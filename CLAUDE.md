@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3837 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3838 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2705 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2706 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 463 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3837**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3838**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2834,6 +2834,28 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   literales de ruta de la FUENTE pedidos uno a uno al CMS vivo — el segundo es el que vio
   `/search`, que ninguna página enlaza mientras no haya un 404 que la pinte.
 
+- `feedback_a_selector_is_crossed_by_value_after_the_resolver` — **un selector del ElementType
+  se cruza por VALOR contra lo que el elemento pinta, DESPUÉS del resolver, y quien cierra el
+  vocabulario es el sanitizador** (#181). En las piezas migradas salía la misma clase una y otra
+  vez: `DTSelectSwatchShape` ofrece `swatch/chip/dot/circle` y `color-swatches` pinta
+  `square/circle/pill` — el editor elige y no pasa nada, porque lo que no casa cae al valor por
+  defecto sin un error. Los gates de la ADR 0135 miran CLAVES; ninguno miraba valores. Hoy el
+  contrato trae por elemento sus `selectores` —`ContratoSynHostTests` pasa cada prevalor de uSync
+  por el resolver y el emitter REALES y escribe dónde cae (`position`, `platforms[]`,
+  `toasts[].variant`) y qué viaja— y `contrato-synhost.spec.ts` del UI lo cruza en las dos
+  direcciones EJECUTANDO el sanitizador, contra una línea base de 8 desajustes, cada uno una
+  decisión de producto pendiente (quitar la opción del DataType o que el elemento la aprenda).
+  **Dos cosas que no se deducen**: (a) cruzar los prevalores CRUDOS acusaría a quien traduce bien
+  —`twitter` llega como `x`, `bottom-start` como `bottom`, y el tipo del aviso cae DENTRO de una
+  lista—, así que se ejecuta el resolver y no se lee uSync a secas; (b) un sanitizador que deja
+  pasar cualquier cadena no dice qué pinta el elemento: 8 de los 10 selectores que viajan lo
+  tenían abierto (`coerceTrimmedStringInput`), el componente filtraba después. Hoy lo cierran con
+  la misma lista del componente y el gate rechaza uno abierto. La otra dirección —el elemento
+  pinta algo que el editor no puede elegir— enumera candidatos de la FUENTE del elemento y deja
+  que el sanitizador decida. **Lo que sí se arregla sin producto**: la traducción con equivalente
+  obvio va al resolver (`cluster` → `wrap` en `badge-group`) y la descripción que contradice al
+  elemento se corrige (`scrollThreshold` decía «Default 400» y el elemento usa 320).
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2893,11 +2915,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3837 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3838 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2705
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2706
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 463
 
@@ -3370,7 +3392,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3837 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3838 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
