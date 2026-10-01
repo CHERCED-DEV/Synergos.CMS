@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3833 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3849 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2701 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2717 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 463 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3833**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3849**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2834,6 +2834,22 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   literales de ruta de la FUENTE pedidos uno a uno al CMS vivo — el segundo es el que vio
   `/search`, que ninguna página enlaza mientras no haya un 404 que la pinte.
 
+- `feedback_a_url_the_cms_inlines_is_resolved_by_the_page` — **una URL que el CMS copia DENTRO de
+  la página la resuelve la página, no el fichero del que salió** (#189). El import map viaja en un
+  `<script type="importmap">` en línea, y `LeerImports` sólo reubicaba las absolutas: el artefacto
+  de `build:cdn` —runtime con `--base=/synergos`, a propósito portátil— salía con
+  `/synergos/runtime/…`, que el navegador pedía al origen del CMS. Medido en vivo con un CDN propio,
+  bajo `/cdn-bundles` y en otro origen: 0 de 3 elementos hidratados, 404 en el runtime; con la
+  forma absoluta, 3 de 3. **Y la nota del código decía lo contrario** —«una entrada relativa se
+  conserva tal cual, ya está servida desde donde toca»—, y el test del cliente HTTP AFIRMABA el
+  defecto: su fixture usaba la forma de `build:cdn` y esperaba la ruta sin reubicar. Hoy es UNA
+  pieza para los dos clientes (`ReubicacionDelImportMap`), las tres formas del mismo fichero dan la
+  misma URL, y `humo-conectado` tiene un quinto diente: cada entrada, resuelta contra la página,
+  contesta 200. **No se veía porque el camino que se probaba no era el que se despliega**: la CDN
+  del arquitecto se publica con el origen absoluto. **Y una trampa de plataforma al escribirlo**: en
+  Linux `Uri.TryCreate("/x", UriKind.Absolute, …)` es `true` (esquema `file`) y en Windows `false`,
+  así que la ruta relativa a la raíz se reconoce por el texto ANTES de parsear, o sólo CI la pierde.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2893,11 +2909,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3833 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3849 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2701
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2717
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 463
 
@@ -2946,7 +2962,7 @@ enumerarlo se equivocaría **en silencio**, que es el defecto #128. El precio de
 otro lado ya está medido dos veces: diez días con toda página de contenido en 500
 (#92) y el sitio entero sin hidratar (#126), las dos con la suite en verde.
 
-Sus cuatro dientes, y qué caza cada uno:
+Sus cinco dientes, y qué caza cada uno:
 
 | | |
 |---|---|
@@ -2954,6 +2970,7 @@ Sus cuatro dientes, y qué caza cada uno:
 | resuelve hacia **cada** framework del registry | con el mapa de uno solo, medio sitio hidrata y la página se ve igual de bien |
 | cada `<synergos-*>` tiene su `<script type="module">` | un tag sin bundle es un hueco que el SSR disimula |
 | cada bundle contesta 200 | un `<script>` a un 404 se ve en el HTML igual que uno bueno |
+| cada entrada del import map contesta 200 **donde la resuelve el navegador** | el mapa viaja en línea, así que lo que no lleva host se resuelve contra la PÁGINA: con el artefacto de `build:cdn` (`--base=/synergos`) el runtime caía en el origen del CMS y nada hidrataba, con los cuatro de arriba en verde (#189) |
 
 > **Y la causa más fácil de cometer es una variable de entorno.**
 > `SYNERGOS_CDN_MODE` / `SYNERGOS_CDN_URL` **sólo existen dentro de
@@ -3370,7 +3387,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3833 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3849 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

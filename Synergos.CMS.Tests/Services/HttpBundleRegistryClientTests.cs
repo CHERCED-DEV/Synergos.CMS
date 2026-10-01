@@ -471,7 +471,7 @@ public sealed class HttpBundleRegistryClientTests
         // Primera vuelta: sólo Angular tiene mapa publicado, así que no hay conflicto.
         var bueno = await cliente.TryGetImportMapAsync();
         Assert.NotNull(bueno);
-        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js", bueno!.Imports["@synergos/core"]);
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/sg-core.js", bueno!.Imports["@synergos/core"]);
 
         // Ahora React publica el SUYO, con el mismo nombre agnóstico y otro destino.
         cdn.Con("/synergos/runtime/react/latest/import-map.json",
@@ -483,8 +483,29 @@ public sealed class HttpBundleRegistryClientTests
         // Lo que ya funcionaba sigue funcionando. React no hidrata —nunca lo hizo—
         // y el probe lo dice, pero el sitio no se apaga.
         Assert.NotNull(trasElConflicto);
-        Assert.Equal("/synergos/runtime/angular/21.1.6/sg-core.js",
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/sg-core.js",
             trasElConflicto!.Imports["@synergos/core"]);
+    }
+
+    [Fact]
+    public async Task El_import_map_de_build_cdn_se_reubica_al_CDN_y_no_al_origen_del_CMS()
+    {
+        // Las dos aserciones de arriba decían que "/synergos/runtime/…" salía TAL CUAL de este
+        // cliente: el test afirmaba el defecto #189. En línea dentro de la página, esa ruta la
+        // resuelve el navegador contra el CMS, y con el CDN en otro origen eso es un 404.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/runtime/angular/latest/import-map.json", """
+                { "imports": {
+                    "@angular/core": "/synergos/runtime/angular/21.1.6/ng-core.js",
+                    "rxjs": "../21.1.6/rxjs.js" } }
+                """);
+
+        var mapa = await Nuevo(cdn: cdn).Cliente.TryGetImportMapAsync();
+
+        Assert.NotNull(mapa);
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/ng-core.js", mapa!.Imports["@angular/core"]);
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/rxjs.js", mapa.Imports["rxjs"]);
     }
 
     [Fact]

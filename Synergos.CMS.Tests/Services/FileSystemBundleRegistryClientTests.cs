@@ -359,6 +359,27 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
     }
 
     [Fact]
+    public async Task El_import_map_de_build_cdn_se_reubica_bajo_la_base_publica()
+    {
+        // build:cdn publica el runtime con --base=/synergos: el mapa sale relativo a la raíz, y en
+        // línea dentro de la página eso es el origen del CMS, no /cdn-bundles (#189).
+        WriteRegistry(SimpleRegistry);
+        WriteScript("runtime", "angular", "latest", "import-map.json", """
+            { "imports": {
+                "@angular/core": "/synergos/runtime/angular/21.1.6/ng-core.js",
+                "rxjs": "../21.1.6/rxjs.js",
+                "@angular/common": "https://synergos-static-local/synergos/runtime/angular/21.1.6/ng-common.js" } }
+            """);
+
+        var mapa = await BuildClient().TryGetImportMapAsync();
+
+        Assert.NotNull(mapa);
+        Assert.Equal("/cdn-bundles/synergos/runtime/angular/21.1.6/ng-core.js", mapa!.Imports["@angular/core"]);
+        Assert.Equal("/cdn-bundles/synergos/runtime/angular/21.1.6/rxjs.js", mapa.Imports["rxjs"]);
+        Assert.Equal("/cdn-bundles/synergos/runtime/angular/21.1.6/ng-common.js", mapa.Imports["@angular/common"]);
+    }
+
+    [Fact]
     public async Task ModeStub_NoOpBoot()
     {
         // Mode != FileSystem → el ctor logueа y NO carga nada.
