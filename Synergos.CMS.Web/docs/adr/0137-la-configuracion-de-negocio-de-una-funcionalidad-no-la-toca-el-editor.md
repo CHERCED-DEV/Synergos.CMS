@@ -249,7 +249,8 @@ de la decisión):
    `IValidateOptions` sobre `ClavesDeConfiguracion` más sus rangos, con `ValidateOnStart`; en
    caliente, quien la lee sigue con el **último valor válido** y lo dice una vez.
 3. **«Otra fuente para la misma regla» queda resuelto así**: una regla que se muestra y se cobra se
-   **cobra en el servidor** desde la misma sección (una costura, `INegocioDe<X>`, con dos lectores:
+   **cobra en el servidor** desde la misma sección (una costura, `INegocioDelSitio<T>` —genérica desde
+   la tanda A de #196, con `SeccionDeNegocio` y `AddSeccionDeNegocio`—, con dos lectores:
    el resolver y los motores); a un servicio del backend le llega como **parámetro** desde el CMS, no
    de su propia configuración; y la fórmula, si vive en más de un sitio, la cruzan **vectores de oro**
    versionados con el redondeo de la casa.
