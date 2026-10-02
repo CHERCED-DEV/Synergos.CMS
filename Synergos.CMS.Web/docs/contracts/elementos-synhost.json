@@ -1497,6 +1497,45 @@
       }
     },
     {
+      "nombre": "realty",
+      "tipo": "funcionalidad",
+      "record": "RealtyProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "defaultRatePercent",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Encuentra el lugar que estás buscando",
+        "subheading": "Compra y arriendo, en lista y en mapa",
+        "apiBase": "/api/realty",
+        "defaultRatePercent": 12
+      }
+    },
+    {
       "nombre": "rich-tooltip",
       "tipo": "pieza",
       "record": "RichTooltipProps",

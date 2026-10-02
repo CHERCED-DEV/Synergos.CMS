@@ -232,6 +232,11 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<RealtyVisitLedger>()));
         }
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
+        // La configuración de negocio de Propiedades (ADR 0137, #196): la API y la tasa con que
+        // arranca el simulador, por sitio. La lee el resolver; el servidor no tiene tasa propia
+        // —calcula con la que le mandan—, así que no hay un segundo lector que alinear.
+        services.AddSeccionDeNegocio<RealtyFeatureSettings, NegocioDeRealty>(
+            builder.Config.GetSection("Synergos:Features:Realty"));
         // OLA 4 Propiedades (doc 21 §2.7) — cara completa: la captura de leads ahora
         // compone el catálogo para resolver el agente dueño del inmueble y alimentar el
         // mini-CRM del agente (kanban Nuevo→Contactado→Visita→Cerrado, avance auditado

@@ -78,6 +78,11 @@ public sealed class ContratoSynHostTests
                 ("subheading", "Conciertos, teatro y festivales"),
                 ("role", "organizer"),
             },
+            ["realty"] = new (string, object?)[]
+            {
+                ("heading", "Encuentra el lugar que estás buscando"),
+                ("subheading", "Compra y arriendo, en lista y en mapa"),
+            },
             ["kpi-card"] = new (string, object?)[]
             {
                 ("kpiLabel", "Ventas del mes"),
@@ -721,24 +726,44 @@ public sealed class ContratoSynHostTests
     }
 
     private static ServiceProvider Proveedor()
-        => new ServiceCollection()
+        => ConNegocioBase(new ServiceCollection())
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
-            .AddSingleton(NegocioBase())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
 
     /// <summary>
-    /// La configuración de negocio con los valores base de cada sección, que es lo que rige en un
-    /// sitio sin override: el ejemplo del contrato muestra lo que llega por defecto.
+    /// La configuración de negocio con los valores base de CADA sección de negocio que exista, que es
+    /// lo que rige en un sitio sin override: el ejemplo del contrato muestra lo que llega por defecto.
     /// </summary>
-    private static INegocioDelSitio<NegocioDeEventos> NegocioBase()
+    /// <remarks>
+    /// Se descubren por la forma (<c>SeccionDeNegocio&lt;,&gt;</c>) y no se listan: una funcionalidad
+    /// que gana su sección (#196) no tiene que tocar este test para que su ejemplo se emita.
+    /// </remarks>
+    private static IServiceCollection ConNegocioBase(IServiceCollection servicios)
     {
-        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEventos>>();
-        negocio.Actual().Returns(new Synergos.CMS.Application.Configuration.EventosFeatureSettings().Para(null));
-        return negocio;
+        var secciones = typeof(Synergos.CMS.Application.Configuration.SeccionDeNegocio<,>).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && t.BaseType is { IsGenericType: true } b
+                && b.GetGenericTypeDefinition() == typeof(Synergos.CMS.Application.Configuration.SeccionDeNegocio<,>));
+
+        foreach (var seccion in secciones)
+        {
+            var negocio = seccion.BaseType!.GenericTypeArguments[1];
+            var valores = seccion.GetMethod("Para")!.Invoke(Activator.CreateInstance(seccion), new object?[] { null })!;
+            servicios.AddSingleton(
+                typeof(INegocioDelSitio<>).MakeGenericType(negocio),
+                Activator.CreateInstance(typeof(NegocioFijo<>).MakeGenericType(negocio), valores)!);
+        }
+
+        return servicios;
+    }
+
+    private sealed class NegocioFijo<T>(T valores) : INegocioDelSitio<T>
+        where T : class
+    {
+        public T Actual() => valores;
     }
 
     private static async Task<JsonElement> Emitido(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)
