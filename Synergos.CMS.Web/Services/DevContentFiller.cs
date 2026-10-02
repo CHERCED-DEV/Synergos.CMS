@@ -1795,7 +1795,7 @@ public sealed class DevContentFiller
         // listado de artículos, testimonios, CTA) se conserva como sub-secciones por debajo de la
         // app. Si el ElementType aún no está importado, AddSynBlogs sale no-op con grace y el home
         // conserva intactas todas las sub-secciones de abajo (no-destructivo).
-        AddSynBlogs(b, "/api/blogs",
+        AddSynBlogs(b,
             "Conecta, publica y crece tu audiencia",
             "Una red social editorial: sigue autores, publica historias y reacciona en tiempo real.");
 
@@ -2069,8 +2069,8 @@ public sealed class DevContentFiller
     private string BuildTiendaVender()
     {
         var v = new BlockGridJsonBuilder();
-        // La consola es la app entera de la página (100% config del CMS: apiBase por prop).
-        AddSynSeller(v, "/api/shop", "Tu negocio, en un solo panel",
+        // La consola es la app entera de la página (la API la fija el sitio, no el bloque: ADR 0137).
+        AddSynSeller(v, "Tu negocio, en un solo panel",
             "Ventas, publicaciones, mensajes y devoluciones — la consola del vendedor sobre el mismo motor.");
         return v.Build();
     }
@@ -2085,7 +2085,7 @@ public sealed class DevContentFiller
         // catálogo SSR, testimonios, FAQ, CTA) se conserva como sub-secciones por debajo de la
         // app. Si el ElementType aún no está importado, AddSynStorefront sale no-op con grace y
         // el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
-        AddSynStorefront(b, "/api/shop",
+        AddSynStorefront(b,
             "Compra en nuestra tienda online",
             "Catálogo, carrito y checkout en un solo lugar. Explora, agrega al carrito y paga en minutos.");
 
@@ -2328,10 +2328,10 @@ public sealed class DevContentFiller
     /// Asistente de reserva multipaso (elementSynBookingWizard): el SynHost lo emite como
     /// &lt;synergos-booking-wizard config='...'&gt; y la CDN hidrata el componente Angular,
     /// que llama a la API de reservas (/api/booking/*, BookingController). Config end-to-end
-    /// desde el CMS (apiBase + destinationLabel + currency). Sale no-op con grace si el
+    /// desde el CMS (destinationLabel; la API la fija el sitio — ADR 0137). Sale no-op con grace si el
     /// ElementType aún no está importado (degradación silenciosa, sin reventar la siembra).
     /// </summary>
-    private void AddSynBookingWizard(BlockGridJsonBuilder b, string apiBase, string destinationLabel, string currency = "COP")
+    private void AddSynBookingWizard(BlockGridJsonBuilder b, string destinationLabel)
     {
         var key = _contentTypeService.Get("elementSynBookingWizard")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller ya compuso el resto)
@@ -2342,9 +2342,7 @@ public sealed class DevContentFiller
             // Los valores de un bloque del BlockGrid se almacenan planos en el JSON; la
             // variación Culture de la propiedad la resuelve el contexto de cultura de la
             // página (misma mecánica que AddSynCalendar/AddSynTestimonials).
-            c.Set("apiBase", apiBase);                  // Nothing (config compartida) — base de /api/booking
             c.Set("destinationLabel", destinationLabel); // Culture — nombre del alojamiento
-            c.Set("currency", currency);                // Nothing (config compartida) — ISO 3 letras
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
     }
@@ -2379,10 +2377,10 @@ public sealed class DevContentFiller
     /// app Booking entera (vuelos, hoteles, paquetes). El SynHost lo emite como
     /// &lt;synergos-travel-shell config='...'&gt; y la CDN hidrata el módulo Angular, que
     /// orquesta búsqueda/disponibilidad/selección/reserva contra la API de viajes. Config
-    /// end-to-end desde el CMS: apiBase + heading/subheading. Sale no-op con grace si el
+    /// end-to-end desde el CMS: heading/subheading (la API la fija el sitio — ADR 0137). Sale no-op con grace si el
     /// ElementType aún no está importado (el caller conserva el resto del home).
     /// </summary>
-    private void AddSynTravelShell(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynTravelShell(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynTravelShell")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2392,7 +2390,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/travel
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2402,11 +2399,11 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta la app Tienda e-commerce (elementSynStorefront → &lt;synergos-storefront&gt;)
     /// como módulo Angular CDN. Calque de <see cref="AddSynTravelShell"/>: el SynHost emite
-    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata.
+    /// el custom element con su config (heading/subheading) y la CDN lo hidrata.
     /// Sale no-op con grace si el ElementType aún no está importado (el caller compone el
     /// resto del home), preservando lo existente.
     /// </summary>
-    private void AddSynStorefront(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynStorefront(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynStorefront")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2416,7 +2413,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2426,11 +2422,11 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta la app red social de Blogs (elementSynBlogs → &lt;synergos-blogs&gt;)
     /// como módulo Angular CDN. Calque de <see cref="AddSynStorefront"/>: el SynHost emite
-    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el custom element con su config (heading/subheading) y la CDN lo hidrata por
     /// el alias kebab "blogs". Sale no-op con grace si el ElementType aún no está importado
     /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
-    private void AddSynBlogs(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynBlogs(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynBlogs")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2440,7 +2436,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/blogs
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2450,11 +2445,11 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta la app LMS de Educación (elementSynAcademy → &lt;synergos-academy&gt;)
     /// como módulo Angular CDN. Calque de <see cref="AddSynBlogs"/>: el SynHost emite
-    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el custom element con su config (heading/subheading) y la CDN lo hidrata por
     /// el alias kebab "academy". Sale no-op con grace si el ElementType aún no está importado
     /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
-    private void AddSynAcademy(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynAcademy(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynAcademy")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2464,7 +2459,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/academy
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2474,11 +2468,11 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta el dashboard clínico demo de Healthcare (elementSynEhr → &lt;synergos-ehr&gt;)
     /// como módulo Angular CDN. Calque de <see cref="AddSynAcademy"/>: el SynHost emite
-    /// el custom element con su config (apiBase/heading/subheading) y la CDN lo hidrata por
+    /// el custom element con su config (heading/subheading) y la CDN lo hidrata por
     /// el alias kebab "ehr". Sale no-op con grace si el ElementType aún no está importado
     /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
-    private void AddSynEhr(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynEhr(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynEhr")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2488,7 +2482,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/ehr
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2498,11 +2491,11 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta el portal inmobiliario demo de Propiedades (elementSynRealty → &lt;synergos-realty&gt;)
     /// como módulo Angular CDN. Calque de <see cref="AddSynEhr"/>: el SynHost emite el custom
-    /// element con su config (apiBase/heading/subheading) y la CDN lo hidrata por el alias kebab
+    /// element con su config (heading/subheading) y la CDN lo hidrata por el alias kebab
     /// "realty". Sale no-op con grace si el ElementType aún no está importado (el caller compone
     /// el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
-    private void AddSynRealty(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynRealty(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynRealty")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2512,7 +2505,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/realty
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2524,7 +2516,7 @@ public sealed class DevContentFiller
     /// principal del home del vertical. Grace: si el ElementType aún no está importado,
     /// sale no-op y el caller compone el resto del home.
     /// </summary>
-    private void AddSynGov(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynGov(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynGov")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace
@@ -2534,7 +2526,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/gov
             c.Set("heading", heading);        // Culture — título del portal
             c.Set("subheading", subheading);  // Culture — subtítulo del portal
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2545,7 +2536,7 @@ public sealed class DevContentFiller
     /// Monta la consola del vendedor (elementSynSeller → &lt;synergos-seller&gt;) como bloque
     /// principal de la página. Grace: no-op si el ElementType aún no está importado.
     /// </summary>
-    private void AddSynSeller(BlockGridJsonBuilder b, string apiBase, string heading, string subheading)
+    private void AddSynSeller(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynSeller")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace
@@ -2555,7 +2546,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/shop
             c.Set("heading", heading);        // Culture — título de la consola
             c.Set("subheading", subheading);  // Culture — subtítulo de la consola
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
@@ -2565,12 +2555,12 @@ public sealed class DevContentFiller
     /// <summary>
     /// Monta la app de Eventos demo (elementSynEventos → &lt;synergos-eventos&gt;) como
     /// módulo Angular CDN. Calque de <see cref="AddSynEhr"/>: el SynHost emite el custom
-    /// element con su config (apiBase/heading/subheading/role) y la CDN lo hidrata por el
+    /// element con su config (heading/subheading/role) y la CDN lo hidrata por el
     /// alias kebab "eventos". El <paramref name="role"/> distingue la cara (attendee=ticketing,
     /// organizer=manager). Sale no-op con grace si el ElementType aún no está importado
     /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
-    private void AddSynEventos(BlockGridJsonBuilder b, string apiBase, string heading, string subheading, string role)
+    private void AddSynEventos(BlockGridJsonBuilder b, string heading, string subheading, string role)
     {
         var key = _contentTypeService.Get("elementSynEventos")?.Key;
         if (key is null) { return; }   // schema aún sin importar → grace (el caller compone el resto del home)
@@ -2580,7 +2570,6 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c =>
         {
-            c.Set("apiBase", apiBase);        // Nothing (config compartida) — base de /api/eventos
             c.Set("heading", heading);        // Culture — título de la app
             c.Set("subheading", subheading);  // Culture — subtítulo de la app
             c.Set("role", role);              // Nothing — cara de la app (attendee/organizer)
@@ -2723,7 +2712,7 @@ public sealed class DevContentFiller
         // Si el ElementType aún no está importado (o el bundle "ehr" aún no está publicado en la CDN),
         // AddSynEhr sale no-op con grace y el home conserva intactas todas las sub-secciones de abajo
         // (no-destructivo). NO toca el vertical Healthcare de PRODUCCIÓN (ADR 0098, schema/PHI propio).
-        AddSynEhr(b, "/api/ehr",
+        AddSynEhr(b,
             "Tu consultorio, en orden",
             "Historia clínica, agenda y recetas en un solo lugar — el dashboard clínico en vivo.");
 
@@ -2801,7 +2790,7 @@ public sealed class DevContentFiller
         // se conserva como sub-secciones por debajo de la app. Si el ElementType aún no está
         // importado (o el bundle "academy" aún no está publicado en la CDN), AddSynAcademy sale
         // no-op con grace y el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
-        AddSynAcademy(b, "/api/academy",
+        AddSynAcademy(b,
             "Aprende lo que el mercado pide",
             "Una academia online: catálogo, lecciones, instructores e inscripciones — a tu ritmo.");
 
@@ -3082,7 +3071,7 @@ public sealed class DevContentFiller
         // funciona, value props, planes, testimonios, FAQ) ya vive en SynergosLabs y aquí queda
         // como sub-secciones por debajo de la app. Si el ElementType aún no está importado,
         // AddSynTravelShell sale no-op con grace y el home conserva el hero + sub-secciones.
-        AddSynTravelShell(b, "/api/travel",
+        AddSynTravelShell(b,
             "Reserva tu próximo viaje",
             "Vuelos, hoteles y paquetes en un solo lugar. Busca, compara y reserva en minutos.");
 
@@ -3318,7 +3307,7 @@ public sealed class DevContentFiller
         // Si el ElementType aún no está importado (o el bundle "eventos" aún no está publicado
         // en la CDN), AddSynEventos sale no-op con grace y el home conserva intactas todas las
         // sub-secciones de abajo (no-destructivo). NO toca el countdown gateado más abajo.
-        AddSynEventos(b, "/api/eventos",
+        AddSynEventos(b,
             "Vive los eventos que importan",
             "Catálogo, tickets y check-in en vivo — la plataforma de eventos en una sola app.",
             "attendee");
@@ -3614,7 +3603,7 @@ public sealed class DevContentFiller
         // CTA) se conserva como sub-secciones por debajo de la app. Si el ElementType aún no está
         // importado (o el bundle "realty" aún no está publicado en la CDN), AddSynRealty sale
         // no-op con grace y el home conserva intactas todas las sub-secciones de abajo (no-destructivo).
-        AddSynRealty(b, "/api/realty",
+        AddSynRealty(b,
             "Encuentra el lugar que estás buscando",
             "El portal inmobiliario en vivo: busca en lista o mapa, abre la ficha, agenda una visita y calcula tu hipoteca.");
 
@@ -3843,7 +3832,7 @@ public sealed class DevContentFiller
 
         // Reframe apps-reales: entrar a /gobierno = la app (el portal ciudadano se monta
         // PRIMERO). Grace: si elementSynGov no está importado, queda el home editorial.
-        AddSynGov(b, "/api/gov", "Tus trámites, sin filas",
+        AddSynGov(b, "Tus trámites, sin filas",
             "Radica, paga la tasa si aplica y sigue tu expediente por etapas — en lenguaje claro.");
 
         AddFallbackHero(b, "elementSynGov", "Trámites del Estado, en lenguaje claro",
@@ -3883,7 +3872,7 @@ public sealed class DevContentFiller
         // Llama a /api/booking/* (BookingController). destinationLabel = nombre del destino.
         AddMission(b, "Reserva en tres pasos", "",
             "<p>Elige fechas y huéspedes, selecciona tu habitación y completa tus datos. El asistente te guía paso a paso y confirma tu reserva al instante.</p>");
-        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+        AddSynBookingWizard(b, "Hoteles SynergosLabs");
 
         AddSynTestimonials(b, "Lo que dicen nuestros huéspedes", new (string quote, string author, string role)[]
         {
@@ -3916,12 +3905,12 @@ public sealed class DevContentFiller
             "Hoteles Reservar Hero", "Hero de la página de reserva de hoteles", TerraHotelFrom, TerraHotelTo,
             ("Volver al inicio", "/hoteles"), ("Hablar con nosotros", "/synergos/contacto"));
 
-        // El asistente de reserva multipaso a pantalla completa. apiBase apunta a la API
-        // de reservas (/api/booking/*, BookingController); el componente Angular hidrata
+        // El asistente de reserva multipaso a pantalla completa. La API de reservas
+        // (/api/booking/*, BookingController) la fija el sitio; el componente Angular hidrata
         // desde la CDN. Grace: si el ElementType no está importado, el bloque se omite.
         AddMission(b, "Completa tu reserva", "",
             "<p>El asistente te guía paso a paso. La disponibilidad se actualiza en tiempo real y la confirmación llega a tu correo al instante.</p>");
-        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+        AddSynBookingWizard(b, "Hoteles SynergosLabs");
 
         // Políticas y horarios — accordion CDN (degrada con grace).
         AddSynAccordion(b, new (string title, string content)[]
@@ -4346,7 +4335,7 @@ public sealed class DevContentFiller
         // DEMO — pieza viva: el asistente de reserva multipaso contra el motor real (/api/booking).
         AddMission(b, "Demo en vivo — reserva de verdad", "",
             "<p>El asistente de abajo es el motor real de reservas: consulta disponibilidad, retiene tu cupo y confirma. Pruébalo aquí mismo.</p>");
-        AddSynBookingWizard(b, "/api/booking", "Booking SynergosLabs");
+        AddSynBookingWizard(b, "Booking SynergosLabs");
 
         AddCta(b, "Recorre la app completa",
             "Catálogo de servicios, calendario y reservas en la app real.",
@@ -4548,7 +4537,7 @@ public sealed class DevContentFiller
         // DEMO — pieza viva: el mismo asistente de reserva multipaso de la app (/api/booking).
         AddMission(b, "Demo en vivo — reserva tu estadía", "",
             "<p>El asistente de abajo es el motor real: elige fechas y huéspedes, selecciona tu habitación y confirma. Pruébalo aquí mismo.</p>");
-        AddSynBookingWizard(b, "/api/booking", "Hoteles SynergosLabs");
+        AddSynBookingWizard(b, "Hoteles SynergosLabs");
 
         AddCta(b, "Recorre la app completa",
             "Fechas, habitaciones y reserva en la app real.",
