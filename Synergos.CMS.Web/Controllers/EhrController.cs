@@ -147,6 +147,21 @@ public sealed class EhrController : ControllerBase
         return Ok(new DoctorsResponse(doctors.Select(ToDoctorDto).ToList()));
     }
 
+    // ── 3b. Copago ─────────────────────────────────────────────────────
+    // GET /api/ehr/copay → { amount, amountMinor, currency } · 503 si no se pudo saber
+    //
+    // Lo que cuesta agendar, de la MISMA fuente que lo cobra (CMS#196). La pantalla pintaba «Sin
+    // costo» por una constante compilada mientras el motor en proceso capturaba 80.000. Sin
+    // respuesta, 503 y no un cero: un cero es «no se cobra», y no se sabe.
+    [HttpGet("copay")]
+    public async Task<IActionResult> Copay(CancellationToken cancellationToken)
+    {
+        var copago = await _scheduling.CopayAsync(cancellationToken);
+        return copago is null
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "No se pudo calcular el copago." })
+            : Ok(new CopayDto(copago.Amount, (long)Math.Round(copago.Amount * 100m, MidpointRounding.ToEven), copago.Currency));
+    }
+
     // ── 4. Citas por fecha ─────────────────────────────────────────────
     // GET /api/ehr/appointments?date=YYYY-MM-DD&doctorId= → { appointments:[...] }
     [HttpGet("appointments")]
@@ -1108,6 +1123,9 @@ public sealed class EhrController : ControllerBase
         IReadOnlyList<int> WorkingDays, int SlotStartHour, int SlotEndHour, int SlotMinutes);
 
     public sealed record DoctorsResponse(IReadOnlyList<DoctorDto> Doctors);
+
+    /// <summary>El copago de una consulta: unidades mayores, menores (las del carrito) y moneda.</summary>
+    public sealed record CopayDto(decimal Amount, long AmountMinor, string Currency);
 
     public sealed record VitalsDto(
         double Systolic, double Diastolic, double HeartRate, double Temperature,

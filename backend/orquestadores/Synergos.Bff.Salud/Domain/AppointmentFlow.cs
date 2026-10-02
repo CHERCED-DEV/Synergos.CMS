@@ -110,10 +110,7 @@ public sealed class AppointmentFlow
         _sagas.Put(saga);
 
         // 3. Cuánto cuesta. Si no hay precio publicado, no hay copago: la cita sigue.
-        var quote = await _caps.QuoteAsync(service, ct);
-        var total = quote.IsOk
-            ? Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency)
-            : Money.Zero(Money.Cop);
+        var total = await CopagoAsync(service, ct);
 
         if (total.IsZero)
         {
@@ -153,6 +150,19 @@ public sealed class AppointmentFlow
     /// <summary>
     /// Fase 2: captura el cobro y confirma el cupo. Si algo falla, deshace.
     /// </summary>
+    /// <summary>
+    /// El copago de <paramref name="service"/>: el precio publicado en <c>Api.Pricing</c>, o cero si no
+    /// hay. Es LA regla: la usa <see cref="ScheduleAsync"/> para autorizar y la cotización que la
+    /// pantalla pide antes de agendar, para que lo que se muestra sea lo que se cobra (CMS#196).
+    /// </summary>
+    public async Task<Money> CopagoAsync(Ref service, CancellationToken ct)
+    {
+        var quote = await _caps.QuoteAsync(service, ct);
+        return quote.IsOk
+            ? Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency)
+            : Money.Zero(Money.Cop);
+    }
+
     public async Task<Result<AppointmentSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
     {
         var saga = _sagas.Find(sagaId);

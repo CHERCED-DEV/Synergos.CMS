@@ -730,4 +730,35 @@ public sealed class CompensationTests
         Assert.True(agendada.IsOk);
         Assert.Equal(0, caps.Veces("POST", "/v1/payments"));
     }
+
+    // ── La cotización del copago (CMS#196) ──────────────────────────────────
+
+    /// <summary>
+    /// Lo que la pantalla del paciente pide ANTES de agendar sale de la misma regla con que la cita
+    /// se autoriza: lo que se muestra es lo que se cobra.
+    /// </summary>
+    [Fact]
+    public async Task La_cotizacion_del_copago_es_la_misma_regla_que_autoriza_la_cita()
+    {
+        var (flow, _, _, _, _) = Nuevo(Feliz());
+
+        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var agendada = await Agendar(flow);
+
+        Assert.Equal(Money.Of(50_000m, "COP"), cotizado);
+        Assert.Equal(cotizado, agendada.Value.Total);
+    }
+
+    [Fact]
+    public async Task Sin_precio_publicado_la_cotizacion_es_cero_como_al_agendar()
+    {
+        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.NotFound, "pricing.no_price");
+        var (flow, _, _, _, _) = Nuevo(caps);
+
+        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var agendada = await Agendar(flow);
+
+        Assert.True(cotizado.IsZero);
+        Assert.Equal(cotizado, agendada.Value.Total);
+    }
 }

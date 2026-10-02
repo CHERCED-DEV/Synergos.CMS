@@ -898,4 +898,27 @@ public sealed class EhrControllerTests
         Participants: new[] { "pat-1", "doc-1" },
         LastMessagePreview: preview,
         LastMessageAt: DateTimeOffset.UnixEpoch, MessageCount: mensajes);
+
+    // ── El copago (CMS#196) ─────────────────────────────────────────────────
+
+    [Fact] // Lo que cuesta agendar, en mayores y en menores (las del carrito), de la fuente que cobra.
+    public async Task El_copago_sale_del_motor_que_lo_cobra()
+    {
+        _scheduling.CopayAsync(Arg.Any<CancellationToken>()).Returns(new ClinicalCopay(80_000m, "COP"));
+
+        var ok = Assert.IsType<OkObjectResult>(await BuildSut().Copay(CancellationToken.None));
+
+        Assert.Equal(new EhrController.CopayDto(80_000m, 8_000_000, "COP"), ok.Value);
+    }
+
+    [Fact] // Sin saberlo, 503 y no un cero: un cero diría «no se cobra».
+    public async Task Sin_copago_conocido_el_borde_no_inventa_un_cero()
+    {
+        _scheduling.CopayAsync(Arg.Any<CancellationToken>()).Returns((ClinicalCopay?)null);
+
+        var resultado = Assert.IsType<ObjectResult>(await BuildSut().Copay(CancellationToken.None));
+
+        Assert.Equal(503, resultado.StatusCode);
+    }
+
 }

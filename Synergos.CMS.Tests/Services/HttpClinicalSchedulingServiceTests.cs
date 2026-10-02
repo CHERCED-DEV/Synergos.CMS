@@ -27,6 +27,9 @@ public sealed class HttpClinicalSchedulingServiceTests
         public List<(string Method, string Path, string? Key, string? Body)> Llamadas { get; } = new();
         public HashSet<string> Caidas { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>La query de cada llamada, en orden: el copago se cotiza por ella.</summary>
+        public List<string> Consultas { get; } = new();
+
         public BffFalso Ok(string ruta, string json)
         {
             _rutas[ruta] = () => new HttpResponseMessage(HttpStatusCode.OK)
@@ -56,6 +59,7 @@ public sealed class HttpClinicalSchedulingServiceTests
             req.Headers.TryGetValues("Idempotency-Key", out var k);
             var body = req.Content?.ReadAsStringAsync(ct).GetAwaiter().GetResult();
             Llamadas.Add((req.Method.Method, path, k?.FirstOrDefault(), body));
+            Consultas.Add(req.RequestUri.Query);
 
             if (Caidas.Contains(clave)) throw new HttpRequestException("guionado: caída");
 
@@ -287,4 +291,33 @@ public sealed class HttpClinicalSchedulingServiceTests
         Assert.Empty(citas);
         Assert.Empty(bff.Llamadas);
     }
+
+    // ── El copago (CMS#196) ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// El copago lo cotiza el orquestador con el MISMO servicio con que se agenda, que es lo que lo
+    /// autoriza: lo que la pantalla muestra es lo que se cobra.
+    /// </summary>
+    [Fact]
+    public async Task El_copago_lo_cotiza_el_orquestador_con_el_servicio_con_que_se_agenda()
+    {
+        var bff = new BffFalso().Ok("GET /v1/appointments/quote", """{"amount":45000,"currency":"COP"}""");
+        var s = new SaludSettings { Mode = "Bff", ServiceKind = "salud.servicio", ServiceId = "consulta-general" };
+
+        var copago = await Nuevo(bff, s).CopayAsync();
+
+        Assert.Equal(new ClinicalCopay(45_000m, "COP"), copago);
+        var consulta = Assert.Single(bff.Consultas);
+        Assert.Contains("serviceKind=salud.servicio", consulta, StringComparison.Ordinal);
+        Assert.Contains("serviceId=consulta-general", consulta, StringComparison.Ordinal);
+    }
+
+    /// <summary>Sin respuesta, el copago no se sabe: nulo, nunca un cero inventado.</summary>
+    [Fact]
+    public async Task Sin_respuesta_del_orquestador_el_copago_no_se_sabe()
+    {
+        Assert.Null(await Nuevo(new BffFalso().Caida("GET /v1/appointments/quote")).CopayAsync());
+        Assert.Null(await Nuevo(new BffFalso()).CopayAsync());
+    }
+
 }

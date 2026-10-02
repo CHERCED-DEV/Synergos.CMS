@@ -59,7 +59,25 @@ public interface IClinicalSchedulingService
         Justification = "La regla protege a consumidores en otros lenguajes (`to`, `date` son palabras reservadas en VB). Este repo es C# y un solo despliegue: el nombre del par from/to es lo que hace legible la ventana, y renombrarlo a `toDate` la empeora (#134).")]
     Task<IReadOnlyList<ClinicalAppointment>> GetForPatientAsync(
         string patientId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// El copago de una consulta, de la MISMA fuente con la que <see cref="BookAsync"/> lo cobra.
+    /// <c>null</c> si no se pudo saber.
+    /// </summary>
+    /// <remarks>
+    /// Existe porque la pantalla no lo sabía (CMS#196): pintaba «Sin costo» —un
+    /// <c>DEFAULT_COPAY_MINOR = 0</c> compilado— mientras el motor en proceso capturaba 80.000 al
+    /// agendar. El copago es un PRECIO que decide el servidor (una constante en proceso, el precio
+    /// publicado del servicio contra el orquestador), así que no es configuración de la pantalla: se
+    /// pregunta (ADR 0137, cambio 4).
+    /// </remarks>
+    Task<ClinicalCopay?> CopayAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>El copago de una consulta: cero es «sin costo», no «no se sabe».</summary>
+/// <param name="Amount">En unidades mayores de <paramref name="Currency"/>.</param>
+/// <param name="Currency">ISO-4217.</param>
+public sealed record ClinicalCopay(decimal Amount, string Currency);
 
 /// <summary>
 /// Cita registrada del EHR-lite. <see cref="ReservationId"/> liga la cita con la

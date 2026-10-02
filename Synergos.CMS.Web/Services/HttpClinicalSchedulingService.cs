@@ -131,6 +131,43 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
     }
 
     /// <summary>
+    /// El copago, cotizado por el orquestador con el MISMO servicio con que <see cref="BookAsync"/>
+    /// agenda: lo que se muestra es lo que se autoriza (CMS#196).
+    /// </summary>
+    /// <remarks>
+    /// Es una lectura y va igual por el orquestador, no contra <c>Api.Pricing</c> de frente: la regla
+    /// de qué se cotiza —y que sin precio publicado no hay copago— vive en <c>Bff.Salud</c>, y si la
+    /// pantalla la calculara por su lado volverían a ser dos reglas. Si no contesta, <c>null</c>: la
+    /// pantalla dice que no lo sabe, no inventa un cero.
+    /// </remarks>
+    public async Task<ClinicalCopay?> CopayAsync(CancellationToken cancellationToken = default)
+    {
+        var s = _settings.CurrentValue;
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get,
+                $"v1/appointments/quote?serviceKind={Uri.EscapeDataString(s.ServiceKind)}&serviceId={Uri.EscapeDataString(s.ServiceId)}");
+            using var res = await _clients.CreateClient(BffClientName).SendAsync(req, cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var precio = await res.Content.ReadFromJsonAsync<MoneyDto>(Json, cancellationToken).ConfigureAwait(false);
+            return precio is null ? null : new ClinicalCopay(precio.Amount, precio.Currency);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "No se pudo cotizar el copago contra el orquestador.");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// La agenda de un día. <b>Devuelve vacío, y es una decisión anotada, no un olvido.</b>
     /// </summary>
     /// <remarks>

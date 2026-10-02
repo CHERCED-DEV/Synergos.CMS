@@ -165,4 +165,56 @@ public class StubClinicalSchedulingServiceTests
         Assert.Empty(fuera);
         Assert.NotEmpty(dentro);
     }
+
+    // ── El copago (CMS#196) ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// El copago que se le muestra al paciente es el que se captura al agendar. La pantalla pintaba
+    /// «Sin costo» —una constante compilada en cero— mientras este motor capturaba 80.000.
+    /// </summary>
+    [Fact]
+    public async Task El_copago_que_se_muestra_es_el_que_se_captura_al_agendar()
+    {
+        var pagos = new PagosQueRecuerdan();
+        var svc = new StubClinicalSchedulingService(
+            new StubReservationService(), pagos, new StubDoctorDirectory(), new StubPatientRegistry(), () => Now, false);
+
+        var copago = await svc.CopayAsync();
+        await svc.BookAsync(Req());
+
+        Assert.NotNull(copago);
+        Assert.True(copago!.Amount > 0m);
+        Assert.Equal(copago.Amount, pagos.Ultima!.Amount);
+        Assert.Equal(copago.Currency, pagos.Ultima.Currency);
+    }
+
+    private sealed class PagosQueRecuerdan : IPaymentProvider, IDisposable
+    {
+        private readonly StubPaymentProvider _real = new();
+
+        public string ProviderKey => _real.ProviderKey;
+
+        public PaymentSessionRequest? Ultima { get; private set; }
+
+        public void Dispose() => _real.Dispose();
+
+        public Task<PaymentSession> CreateSessionAsync(PaymentSessionRequest request, CancellationToken ct = default)
+        {
+            Ultima = request;
+            return _real.CreateSessionAsync(request, ct);
+        }
+
+        public Task<PaymentOutcome> GetStatusAsync(string sessionId, CancellationToken ct = default)
+            => _real.GetStatusAsync(sessionId, ct);
+
+        public Task<PaymentOutcome> CaptureAsync(string sessionId, decimal? amount = null, CancellationToken ct = default)
+            => _real.CaptureAsync(sessionId, amount, ct);
+
+        public Task<PaymentOutcome> VoidAsync(string sessionId, CancellationToken ct = default)
+            => _real.VoidAsync(sessionId, ct);
+
+        public Task<PaymentOutcome> RefundAsync(string sessionId, decimal? amount = null, CancellationToken ct = default)
+            => _real.RefundAsync(sessionId, amount, ct);
+    }
+
 }

@@ -168,6 +168,10 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
         return appointment;
     }
 
+    /// <summary>El copago que <see cref="BookAsync"/> captura: <see cref="ConsultationFee"/>.</summary>
+    public Task<ClinicalCopay?> CopayAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<ClinicalCopay?>(new ClinicalCopay(ConsultationFee, Currency));
+
     public Task<IReadOnlyList<ClinicalAppointment>> GetByDateAsync(DateOnly date, string? doctorId = null, CancellationToken cancellationToken = default)
     {
         var matches = _appointments.Values

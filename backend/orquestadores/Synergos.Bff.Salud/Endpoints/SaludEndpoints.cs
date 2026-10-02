@@ -58,6 +58,18 @@ public static class SaludEndpoints
         app.MapPost("/v1/appointments/{id}/retry", async (string id, AppointmentFlow flow, CancellationToken ct) =>
             (await flow.RetryStuckAsync(id, ct)).Map(AppointmentResponse.From).ToHttp());
 
+        // Lo que cuesta agendar, ANTES de agendar: la pantalla del paciente lo muestra con la misma
+        // regla con que la cita se autoriza (CMS#196). No choca con GET /v1/appointments/{id}: en el
+        // enrutado de ASP.NET un segmento literal gana a un parámetro, sin importar el orden.
+        app.MapGet("/v1/appointments/quote", async (string? serviceKind, string? serviceId, AppointmentFlow flow, CancellationToken ct) =>
+        {
+            var service = Ref.TryCreate(serviceKind, serviceId);
+            if (service is null) return Invalid("bad_service", "Hacen falta serviceKind y serviceId.");
+
+            var copago = await flow.CopagoAsync(service, ct);
+            return Results.Ok(new MoneyDto(copago.Amount, copago.Currency));
+        });
+
         // La vista de operación: qué quedó colgado. Sin ella, una compensación que se rindió
         // solo existe en una línea de log que nadie está mirando.
         app.MapGet("/v1/compensations", (int? offset, int? limit, AppointmentFlow flow) =>
