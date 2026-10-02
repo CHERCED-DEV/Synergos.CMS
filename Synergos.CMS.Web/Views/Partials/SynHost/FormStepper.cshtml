@@ -1,15 +1,17 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-form-stepper>. Un formulario del sitio presentado por pasos.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (FormStepperProps) con los pasos y
+    los campos del editor (elementFormStep + elementFormField, el modelo de Forms), y dónde y cómo
+    se envía para el sitio de la petición (Synergos:Features:FormStepper y Synergos:Forms,
+    ADR 0137). Es una FUNCIONALIDAD (ADR 0134): no recibe JSON libre del editor.
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.FormStepperProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
-#nullable enable
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["stepsJson"] = Model.Value<string>("stepsJson"),
-        ["submitEndpoint"] = Model.Value<string>("submitEndpoint"),
-        ["allowSkip"] = Model.Value<bool>("allowSkip"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("form-stepper", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

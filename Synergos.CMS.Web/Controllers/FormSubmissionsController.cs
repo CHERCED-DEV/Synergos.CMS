@@ -87,7 +87,7 @@ public sealed class FormSubmissionsController : ControllerBase
             {
                 ["formKey"] = formKey,
             });
-            return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
+            return Exito(referrer, settings);
         }
 
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -104,11 +104,11 @@ public sealed class FormSubmissionsController : ControllerBase
         var fields = ExtractFields(settings);
         if (fields.Count == 0)
         {
-            return RedirectWithQuery(referrer, settings.ErrorQueryParam, "no-fields");
+            return Fallo(referrer, settings, "no-fields", StatusCodes.Status422UnprocessableEntity);
         }
         if (fields.Count > settings.MaxFieldsPerSubmission)
         {
-            return RedirectWithQuery(referrer, settings.ErrorQueryParam, "too-many-fields");
+            return Fallo(referrer, settings, "too-many-fields", StatusCodes.Status422UnprocessableEntity);
         }
 
         // Los campos OBLIGATORIOS se exigen aquí, contra la definición publicada. Antes no lo
@@ -143,7 +143,7 @@ public sealed class FormSubmissionsController : ControllerBase
                     ["formKey"] = formKey,
                     ["missingCount"] = missing.Length,
                 });
-                return RedirectWithQuery(referrer, settings.ErrorQueryParam, "missing-required");
+                return Fallo(referrer, settings, "missing-required", StatusCodes.Status422UnprocessableEntity);
             }
         }
 
@@ -163,8 +163,7 @@ public sealed class FormSubmissionsController : ControllerBase
                 ["formKey"] = formKey,
                 ["errorCode"] = result.ErrorCode,
             });
-            return RedirectWithQuery(referrer, settings.ErrorQueryParam,
-                result.ErrorCode ?? "unknown");
+            return Fallo(referrer, settings, result.ErrorCode ?? "unknown", StatusCodes.Status500InternalServerError);
         }
 
         _analytics.Track("form.submitted", new Dictionary<string, object?>
@@ -179,7 +178,7 @@ public sealed class FormSubmissionsController : ControllerBase
         // NO rompen la persistencia que ya ocurrió.
         await _notifier.NotifySubmittedAsync(request, result, cancellationToken);
 
-        return RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
+        return Exito(referrer, settings);
     }
 
     private Dictionary<string, string> ExtractFields(FormsSettings settings)
@@ -204,6 +203,22 @@ public sealed class FormSubmissionsController : ControllerBase
         }
         return fields;
     }
+
+    /// <summary>
+    /// Quien envía por <c>fetch</c> —el formulario por pasos (#196)— pide JSON: un redirect a la
+    /// página no le dice si el envío entró, y sin eso no puede decir «enviado» sin mentir. El
+    /// formulario SSR (<c>elementFormContainer</c>) no lo pide y sigue con su PRG.
+    /// </summary>
+    private bool PideJson()
+        => Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+    private IActionResult Exito(string referrer, FormsSettings settings)
+        => PideJson() ? Ok(new { submitted = true }) : RedirectWithQuery(referrer, settings.SuccessQueryParam, "1");
+
+    private IActionResult Fallo(string referrer, FormsSettings settings, string codigo, int estado)
+        => PideJson()
+            ? StatusCode(estado, new { error = codigo })
+            : RedirectWithQuery(referrer, settings.ErrorQueryParam, codigo);
 
     private IActionResult RedirectWithQuery(string referrer, string queryName, string queryValue)
     {

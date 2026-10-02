@@ -117,6 +117,26 @@ public sealed class ContratoSynHostTests
                 ("heading", "Reserva tu próximo viaje"),
                 ("subheading", "Vuelos, hoteles y paquetes"),
             },
+            // Un formulario del modelo de Forms por pasos (#196, tanda D): cada campo de un paso
+            // lleva todo su vocabulario, para que el UI vea viajar cada clave a cualquier profundidad.
+            ["form-stepper"] = new (string, object?)[]
+            {
+                ("formInternalKey", "reserva-cita"),
+                ("steps", ElementoFalso.Lista(
+                    ElementoFalso.Con(
+                        ("stepTitle", "Tu reserva"),
+                        ("stepDescription", "Elige el servicio y la fecha."),
+                        ("fields", ElementoFalso.Lista(
+                            ElementoFalso.Con(
+                                ("fieldName", "servicio"),
+                                ("fieldLabel", "Servicio"),
+                                ("fieldType", "select"),
+                                ("fieldRequired", true),
+                                ("fieldPlaceholder", "Elige uno"),
+                                ("fieldHelpText", "Puedes cambiarlo después."),
+                                ("fieldOptions", new[] { "Asesoría express", "Auditorio" }))))))),
+                ("allowSkip", true),
+            },
             ["kpi-card"] = new (string, object?)[]
             {
                 ("kpiLabel", "Ventas del mes"),

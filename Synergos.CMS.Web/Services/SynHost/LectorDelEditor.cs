@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Models;
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
 using Umbraco.Cms.Core.Strings;
@@ -548,6 +549,19 @@ public sealed class LectorDelEditor
 
         return limpias is { Count: > 0 } ? limpias : null;
     }
+
+    /// <summary>
+    /// Los bloques de la lista (<c>Umbraco.BlockList</c>) de <paramref name="alias"/>, en el orden en
+    /// que el editor los dejó, cada uno con su propio lector; vacía si no hay ninguno.
+    /// </summary>
+    /// <remarks>
+    /// Un bloque anidado se lee con el mismo fallback, el mismo log y el mismo proveedor de URLs que
+    /// su padre: es la misma página, en la misma cultura.
+    /// </remarks>
+    public IReadOnlyList<LectorDelEditor> Bloques(string alias)
+        => _elemento.Value<BlockListModel>(_fallback, alias) is { } lista
+            ? lista.Select(b => new LectorDelEditor(b.Content, _fallback, _log, _urls)).ToList()
+            : [];
 
     /// <summary>Anota lo que el editor escribió y no se pudo usar: no viaja, pero no se pierde callado.</summary>
     public void NoEsValido(string alias, string valor, string esperado)

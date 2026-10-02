@@ -2235,30 +2235,46 @@ public sealed class DevContentFiller
     }
 
     /// <summary>
-    /// Formulario multi-paso (elementSynFormStepper): steps {title, fields[{name,label,type,required,placeholder}]}.
-    /// Reusable para inscripción a curso y reservas. POST al endpoint de Forms (honeypot + rate-limit + email).
+    /// Formulario por pasos (elementSynFormStepper) sobre el modelo de Forms (#196): cada paso es un
+    /// elementFormStep con sus elementFormField, y la clave del formulario es la de cualquier
+    /// formulario del sitio — el envío va a la API de formularios (honeypot + rate-limit + email) y
+    /// el servidor exige los obligatorios con esta misma definición.
     /// </summary>
-    private void AddSynFormStepper(BlockGridJsonBuilder b, string submitEndpoint,
+    private void AddSynFormStepper(BlockGridJsonBuilder b, string formKey,
         (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[] steps)
     {
         var key = _contentTypeService.Get("elementSynFormStepper")?.Key;
-        if (key is null) { return; }
+        var stepKey = _contentTypeService.Get("elementFormStep")?.Key;
+        var fieldKey = _contentTypeService.Get("elementFormField")?.Key;
+        if (key is null || stepKey is null || fieldKey is null) { return; }
         var section = b.AddTopLevelBlock(_sectionKey);
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
-        var stepsJson = "[" + string.Join(",", steps.Select(s =>
+
+        var pasos = new BlockListJsonBuilder();
+        foreach (var (title, fields) in steps)
         {
-            var fields = "[" + string.Join(",", s.fields.Select(f =>
+            var campos = new BlockListJsonBuilder();
+            foreach (var f in fields)
             {
-                var optionsJson = f.options is { Length: > 0 }
-                    ? ",\"options\":[" + string.Join(",", f.options.Select(o => $"\"{Esc(o)}\"")) + "]"
-                    : "";
-                return $"{{\"name\":\"{Esc(f.name)}\",\"label\":\"{Esc(f.label)}\",\"type\":\"{Esc(f.type)}\",\"required\":{(f.required ? "true" : "false")},\"placeholder\":\"{Esc(f.placeholder)}\"{optionsJson}}}";
-            })) + "]";
-            return $"{{\"title\":\"{Esc(s.title)}\",\"fields\":{fields}}}";
-        })) + "]";
+                campos.AddBlock(fieldKey.Value)
+                    .Set("fieldLabel", f.label)
+                    .Set("fieldName", f.name)
+                    .Set("fieldType", f.type)
+                    .Set("fieldRequired", f.required ? "1" : "0")
+                    .Set("fieldPlaceholder", f.placeholder)
+                    .Set("fieldOptions", f.options is { Length: > 0 } ? string.Join('\n', f.options) : null)
+                    .ApplyDefaults(_defaults.DefaultsFor(fieldKey.Value));
+            }
+
+            pasos.AddBlock(stepKey.Value)
+                .Set("stepTitle", title)
+                .Set("fields", campos.Build())
+                .ApplyDefaults(_defaults.DefaultsFor(stepKey.Value));
+        }
+
         section.AddChild(SectionContentAreaKey, key.Value, c => c
-            .Set("stepsJson", stepsJson)
-            .Set("submitEndpoint", submitEndpoint)
+            .Set("formInternalKey", formKey)   // → /api/forms/{formKey}/submit (kebab, matchea FormKeyRegex)
+            .Set("steps", pasos.Build())
             .Set("allowSkip", false)
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
@@ -2946,7 +2962,7 @@ public sealed class DevContentFiller
         AddMission(b, "Inscríbete al curso", "",
             "<p>Crea tu cuenta o inicia sesión para acceder a las lecciones y al proyecto guiado. Si tu empresa cubre tu formación, completa la inscripción y te enviamos la factura.</p>");
         AddMemberLogin(b, "/educacion/curso");
-        AddSynFormStepper(b, "/api/forms/inscripcion-curso/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        AddSynFormStepper(b, "inscripcion-curso", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
         {
             ("Tus datos", new (string, string, string, bool, string, string[])[]
             {
@@ -3226,7 +3242,7 @@ public sealed class DevContentFiller
         // Paso 2 — datos de la reserva: form-stepper multipaso → POST a Forms (honeypot + rate-limit + email).
         AddMission(b, "2 · Completa tus datos", "",
             "<p>Confirma el servicio, la fecha y la hora elegidas y déjanos tus datos de contacto. Te enviamos la confirmación al correo.</p>");
-        AddSynFormStepper(b, "/api/forms/reserva-cita/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        AddSynFormStepper(b, "reserva-cita", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
         {
             ("Tu reserva", new (string, string, string, bool, string, string[])[]
             {
@@ -3455,7 +3471,7 @@ public sealed class DevContentFiller
         // Registro / ticket — form-stepper multipaso (CDN) → POST a Forms (honeypot + rate-limit + email).
         AddMission(b, "Registro y tickets", "",
             "<p>Completa tu registro para asegurar tu cupo. Elige tu tipo de entrada y déjanos tus datos; recibes la confirmación y tu acceso por correo al instante.</p>");
-        AddSynFormStepper(b, "/api/forms/registro-evento/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        AddSynFormStepper(b, "registro-evento", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
         {
             ("Tu entrada", new (string, string, string, bool, string, string[])[]
             {
@@ -3773,7 +3789,7 @@ public sealed class DevContentFiller
         AddMission(b, "Agenda una visita", "",
             "<p>Déjanos tus datos y la fecha que prefieres; un asesor te confirma la visita y resuelve tus dudas. Si ya tienes cuenta, inicia sesión para hacer seguimiento a tus favoritos.</p>");
         AddMemberLogin(b, "/propiedades/propiedad");
-        AddSynFormStepper(b, "/api/forms/contacto-propiedad/submit", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
+        AddSynFormStepper(b, "contacto-propiedad", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
         {
             ("Tu interés", new (string, string, string, bool, string, string[])[]
             {

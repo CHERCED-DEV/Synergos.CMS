@@ -1106,6 +1106,94 @@
       }
     },
     {
+      "nombre": "form-stepper",
+      "tipo": "funcionalidad",
+      "record": "FormStepperProps",
+      "diccionario": [
+        "Form.Messages",
+        "Form.Actions",
+        "Form.Validation.Required",
+        "Form.Placeholders.SelectOption",
+        "Form.Submit"
+      ],
+      "claves": [
+        "Form.Actions.Apply",
+        "Form.Actions.Back",
+        "Form.Actions.Next",
+        "Form.Actions.Register",
+        "Form.Actions.RequestDemo",
+        "Form.Actions.Send",
+        "Form.Actions.Subscribe",
+        "Form.Messages.Error",
+        "Form.Messages.NetworkError",
+        "Form.Messages.NotFound",
+        "Form.Messages.Sending",
+        "Form.Messages.Success",
+        "Form.Placeholders.SelectOption",
+        "Form.Submit",
+        "Form.Validation.Required"
+      ],
+      "campos": [
+        {
+          "nombre": "formKey",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "steps",
+          "tipo": "PasoDelFormulario[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "allowSkip",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "honeypotField",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "formKey": "reserva-cita",
+        "steps": [
+          {
+            "title": "Tu reserva",
+            "fields": [
+              {
+                "name": "servicio",
+                "label": "Servicio",
+                "type": "select",
+                "required": true,
+                "placeholder": "Elige uno",
+                "helpText": "Puedes cambiarlo después.",
+                "options": [
+                  "Asesoría express",
+                  "Auditorio"
+                ]
+              }
+            ],
+            "description": "Elige el servicio y la fecha."
+          }
+        ],
+        "allowSkip": true,
+        "apiBase": "/api/forms",
+        "honeypotField": "syn_hp"
+      }
+    },
+    {
       "nombre": "gov",
       "tipo": "funcionalidad",
       "record": "GovProps",
@@ -2536,6 +2624,46 @@
       ]
     },
     {
+      "record": "CampoDelFormulario",
+      "campos": [
+        {
+          "nombre": "name",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "type",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "required",
+          "tipo": "boolean",
+          "opcional": false
+        },
+        {
+          "nombre": "placeholder",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "helpText",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "options",
+          "tipo": "string[]",
+          "opcional": true
+        }
+      ]
+    },
+    {
       "record": "CarouselSlide",
       "campos": [
         {
@@ -2665,6 +2793,26 @@
         },
         {
           "nombre": "variant",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "PasoDelFormulario",
+      "campos": [
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "fields",
+          "tipo": "CampoDelFormulario[]",
+          "opcional": false
+        },
+        {
+          "nombre": "description",
           "tipo": "string",
           "opcional": true
         }

@@ -1,7 +1,9 @@
 using System.Globalization;
 using NSubstitute;
+using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Dictionary;
 using Umbraco.Cms.Core.Models;
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
 
@@ -33,6 +35,22 @@ internal static class ElementoFalso
 
         return elemento;
     }
+
+    /// <summary>Como <see cref="Con"/>, pero de un ElementType con este <paramref name="tipo"/> (su alias).</summary>
+    public static IPublishedElement DeTipo(string tipo, params (string Alias, object? Valor)[] valores)
+    {
+        var contentType = Substitute.For<IPublishedContentType>();
+        contentType.Alias.Returns(tipo);
+        var elemento = Con(valores);
+        elemento.ContentType.Returns(contentType);
+        return elemento;
+    }
+
+    /// <summary>Una lista de bloques (<c>Umbraco.BlockList</c>) con estos elementos, en orden.</summary>
+    public static BlockListModel Lista(params IPublishedElement[] bloques)
+        => new(bloques
+            .Select(b => new BlockListItem(new GuidUdi(Constants.UdiEntityType.Element, Guid.NewGuid()), b, null!, null!))
+            .ToList());
 
     /// <summary>
     /// Un medio de la biblioteca con su fichero en <paramref name="archivo"/> (lo que Umbraco

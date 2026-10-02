@@ -41,6 +41,11 @@ public sealed partial class SeamComposer
         // el published cache en cada llamada vía IUmbracoContextAccessor.
         services.AddSingleton<IFormDefinitionReader, UmbracoFormDefinitionReader>();
 
+        // La configuración de negocio del formulario por pasos (ADR 0137, escala #196): dónde vive
+        // la API de formularios, por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<FormStepperFeatureSettings, NegocioDeFormStepper>(
+            builder.Config.GetSection("Synergos:Features:FormStepper"));
+
         // Ola 61 — Search infrastructure (ADR 0031). ExamineSearchProvider
         // usa el ExternalIndex out-of-the-box de Umbraco (Examine 3.1.0)
         // y reproyecta los hits cruzando con el published cache para

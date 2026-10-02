@@ -22,17 +22,35 @@ namespace Synergos.CMS.Web.Services;
 /// <c>/api/forms/{key}/submit</c>, que no tiene página en contexto: filtrar por siteRoot ahí
 /// dejaría fuera formularios legítimos.
 /// </para>
+/// <para>
+/// <b>Un formulario por pasos también es un formulario</b> (#196): <c>elementSynFormStepper</c>
+/// declara su clave con el mismo alias y sus campos son <c>elementFormField</c> repartidos en pasos.
+/// Su definición es la unión de los campos de todos sus pasos, así que el servidor exige sus
+/// obligatorios igual que los de un contenedor. Antes no los veía: el envío del stepper no llegaba
+/// nunca, pero en cuanto llegara habría pasado sin chequeo.
+/// </para>
 /// </remarks>
 public sealed class UmbracoFormDefinitionReader : IFormDefinitionReader
 {
     private const string ContainerAlias = "elementFormContainer";
+    private const string StepperAlias = "elementSynFormStepper";
+    private const string StepsAlias = "steps";
     private const string FieldsAlias = "fields";
     private const string KeyAlias = "formInternalKey";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
+    private readonly IPublishedValueFallback _fallback;
 
-    public UmbracoFormDefinitionReader(IUmbracoContextAccessor umbracoContextAccessor)
-        => _umbracoContextAccessor = umbracoContextAccessor;
+    /// <param name="umbracoContextAccessor">El published cache de la petición.</param>
+    /// <param name="fallback">
+    /// El fallback de valores, inyectado: la forma «amigable» <c>Value&lt;T&gt;(alias)</c> lo saca del
+    /// proveedor estático y deja la lectura sin poder probarse fuera de Umbraco.
+    /// </param>
+    public UmbracoFormDefinitionReader(IUmbracoContextAccessor umbracoContextAccessor, IPublishedValueFallback fallback)
+    {
+        _umbracoContextAccessor = umbracoContextAccessor;
+        _fallback = fallback;
+    }
 
     public FormDefinition? GetByKey(string formKey)
     {
@@ -44,10 +62,10 @@ public sealed class UmbracoFormDefinitionReader : IFormDefinitionReader
         {
             foreach (var container in EnumerateFormContainers(page))
             {
-                var key = container.Value<string>(KeyAlias);
+                var key = container.Value<string>(_fallback, KeyAlias);
                 if (!string.Equals(key, formKey, StringComparison.OrdinalIgnoreCase)) { continue; }
 
-                return new FormDefinition(formKey, ReadFields(container));
+                return new FormDefinition(formKey, ReadFields(container, _fallback));
             }
         }
 
@@ -96,24 +114,38 @@ public sealed class UmbracoFormDefinitionReader : IFormDefinitionReader
         }
     }
 
-    private static bool IsContainer(IPublishedElement el)
-        => string.Equals(el.ContentType.Alias, ContainerAlias, StringComparison.Ordinal);
+    /// <summary>
+    /// ¿Este bloque declara un formulario? Un contenedor o un formulario por pasos. Público para
+    /// probarlo: es lo que decide si el servidor encuentra la definición y exige los obligatorios.
+    /// </summary>
+    public static bool IsContainer(IPublishedElement el)
+        => string.Equals(el.ContentType.Alias, ContainerAlias, StringComparison.Ordinal)
+        || IsStepper(el);
 
-    private static IReadOnlyList<FormFieldDefinition> ReadFields(IPublishedElement container)
+    private static bool IsStepper(IPublishedElement el)
+        => string.Equals(el.ContentType.Alias, StepperAlias, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Los campos de un formulario: los del contenedor, o los de todos los pasos del stepper en
+    /// orden. Público para que se pruebe sin el published cache.
+    /// </summary>
+    public static IReadOnlyList<FormFieldDefinition> ReadFields(IPublishedElement container, IPublishedValueFallback fallback)
     {
-        var fields = container.Value<BlockListModel>(FieldsAlias);
-        if (fields is null) { return Array.Empty<FormFieldDefinition>(); }
+        var listas = IsStepper(container)
+            ? (container.Value<BlockListModel>(fallback, StepsAlias) ?? Enumerable.Empty<BlockListItem>())
+                .Select(paso => paso.Content.Value<BlockListModel>(fallback, FieldsAlias))
+            : [container.Value<BlockListModel>(fallback, FieldsAlias)];
 
         var result = new List<FormFieldDefinition>();
-        foreach (var block in fields)
+        foreach (var block in listas.OfType<BlockListModel>().SelectMany(l => l))
         {
-            var name = block.Content.Value<string>("fieldName");
+            var name = block.Content.Value<string>(fallback, "fieldName");
             if (string.IsNullOrWhiteSpace(name)) { continue; }
 
             result.Add(new FormFieldDefinition(
                 Name: name,
-                Label: block.Content.Value<string>("fieldLabel") ?? name,
-                Required: block.Content.Value<bool>("fieldRequired")));
+                Label: block.Content.Value<string>(fallback, "fieldLabel") ?? name,
+                Required: block.Content.Value<bool>(fallback, "fieldRequired")));
         }
 
         return result;
