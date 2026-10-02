@@ -12,16 +12,11 @@ namespace Synergos.CMS.Application.Configuration;
 /// <c>feePercent</c> en el JSON libre del bloque; ningún camino del servidor la cobraba (#194).
 /// Ahora la escribe quien despliega, una vez, y la leen lo que se muestra y lo que se cobra.</para>
 ///
-/// <para><b>Un sitio cambia claves sueltas, no la sección.</b> Cada entrada de <see cref="Sitios"/>
-/// se nombra por la <c>Key</c> del siteRoot —la que viaja en uSync y no cambia al renombrar el
-/// sitio— y lleva sólo lo que ese sitio cambia; lo demás lo hereda de los valores base. Nunca se
-/// reemplaza la sección entera por sitio.</para>
-///
-/// <para><b>Una clave mal escrita falla al arrancar</b> (<c>ValidadorDeNegocioDeEventos</c>): el
-/// binder de .NET descarta en silencio lo que no mapea, y sin el validador esta sección movería el
-/// fallo silencioso del JSON del editor a un <c>appsettings</c>.</para>
+/// <para>La forma —valores base, <c>Sitios</c> por la <c>Key</c> del siteRoot, fusión clave por
+/// clave y validación al arrancar— es la de toda sección de negocio
+/// (<see cref="SeccionDeNegocio{TSitio, TNegocio}"/>).</para>
 /// </remarks>
-public sealed class EventosFeatureSettings
+public sealed class EventosFeatureSettings : SeccionDeNegocio<EventosFeatureSitio, NegocioDeEventos>
 {
     /// <summary>La sección de configuración.</summary>
     public const string Seccion = "Synergos:Features:Eventos";
@@ -39,39 +34,21 @@ public sealed class EventosFeatureSettings
     /// <remarks>El 10 es el que el bundle traía compilado en la plantilla del payout.</remarks>
     public decimal PlatformFeePercent { get; init; } = 10m;
 
-    /// <summary>Lo que cambia cada sitio, por la <c>Key</c> de su siteRoot.</summary>
-    public Dictionary<string, EventosFeatureSitio> Sitios { get; init; } = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Los valores que rigen en <paramref name="sitio"/>: los suyos encima de los base, clave por
-    /// clave. Sin sitio, o con uno que no cambia nada, rigen los base.
-    /// </summary>
-    public NegocioDeEventos Para(Guid? sitio)
-    {
-        var propio = sitio is { } key ? DelSitio(key) : null;
-
-        return new NegocioDeEventos(
+    /// <inheritdoc />
+    protected override NegocioDeEventos Fusionar(EventosFeatureSitio? propio)
+        => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             FeePercent: propio?.FeePercent ?? FeePercent,
             PlatformFeePercent: propio?.PlatformFeePercent ?? PlatformFeePercent);
-    }
 
-    /// <summary>
-    /// Lo que cambia <paramref name="sitio"/>. La clave se compara como GUID y no como texto: con
-    /// llaves o en mayúsculas sigue siendo la misma <c>Key</c>.
-    /// </summary>
-    private EventosFeatureSitio? DelSitio(Guid sitio)
-    {
-        foreach (var (clave, valores) in Sitios)
+    /// <inheritdoc />
+    protected override IEnumerable<string> ProblemasDe(NegocioDeEventos negocio)
+        => new[]
         {
-            if (Guid.TryParse(clave, out var key) && key == sitio)
-            {
-                return valores;
-            }
-        }
-
-        return null;
-    }
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            ReglasDeNegocio.Porcentaje("FeePercent", negocio.FeePercent),
+            ReglasDeNegocio.Porcentaje("PlatformFeePercent", negocio.PlatformFeePercent),
+        }.OfType<string>();
 }
 
 /// <summary>

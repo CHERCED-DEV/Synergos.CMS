@@ -734,9 +734,9 @@ public sealed class ContratoSynHostTests
     /// La configuración de negocio con los valores base de cada sección, que es lo que rige en un
     /// sitio sin override: el ejemplo del contrato muestra lo que llega por defecto.
     /// </summary>
-    private static INegocioDeEventos NegocioBase()
+    private static INegocioDelSitio<NegocioDeEventos> NegocioBase()
     {
-        var negocio = Substitute.For<INegocioDeEventos>();
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEventos>>();
         negocio.Actual().Returns(new Synergos.CMS.Application.Configuration.EventosFeatureSettings().Para(null));
         return negocio;
     }

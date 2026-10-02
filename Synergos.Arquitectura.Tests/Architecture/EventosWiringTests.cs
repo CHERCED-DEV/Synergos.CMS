@@ -168,11 +168,11 @@ public sealed class EventosWiringTests
     /// motores de compra — no sólo el resolver que la muestra.
     /// </summary>
     /// <remarks>
-    /// <para>Cada pieza se olvida sola y en verde: sin <c>ValidateOnStart</c> una clave mal escrita
-    /// se descubre en la primera compra (o nunca: el binder la descarta); sin el validador
-    /// registrado, <c>ValidateOnStart</c> no tiene nada que correr; y un motor sin
-    /// <c>negocio:</c> vuelve a cobrar sin la comisión que el carrito muestra, que es el defecto
-    /// que el piloto cerró (#194). El motor que NO está encendido es justo el que nadie mira.</para>
+    /// <para>La sección se enchufa con <c>AddSeccionDeNegocio</c>, que junta el enlace, el validador
+    /// y <c>ValidateOnStart</c> (lo prueba <c>NegocioDeEventosTests</c>: una clave mal escrita no deja
+    /// arrancar). Lo que queda por olvidar está acá: un motor sin <c>negocio:</c> vuelve a cobrar sin
+    /// la comisión que el carrito muestra, que es el defecto que el piloto cerró (#194). El motor que
+    /// NO está encendido es justo el que nadie mira.</para>
     /// </remarks>
     [Fact]
     public void La_configuracion_de_negocio_se_valida_al_arrancar_y_la_leen_los_dos_motores()
@@ -181,9 +181,8 @@ public sealed class EventosWiringTests
 
         Assert.Equal("Synergos:Features:Eventos", Synergos.CMS.Application.Configuration.EventosFeatureSettings.Seccion);
         Assert.Matches(
-            @"AddOptions<EventosFeatureSettings>\(\)\s*\.Bind\(builder\.Config\.GetSection\(""Synergos:Features:Eventos""\)\)\s*\.ValidateOnStart\(\)",
+            @"AddSeccionDeNegocio<EventosFeatureSettings, NegocioDeEventos>\(\s*builder\.Config\.GetSection\(""Synergos:Features:Eventos""\)\)",
             composer);
-        Assert.Contains("IValidateOptions<EventosFeatureSettings>, ValidadorDeNegocioDeEventos>", composer, StringComparison.Ordinal);
 
         foreach (var motor in new[] { "new StubEventTicketingService(", "new HttpEventTicketingService(" })
         {

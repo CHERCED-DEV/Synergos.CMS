@@ -151,7 +151,7 @@ public sealed class HttpEventTicketingServiceTests
     public async Task Comprar_manda_al_orquestador_la_comision_del_sitio()
     {
         var orq = Feliz();
-        var negocio = Substitute.For<INegocioDeEventos>();
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEventos>>();
         negocio.Actual().Returns(new NegocioDeEventos("/api/eventos", 8.5m, 10m));
         var svc = new HttpEventTicketingService(
             new FabricaFalsa(orq),

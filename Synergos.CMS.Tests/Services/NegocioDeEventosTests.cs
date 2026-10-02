@@ -12,6 +12,7 @@ using Synergos.CMS.Interfaces.SynHost;
 using Synergos.CMS.Tests.Services.SynHost;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.SynHost;
+using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -136,6 +137,18 @@ public sealed class NegocioDeEventosTests
 
         sp.GetRequiredService<IStartupValidator>().Validate();
         Assert.Equal(8m, sp.GetRequiredService<IOptionsMonitor<EventosFeatureSettings>>().CurrentValue.Para(Bogota).FeePercent);
+    }
+
+    /// <summary>
+    /// La línea del composer sirve el lector: sin ella el resolver y los motores no tienen de dónde
+    /// leer, y el contenedor fallaría recién al pintar la primera página.
+    /// </summary>
+    [Fact]
+    public void El_registro_en_una_linea_sirve_la_configuracion_del_sitio()
+    {
+        using var sp = Opciones(new() { ["FeePercent"] = "9" });
+
+        Assert.Equal(9m, sp.GetRequiredService<INegocioDelSitio<NegocioDeEventos>>().Actual().FeePercent);
     }
 
     [Theory]
@@ -302,15 +315,21 @@ public sealed class NegocioDeEventosTests
     private static Dictionary<string, string?> EnLaSeccion(Dictionary<string, string?> claves)
         => claves.ToDictionary(c => $"{EventosFeatureSettings.Seccion}:{c.Key}", c => c.Value);
 
-    /// <summary>Como lo registra el composer: enlazada, validada al arrancar y con su validador.</summary>
+    /// <summary>
+    /// Como lo registra el composer, con la MISMA línea (<c>AddSeccionDeNegocio</c>). Sin contexto de
+    /// Umbraco, el sitio de la petición es ninguno: rigen los valores base.
+    /// </summary>
     private static ServiceProvider Proveedor(IConfiguration config)
     {
-        var servicios = new ServiceCollection().AddSingleton(config);
-        servicios.AddOptions<EventosFeatureSettings>()
-            .Bind(config.GetSection(EventosFeatureSettings.Seccion))
-            .ValidateOnStart();
-        servicios.AddSingleton<IValidateOptions<EventosFeatureSettings>, ValidadorDeNegocioDeEventos>();
-        return servicios.BuildServiceProvider();
+        var sinUmbraco = Substitute.For<IUmbracoContextAccessor>();
+        sinUmbraco.TryGetUmbracoContext(out Arg.Any<IUmbracoContext>()!).Returns(false);
+
+        return new ServiceCollection()
+            .AddSingleton(config)
+            .AddLogging()
+            .AddSingleton(new SitioDeLaPeticion(sinUmbraco))
+            .AddSeccionDeNegocio<EventosFeatureSettings, NegocioDeEventos>(config.GetSection(EventosFeatureSettings.Seccion))
+            .BuildServiceProvider();
     }
 
     private static ServiceProvider Opciones(Dictionary<string, string?> claves)
@@ -322,18 +341,19 @@ public sealed class NegocioDeEventosTests
         return (config, Proveedor(config));
     }
 
-    private static NegocioDeEventosDelSitio Lector(IServiceProvider sp, Func<Guid?> sitio, ILogger<NegocioDeEventosDelSitio>? log = null)
+    private static NegocioDelSitio<EventosFeatureSettings, NegocioDeEventos> Lector(
+        IServiceProvider sp, Func<Guid?> sitio, ILogger? log = null)
         => new(sp.GetRequiredService<IOptionsMonitor<EventosFeatureSettings>>(), sitio,
-            log ?? NullLogger<NegocioDeEventosDelSitio>.Instance);
+            EventosFeatureSettings.Seccion, log ?? NullLogger.Instance);
 
-    private static INegocioDeEventos Fijo(decimal comision)
+    private static INegocioDelSitio<NegocioDeEventos> Fijo(decimal comision)
     {
-        var negocio = Substitute.For<INegocioDeEventos>();
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEventos>>();
         negocio.Actual().Returns(new NegocioDeEventos("/api/eventos", comision, 10m));
         return negocio;
     }
 
-    private static StubEventTicketingService Motor(IPaymentProvider pagos, INegocioDeEventos? negocio)
+    private static StubEventTicketingService Motor(IPaymentProvider pagos, INegocioDelSitio<NegocioDeEventos>? negocio)
         => new(new StubEventCatalogProvider(), new StubReservationService(), pagos,
             null, null, null, null,
             signer: new HmacTicketSigner("llave-de-tests-negocio"u8.ToArray()),
@@ -341,7 +361,7 @@ public sealed class NegocioDeEventosTests
 
     private static EventAttendeeInfo Asistente(string n) => new($"Asistente {n}", $"asistente{n}@synergos.co", $"100{n}");
 
-    private sealed class LogQueCuenta : ILogger<NegocioDeEventosDelSitio>
+    private sealed class LogQueCuenta : ILogger
     {
         public int Errores { get; private set; }
 

@@ -64,7 +64,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     private readonly ITransactionalNotifier? _notifier;
     private readonly ILogger<HttpEventTicketingService> _log;
     private readonly Func<DateTimeOffset> _now;
-    private readonly INegocioDeEventos? _negocio;
+    private readonly INegocioDelSitio<NegocioDeEventos>? _negocio;
 
     /// <param name="negocio">De dónde sale la comisión de servicio que se manda al orquestador
     /// (ADR 0137): la misma que el carrito le muestra al comprador. Sin él no se cobra comisión.</param>
@@ -75,7 +75,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         ILogger<HttpEventTicketingService> log,
         ITransactionalNotifier? notifier = null,
         Func<DateTimeOffset>? now = null,
-        INegocioDeEventos? negocio = null)
+        INegocioDelSitio<NegocioDeEventos>? negocio = null)
     {
         _negocio = negocio;
         _clients = clients;

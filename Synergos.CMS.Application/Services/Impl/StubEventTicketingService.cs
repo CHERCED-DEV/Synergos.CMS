@@ -62,7 +62,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly Func<DateTimeOffset> _now;
 
     /// <summary>De dónde sale la comisión de servicio; sin él no se cobra comisión.</summary>
-    private readonly INegocioDeEventos? _negocio;
+    private readonly INegocioDelSitio<NegocioDeEventos>? _negocio;
 
     public StubEventTicketingService(
         IEventCatalogProvider catalog,
@@ -126,7 +126,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         ITransactionalNotifier? notifier = null,
         ITicketSigner? signer = null,
         EventTicketLedger? ledger = null,
-        INegocioDeEventos? negocio = null)
+        INegocioDelSitio<NegocioDeEventos>? negocio = null)
     {
         _negocio = negocio;
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
