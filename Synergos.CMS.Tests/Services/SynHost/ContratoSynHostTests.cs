@@ -83,6 +83,40 @@ public sealed class ContratoSynHostTests
                 ("heading", "Encuentra el lugar que estás buscando"),
                 ("subheading", "Compra y arriendo, en lista y en mapa"),
             },
+            ["academy"] = new (string, object?)[]
+            {
+                ("heading", "Aprende lo que el mercado pide"),
+                ("subheading", "Catálogo, lecciones e instructores a tu ritmo"),
+            },
+            ["blogs"] = new (string, object?)[]
+            {
+                ("heading", "Conecta, publica y crece tu audiencia"),
+            },
+            ["booking-wizard"] = new (string, object?)[]
+            {
+                ("destinationLabel", "Hoteles SynergosLabs"),
+            },
+            // La identidad no es del editor: el resolver pone el paciente de demo (#197).
+            ["ehr"] = Array.Empty<(string, object?)>(),
+            ["gov"] = new (string, object?)[]
+            {
+                ("heading", "Tus trámites, sin filas"),
+                ("subheading", "Radica, paga la tasa y sigue tu expediente"),
+            },
+            ["seller"] = new (string, object?)[]
+            {
+                ("heading", "Tu negocio, en un solo panel"),
+            },
+            ["storefront"] = new (string, object?)[]
+            {
+                ("heading", "Compra en nuestra tienda online"),
+                ("subheading", "Catálogo, carrito y checkout"),
+            },
+            ["travel-shell"] = new (string, object?)[]
+            {
+                ("heading", "Reserva tu próximo viaje"),
+                ("subheading", "Vuelos, hoteles y paquetes"),
+            },
             ["kpi-card"] = new (string, object?)[]
             {
                 ("kpiLabel", "Ventas del mes"),
@@ -406,7 +440,7 @@ public sealed class ContratoSynHostTests
             .ToList();
 
         Assert.True(sinOrigen.Count == 0,
-            "Estos campos no declaran [CampoSynHost(Contenido|Decision|Negocio)]: " + string.Join(", ", sinOrigen)
+            "Estos campos no declaran [CampoSynHost(Contenido|Decision|Negocio|Sesion)]: " + string.Join(", ", sinOrigen)
             + ". Es la clasificación que la fábrica lee para saber qué dato pide un elemento.");
     }
 
@@ -439,6 +473,52 @@ public sealed class ContratoSynHostTests
         Assert.True(enPiezas.Count == 0,
             "Estas piezas llevan configuración de negocio, que es sólo de las funcionalidades: "
             + string.Join(", ", enPiezas) + ". Si es una decisión del editor, es Decision.");
+    }
+
+    /// <summary>
+    /// Lo que el editor podía escribir antes en una funcionalidad —la base de la API, el JSON libre,
+    /// la moneda— sigue guardado en el contenido de las bases que ya existen, y no viaja: lo de
+    /// negocio lo fija el sitio (ADR 0137, escala #196).
+    /// </summary>
+    /// <remarks>
+    /// Cada resolver corre con su muestra y otra vez con esas claves VIEJAS encima, con valores que
+    /// no son los del sitio: si una vista o un resolver volviera a leer alguna, el <c>config</c>
+    /// emitido cambiaría. Las funcionalidades se descubren, no se listan.
+    /// </remarks>
+    [Fact]
+    public async Task Lo_que_el_editor_escribia_antes_en_una_funcionalidad_no_viaja()
+    {
+        var viejas = new (string Alias, object? Valor)[]
+        {
+            ("apiBase", "/otra/api"),
+            ("currency", "USD"),
+            ("config", """{"apiBase":"/otra/api","currency":"USD","feePercent":99}"""),
+        };
+        var funcionalidades = Records()
+            .Where(r => SolicitudSynHost.Elemento(r).Tipo == TipoDeColocable.Funcionalidad)
+            .ToList();
+
+        // Sin piso, un descubrimiento roto pasaría en verde: eventos es el piloto.
+        Assert.Contains(typeof(EventosProps), funcionalidades);
+
+        var leen = new List<string>();
+        foreach (var record in funcionalidades)
+        {
+            var nombre = SolicitudSynHost.Elemento(record).Nombre;
+            var muestra = Muestras[nombre];
+            var conViejas = muestra.Concat(viejas.Where(v => muestra.All(m => m.Alias != v.Alias))).ToArray();
+
+            var antes = (await Ejemplo(record, muestra)).GetRawText();
+            var despues = (await Ejemplo(record, conViejas)).GetRawText();
+            if (antes != despues)
+            {
+                leen.Add($"{nombre}: {despues}");
+            }
+        }
+
+        Assert.True(leen.Count == 0,
+            "Estas funcionalidades hacen viajar lo que el editor escribía antes en el bloque, que ya no es "
+            + "suyo: " + string.Join("; ", leen));
     }
 
     /// <summary>
@@ -670,6 +750,7 @@ public sealed class ContratoSynHostTests
                     OrigenDelCampo.Contenido => "contenido",
                     OrigenDelCampo.Decision => "decision",
                     OrigenDelCampo.Negocio => "negocio",
+                    OrigenDelCampo.Sesion => "sesion",
                     _ => "SIN-ORIGEN",
                 }
                 : null;
@@ -884,7 +965,11 @@ public sealed class ContratoSynHostTests
 
         // Red de seguridad: un resolver que no pide NADA es uno que no se está observando (o un
         // NSubstitute que dejó de registrar llamadas), y todos sus selectores saldrían «no viaja».
-        Assert.True(leidas.Count > 0, $"El resolver de {record.Name} no le pidió ninguna propiedad al bloque de muestra.");
+        // Salvo que el record no reciba nada del editor (ehr: su API es de negocio y su paciente es
+        // de la sesión, #196/#197); entonces no pedir nada es lo correcto.
+        var delEditor = record.GetProperties().Any(p =>
+            p.GetCustomAttribute<CampoSynHostAttribute>()?.Origen is OrigenDelCampo.Contenido or OrigenDelCampo.Decision);
+        Assert.True(leidas.Count > 0 || !delEditor, $"El resolver de {record.Name} no le pidió ninguna propiedad al bloque de muestra.");
         return leidas;
     }
 

@@ -13,6 +13,16 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
+        // La configuración de negocio de la tienda (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<StorefrontFeatureSettings, NegocioDeStorefront>(
+            builder.Config.GetSection("Synergos:Features:Storefront"));
+
+        // La configuración de negocio de la consola del vendedor (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<SellerFeatureSettings, NegocioDeSeller>(
+            builder.Config.GetSection("Synergos:Features:Seller"));
+
         // OLA 2 Tienda — motor del marketplace e-commerce (doc tienda-app-spec).
         // Dos seams stub-first, aditivos (no tocan Booking/Travel ni el carrito
         // cookie IShopQuery/ICartService de los bloques Razor del CMS). ADR 0002

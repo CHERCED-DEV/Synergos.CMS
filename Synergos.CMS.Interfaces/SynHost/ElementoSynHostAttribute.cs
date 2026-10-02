@@ -91,4 +91,11 @@ public enum OrigenDelCampo
     /// ve (ADR 0137). Sólo una funcionalidad lleva campos de este origen (ADR 0134).
     /// </summary>
     Negocio,
+
+    /// <summary>
+    /// De quién son los datos que se muestran: lo decide el servidor para la petición, no el editor
+    /// (ADR 0137 §5, «de runtime»). Hoy es una identidad de demo; #197 la pasa al miembro de la
+    /// sesión.
+    /// </summary>
+    Sesion,
 }

@@ -1,5 +1,7 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -8,6 +10,11 @@ public sealed partial class SeamComposer
     private static void ComposeSocial(IUmbracoBuilder builder)
     {
         var services = builder.Services;
+
+        // La configuración de negocio de la red editorial (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<BlogsFeatureSettings, NegocioDeBlogs>(
+            builder.Config.GetSection("Synergos:Features:Blogs"));
 
         // OLA 3 Blogs — red social (doc blogs-app-spec). Seams stub-first, aditivos
         // (no tocan Booking/Travel/Shop). ADR 0002 (Application pura, sin Umbraco) +

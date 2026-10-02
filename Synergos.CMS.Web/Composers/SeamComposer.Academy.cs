@@ -13,6 +13,11 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
+        // La configuración de negocio de la academia (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<AcademyFeatureSettings, NegocioDeAcademy>(
+            builder.Config.GetSection("Synergos:Features:Academy"));
+
         // OLA 4 Educación — LMS (doc educacion-app-spec). Dos seams stub-first,
         // aditivos (no tocan Booking/Travel/Shop/Blogs). ADR 0002 (Application pura,
         // sin Umbraco) + ADR 0075 (seam con tests canónicos).

@@ -13,6 +13,11 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
+        // La configuración de negocio de el portal de trámites (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<GovFeatureSettings, NegocioDeGov>(
+            builder.Config.GetSection("Synergos:Features:Gov"));
+
         // OLA 6 Eventos — plataforma de eventos enterprise (doc eventos-app-spec).
         // Tres seams stub-first, aditivos (no tocan Booking/Travel/Shop/Blogs/Educación/
         // Healthcare). ADR 0002 (Application pura, sin Umbraco) + ADR 0075 (tests

@@ -13,6 +13,11 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
+        // La configuración de negocio de el portal clínico (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<EhrFeatureSettings, NegocioDeEhr>(
+            builder.Config.GetSection("Synergos:Features:Ehr"));
+
         // Ola 216 — Host bridge (ADR 0083). DefaultHostBridgeContextBuilder
         // arma el shape canónico de window.synergos consumed by UI components
         // via _SynergosBridge.cshtml partial. Transient — depende de scoped

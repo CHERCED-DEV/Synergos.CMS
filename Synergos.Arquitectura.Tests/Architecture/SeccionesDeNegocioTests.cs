@@ -70,4 +70,20 @@ public sealed class SeccionesDeNegocioTests
             + "literal de su constante Seccion: " + string.Join(", ", sueltas)
             + ". Sin el registro, el resolver que las lee contesta 500 al pintar la página.");
     }
+
+    /// <summary>
+    /// Los valores base de cada sección sirven: son los que rigen en un sitio sin override, y uno que
+    /// no pasara su propia validación no dejaría arrancar un despliegue sin configurar nada.
+    /// </summary>
+    [Fact]
+    public void Los_valores_base_de_cada_seccion_pasan_su_propia_validacion()
+    {
+        var malas = Secciones()
+            .Select(s => (Seccion: s.Name, Problemas: ((ISeccionDeNegocio)Activator.CreateInstance(s)!).Problemas()))
+            .Where(x => x.Problemas.Count > 0)
+            .Select(x => $"{x.Seccion}: {string.Join("; ", x.Problemas)}")
+            .ToList();
+
+        Assert.True(malas.Count == 0, "Estas secciones no validan sus propios valores base: " + string.Join(" | ", malas));
+    }
 }

@@ -2,6 +2,38 @@
   "comentario": "GENERADO desde los records [ElementoSynHost] de Synergos.CMS.Interfaces por Synergos.CMS.Tests/Services/SynHost/ContratoSynHostTests.cs — no se edita a mano (ADR 0135). `ejemplo` es el config EXACTO que emite la vista para una muestra autorada.",
   "elementos": [
     {
+      "nombre": "academy",
+      "tipo": "funcionalidad",
+      "record": "AcademyProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Aprende lo que el mercado pide",
+        "subheading": "Catálogo, lecciones e instructores a tu ritmo",
+        "apiBase": "/api/academy"
+      }
+    },
+    {
       "nombre": "accordion",
       "tipo": "pieza",
       "record": "AccordionProps",
@@ -332,6 +364,56 @@
           }
         ],
         "layout": "stack"
+      }
+    },
+    {
+      "nombre": "blogs",
+      "tipo": "funcionalidad",
+      "record": "BlogsProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Conecta, publica y crece tu audiencia",
+        "apiBase": "/api/blogs"
+      }
+    },
+    {
+      "nombre": "booking-wizard",
+      "tipo": "funcionalidad",
+      "record": "BookingWizardProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "destinationLabel",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "destinationLabel": "Hoteles SynergosLabs",
+        "apiBase": "/api/booking"
       }
     },
     {
@@ -861,6 +943,31 @@
       }
     },
     {
+      "nombre": "ehr",
+      "tipo": "funcionalidad",
+      "record": "EhrProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "patient",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sesion"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "patient": "pat-jorge-medina",
+        "apiBase": "/api/ehr"
+      }
+    },
+    {
       "nombre": "eventos",
       "tipo": "funcionalidad",
       "record": "EventosProps",
@@ -996,6 +1103,38 @@
         "target": "_blank",
         "position": "bottom-left",
         "label": "Escribinos por WhatsApp"
+      }
+    },
+    {
+      "nombre": "gov",
+      "tipo": "funcionalidad",
+      "record": "GovProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Tus trámites, sin filas",
+        "subheading": "Radica, paga la tasa y sigue tu expediente",
+        "apiBase": "/api/gov"
       }
     },
     {
@@ -1769,6 +1908,31 @@
       }
     },
     {
+      "nombre": "seller",
+      "tipo": "funcionalidad",
+      "record": "SellerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Tu negocio, en un solo panel",
+        "apiBase": "/api/shop"
+      }
+    },
+    {
       "nombre": "share-bar",
       "tipo": "pieza",
       "record": "ShareBarProps",
@@ -1903,6 +2067,38 @@
           }
         ],
         "currentStep": 1
+      }
+    },
+    {
+      "nombre": "storefront",
+      "tipo": "funcionalidad",
+      "record": "StorefrontProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Compra en nuestra tienda online",
+        "subheading": "Catálogo, carrito y checkout",
+        "apiBase": "/api/shop"
       }
     },
     {
@@ -2081,6 +2277,38 @@
           }
         ],
         "autoStart": true
+      }
+    },
+    {
+      "nombre": "travel-shell",
+      "tipo": "funcionalidad",
+      "record": "TravelShellProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Reserva tu próximo viaje",
+        "subheading": "Vuelos, hoteles y paquetes",
+        "apiBase": "/api/travel"
       }
     },
     {

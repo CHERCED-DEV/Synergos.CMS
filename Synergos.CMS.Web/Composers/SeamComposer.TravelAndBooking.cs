@@ -13,6 +13,16 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
+        // La configuración de negocio de el portal de viajes (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<TravelShellFeatureSettings, NegocioDeTravelShell>(
+            builder.Config.GetSection("Synergos:Features:TravelShell"));
+
+        // La configuración de negocio de el asistente de reservas (ADR 0137, escala #196): dónde vive su API,
+        // por sitio. La lee el resolver del elemento.
+        services.AddSeccionDeNegocio<BookingWizardFeatureSettings, NegocioDeBookingWizard>(
+            builder.Config.GetSection("Synergos:Features:BookingWizard"));
+
         // Motor de reservas (vertical Hoteles) — 3 seams stub-first (doc 17),
         // calcando IPaymentProvider. Hoy sirven la demo end-to-end en memoria;
         // se cambian por adapters reales (PMS / channel-manager) sin tocar el
