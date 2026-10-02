@@ -126,10 +126,12 @@
     escribe acá, lo lista `docs/contracts/elementos-synhost.json`. El **diccionario por secciones
     declaradas** (ADR 0136) está **Aceptado** (2026-10-01; ver
     `feedback_the_dictionary_travels_by_declared_sections`): cada página publica las secciones que
-    declaran los records de sus elementos, y se escala a todos los que tienen record. **Propuestos**,
-    y describen el rumbo, no lo que ya está: configuración de negocio por funcionalidad (0137, pilotada en #194: espera ratificación),
-    coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables frente a
-    0113 (0139).
+    declaran los records de sus elementos, y se escala a todos los que tienen record. La
+    **configuración de negocio por funcionalidad** (ADR 0137) está **Aceptada** (2026-10-02): vive en
+    `Synergos:Features:<X>`, por sitio y validada al arrancar, y la leen lo que se muestra y lo que se
+    cobra; se escala a las funcionalidades (#196). **Propuestos**, y describen el rumbo, no lo que ya
+    está: coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables
+    frente a 0113 (0139).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por

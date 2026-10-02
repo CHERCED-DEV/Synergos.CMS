@@ -517,7 +517,7 @@ que hoy se infiere y se deja escrito.
   errores y sus textos de accesibilidad. La funcionalidad traduce con `t()` y sus hojas reciben el
   texto ya traducido (ADR 0136, Aceptada);
 - **la configuración de negocio**, que es del despliegue o del siteRoot y no del editor (ADR 0137,
-  Propuesta);
+  Aceptada);
 - **las pocas decisiones del editor** —variante, mostrar u ocultar, página destino—, cada una
   **como selector**, nunca como texto libre: un editor que teclea un enum lo teclea mal;
 - **la identidad**, por el canal de runtime (`window.synergos.member`), nunca por el JSON del

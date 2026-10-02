@@ -1,8 +1,8 @@
 # ADR 0137 — La configuración de negocio de una funcionalidad vive en el despliegue, no en el editor
 
-- **Estado:** Propuesto — pilotada en [#194](../../../../../issues/194) (2026-10-02): el piloto
-  recomienda **aceptarla con 6 cambios** (ver «Resultado del piloto»). Espera la ratificación del
-  arquitecto.
+- **Estado:** Aceptado (2026-10-02) — el arquitecto la ratificó con los seis cambios que pidió el
+  piloto ([#194](../../../../../issues/194)), que pasan a ser parte de la decisión (ver «Resultado del
+  piloto»). Se escala a las funcionalidades en [#196](../../../../../issues/196)
 - **Fecha:** 2026-09-29
 - **Propone:** la síntesis de la auditoría de reutilización (informe 20 §5.C.4-5 y §4.2 punto 7,
   «pide ADR»). El arquitecto fijó número y estado el 2026-09-29.
@@ -50,7 +50,10 @@
   configuración del front se **compila** en 26 `environment.*.ts`; y la caché de esos JSON no cachea
   porque el servicio está registrado Transient ◐ (informe 15 §5, D7-D9).
 
-## Decisión (propuesta)
+## Decisión
+
+> **Aceptada con los seis cambios del piloto** (ver «Resultado del piloto»). Donde un apartado de abajo
+> y uno de esos cambios digan cosas distintas, manda el cambio.
 
 ### 1. Una sección por funcionalidad
 
@@ -193,7 +196,8 @@ ejecutarla:
    una funcionalidad; el schema quita además `apiBase`, `config` y la composición `compIntegration`
    de `elementSynEventos` (contenido medido antes: nada que regía se pierde). Import quirúrgico en la
    copia: 1 ítem, 0 ERR; el tipo queda con `heading`, `subheading` y `role`. `usync-rebuild-check`
-   1331/1331. **El import en la base real queda para el arquitecto** (ADR 0008).
+   1331/1331. **En la base real**, import quirúrgico delegado por el arquitecto el 2026-10-02 (respaldo
+   `*.bak.20261002-095324`): 1 ítem, 0 ERR, el tipo queda igual que en la copia.
 6. **(Propio) Lo que se muestra es lo que se cobra, en los dos caminos.** Motor en proceso, **en el
    navegador**: el carrito de `eventos-a` pinta «Cargos por servicio (8 %) $ 67.200» y total
    907.200; `POST /api/eventos/checkout` abre la sesión por `"amount": 907200`. Contra el
@@ -234,7 +238,8 @@ decidida en el constructor. Suites: CMS 2776 + 682 + 465 = **3923**; UI 760 + 65
   (22.500,12); el carrito ahora los pinta en vez de redondearlos. Si COP se cobra sin centavos es una
   decisión de negocio que no tomó el piloto.
 
-**Los cambios que el piloto pide a esta ADR:**
+**Los cambios que el piloto pidió a esta ADR** (ratificados por el arquitecto el 2026-10-02; son parte
+de la decisión):
 
 1. **§2 — el sitio es el del hostname** (`SitioDeLaPeticion`, la regla del router de Umbraco), no el
    de la página: la API del checkout no tiene página, y lo que se muestra y lo que se cobra tienen que
@@ -257,11 +262,14 @@ decidida en el constructor. Suites: CMS 2776 + 682 + 465 = **3923**; UI 760 + 65
    muestra de lo que se cobra— y **la funcionalidad lee su `config` en `ngOnInit`**, nunca en el
    constructor.
 
-**Para escalar** (las 11 funcionalidades verticales; `realty` y `ehr` repiten el patrón con la tasa y
-el copago): por cada una, medir su lista de claves contra lo que el servidor ya decide, su sección
-con validador, los motores que cobran o aplican la regla leyendo la misma costura, y su par de
-vectores si la fórmula vive en dos lenguajes. `app-launcher` conserva `compIntegration` aunque como
-funcionalidad no la recibe: sale en la misma pasada.
+**Para escalar** ([#196](../../../../../issues/196): 25 funcionalidades sin record, medidas el
+2026-10-02 —las verticales y las acotadas—): por cada una, medir su lista de claves contra lo que el
+servidor ya decide, su sección con validador, los motores que cobran o aplican la regla leyendo la
+misma costura, y su par de vectores si la fórmula vive en dos lenguajes. `realty` repite el patrón
+con la tasa del simulador. `ehr` **no**, y lo dice el cambio 4: su copago es un precio que el servidor
+ya decide (el motor en proceso cobra 80.000 mientras la UI pinta «Sin costo»), así que llega de la
+API y no de una sección. `app-launcher` conserva `compIntegration` aunque como funcionalidad no la
+recibe: sale en la misma pasada.
 
 ## Relación con otras ADRs
 

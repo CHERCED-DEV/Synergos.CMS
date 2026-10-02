@@ -427,8 +427,8 @@ que el sub-arnés tiene que cargar —y lo que este repo ya escribe en sus guía
    funcionalidades—, dos tipos de colocable —**funcionalidad** y **pieza**—, **el CMS da cableado y
    no la configuración completa de una funcionalidad**, **no se retira por defecto**, y la regla de
    los dos pisos. Y el paso que lo aplica al generar un vertical: el doc 12 §5.11. De las cinco ADRs
-   que dan el rumbo, la 0135 y la 0136 están **Aceptadas** (2026-09-30 y 2026-10-01) y la 0137 a la 0139 siguen
-   **Propuestas**:
+   que dan el rumbo, la 0135, la 0136 y la 0137 están **Aceptadas** (2026-09-30, 2026-10-01 y 2026-10-02) y la
+   0138 y la 0139 siguen **Propuestas**:
    una skill no puede enseñar éstas como hechas.
 2. **La disciplina de medición**, que es de proceso y vale en los dos árboles: **un grep es una
    hipótesis** —toda cifra que decide sale de dos métodos distintos, y se dice cuál—; **las cifras
