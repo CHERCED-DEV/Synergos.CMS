@@ -1,6 +1,8 @@
 # ADR 0137 — La configuración de negocio de una funcionalidad vive en el despliegue, no en el editor
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto (ver al final)
+- **Estado:** Propuesto — pilotada en [#194](../../../../../issues/194) (2026-10-02): el piloto
+  recomienda **aceptarla con 6 cambios** (ver «Resultado del piloto»). Espera la ratificación del
+  arquitecto.
 - **Fecha:** 2026-09-29
 - **Propone:** la síntesis de la auditoría de reutilización (informe 20 §5.C.4-5 y §4.2 punto 7,
   «pide ADR»). El arquitecto fijó número y estado el 2026-09-29.
@@ -134,6 +136,132 @@ Una funcionalidad: `eventos`, con las claves que el informe 16 §7.3 le asigna (
 3. **Recarga sin reinicio**: cambiar el valor en configuración y verlo en la siguiente petición.
 4. **Una clave mal escrita falla al arrancar**, no en silencio (mutación comprobada).
 5. `configOverride` fuera de esa funcionalidad, con el contenido que ya lo usaba medido antes.
+
+## Resultado del piloto (#194, 2026-10-02)
+
+Piloto en `eventos`, rama `lego/integracion` de CMS (`7c966f9d` código y tests, `1a281aab` schema) y
+UI (`444cb84`). Medido en vivo con el CMS del piloto en `:5194` contra una **copia** de la base real,
+con dos dominios asignados en la copia (`eventos-a.localhost` → siteRoot Eventos,
+`tienda-b.localhost` → siteRoot Tienda) y un CDN propio con el bundle nuevo; la base real y
+`C:\LOCAL_CDN` no se tocaron.
+
+**Lo que había, leído en el código antes de tocar nada.** La comisión era `DEFAULT_FEE_PERCENT = 12`
+en el bundle y **ningún camino del servidor la cobraba**: ni el motor en proceso (el total era la suma
+de las entradas) ni el orquestador (autorizaba el total de `Api.Pricing`). Con ese código, dos VIP se
+mostraban en 940.800 y se cobraban 840.000. La «Comisión plataforma (10%)» del payout estaba escrita en la
+plantilla, y `/api/eventos` en cuatro sitios del módulo además del campo del editor y del default de
+la vista. El campo `config` (JSON libre) estaba vacío en el único bloque, y **ningún** bloque usa
+`configOverride`.
+
+**La lista heredada del informe 16 §7.3 estaba mal en las dos direcciones**, y se midió antes de
+ejecutarla:
+
+- `currency` **no** es configuración: es un dato del precio. La decide el catálogo
+  (`Currency = "COP"` en las dos fuentes, CMS y demo) y viaja con cada importe; el elemento ya la
+  prefería (`tier.currency || currency()`), salvo en el carrito. Una moneda de configuración habría
+  sido una segunda fuente para un dato que ya tiene dueño — justo el «En contra» de esta ADR.
+- `scope` es el prefijo de las rutas por hash (`#/eventos/e/<id>`): de runtime, se queda en el
+  componente.
+- Faltaba `platformFeePercent`, el 10 % compilado en el payout.
+
+**Los criterios:**
+
+1. **Las constantes de negocio salen del bundle** — `DEFAULT_FEE_PERCENT`, `DEFAULT_CURRENCY`,
+   `DEFAULT_API_BASE` y sus tres copias en la estrategia, y el 10 % de la plantilla. Con los valores
+   base, la página emite `feePercent: 12`, `platformFeePercent: 10`, `apiBase: "/api/eventos"`: se
+   ve lo mismo que antes. **Lo que cambia a propósito es el cobro**: ahora cobra lo que se mostraba.
+   Sin configuración el elemento no inventa una comisión, y sin `apiBase` no llama a nada (degrada a
+   su muestra, visible).
+2. **Dos siteRoots con valores distintos y el resto heredado, en vivo.** Overrides `Sitios:{Key}`:
+   Eventos `FeePercent: 8`; Tienda `FeePercent: 15, PlatformFeePercent: 5`. La página por
+   `eventos-a` emite `feePercent: 8` con `apiBase` y `platformFeePercent` **heredados**; el control
+   sin dominio, 12. El checkout del mismo carrito (2 × 180.000) cobra **28.800** por `eventos-a`,
+   **43.200** sin dominio y **54.000** por `tienda-b`.
+3. **Recarga sin reinicio, en vivo.** Con el CMS corriendo, 8 → 9,5 en `appsettings`: la petición
+   siguiente cobra 34.200 y la página emite 9,5 (un solo arranque en el log). La caché de salida
+   sólo cubre sitemaps y RSS, así que página y cobro cambian juntos. **Una recarga inválida**
+   (`FeePercnt`) **no tumba la venta**: sigue rigiendo 9,5 en la página y en el cobro, el error sale
+   **una vez** con la ruta exacta de la clave, y al corregirla rige el valor nuevo (7 % → 385.200).
+4. **Una clave mal escrita no deja arrancar, en vivo y mutado.** Con `FeePercnt` el CMS no llega a
+   escuchar: `OptionsValidationException` con la ruta de la clave y las que sí se leen. Validador por
+   sección (`ValidadorDeNegocioDeEventos`, `ValidateOnStart`) sobre una pieza genérica
+   (`ClavesDeConfiguracion`: lo que el binder descarta en silencio). Rechaza también sitios que no
+   son GUID, porcentajes fuera de 0–100 o con más de dos decimales, y una `ApiBase` que no es ruta del
+   sitio ni `http(s)` (`//host` y `/\host` incluidos). Medido: el binder **no** lee `1,5` como 15 —lo
+   rechaza al convertir—, así que eso ya fallaba al arrancar.
+5. **`configOverride` y el JSON libre, fuera.** `SolicitudSynHost` ya descartaba `configOverride` en
+   una funcionalidad; el schema quita además `apiBase`, `config` y la composición `compIntegration`
+   de `elementSynEventos` (contenido medido antes: nada que regía se pierde). Import quirúrgico en la
+   copia: 1 ítem, 0 ERR; el tipo queda con `heading`, `subheading` y `role`. `usync-rebuild-check`
+   1331/1331. **El import en la base real queda para el arquitecto** (ADR 0008).
+6. **(Propio) Lo que se muestra es lo que se cobra, en los dos caminos.** Motor en proceso, **en el
+   navegador**: el carrito de `eventos-a` pinta «Cargos por servicio (8 %) $ 67.200» y total
+   907.200; `POST /api/eventos/checkout` abre la sesión por `"amount": 907200`. Contra el
+   orquestador, **por tests**: el CMS manda `serviceFeePercent` y `Bff.Eventos` autoriza el total de
+   la cotización más la comisión **sobre el subtotal** (con impuesto en la cotización, para que
+   calcularla sobre el total no pase en verde). **No se verificó en vivo**: el árbol de servicios
+   local no tiene precios ni aforo de eventos sembrados.
+
+**La fórmula vive en tres sitios** —carrito, motor en proceso, orquestador— y en dos lenguajes, así
+que la cruzan unos **vectores de oro** en la superficie de acople
+(`docs/contracts/service-fee-vectors.json`, como la hipoteca del #167): `NegocioDeEventosTests`,
+`ComisionDeServicioTests` y, en la UI, G-12. La regla es la de la casa —al par, la de
+`Synergos.Core.Money`— y no la del `Math.round` que tenía el carrito; los vectores de medio centavo
+están elegidos para que mitad-arriba dé otro número.
+
+**Gates y mutaciones.** 10 mutaciones en el CMS y 5 en la UI (más G-12), todas compilaron y todas
+rojas: el motor contra el orquestador sin `negocio:`, sin `ValidateOnStart`, el motor en proceso sin sumar, el
+orquestador sobre el total, mitad-arriba en cada implementación, el validador sin claves, el lector
+sin último válido, el orquestador sin revisar el porcentaje, el cuerpo sin la comisión, el carrito
+inventando un 12, el sanitizador tirando `platformFeePercent`, el cliente llamando sin base, y la cara
+decidida en el constructor. Suites: CMS 2776 + 682 + 465 = **3923**; UI 760 + 65 + 1.853 + 11;
+`usync-audit` y `compilan-las-vistas` (401) en verde; G-10 ve las 115 rutas.
+
+**Encontrado por el camino:**
+
+- **El `role` del editor no se respetaba nunca.** El constructor decidía la cara y lanzaba la primera
+  carga, y en un custom element los inputs llegan **después** del constructor: siempre abría la de
+  asistente. Arreglado (`ngOnInit`) con test y mutación. Sin la base compilada, la primera cartelera
+  habría salido sin API: el piloto lo destapó. **Hay que medir el patrón en las otras funcionalidades.**
+- **G-10 se quedó ciego** con la primera forma del guardia (un helper en la URL): busca el marcador
+  literal `${apiBase}` y dejó de ver las nueve rutas de eventos; lo delató su censo. El guardia quedó
+  en `request()`.
+- **Se venden entradas de un evento pasado**: «Festival Estéreo 2026» es del 15 de agosto, la ficha
+  dice «El evento ya comenzó» y el checkout lo cobra. Previo al piloto; ticket aparte.
+- **En modo orquestador el impuesto no se muestra**: si `Api.Pricing` cotiza impuesto, se autoriza y
+  el carrito no lo pinta. Previo; sin medir en vivo.
+- **Centavos en COP**: con un porcentaje de dos decimales la comisión puede tener centavos
+  (22.500,12); el carrito ahora los pinta en vez de redondearlos. Si COP se cobra sin centavos es una
+  decisión de negocio que no tomó el piloto.
+
+**Los cambios que el piloto pide a esta ADR:**
+
+1. **§2 — el sitio es el del hostname** (`SitioDeLaPeticion`, la regla del router de Umbraco), no el
+   de la página: la API del checkout no tiene página, y lo que se muestra y lo que se cobra tienen que
+   salir de la misma regla. Sin dominio rigen los valores base. **El override se nombra por la `Key`
+   del siteRoot**: `Synergos:Features:<X>:Sitios:{Key}:{Clave}`.
+2. **§1 — la validación es parte de la decisión, no del piloto**: cada sección trae su
+   `IValidateOptions` sobre `ClavesDeConfiguracion` más sus rangos, con `ValidateOnStart`; en
+   caliente, quien la lee sigue con el **último valor válido** y lo dice una vez.
+3. **«Otra fuente para la misma regla» queda resuelto así**: una regla que se muestra y se cobra se
+   **cobra en el servidor** desde la misma sección (una costura, `INegocioDe<X>`, con dos lectores:
+   el resolver y los motores); a un servicio del backend le llega como **parámetro** desde el CMS, no
+   de su propia configuración; y la fórmula, si vive en más de un sitio, la cruzan **vectores de oro**
+   versionados con el redondeo de la casa.
+4. **§5 — la clasificación de claves se mide antes de mudarlas**: un dato que ya tiene dueño (la
+   moneda del precio) no se vuelve configuración, y una constante de negocio que la lista no ve (el
+   10 % del payout) entra.
+5. **El contrato declara el origen `negocio`** (`OrigenDelCampo.Negocio`) y **sólo una funcionalidad
+   lo lleva**, con gate en los dos repos (`ContratoSynHostTests` y el generador del UI).
+6. **En el elemento, una regla de negocio no tiene atributo suelto** —volvería a separar lo que se
+   muestra de lo que se cobra— y **la funcionalidad lee su `config` en `ngOnInit`**, nunca en el
+   constructor.
+
+**Para escalar** (las 11 funcionalidades verticales; `realty` y `ehr` repiten el patrón con la tasa y
+el copago): por cada una, medir su lista de claves contra lo que el servidor ya decide, su sección
+con validador, los motores que cobran o aplican la regla leyendo la misma costura, y su par de
+vectores si la fórmula vive en dos lenguajes. `app-launcher` conserva `compIntegration` aunque como
+funcionalidad no la recibe: sale en la misma pasada.
 
 ## Relación con otras ADRs
 
