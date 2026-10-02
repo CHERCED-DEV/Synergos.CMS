@@ -72,4 +72,81 @@ public sealed class VitrinaDeAppsTests
         sitio.GetValue<string>("brandKey").Returns(marca);
         return sitio;
     }
+
+    // ── El parche del lanzador de Soluciones (#188): arreglar el sembrador no arregla lo sembrado ──
+
+    private static readonly Guid Lanzador = Guid.Parse("1e39923e-cd92-4b40-8b3d-3a94c23168cf");
+    private static readonly Guid Hero = Guid.Parse("0a2edb7e-8555-4044-bebc-bf0fe37662f2");
+    private const string Nueve = "[{\"id\":\"tienda\",\"name\":\"Tienda\"},{\"id\":\"hoteles\",\"name\":\"Hoteles\"}]";
+    private const string Siete = "[{\"id\":\"eventos\",\"name\":\"Eventos\"}]";
+
+    private static string Pagina(string appsComoValor) =>
+        "{\"layout\":{\"Umbraco.BlockGrid\":[]},\"contentData\":["
+        + $"{{\"contentTypeKey\":\"{Hero}\",\"udi\":\"umb://element/a\",\"headingTitle\":\"Una solución\",\"apps\":\"no-es-del-lanzador\"}},"
+        + $"{{\"contentTypeKey\":\"{Lanzador}\",\"udi\":\"umb://element/b\",\"heading\":\"Soluciones disponibles\",\"apps\":{appsComoValor}}}"
+        + "],\"settingsData\":[]}";
+
+    private static string ComoTexto(string json) => System.Text.Json.JsonSerializer.Serialize(json);
+
+    [Fact]
+    public void Sin_secciones_no_hay_nada_que_parchear()
+    {
+        Assert.Null(DevContentFiller.ConLaListaDelLanzador(null, Lanzador, Nueve, out var n));
+        Assert.Equal(0, n);
+        Assert.Equal("", DevContentFiller.ConLaListaDelLanzador("", Lanzador, Nueve, out _));
+    }
+
+    [Fact]
+    public void Reemplaza_la_lista_del_lanzador_y_conserva_que_viaja_como_texto()
+    {
+        var despues = DevContentFiller.ConLaListaDelLanzador(Pagina(ComoTexto(Siete)), Lanzador, Nueve, out var lanzadores);
+
+        Assert.Equal(1, lanzadores);
+        var bloque = System.Text.Json.Nodes.JsonNode.Parse(despues!)!["contentData"]![1]!;
+        Assert.Equal(Nueve, bloque["apps"]!.GetValue<string>());
+        Assert.Equal("Soluciones disponibles", bloque["heading"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Una_lista_expandida_como_la_exporta_uSync_se_reemplaza_como_lista()
+    {
+        var despues = DevContentFiller.ConLaListaDelLanzador(Pagina(Siete), Lanzador, Nueve, out _);
+
+        var apps = System.Text.Json.Nodes.JsonNode.Parse(despues!)!["contentData"]![1]!["apps"]!;
+        Assert.IsType<System.Text.Json.Nodes.JsonArray>(apps);
+        Assert.Equal(2, apps.AsArray().Count);
+    }
+
+    [Fact]
+    public void Ningun_otro_bloque_cambia_aunque_tenga_una_propiedad_que_se_llame_igual()
+    {
+        var despues = DevContentFiller.ConLaListaDelLanzador(Pagina(ComoTexto(Siete)), Lanzador, Nueve, out _);
+
+        var hero = System.Text.Json.Nodes.JsonNode.Parse(despues!)!["contentData"]![0]!;
+        Assert.Equal("no-es-del-lanzador", hero["apps"]!.GetValue<string>());
+        Assert.Equal("Una solución", hero["headingTitle"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Con_la_lista_ya_al_dia_devuelve_el_mismo_texto_y_no_hay_nada_que_guardar()
+    {
+        var antes = Pagina(ComoTexto(Nueve));
+
+        var despues = DevContentFiller.ConLaListaDelLanzador(antes, Lanzador, Nueve, out var lanzadores);
+
+        // El MISMO texto, no uno equivalente reserializado: el que llama decide guardar por eso.
+        Assert.Same(antes, despues);
+        Assert.Equal(1, lanzadores);
+    }
+
+    [Fact]
+    public void Una_pagina_sin_el_lanzador_lo_dice_y_no_se_toca()
+    {
+        var sinLanzador = Pagina(ComoTexto(Siete)).Replace(Lanzador.ToString(), Guid.NewGuid().ToString(), StringComparison.Ordinal);
+
+        var despues = DevContentFiller.ConLaListaDelLanzador(sinLanzador, Lanzador, Nueve, out var lanzadores);
+
+        Assert.Equal(0, lanzadores);
+        Assert.Same(sinLanzador, despues);
+    }
 }

@@ -542,18 +542,8 @@ public sealed class DevContentFiller
             "Synergos Soluciones Hero", "Soluciones de SynergosLabs por tipo de negocio", "#0A2540", "#1FA2A6",
             ("Ver planes", "/synergos/precios"), ("Hablar con ventas", "/synergos/contacto"));
 
-        // Las soluciones REALES son las verticales vivas: el launcher deep-linkea a la
-        // página showcase de cada una (/synergos/apps/<slug>, arco preview→demo→app). Fuente
-        // única = ShowcaseCatalog (cero hardcode). Fallback SSR (cards) si el launcher no está.
-        // El Icon ya no se re-deriva con un switch paralelo (que además discrepaba de
-        // DomainAppCatalog en propiedades/hoteles): sale de la misma fila que todo lo demás.
-        var solApps = ShowcaseCatalog()
-            .Where(d => !string.IsNullOrEmpty(d.AppUrl))
-            .Join(Verticals, d => d.Slug, v => v.Slug, (d, v) =>
-                (Slug: d.Slug, Name: d.Name, Tagline: d.Blurb, Status: "live",
-                 Url: $"/synergos/apps/{d.Slug}", Icon: v.Icon,
-                 Industry: v.Industry, Persona: v.Persona, Capabilities: v.Capabilities))
-            .ToArray();
+        // Fallback SSR (cards) si el launcher no está.
+        var solApps = AppsDeSoluciones();
         if (_contentTypeService.Get("elementSynAppLauncher")?.Key is not null)
         {
             AddSynAppLauncher(b, BuildAppsCatalogJson(solApps),
@@ -4045,6 +4035,150 @@ public sealed class DevContentFiller
             SeedShowcasePage(appsId, d.Name, $"{d.Name} — la app por dentro", recorrido(this, d.AppUrl), details, sortOrder: ++order);
         }
         details.Add("AppsShowcase:ok");
+    }
+
+    /// <summary>
+    /// Las soluciones REALES son las verticales vivas: el lanzador de Soluciones lleva a la ficha
+    /// de cada una (<c>/synergos/apps/&lt;slug&gt;</c>, arco preview→demo→app). Fuente única =
+    /// <see cref="ShowcaseCatalog"/>, y el icono sale de la misma fila de <see cref="Verticals"/>.
+    /// </summary>
+    private (string Slug, string Name, string Tagline, string Status, string Url, string Icon,
+        string Industry, string Persona, string[] Capabilities)[] AppsDeSoluciones()
+        => ShowcaseCatalog()
+            .Where(d => !string.IsNullOrEmpty(d.AppUrl))
+            .Join(Verticals, d => d.Slug, v => v.Slug, (d, v) =>
+                (Slug: d.Slug, Name: d.Name, Tagline: d.Blurb, Status: "live",
+                 Url: $"/synergos/apps/{d.Slug}", Icon: v.Icon,
+                 Industry: v.Industry, Persona: v.Persona, Capabilities: v.Capabilities))
+            .ToArray();
+
+    /// <summary>
+    /// Pone al día la vitrina SIN PISAR: crea las fichas <c>/synergos/apps/&lt;slug&gt;</c> que
+    /// falten y deja la lista del lanzador de Soluciones igual al catálogo. Nada más.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque arreglar el sembrador no arregla lo ya sembrado.</b> El #187 le dio a
+    /// Hoteles su recorrido y el #188 hizo que Soluciones encontrara Tienda y Booking por la ruta;
+    /// los dos se verificaron re-sembrando una COPIA de la base. El contenido sembrado antes —el de
+    /// la base del arquitecto y el de demo versionado (ADR 0129)— seguía con la lista vieja: medido
+    /// en vivo, Soluciones con 7 apps y Hoteles en 404, desde su lanzador y desde la tarjeta del
+    /// índice de Apps.</para>
+    /// <para><b>Re-sembrar no era la salida</b>: <see cref="FillSynergosPages"/> reescribe páginas
+    /// enteras y vuelve a subir cada imagen (<see cref="DevMediaFactory"/> reemplaza el fichero de
+    /// la media que ya existe), así que habría pisado los ajustes del editor y llenado la demo
+    /// versionada de PNG duplicados. Esto toca dos cosas: crea la ficha que no existe (una ficha
+    /// existente NO se reescribe, aunque su recorrido haya cambiado) y reemplaza la propiedad
+    /// <c>apps</c> del lanzador de Soluciones sin tocar ningún otro bloque.</para>
+    /// <para><b>Idempotente</b>: la segunda vez no crea nada ni guarda nada, y lo dice.</para>
+    /// </remarks>
+    public FillResult CompletarVitrina()
+    {
+        if (!ResolveKeys(out var missing))
+        {
+            return new FillResult(false, 0, $"element-types-missing:{missing}");
+        }
+
+        var site = FindSiteRoot();
+        if (site is null) { return new FillResult(false, 0, "siteroot-not-found"); }
+
+        var indice = _contentService.GetPagedChildren(site.Id, 0, 200, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "pageBase" && Matches(c, "Apps"));
+        if (indice is null) { return new FillResult(false, 0, "apps-index-not-found:sembrar-con-fill-synergos-pages"); }
+
+        var details = new List<string>();
+        var cambios = 0;
+
+        var fichas = _contentService.GetPagedChildren(indice.Id, 0, 200, out _).ToList();
+        var orden = 0;
+        foreach (var d in ShowcaseCatalog())
+        {
+            orden++;
+            if (fichas.Any(c => c.ContentType.Alias == "pageBase" && Matches(c, d.Name))) { continue; }
+            if (!Recorridos.TryGetValue(d.Slug, out var recorrido))
+            {
+                details.Add($"AppsShowcase:{d.Slug}:sin-recorrido");
+                continue;
+            }
+
+            if (SeedShowcasePage(indice.Id, d.Name, $"{d.Name} — la app por dentro", recorrido(this, d.AppUrl), details, sortOrder: orden) == 0)
+            {
+                return new FillResult(false, cambios, string.Join("; ", details));
+            }
+            cambios++;
+        }
+
+        var soluciones = FindByName("Soluciones");
+        var lanzador = _contentTypeService.Get("elementSynAppLauncher")?.Key;
+        if (soluciones is null || lanzador is null)
+        {
+            details.Add(soluciones is null ? "Soluciones:no-encontrada" : "Soluciones:sin-lanzador-en-el-schema");
+            return new FillResult(cambios > 0, cambios, string.Join("; ", details));
+        }
+
+        var antes = soluciones.GetValue<string>(SectionsAlias, Culture);
+        var despues = ConLaListaDelLanzador(antes, lanzador.Value, BuildAppsCatalogJson(AppsDeSoluciones()), out var lanzadores);
+        if (lanzadores == 0)
+        {
+            details.Add("Soluciones:sin-lanzador-colocado");
+        }
+        else if (despues == antes)
+        {
+            details.Add("Soluciones:al-dia");
+        }
+        else
+        {
+            soluciones.SetValue(SectionsAlias, despues, Culture);
+            var save = _contentService.SaveAndPublish(soluciones, new[] { Culture });
+            if (!save.Success)
+            {
+                details.Add($"Soluciones:save-failed:{save.Result}");
+                return new FillResult(false, cambios, string.Join("; ", details));
+            }
+            details.Add("Soluciones:lista-al-dia");
+            cambios++;
+        }
+
+        if (cambios == 0) { details.Add("Vitrina:nada-que-hacer"); }
+        return new FillResult(true, cambios, string.Join("; ", details));
+    }
+
+    /// <summary>
+    /// El valor <c>sections</c> de una página con la propiedad <c>apps</c> de cada bloque del
+    /// lanzador reemplazada por <paramref name="appsJson"/>. Ningún otro bloque ni propiedad cambia.
+    /// </summary>
+    /// <remarks>
+    /// <c>apps</c> se guarda como TEXTO con el JSON dentro (así lo deja el sembrador); uSync la
+    /// exporta expandida a un arreglo. Se respeta la forma que trae, para que el diff sea sólo la
+    /// lista. Si la lista ya es la misma, devuelve el valor de entrada sin reserializar: dos JSON
+    /// iguales con otro espaciado no son un cambio, y guardarlos sería una versión vacía.
+    /// </remarks>
+    internal static string? ConLaListaDelLanzador(string? sectionsJson, Guid lanzador, string appsJson, out int lanzadores)
+    {
+        lanzadores = 0;
+        if (string.IsNullOrWhiteSpace(sectionsJson)) { return sectionsJson; }
+        if (System.Text.Json.Nodes.JsonNode.Parse(sectionsJson) is not System.Text.Json.Nodes.JsonObject raiz
+            || raiz["contentData"] is not System.Text.Json.Nodes.JsonArray bloques)
+        {
+            return sectionsJson;
+        }
+
+        var nueva = System.Text.Json.Nodes.JsonNode.Parse(appsJson);
+        var cambio = false;
+        foreach (var bloque in bloques.OfType<System.Text.Json.Nodes.JsonObject>())
+        {
+            if (!Guid.TryParse(bloque["contentTypeKey"]?.GetValue<string>(), out var tipo) || tipo != lanzador) { continue; }
+            lanzadores++;
+
+            var actual = bloque["apps"];
+            var comoTexto = actual is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out _);
+            var actualComoLista = comoTexto ? System.Text.Json.Nodes.JsonNode.Parse(actual!.GetValue<string>()) : actual;
+            if (System.Text.Json.Nodes.JsonNode.DeepEquals(actualComoLista, nueva)) { continue; }
+
+            bloque["apps"] = comoTexto ? appsJson : nueva!.DeepClone();
+            cambio = true;
+        }
+
+        return cambio ? raiz.ToJsonString() : sectionsJson;
     }
 
     /// <summary>

@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3874 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3880 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2741 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2747 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 669 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 464 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -169,7 +169,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3874**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3880**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2861,6 +2861,15 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   sitio buscando su slug entre las MARCAS (`brandKey`), y Tienda es `ecommerce` y Booking
   `meridian`: 7 de 9, con `/tienda` y `/booking` en 200. Lo que hace válido `/{slug}` es la RUTA
   del sitio, así que se busca por ella (`SitioEnLaRuta`, el segmento que saca Umbraco del nombre).
+  **Y arreglar el sembrador no arregló lo sembrado** (#188). Los dos arreglos de arriba se
+  verificaron re-sembrando una COPIA de la base, y el contenido sembrado antes —la base del
+  arquitecto y la demo versionada (ADR 0129)— siguió con la lista vieja: medido en vivo,
+  Soluciones con 7 apps y Hoteles en 404 desde su lanzador y desde la tarjeta del índice de Apps.
+  Re-sembrar no es la salida —`fill-synergos-pages` reescribe páginas enteras y vuelve a subir
+  cada imagen—: `POST /dev/complete-apps-showcase` crea sólo la ficha que falta y parchea sólo la
+  lista del lanzador, y lo nuevo entra al repo por la exportación de uSync. **La pregunta que lo
+  caza, al cerrar el arreglo de un sembrador: ¿qué contenido sembró ya la versión vieja, y quién lo
+  pone al día?**
 
 - `feedback_a_url_the_cms_inlines_is_resolved_by_the_page` — **una URL que el CMS copia DENTRO de
   la página la resuelve la página, no el fichero del que salió** (#189). El import map viaja en un
@@ -2984,11 +2993,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3874 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3880 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2741
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2747
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 669
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 464
 
@@ -3462,7 +3471,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3874 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3880 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

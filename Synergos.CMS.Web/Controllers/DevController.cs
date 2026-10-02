@@ -243,6 +243,24 @@ public sealed class DevController : ControllerBase
     }
 
     /// <summary>
+    /// Pone al día la vitrina sin pisar nada. <c>POST /dev/complete-apps-showcase</c>
+    /// </summary>
+    /// <remarks>
+    /// Crea las fichas <c>/synergos/apps/&lt;slug&gt;</c> que falten y deja la lista del lanzador
+    /// de Soluciones igual al catálogo; no reescribe ninguna otra página ni vuelve a subir
+    /// imágenes, al revés que <c>fill-synergos-pages</c>. Es lo que lleva al contenido YA
+    /// sembrado un arreglo hecho en el sembrador (#188). Idempotente; un fallo sale con 409.
+    /// </remarks>
+    [HttpPost("complete-apps-showcase")]
+    public IActionResult CompleteAppsShowcase()
+    {
+        if (!_settings.Enabled) return NotFound();
+        _logger.LogInformation("DevContentFiller endpoint invocado (complete-apps-showcase).");
+        var result = _filler.CompletarVitrina();
+        return result.Success ? Ok(result) : Conflict(result);
+    }
+
+    /// <summary>
     /// Coloca UNA tarjeta de producto (<c>elementShopProductCard</c>) en el BlockGrid
     /// <c>sections</c> de una página. <c>POST /dev/place-product-card?pageId=&amp;sku=</c>
     /// </summary>
