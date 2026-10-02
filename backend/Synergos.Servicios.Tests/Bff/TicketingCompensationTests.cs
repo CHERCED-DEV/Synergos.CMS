@@ -560,6 +560,58 @@ public sealed class TicketingCompensationTests
         Assert.Equal("eventos.no_lines", r.Rejection!.Code);
     }
 
+    // ── La comisión de servicio (ADR 0137, #194) ────────────────────────────
+
+    /// <summary>
+    /// Se AUTORIZA la comisión que el carrito muestra, y sobre el subtotal de las entradas.
+    /// </summary>
+    /// <remarks>
+    /// Antes la sumaba sólo el navegador y aquí se autorizaba el total de la cotización: el
+    /// comprador veía un total y se le cobraba otro. La cotización lleva impuesto a propósito: con
+    /// impuesto cero, calcularla sobre el total en vez del subtotal pasaría en verde.
+    /// </remarks>
+    [Fact]
+    public async Task La_comision_se_autoriza_sobre_el_subtotal_de_la_cotizacion()
+    {
+        var caps = Feliz().Ok("POST /v1/quotes",
+            """{"subtotal":{"amount":400000,"currency":"COP"},"tax":{"amount":76000,"currency":"COP"},"total":{"amount":476000,"currency":"COP"}}""");
+        var ctx = Nuevo(caps);
+
+        var r = await ctx.Flow.BuyAsync("e1", Comprador, Mezcla, 12m, "compra-1", CancellationToken.None);
+
+        Assert.True(r.IsOk);
+        Assert.Equal(Money.Of(524_000m, "COP"), r.Value.Total);   // 476.000 + 12 % de 400.000
+
+        var autorizacion = caps.Llamadas.Single(l => l.Method == "POST" && l.Path == "/v1/payments");
+        using var cuerpo = System.Text.Json.JsonDocument.Parse(autorizacion.Body!);
+        Assert.Equal(524_000m, cuerpo.RootElement.GetProperty("amount").GetProperty("amount").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Sin_comision_se_autoriza_el_total_de_la_cotizacion_como_siempre()
+    {
+        var ctx = Nuevo(Feliz());
+
+        var r = await Comprar(ctx.Flow);
+
+        Assert.Equal(Money.Of(400_000m, "COP"), r.Value.Total);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(100.01)]
+    [InlineData(12.345)]
+    public async Task Una_comision_que_no_sirve_se_rechaza_sin_tocar_ninguna_capacidad(double porcentaje)
+    {
+        var ctx = Nuevo(Feliz());
+
+        var r = await ctx.Flow.BuyAsync("e1", Comprador, Mezcla, (decimal)porcentaje, "c", CancellationToken.None);
+
+        Assert.False(r.IsOk);
+        Assert.Equal("eventos.bad_service_fee", r.Rejection!.Code);
+        Assert.Empty(ctx.Caps.Llamadas);
+    }
+
     [Fact]
     public async Task Hay_TOPE_de_lineas_y_de_entradas_por_linea()
     {

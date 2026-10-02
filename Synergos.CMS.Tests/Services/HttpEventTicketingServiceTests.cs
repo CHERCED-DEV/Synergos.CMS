@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -138,6 +139,44 @@ public sealed class HttpEventTicketingServiceTests
     };
 
     // ── Comprar ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// La comisión que el carrito muestra viaja al orquestador, que es quien la autoriza (#194).
+    /// </summary>
+    /// <remarks>
+    /// Antes no viajaba nada: la sumaba sólo el navegador. Se afirma sobre el CUERPO que sale, que
+    /// es lo que el orquestador lee, y con un valor que no es el de por defecto.
+    /// </remarks>
+    [Fact]
+    public async Task Comprar_manda_al_orquestador_la_comision_del_sitio()
+    {
+        var orq = Feliz();
+        var negocio = Substitute.For<INegocioDeEventos>();
+        negocio.Actual().Returns(new NegocioDeEventos("/api/eventos", 8.5m, 10m));
+        var svc = new HttpEventTicketingService(
+            new FabricaFalsa(orq),
+            new Monitor<EventosSettings>(new EventosSettings { Mode = "Bff" }),
+            new EventTicketLedger(signer: Firmante),
+            NullLogger<HttpEventTicketingService>.Instance,
+            negocio: negocio);
+
+        await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+
+        using var cuerpo = System.Text.Json.JsonDocument.Parse(orq.Cuerpos[0]);
+        Assert.Equal(8.5m, cuerpo.RootElement.GetProperty("serviceFeePercent").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Sin_configuracion_de_negocio_no_pide_comision()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq);
+
+        await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+
+        using var cuerpo = System.Text.Json.JsonDocument.Parse(orq.Cuerpos[0]);
+        Assert.Equal(0m, cuerpo.RootElement.GetProperty("serviceFeePercent").GetDecimal());
+    }
 
     /// <summary>
     /// La mitad que el orquestador NO lleva se anota de este lado, y sin ella no habría entradas.

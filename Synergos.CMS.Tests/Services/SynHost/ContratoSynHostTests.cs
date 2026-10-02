@@ -71,6 +71,13 @@ public sealed class ContratoSynHostTests
                 ("selectedValue", "co"),
                 ("searchable", true),
             },
+            // La configuración de negocio no es del editor: sale de NegocioBase (ADR 0137).
+            ["eventos"] = new (string, object?)[]
+            {
+                ("heading", "Vive los mejores eventos"),
+                ("subheading", "Conciertos, teatro y festivales"),
+                ("role", "organizer"),
+            },
             ["kpi-card"] = new (string, object?)[]
             {
                 ("kpiLabel", "Ventas del mes"),
@@ -394,8 +401,39 @@ public sealed class ContratoSynHostTests
             .ToList();
 
         Assert.True(sinOrigen.Count == 0,
-            "Estos campos no declaran [CampoSynHost(Contenido|Decision)]: " + string.Join(", ", sinOrigen)
+            "Estos campos no declaran [CampoSynHost(Contenido|Decision|Negocio)]: " + string.Join(", ", sinOrigen)
             + ". Es la clasificación que la fábrica lee para saber qué dato pide un elemento.");
+    }
+
+    /// <summary>
+    /// Sólo una funcionalidad recibe configuración de negocio (ADR 0134, ADR 0137): una pieza recibe
+    /// decisiones del editor.
+    /// </summary>
+    /// <remarks>
+    /// Una pieza con un campo de negocio sería la comisión de un sitio entrando por un botón: la
+    /// regla de la funcionalidad repartida por la página, sin que nadie la pueda cambiar en un sitio.
+    /// </remarks>
+    [Fact]
+    public void Un_campo_de_negocio_solo_lo_lleva_una_funcionalidad()
+    {
+        var deNegocio = Records()
+            .SelectMany(r => SolicitudSynHost.Cable.GetTypeInfo(r).Properties
+                .Where(p => (p.AttributeProvider as PropertyInfo)?.GetCustomAttribute<CampoSynHostAttribute>()?.Origen
+                    == OrigenDelCampo.Negocio)
+                .Select(p => (Record: r, Campo: p.Name)))
+            .ToList();
+
+        // Sin piso, un descubrimiento roto pasaría en verde: eventos es el piloto y los lleva.
+        Assert.Contains(deNegocio, c => c.Record == typeof(EventosProps));
+
+        var enPiezas = deNegocio
+            .Where(c => SolicitudSynHost.Elemento(c.Record).Tipo != TipoDeColocable.Funcionalidad)
+            .Select(c => $"{c.Record.Name}.{c.Campo}")
+            .ToList();
+
+        Assert.True(enPiezas.Count == 0,
+            "Estas piezas llevan configuración de negocio, que es sólo de las funcionalidades: "
+            + string.Join(", ", enPiezas) + ". Si es una decisión del editor, es Decision.");
     }
 
     /// <summary>
@@ -626,6 +664,7 @@ public sealed class ContratoSynHostTests
                 {
                     OrigenDelCampo.Contenido => "contenido",
                     OrigenDelCampo.Decision => "decision",
+                    OrigenDelCampo.Negocio => "negocio",
                     _ => "SIN-ORIGEN",
                 }
                 : null;
@@ -686,9 +725,21 @@ public sealed class ContratoSynHostTests
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
+            .AddSingleton(NegocioBase())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
+
+    /// <summary>
+    /// La configuración de negocio con los valores base de cada sección, que es lo que rige en un
+    /// sitio sin override: el ejemplo del contrato muestra lo que llega por defecto.
+    /// </summary>
+    private static INegocioDeEventos NegocioBase()
+    {
+        var negocio = Substitute.For<INegocioDeEventos>();
+        negocio.Actual().Returns(new Synergos.CMS.Application.Configuration.EventosFeatureSettings().Para(null));
+        return negocio;
+    }
 
     private static async Task<JsonElement> Emitido(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)
     {

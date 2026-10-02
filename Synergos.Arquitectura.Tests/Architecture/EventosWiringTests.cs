@@ -162,4 +162,37 @@ public sealed class EventosWiringTests
             "services.Configure<EventosSettings>(builder.Config.GetSection(\"Synergos:Eventos\"))",
             Composer(), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// La configuración de negocio (ADR 0137) se enlaza, se valida AL ARRANCAR, y la leen los DOS
+    /// motores de compra — no sólo el resolver que la muestra.
+    /// </summary>
+    /// <remarks>
+    /// <para>Cada pieza se olvida sola y en verde: sin <c>ValidateOnStart</c> una clave mal escrita
+    /// se descubre en la primera compra (o nunca: el binder la descarta); sin el validador
+    /// registrado, <c>ValidateOnStart</c> no tiene nada que correr; y un motor sin
+    /// <c>negocio:</c> vuelve a cobrar sin la comisión que el carrito muestra, que es el defecto
+    /// que el piloto cerró (#194). El motor que NO está encendido es justo el que nadie mira.</para>
+    /// </remarks>
+    [Fact]
+    public void La_configuracion_de_negocio_se_valida_al_arrancar_y_la_leen_los_dos_motores()
+    {
+        var composer = Composer();
+
+        Assert.Equal("Synergos:Features:Eventos", Synergos.CMS.Application.Configuration.EventosFeatureSettings.Seccion);
+        Assert.Matches(
+            @"AddOptions<EventosFeatureSettings>\(\)\s*\.Bind\(builder\.Config\.GetSection\(""Synergos:Features:Eventos""\)\)\s*\.ValidateOnStart\(\)",
+            composer);
+        Assert.Contains("IValidateOptions<EventosFeatureSettings>, ValidadorDeNegocioDeEventos>", composer, StringComparison.Ordinal);
+
+        foreach (var motor in new[] { "new StubEventTicketingService(", "new HttpEventTicketingService(" })
+        {
+            var desde = composer.IndexOf(motor, StringComparison.Ordinal);
+            Assert.True(desde > 0, $"No se encontró {motor} en el composer.");
+            var construccion = composer[desde..composer.IndexOf(';', desde)];
+            Assert.True(construccion.Contains("negocio:", StringComparison.Ordinal),
+                $"{motor.TrimEnd('(')[4..]} se construye sin la configuración de negocio: cobra sin la comisión "
+                + "que el carrito le muestra al comprador.");
+        }
+    }
 }

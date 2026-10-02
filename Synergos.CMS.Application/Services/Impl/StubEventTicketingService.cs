@@ -61,6 +61,9 @@ public sealed class StubEventTicketingService : IEventTicketingService
     private readonly EventTicketLedger _ledger;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <summary>De dónde sale la comisión de servicio; sin él no se cobra comisión.</summary>
+    private readonly INegocioDeEventos? _negocio;
+
     public StubEventTicketingService(
         IEventCatalogProvider catalog,
         IReservationService reservations,
@@ -109,6 +112,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// al COMPRADOR (un solo email con todas las entradas). Null ≡ no notificar.
     /// <paramref name="ledger"/> es el registro COMPARTIDO de entradas emitidas; sin él se arma
     /// uno propio sobre <paramref name="store"/>.
+    /// <paramref name="negocio"/> es la configuración de negocio de Eventos (ADR 0137): de ahí sale
+    /// la comisión de servicio, la MISMA que el carrito le muestra al comprador. Null ≡ sin comisión.
     /// </summary>
     public StubEventTicketingService(
         IEventCatalogProvider catalog,
@@ -120,8 +125,10 @@ public sealed class StubEventTicketingService : IEventTicketingService
         Func<DateTimeOffset>? now,
         ITransactionalNotifier? notifier = null,
         ITicketSigner? signer = null,
-        EventTicketLedger? ledger = null)
+        EventTicketLedger? ledger = null,
+        INegocioDeEventos? negocio = null)
     {
+        _negocio = negocio;
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
@@ -258,6 +265,20 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 UnitPrice: planned.Price,
                 Quantity: 1));
             total += planned.Price;
+        }
+
+        // La comisión de servicio, como una línea más del cobro. Antes la sumaba sólo el carrito
+        // del navegador: el comprador veía un total y se le cobraba otro (#194). Sale de la misma
+        // configuración que la muestra, para el sitio de esta petición (ADR 0137).
+        var comision = _negocio?.Actual().ComisionSobre(total) ?? 0m;
+        if (comision > 0m)
+        {
+            paymentLines.Add(new PaymentLineItem(
+                Sku: "fees",
+                Description: "Cargos por servicio",
+                UnitPrice: comision,
+                Quantity: 1));
+            total += comision;
         }
 
         // 3) UNA sola sesión de pago por el total agregado de la orden.

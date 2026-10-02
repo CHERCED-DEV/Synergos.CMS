@@ -55,9 +55,10 @@ fixture lo ejecuta un gate de cada lado.
 | Fichero | Qué cruza | Quién lo ejecuta |
 |---|---|---|
 | [`mortgage-vectors.json`](mortgage-vectors.json) | La calculadora de hipoteca del vertical Propiedades: las dos implementaciones tienen que dar **la misma cuota al centavo** para el mismo cuerpo. | CMS: `HipotecaVectoresTests` (por el borde, con su conversión) · UI: el spec de `mortgage.calc` |
-| [`elementos-synhost.json`](elementos-synhost.json) | **Lo que viaja** en el `config` de cada elemento con resolver tipado (ADR 0135): sus campos con nombre del cable, tipo y si son contenido o decisión, sus secciones de diccionario, y el `config` EXACTO que emite su vista para una muestra autorada. **Generado** de los records `[ElementoSynHost]`: no se edita a mano. | CMS: `ContratoSynHostTests` (records ↔ fichero, y el ejemplo emitido por el resolver y el emitter reales) · UI: `tools/contrato-synhost.mjs --check` (fichero ↔ tipo TS generado) y el spec que **ejecuta** el sanitizador de cada elemento con el ejemplo |
+| [`service-fee-vectors.json`](service-fee-vectors.json) | La comisión de servicio de Eventos (ADR 0137): el carrito que la **muestra** y los dos motores que la **cobran** tienen que dar la misma al centavo, con el redondeo de la casa (al par). | CMS: `NegocioDeEventosTests` (el motor en proceso) · orquestador: `ComisionDeServicioTests` · UI: el spec de la comisión del elemento `eventos` |
+| [`elementos-synhost.json`](elementos-synhost.json) | **Lo que viaja** en el `config` de cada elemento con resolver tipado (ADR 0135): sus campos con nombre del cable, tipo y si son contenido, decisión o negocio, sus secciones de diccionario, y el `config` EXACTO que emite su vista para una muestra autorada. **Generado** de los records `[ElementoSynHost]`: no se edita a mano. | CMS: `ContratoSynHostTests` (records ↔ fichero, y el ejemplo emitido por el resolver y el emitter reales) · UI: `tools/contrato-synhost.mjs --check` (fichero ↔ tipo TS generado) y el spec que **ejecuta** el sanitizador de cada elemento con el ejemplo |
 
-> **Por qué hay uno, y por qué no era un documento.** `IMortgageCalculator` afirmaba en
+> **Por qué existe el primero, y por qué no era un documento.** `IMortgageCalculator` afirmaba en
 > su `<remarks>` que «el cálculo base es el mismo en cliente y servidor» y era **falso**
 > desde que existe el endpoint (#167): las dos eran la misma fórmula con la tasa a
 > **100×** de distancia —el borde la leía como fracción y la app la mandaba en

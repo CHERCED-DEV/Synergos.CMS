@@ -89,6 +89,18 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<ITicketSigner>(),
             sp.GetRequiredService<IAuditTrailWriter>()));
 
+        // La configuración de negocio de la funcionalidad (ADR 0137): una fuente que leen lo que se
+        // MUESTRA (el resolver del elemento) y lo que se COBRA (los dos motores). La sección se
+        // valida al arrancar —una clave mal escrita no deja arrancar— y se recarga en caliente.
+        services.AddOptions<EventosFeatureSettings>()
+            .Bind(builder.Config.GetSection("Synergos:Features:Eventos"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EventosFeatureSettings>, ValidadorDeNegocioDeEventos>();
+        services.AddSingleton<INegocioDeEventos>(sp => new NegocioDeEventosDelSitio(
+            sp.GetRequiredService<IOptionsMonitor<EventosFeatureSettings>>(),
+            sp.GetRequiredService<SitioDeLaPeticion>(),
+            sp.GetRequiredService<ILogger<NegocioDeEventosDelSitio>>()));
+
         services.AddSingleton<StubEventTicketingService>(sp =>
             new StubEventTicketingService(
                 sp.GetRequiredService<IEventCatalogProvider>(),
@@ -101,7 +113,8 @@ public sealed partial class SeamComposer
                 notifier: sp.GetRequiredService<ITransactionalNotifier>(),
                 // T9: sin firmante no se emite QR ni se valida en la puerta (fail-closed).
                 signer: sp.GetRequiredService<ITicketSigner>(),
-                ledger: sp.GetRequiredService<EventTicketLedger>()));
+                ledger: sp.GetRequiredService<EventTicketLedger>(),
+                negocio: sp.GetRequiredService<INegocioDeEventos>()));
         // Contra qué se compran las entradas (HU #35). La sección se ENLAZA: sin esto el cliente
         // recibe un EventosSettings recién construido y lo que no viaja por el HttpClient —el
         // Kind del comprador— se queda en su valor por defecto en silencio.
@@ -121,7 +134,8 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IOptionsMonitor<EventosSettings>>(),
                 sp.GetRequiredService<EventTicketLedger>(),
                 sp.GetRequiredService<ILogger<HttpEventTicketingService>>(),
-                sp.GetRequiredService<ITransactionalNotifier>()));
+                sp.GetRequiredService<ITransactionalNotifier>(),
+                negocio: sp.GetRequiredService<INegocioDeEventos>()));
         }
         else
         {

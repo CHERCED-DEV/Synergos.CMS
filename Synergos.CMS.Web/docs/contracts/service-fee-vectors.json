@@ -1,0 +1,36 @@
+{
+  "queEsEsto": [
+    "Vectores de oro de la comisión de servicio de Eventos (ADR 0137, #194). Los ejecutan LAS TRES",
+    "implementaciones: el carrito del elemento `eventos` (TypeScript, en Synergos.UI), el motor en",
+    "proceso del CMS (`NegocioDeEventos.ComisionSobre`) y el orquestador",
+    "(`Synergos.Bff.Eventos` · `ComisionDeServicio.Sobre`). No es documentación: es el fixture que",
+    "hace que 'lo que el carrito muestra es lo que se cobra' sea un hecho comprobado.",
+    "",
+    "POR QUÉ EXISTE. Antes del piloto la comisión vivía sólo en el bundle (DEFAULT_FEE_PERCENT = 12)",
+    "y ningún camino del servidor la cobraba: el comprador veía un total y se le cobraba otro. Al",
+    "cobrarla en el servidor la fórmula queda escrita tres veces, en dos lenguajes; la regla de",
+    "redondeo es donde se separan sin que nadie lo note.",
+    "",
+    "LA REGLA. comisión = subtotal × porcentaje / 100, a dos decimales, con el redondeo de la casa:",
+    "al par (bancario, el de Synergos.Core.Money). El porcentaje va de 0 a 100 con dos decimales como",
+    "mucho; con eso, en unidades menores, la cuenta es entera y exacta en las tres. Subtotal o",
+    "porcentaje cero dan cero.",
+    "",
+    "LAS EXPECTATIVAS NO SALEN DE NINGUNA DE LAS TRES: se derivaron a mano con aritmética decimal",
+    "exacta. Los vectores de medio centavo están elegidos para que el redondeo mitad-arriba (el",
+    "Math.round del navegador) dé OTRO número: con él pasarían en verde sólo los que no deciden."
+  ],
+  "vectores": [
+    { "nombre": "dos entradas generales al 12 %", "subtotal": 360000, "feePercent": 12, "fee": 43200 },
+    { "nombre": "porcentaje cero no cobra", "subtotal": 360000, "feePercent": 0, "fee": 0 },
+    { "nombre": "subtotal cero no cobra", "subtotal": 0, "feePercent": 12, "fee": 0 },
+    { "nombre": "porcentaje con dos decimales", "subtotal": 180000, "feePercent": 12.5, "fee": 22500 },
+    { "nombre": "fracción por debajo del medio", "subtotal": 123.45, "feePercent": 12, "fee": 14.81 },
+    { "nombre": "fracción por encima del medio", "subtotal": 0.37, "feePercent": 7, "fee": 0.03 },
+    { "nombre": "medio centavo: el par es el de abajo (mitad-arriba daría 0.01)", "subtotal": 0.05, "feePercent": 10, "fee": 0 },
+    { "nombre": "medio centavo: el par es el de arriba", "subtotal": 0.15, "feePercent": 10, "fee": 0.02 },
+    { "nombre": "medio centavo: el par es el de abajo (mitad-arriba daría 0.03)", "subtotal": 0.25, "feePercent": 10, "fee": 0.02 },
+    { "nombre": "pesos con media centésima (mitad-arriba daría 22500.13)", "subtotal": 180001, "feePercent": 12.5, "fee": 22500.12 },
+    { "nombre": "el porcentaje entero", "subtotal": 999.99, "feePercent": 100, "fee": 999.99 }
+  ]
+}

@@ -73,7 +73,10 @@ public sealed class CampoSynHostAttribute : Attribute
     public OrigenDelCampo Origen { get; }
 }
 
-/// <summary>Contenido o decisión del editor (informe 16 §3: clases C y D).</summary>
+/// <summary>
+/// De dónde sale un campo: contenido o decisión del editor (informe 16 §3: clases C y D), o la
+/// configuración de negocio de la funcionalidad, que el editor no toca (ADR 0137).
+/// </summary>
 public enum OrigenDelCampo
 {
     /// <summary>Lo que el editor escribe: textos, cifras, listas.</summary>
@@ -81,4 +84,11 @@ public enum OrigenDelCampo
 
     /// <summary>Lo que el editor elige: variantes, interruptores, el valor inicial de un control.</summary>
     Decision,
+
+    /// <summary>
+    /// La configuración de negocio de una funcionalidad: sale de su sección
+    /// <c>Synergos:Features:&lt;X&gt;</c> del despliegue, con override por siteRoot, y el editor no la
+    /// ve (ADR 0137). Sólo una funcionalidad lleva campos de este origen (ADR 0134).
+    /// </summary>
+    Negocio,
 }

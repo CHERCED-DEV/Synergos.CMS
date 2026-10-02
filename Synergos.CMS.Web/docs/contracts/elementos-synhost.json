@@ -861,6 +861,59 @@
       }
     },
     {
+      "nombre": "eventos",
+      "tipo": "funcionalidad",
+      "record": "EventosProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "role",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "feePercent",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "platformFeePercent",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Vive los mejores eventos",
+        "subheading": "Conciertos, teatro y festivales",
+        "role": "organizer",
+        "apiBase": "/api/eventos",
+        "feePercent": 12,
+        "platformFeePercent": 10
+      }
+    },
+    {
       "nombre": "fab",
       "tipo": "pieza",
       "record": "FabProps",

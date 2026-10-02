@@ -32,7 +32,7 @@ public static class EventosEndpoints
                 .Select(l => new TicketLine(l.Tier ?? string.Empty, l.Seat, l.Quantity))
                 .ToList();
 
-            var r = await flow.BuyAsync(req.EventId!, buyer, lineas, key.Value, ct);
+            var r = await flow.BuyAsync(req.EventId!, buyer, lineas, req.ServiceFeePercent ?? 0m, key.Value, ct);
 
             return r.Match(
                 s => Results.Created($"/v1/ticket-purchases/{s.Id}", TicketPurchaseResponse.From(s)),

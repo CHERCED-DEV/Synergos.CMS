@@ -64,15 +64,20 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     private readonly ITransactionalNotifier? _notifier;
     private readonly ILogger<HttpEventTicketingService> _log;
     private readonly Func<DateTimeOffset> _now;
+    private readonly INegocioDeEventos? _negocio;
 
+    /// <param name="negocio">De dónde sale la comisión de servicio que se manda al orquestador
+    /// (ADR 0137): la misma que el carrito le muestra al comprador. Sin él no se cobra comisión.</param>
     public HttpEventTicketingService(
         IHttpClientFactory clients,
         IOptionsMonitor<EventosSettings> settings,
         EventTicketLedger ledger,
         ILogger<HttpEventTicketingService> log,
         ITransactionalNotifier? notifier = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        INegocioDeEventos? negocio = null)
     {
+        _negocio = negocio;
         _clients = clients;
         _settings = settings;
         _ledger = ledger;
@@ -124,7 +129,12 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         // crearía una SEGUNDA compra sobre las mismas butacas.
         var key = IdempotencyKeyFor(eventId, buyerId, lineas);
 
-        var compra = await ComprarAsync(eventId, buyerId, s.BuyerKind, lineas, key, cancellationToken)
+        // La comisión la calcula y la autoriza el orquestador sobre SU cotización; de acá sale
+        // sólo el porcentaje, el del sitio de esta petición (ADR 0137). No entra en la llave: un
+        // reintento de la misma compra es la misma compra, con la comisión con que se pidió.
+        var comision = _negocio?.Actual().FeePercent ?? 0m;
+
+        var compra = await ComprarAsync(eventId, buyerId, s.BuyerKind, lineas, comision, key, cancellationToken)
             .ConfigureAwait(false);
 
         // Y acá se anota lo que la saga no lleva. Si esto no ocurriera, la compra existiría del
@@ -147,7 +157,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
 
     private async Task<PurchaseDto> ComprarAsync(
         string eventId, string buyerId, string buyerKind,
-        IReadOnlyList<EventCheckoutItem> lineas, string key, CancellationToken ct)
+        IReadOnlyList<EventCheckoutItem> lineas, decimal comision, string key, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, "v1/ticket-purchases")
         {
@@ -157,6 +167,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
                 buyerKind,
                 buyerId,
                 lines = lineas.Select(l => new { tier = l.Tier, seat = l.Seat, quantity = l.Quantity }),
+                serviceFeePercent = comision,
             }),
         };
         req.Headers.Add("Idempotency-Key", key);

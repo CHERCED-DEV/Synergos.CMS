@@ -18,8 +18,18 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 public sealed record TicketLineRequest(string? Tier, string? Seat, int Quantity);
 
 /// <summary>Comprar entradas de un evento.</summary>
+/// <param name="ServiceFeePercent">La comisión de servicio que paga quien compra, en porcentaje
+/// del subtotal; sin ella no hay comisión.</param>
+/// <remarks>
+/// <b>El porcentaje sí viaja, y el precio no.</b> Lo que no puede llegar del llamador es lo que el
+/// comprador querría cambiar: el precio se cotiza acá. La comisión es configuración del despliegue
+/// del CMS, por sitio (ADR 0137): el navegador no la manda —la pone el CMS, el único con la llave
+/// de este servicio— y tenerla también acá sería una segunda fuente para la regla que el
+/// comprador ve en el carrito.
+/// </remarks>
 public sealed record BuyTicketsRequest(
-    string? EventId, string? BuyerKind, string? BuyerId, IReadOnlyList<TicketLineRequest>? Lines);
+    string? EventId, string? BuyerKind, string? BuyerId, IReadOnlyList<TicketLineRequest>? Lines,
+    decimal? ServiceFeePercent = null);
 
 /// <summary>Una butaca o cupo apartado, tal como sale.</summary>
 /// <param name="Tier">La localidad.</param>

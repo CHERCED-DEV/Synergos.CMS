@@ -65,9 +65,17 @@ public sealed class TicketingFlow
         _log = log;
     }
 
-    /// <summary>Aparta el aforo y autoriza el cobro. No mueve plata todavía.</summary>
-    public async Task<Result<TicketingSaga>> BuyAsync(
+    /// <summary>Aparta el aforo y autoriza el cobro, sin comisión de servicio.</summary>
+    public Task<Result<TicketingSaga>> BuyAsync(
         string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, string sagaId, CancellationToken ct)
+        => BuyAsync(eventId, buyer, lineas, 0m, sagaId, ct);
+
+    /// <summary>Aparta el aforo y autoriza el cobro. No mueve plata todavía.</summary>
+    /// <param name="comisionPorcentaje">La comisión de servicio sobre el subtotal, de 0 a 100 y con
+    /// dos decimales como mucho: la que el CMS le mostró al comprador (ADR 0137).</param>
+    public async Task<Result<TicketingSaga>> BuyAsync(
+        string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
+        string sagaId, CancellationToken ct)
     {
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
         // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
@@ -81,7 +89,7 @@ public sealed class TicketingFlow
         if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
         sagaId = slot.Id;
 
-        var motivo = Revisar(lineas);
+        var motivo = Revisar(lineas) ?? ComisionDeServicio.Revisar(comisionPorcentaje);
         if (motivo is not null) return Result.Rejected<TicketingSaga>(motivo);
 
         // 1. Cuánto cuesta, contra la capacidad. Va antes de apartar porque un precio que no se
@@ -96,7 +104,12 @@ public sealed class TicketingFlow
 
         var quote = await _caps.QuoteAsync(aCotizar, ct);
         if (!quote.IsOk) return Result.Rejected<TicketingSaga>(quote.Rejection!);
-        var total = Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency);
+
+        // La comisión va sobre el SUBTOTAL de las entradas, que es sobre lo que la calcula el
+        // carrito; sin ella, quien compraba veía un total y se le autorizaba otro (#194).
+        var total = Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency)
+            + ComisionDeServicio.Sobre(
+                Money.Of(quote.Value.Subtotal.Amount, quote.Value.Subtotal.Currency), comisionPorcentaje);
 
         var saga = new TicketingSaga(sagaId, buyer, eventId, SagaStatus.Running,
             Array.Empty<SeatHold>(), null, total,
