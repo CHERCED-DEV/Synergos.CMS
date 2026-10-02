@@ -2324,24 +2324,6 @@ public sealed class DevContentFiller
     }
 
     /// <summary>
-    /// Calendario month-view (elementSynCalendar): eventsEndpoint (GET JSON con slots/eventos) +
-    /// initialMonth (YYYY-MM, opcional → mes actual). Reusable para elegir fecha/slot de la reserva.
-    /// </summary>
-    private void AddSynCalendar(BlockGridJsonBuilder b, string eventsEndpoint, string? initialMonth = null)
-    {
-        var key = _contentTypeService.Get("elementSynCalendar")?.Key;
-        if (key is null) { return; }
-        var section = b.AddTopLevelBlock(_sectionKey);
-        section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
-        section.AddChild(SectionContentAreaKey, key.Value, c =>
-        {
-            c.Set("eventsEndpoint", eventsEndpoint);           // mandatory (URL ^https?://|^/)
-            if (!string.IsNullOrWhiteSpace(initialMonth)) { c.Set("initialMonth", initialMonth); }
-            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
-        });
-    }
-
-    /// <summary>
     /// Asistente de reserva multipaso (elementSynBookingWizard): el SynHost lo emite como
     /// &lt;synergos-booking-wizard config='...'&gt; y la CDN hidrata el componente Angular,
     /// que llama a la API de reservas (/api/booking/*, BookingController). Config end-to-end
@@ -2358,7 +2340,7 @@ public sealed class DevContentFiller
         {
             // Los valores de un bloque del BlockGrid se almacenan planos en el JSON; la
             // variación Culture de la propiedad la resuelve el contexto de cultura de la
-            // página (misma mecánica que AddSynCalendar/AddSynTestimonials).
+            // página (misma mecánica que AddSynTestimonials).
             c.Set("destinationLabel", destinationLabel); // Culture — nombre del alojamiento
             c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
         });
@@ -3211,26 +3193,23 @@ public sealed class DevContentFiller
         return b.Build();
     }
 
-    // Página Reservar: calendar (elegir fecha/slot) + form-stepper multipaso (datos de la
-    // reserva) + confirmación + (opcional) map-embed/horarios en accordion. Todo CDN con
-    // fallback con grace. CERO contenido baked en .cshtml.
+    // Página Reservar: form-stepper multipaso (servicio, fecha, hora y datos) + confirmación +
+    // (opcional) map-embed/horarios en accordion. Todo CDN con fallback con grace. CERO contenido
+    // baked en .cshtml. Sin calendario (#196, tanda D): pedía un feed de disponibilidad de citas
+    // que no existe —la única disponibilidad es la de habitaciones de hotel— y el formulario ya
+    // pide la fecha y la hora.
     private string BuildBookingReservar()
     {
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Reserva tu cita",
             "Elige fecha y hora, sin llamadas",
-            "<p>Selecciona el día y el horario disponibles en el calendario, completa tus datos y recibe la confirmación por correo en minutos.</p>",
+            "<p>Elige el servicio, el día y la hora, completa tus datos y recibe la confirmación por correo en minutos.</p>",
             "Booking Reservar Hero", "Hero de la página de reserva", MeridianFrom, MeridianTo,
             ("Ver servicios", "/booking/servicios"), ("Volver al inicio", "/booking"));
 
-        // Paso 1 — calendario: elegir fecha/slot. eventsEndpoint = GET JSON de disponibilidad.
-        AddMission(b, "1 · Elige fecha y hora", "",
-            "<p>Toca un día disponible en el calendario para ver los horarios libres. La disponibilidad se actualiza en tiempo real.</p>");
-        AddSynCalendar(b, "/api/booking/availability");
-
-        // Paso 2 — datos de la reserva: form-stepper multipaso → POST a Forms (honeypot + rate-limit + email).
-        AddMission(b, "2 · Completa tus datos", "",
-            "<p>Confirma el servicio, la fecha y la hora elegidas y déjanos tus datos de contacto. Te enviamos la confirmación al correo.</p>");
+        // Paso 1 — datos de la reserva: form-stepper multipaso → POST a Forms (honeypot + rate-limit + email).
+        AddMission(b, "1 · Completa tus datos", "",
+            "<p>Elige el servicio, la fecha y la hora y déjanos tus datos de contacto. Te enviamos la confirmación al correo.</p>");
         AddSynFormStepper(b, "reserva-cita", new (string title, (string label, string name, string type, bool required, string placeholder, string[] options)[] fields)[]
         {
             ("Tu reserva", new (string, string, string, bool, string, string[])[]
@@ -3249,7 +3228,7 @@ public sealed class DevContentFiller
         });
 
         // Confirmación — mensaje de qué sigue tras reservar.
-        AddMission(b, "3 · Confirmación", "",
+        AddMission(b, "2 · Confirmación", "",
             "<p>Al enviar tu reserva recibirás un correo con los detalles y un enlace para reprogramar o cancelar. Te enviaremos un recordatorio antes de tu cita.</p>");
 
         // Opcional — ubicación (map-embed SSR) + horarios de atención (accordion CDN).
