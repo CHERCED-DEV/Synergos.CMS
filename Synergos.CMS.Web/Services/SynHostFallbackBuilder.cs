@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Synergos.CMS.Interfaces.SynHost;
 
 namespace Synergos.CMS.Web.Services;
 
@@ -194,6 +195,45 @@ public static class SynHostFallbackBuilder
         sb.Append("</ul></section>");
 
         return rendered == 0 ? null : sb.ToString();
+    }
+
+    // ── Listado ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>elementSynDataGrid</c> — las filas que armó el servidor (#196, tanda D): título (con su
+    /// enlace si la fuente tiene página), etiqueta y datos. Es lo que se ve sin JavaScript y lo que
+    /// indexa un buscador; el elemento, al hidratar, pinta las mismas filas como tarjetas.
+    /// </summary>
+    public static string? Listado(IReadOnlyList<FilaDelListado>? filas, string? ariaLabel)
+    {
+        if (filas is not { Count: > 0 }) return null;
+
+        var sb = new StringBuilder();
+        sb.Append("<section class=\"").Append(BaseClass).Append(" syn-ssr-listing\"")
+          .Append(Marker)
+          .Append(AriaLabel(ariaLabel))
+          .Append("><ul class=\"syn-ssr-listing__list\">");
+        foreach (var fila in filas)
+        {
+            sb.Append("<li class=\"syn-ssr-listing__item\"><h3 class=\"syn-ssr-listing__title\">");
+            if (Clean(fila.Href) is { } href)
+                sb.Append("<a href=\"").Append(Esc(href)).Append("\">").Append(Esc(fila.Title)).Append("</a>");
+            else
+                sb.Append(Esc(fila.Title));
+            sb.Append("</h3>");
+            if (Clean(fila.Badge) is { } badge)
+                sb.Append("<p class=\"syn-ssr-listing__badge\">").Append(Esc(badge)).Append("</p>");
+            if (fila.Specs is { Count: > 0 } datos)
+            {
+                sb.Append("<dl class=\"syn-ssr-listing__specs\">");
+                foreach (var dato in datos)
+                    sb.Append("<div><dt>").Append(Esc(dato.Label)).Append("</dt><dd>").Append(Esc(dato.Value)).Append("</dd></div>");
+                sb.Append("</dl>");
+            }
+            sb.Append("</li>");
+        }
+        sb.Append("</ul></section>");
+        return sb.ToString();
     }
 
     // ── Media + text ─────────────────────────────────────────────────

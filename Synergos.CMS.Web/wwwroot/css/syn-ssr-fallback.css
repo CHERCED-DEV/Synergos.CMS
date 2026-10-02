@@ -390,3 +390,44 @@ synergos-stat-ticker:defined > [data-syn-ssr-fallback],
 synergos-kpi-card:defined > [data-syn-ssr-fallback] {
   display: none;
 }
+
+/* ── Listado (elementSynDataGrid, #196 tanda D) ──────────────── */
+
+.syn-ssr-listing__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--syn-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--syn-ssr-col-min)), 1fr));
+}
+
+.syn-ssr-listing__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+  padding: var(--syn-card-pad);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-ssr-listing__title {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-listing__badge,
+.syn-ssr-listing__specs {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-listing__specs div {
+  display: flex;
+  gap: var(--syn-space-2);
+}
+
+.syn-ssr-listing__specs dd {
+  margin: 0;
+}

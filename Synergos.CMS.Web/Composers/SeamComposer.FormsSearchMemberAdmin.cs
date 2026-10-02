@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Listados;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -45,6 +46,18 @@ public sealed partial class SeamComposer
         // la API de formularios, por sitio. La lee el resolver del elemento.
         services.AddSeccionDeNegocio<FormStepperFeatureSettings, NegocioDeFormStepper>(
             builder.Config.GetSection("Synergos:Features:FormStepper"));
+
+        // Los listados que arma el servidor (#196, tanda D): cada fuente es una pieza que el
+        // editor elige por su clave; una nueva se registra acá, el resolver no cambia. Las de
+        // catálogo leen el MISMO proveedor que su app.
+        services.AddSingleton<IFuenteDeListado, FichasDeLaSeccion>();
+        services.AddSingleton<IFuenteDeListado, CursosDelCatalogo>();
+        services.AddSingleton<IFuenteDeListado, EventosDelCatalogo>();
+        services.AddSingleton<IFuenteDeListado, InmueblesDelCatalogo>();
+        services.AddOptions<ListadosSettings>()
+            .Bind(builder.Config.GetSection(ListadosSettings.Seccion))
+            .Validate(s => s.Zona() is not null, $"{ListadosSettings.Seccion}:ZonaHoraria no es una zona horaria que el sistema conozca.")
+            .ValidateOnStart();
 
         // Ola 61 — Search infrastructure (ADR 0031). ExamineSearchProvider
         // usa el ExternalIndex out-of-the-box de Umbraco (Examine 3.1.0)

@@ -41,6 +41,14 @@ public sealed class ElementoSynHostAttribute : Attribute
     /// de sus claves. Vacío si no usa ninguna. Un gate comprueba que cada una exista.
     /// </summary>
     public string[] Diccionario { get; set; } = [];
+
+    /// <summary>
+    /// Los selectores del ElementType que eligen DATOS, no vocabulario del elemento: la fuente de
+    /// un listado elige de dónde salen sus filas (#196, tanda D). El gate de vocabulario (#181) no
+    /// los sondea —cambiarlos cambia el contenido entero, no una clave—, y el contrato los declara
+    /// sin campo. Un gate comprueba que cada uno exista en el ElementType y que el resolver lo lea.
+    /// </summary>
+    public string[] SelectoresDeDatos { get; set; } = [];
 }
 
 /// <summary>

@@ -10,6 +10,7 @@ using NSubstitute;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
+using Synergos.CMS.Web.Services.Listados;
 using Synergos.CMS.Web.Services.SynHost;
 
 namespace Synergos.CMS.Tests.Services.SynHost;
@@ -116,6 +117,17 @@ public sealed class ContratoSynHostTests
             {
                 ("heading", "Reserva tu próximo viaje"),
                 ("subheading", "Vuelos, hoteles y paquetes"),
+            },
+            // Un listado cuyas filas arma el servidor (#196, tanda D): la fuente se elige, las filas
+            // salen de ella (en el test, FuentesDeMuestra).
+            ["data-grid"] = new (string, object?)[]
+            {
+                ("fuente", "fichas"),
+            },
+            ["search-box"] = new (string, object?)[]
+            {
+                ("searchPlaceholder", "Buscar cursos por tema o nivel…"),
+                ("submitToPage", true),
             },
             // Un formulario del modelo de Forms por pasos (#196, tanda D): cada campo de un paso
             // lleva todo su vocabulario, para que el UI vea viajar cada clave a cualquier profundidad.
@@ -827,13 +839,46 @@ public sealed class ContratoSynHostTests
     }
 
     private static ServiceProvider Proveedor()
-        => ConNegocioBase(new ServiceCollection())
+        => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
+
+    /// <summary>
+    /// Las fuentes de los listados (#196, tanda D), todas con la MISMA fila de muestra, que lleva
+    /// cada campo de la fila. Iguales a propósito: elegir una fuente u otra elige DATOS, no
+    /// vocabulario del elemento, así que el sondeo del selector <c>fuente</c> no debe ver cambios
+    /// en el cable. Las fuentes reales se prueban aparte.
+    /// </summary>
+    private static IServiceCollection FuentesDeMuestra(IServiceCollection servicios)
+    {
+        foreach (var clave in new[] { "fichas", "cursos", "eventos", "inmuebles" })
+        {
+            servicios.AddSingleton<IFuenteDeListado>(new FuenteDeMuestra(clave));
+        }
+
+        return servicios;
+    }
+
+    private sealed class FuenteDeMuestra(string clave) : IFuenteDeListado
+    {
+        public string Clave => clave;
+
+        public IReadOnlyList<FilaDelListado> Filas(PeticionDelListado peticion) =>
+        [
+            new FilaDelListado(
+                Id: "ficha-1",
+                Title: "Asesoría express",
+                Href: "/booking/servicios/asesoria-express/",
+                Image: "/media/asesoria.jpg",
+                ImageAlt: "Asesoría express",
+                Badge: "Consultoría",
+                Specs: [new DatoDeLaFila(peticion.Rotulo("DataGrid.Price", "Precio"), "$ 180.000")]),
+        ];
+    }
 
     /// <summary>
     /// La configuración de negocio con los valores base de CADA sección de negocio que exista, que es
@@ -911,11 +956,27 @@ public sealed class ContratoSynHostTests
         using var proveedor = Proveedor();
         var resultado = new List<SelectorDelContrato>();
         var leidas = PropiedadesQueLee(proveedor, record, muestra);
+        var deDatos = SolicitudSynHost.Elemento(record).SelectoresDeDatos.ToHashSet(StringComparer.Ordinal);
+        var deDatosVistos = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var elementType in SelectoresDeUSync.ElementTypesDe(repo, record))
         {
             foreach (var selector in SelectoresDeUSync.De(repo, elementType))
             {
+                // Un selector que elige DATOS (la fuente de un listado) no es vocabulario: cambiarlo
+                // cambia las filas enteras. No se sondea y viaja sin campo (#196, tanda D).
+                if (deDatos.Contains(selector.Propiedad))
+                {
+                    Assert.True(leidas.Contains(selector.Propiedad),
+                        $"{record.Name}: declara «{selector.Propiedad}» como selector de datos y su resolver no lo lee.");
+                    deDatosVistos.Add(selector.Propiedad);
+                    resultado.Add(new SelectorDelContrato(
+                        selector.Propiedad, selector.DataType, selector.Multiple, null,
+                        selector.Prevalores.Select(p => new ValorDelSelector(p, null)).ToList(),
+                        DeDatos: true));
+                    continue;
+                }
+
                 // Lo que el resolver ni siquiera pide no puede viajar: no hace falta sondearlo. Es
                 // también lo que hace barata la derivación —las composiciones traen cinco
                 // selectores a cada elemento y ningún resolver los lee—.
@@ -961,6 +1022,12 @@ public sealed class ContratoSynHostTests
                     sondas.Select(s => new ValorDelSelector(s.Editor, campo is null ? null : UnoSolo(s.Hojas[campo], record, selector.Propiedad))).ToList()));
             }
         }
+
+        // Una declaración vieja (el ElementType ya no tiene ese selector) apagaría el gate para un
+        // selector que ya no existe y nadie lo vería.
+        var huerfanos = deDatos.Except(deDatosVistos).ToList();
+        Assert.True(huerfanos.Count == 0,
+            $"{record.Name}: declara como selectores de datos {string.Join(", ", huerfanos)}, que su ElementType no tiene.");
 
         return resultado;
     }
@@ -1075,14 +1142,16 @@ public sealed class ContratoSynHostTests
     /// <summary>
     /// Un selector del ElementType y lo que viaja de cada prevalor. <c>campo</c> es la ruta del
     /// <c>config</c> donde cae (<c>position</c>, <c>platforms[]</c>, <c>toasts[].variant</c>);
-    /// <c>null</c> si ningún prevalor llega al elemento.
+    /// <c>null</c> si ningún prevalor llega al elemento. <c>deDatos</c> marca el selector que elige
+    /// DATOS (la fuente de un listado, #196): no es vocabulario y el gate del UI no lo cruza.
     /// </summary>
     private sealed record SelectorDelContrato(
         string Propiedad,
         string DataType,
         bool Multiple,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Campo,
-        IReadOnlyList<ValorDelSelector> Valores);
+        IReadOnlyList<ValorDelSelector> Valores,
+        bool? DeDatos = null);
 
     /// <summary>Lo que el editor elige y lo que de eso llega al elemento (<c>null</c>: nada).</summary>
     private sealed record ValorDelSelector(

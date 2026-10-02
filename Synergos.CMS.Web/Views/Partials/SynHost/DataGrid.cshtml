@@ -1,15 +1,16 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@*
+    SynHost renderer — <synergos-data-grid>. Un listado cuyas filas arma el servidor.
+
+    Host tonto (ADR 0135): el resolver consulta la fuente que eligió el editor (las fichas de su
+    sección, o el catálogo de cursos, de eventos o de inmuebles) con el ?q de la página, y arma
+    el record que viaja (DataGridProps). Sin endpoint en el cliente (#196, tanda D).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.DataGridProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
-#nullable enable
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["dataSource"] = Model.Value<string>("dataSource"),
-        ["columnsJson"] = Model.Value<string>("columnsJson"),
-        ["pageSize"] = Model.Value<string>("pageSize"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("data-grid", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

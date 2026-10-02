@@ -2204,8 +2204,11 @@ public sealed class DevContentFiller
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
-    /// <summary>Buscador en vivo (elementSynSearchBox): apunta a un endpoint GET. Reusable para filtrar el catálogo de cursos.</summary>
-    private void AddSynSearchBox(BlockGridJsonBuilder b, string placeholder, string endpoint, string paramName)
+    /// <summary>
+    /// Buscador (elementSynSearchBox) que recarga la página con <c>?q</c>: el listado de al lado lo
+    /// lee en el servidor (#196, tanda D).
+    /// </summary>
+    private void AddSynSearchBox(BlockGridJsonBuilder b, string placeholder)
     {
         var key = _contentTypeService.Get("elementSynSearchBox")?.Key;
         if (key is null) { return; }
@@ -2213,24 +2216,22 @@ public sealed class DevContentFiller
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
         section.AddChild(SectionContentAreaKey, key.Value, c => c
             .Set("searchPlaceholder", placeholder)
-            .Set("searchEndpoint", endpoint)
-            .Set("searchParamName", paramName)
+            .Set("submitToPage", "1")
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
-    /// <summary>Grilla de datos filtrable/paginada (elementSynDataGrid): columns {field,label,sortable,filterable} + dataSource GET. Catálogo de cursos.</summary>
-    private void AddSynDataGrid(BlockGridJsonBuilder b, string dataSource, (string field, string label, bool sortable, bool filterable)[] columns, int pageSize = 9)
+    /// <summary>
+    /// Listado (elementSynDataGrid) cuyas filas arma el servidor desde una fuente: las fichas de la
+    /// sección o el catálogo de cursos, de eventos o de inmuebles (#196, tanda D).
+    /// </summary>
+    private void AddSynDataGrid(BlockGridJsonBuilder b, string fuente)
     {
         var key = _contentTypeService.Get("elementSynDataGrid")?.Key;
         if (key is null) { return; }
         var section = b.AddTopLevelBlock(_sectionKey);
         section.ApplyDefaults(_defaults.DefaultsFor(_sectionKey));
-        var columnsJson = "[" + string.Join(",", columns.Select(col =>
-            $"{{\"field\":\"{Esc(col.field)}\",\"label\":\"{Esc(col.label)}\",\"sortable\":{(col.sortable ? "true" : "false")},\"filterable\":{(col.filterable ? "true" : "false")}}}")) + "]";
         section.AddChild(SectionContentAreaKey, key.Value, c => c
-            .Set("dataSource", dataSource)
-            .Set("columnsJson", columnsJson)
-            .Set("pageSize", pageSize.ToString())
+            .Set("fuente", $"[\"{fuente}\"]")
             .ApplyDefaults(_defaults.DefaultsFor(key.Value)));
     }
 
@@ -2894,19 +2895,13 @@ public sealed class DevContentFiller
             ("Ver planes", "/educacion#planes"), ("Hablar con nosotros", "/synergos/contacto"));
 
         // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine, ADR de search).
-        AddSynSearchBox(b, "Buscar cursos por tema o nivel…", "/api/search", "q");
+        AddSynSearchBox(b, "Buscar cursos por tema o nivel…");
 
-        // Catálogo filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Listado (CDN data-grid) con las filas que arma el servidor desde su fuente (#196).
         // Si el data-grid no está importado, fallback a un feature-grid del catálogo.
         if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
         {
-            AddSynDataGrid(b, "/api/search?type=curso", new (string field, string label, bool sortable, bool filterable)[]
-            {
-                ("title", "Curso", true, true),
-                ("level", "Nivel", true, true),
-                ("duration", "Duración", true, false),
-                ("category", "Categoría", true, true),
-            }, pageSize: 9);
+            AddSynDataGrid(b, "cursos");
         }
         else
         {
@@ -3178,19 +3173,13 @@ public sealed class DevContentFiller
             ("Reservar", "/booking/reservar"), ("Hablar con nosotros", "/synergos/contacto"));
 
         // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
-        AddSynSearchBox(b, "Buscar servicios por nombre o categoría…", "/api/search", "q");
+        AddSynSearchBox(b, "Buscar servicios por nombre o categoría…");
 
-        // Catálogo filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Listado (CDN data-grid) con las filas que arma el servidor desde su fuente (#196).
         // Columnas incluyen precio (lo formatea el render es-CO). Fallback a feature-grid.
         if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
         {
-            AddSynDataGrid(b, "/api/search?type=servicio", new (string field, string label, bool sortable, bool filterable)[]
-            {
-                ("title", "Servicio", true, true),
-                ("category", "Categoría", true, true),
-                ("duration", "Duración", true, false),
-                ("price", "Precio", true, false),
-            }, pageSize: 9);
+            AddSynDataGrid(b, "fichas");
         }
         else
         {
@@ -3394,19 +3383,13 @@ public sealed class DevContentFiller
             ("Ver el evento destacado", "/eventos/evento"), ("Hablar con nosotros", "/synergos/contacto"));
 
         // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
-        AddSynSearchBox(b, "Buscar eventos por nombre o categoría…", "/api/search", "q");
+        AddSynSearchBox(b, "Buscar eventos por nombre o categoría…");
 
-        // Cartelera filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Listado (CDN data-grid) con las filas que arma el servidor desde su fuente (#196).
         // La columna de precio la formatea el render (es-CO, IPriceFormatter). Fallback feature-grid.
         if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
         {
-            AddSynDataGrid(b, "/api/search?type=evento", new (string field, string label, bool sortable, bool filterable)[]
-            {
-                ("title", "Evento", true, true),
-                ("date", "Fecha", true, true),
-                ("category", "Categoría", true, true),
-                ("price", "Precio", true, false),
-            }, pageSize: 9);
+            AddSynDataGrid(b, "eventos");
         }
         else
         {
@@ -3695,19 +3678,13 @@ public sealed class DevContentFiller
             ("Ver una propiedad", "/propiedades/propiedad"), ("Hablar con un asesor", "/synergos/contacto"));
 
         // Buscador en vivo (CDN). Apunta al endpoint de búsqueda del CMS (Examine).
-        AddSynSearchBox(b, "Buscar por zona, tipo o nombre…", "/api/search", "q");
+        AddSynSearchBox(b, "Buscar por zona, tipo o nombre…");
 
-        // Listado filtrable/paginable (CDN data-grid). dataSource = endpoint GET JSON.
+        // Listado (CDN data-grid) con las filas que arma el servidor desde su fuente (#196).
         // La columna de precio la formatea el render (es-CO, IPriceFormatter). Fallback feature-grid.
         if (_contentTypeService.Get("elementSynDataGrid")?.Key is not null)
         {
-            AddSynDataGrid(b, "/api/search?type=propiedad", new (string field, string label, bool sortable, bool filterable)[]
-            {
-                ("title", "Propiedad", true, true),
-                ("category", "Tipo", true, true),
-                ("location", "Ubicación", true, true),
-                ("price", "Precio", true, false),
-            }, pageSize: 9);
+            AddSynDataGrid(b, "inmuebles");
         }
         else
         {

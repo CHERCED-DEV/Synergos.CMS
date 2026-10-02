@@ -877,6 +877,86 @@
       }
     },
     {
+      "nombre": "data-grid",
+      "tipo": "pieza",
+      "record": "DataGridProps",
+      "diccionario": [
+        "DataGrid"
+      ],
+      "claves": [
+        "DataGrid.Aria",
+        "DataGrid.Count.One",
+        "DataGrid.Count.Other",
+        "DataGrid.Cta",
+        "DataGrid.Date",
+        "DataGrid.Detail",
+        "DataGrid.Duration",
+        "DataGrid.Empty",
+        "DataGrid.Free",
+        "DataGrid.Level",
+        "DataGrid.Loading",
+        "DataGrid.Location",
+        "DataGrid.NoResults",
+        "DataGrid.Place",
+        "DataGrid.Price",
+        "DataGrid.PriceFrom"
+      ],
+      "campos": [
+        {
+          "nombre": "rows",
+          "tipo": "FilaDelListado[]",
+          "opcional": true,
+          "origen": "contenido"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "fuente",
+          "dataType": "DTSelectFuenteDeListado",
+          "multiple": false,
+          "campo": null,
+          "valores": [
+            {
+              "editor": "fichas",
+              "viaja": null
+            },
+            {
+              "editor": "cursos",
+              "viaja": null
+            },
+            {
+              "editor": "eventos",
+              "viaja": null
+            },
+            {
+              "editor": "inmuebles",
+              "viaja": null
+            }
+          ],
+          "deDatos": true
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "rows": [
+          {
+            "id": "ficha-1",
+            "title": "Asesoría express",
+            "href": "/booking/servicios/asesoria-express/",
+            "image": "/media/asesoria.jpg",
+            "imageAlt": "Asesoría express",
+            "badge": "Consultoría",
+            "specs": [
+              {
+                "label": "Precio",
+                "value": "$ 180.000"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "nombre": "dropdown",
       "tipo": "pieza",
       "record": "DropdownProps",
@@ -1928,6 +2008,31 @@
       }
     },
     {
+      "nombre": "search-box",
+      "tipo": "pieza",
+      "record": "SearchBoxProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "placeholder",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "submitToPage",
+          "tipo": "boolean",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "placeholder": "Buscar cursos por tema o nivel…",
+        "submitToPage": true
+      }
+    },
+    {
       "nombre": "select-multi",
       "tipo": "pieza",
       "record": "SelectMultiProps",
@@ -2714,6 +2819,21 @@
       ]
     },
     {
+      "record": "DatoDeLaFila",
+      "campos": [
+        {
+          "nombre": "label",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "value",
+          "tipo": "string",
+          "opcional": false
+        }
+      ]
+    },
+    {
       "record": "DropdownOption",
       "campos": [
         {
@@ -2729,6 +2849,46 @@
         {
           "nombre": "href",
           "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "FilaDelListado",
+      "campos": [
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "image",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "imageAlt",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "badge",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "specs",
+          "tipo": "DatoDeLaFila[]",
           "opcional": true
         }
       ]
