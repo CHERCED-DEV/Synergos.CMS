@@ -47,7 +47,8 @@ public sealed class EhrContractDriftTests
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
         _results, _medications, _orders, _billing, _inBasket, _messaging,
-        new EsCoPriceFormatter(new CartSettings()), _gate);
+        new EsCoPriceFormatter(new CartSettings()), _gate,
+        Microsoft.Extensions.Options.Options.Create(new ListadosSettings()));
 
     /// <summary>
     /// La sesión de partida: personal clínico sin médico vinculado (#197), que es quien escribe

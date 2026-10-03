@@ -61,10 +61,13 @@ public sealed class EhrControllerTests
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
+    /// <summary>La zona del sitio; la de partida es la del producto, America/Bogota.</summary>
+    private ListadosSettings _listados = new();
+
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
         _results, _medications, _orders, _billing, _inBasket, _messaging,
-        new EsCoPriceFormatter(new CartSettings()), _gate);
+        new EsCoPriceFormatter(new CartSettings()), _gate, Microsoft.Extensions.Options.Options.Create(_listados));
 
     /// <summary>
     /// La sesión de partida (#197): un PACIENTE —un miembro sin rol clínico cuyo correo lleva a la
@@ -1157,6 +1160,45 @@ public sealed class EhrControllerTests
         {
             System.Globalization.CultureInfo.CurrentCulture = antes;
         }
+    }
+
+    /// <summary>
+    /// La hora de «Tu próxima cita» es la del sitio, no la de UTC.
+    /// </summary>
+    /// <remarks>
+    /// Se escribía <c>{StartUtc:yyyy-MM-dd HH:mm}</c>: una cita de las 9:00 en Bogotá (14:00Z) salía
+    /// «14:00» en la tarjeta, cinco horas tarde. Ahora sale en la zona de
+    /// <c>Synergos:Listados:ZonaHoraria</c>, la misma pieza que ya dice el día de los listados; el
+    /// fixture pone la cita a las 23:30 de Bogotá, que en UTC ya es el día SIGUIENTE, para que la
+    /// fecha también se vea.
+    /// </remarks>
+    [Fact]
+    public async Task PortalHome_LaProximaCita_SaleEnLaHoraDelSitio()
+    {
+        var dia = DateTime.UtcNow.Date.AddDays(10);
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven(Cita(startUtc: dia.AddHours(28).AddMinutes(30))); // 23:30 en Bogotá
+
+        var body = Json(await BuildSut().PortalHome("pat-1", default));
+
+        var tarjeta = body.GetProperty("cards").EnumerateArray()
+            .Single(c => c.GetProperty("kind").GetString() == "appointment");
+        Assert.StartsWith($"{dia:yyyy-MM-dd} 23:30 · ", tarjeta.GetProperty("detail").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact] // la zona es la de la CONFIGURACIÓN, no un −5 escrito a mano.
+    public async Task PortalHome_LaProximaCita_SaleEnLaZonaConfigurada()
+    {
+        _listados = new ListadosSettings { ZonaHoraria = "Asia/Tokyo" }; // UTC+9, sin horario de verano
+        var dia = DateTime.UtcNow.Date.AddDays(10);
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven(Cita(startUtc: dia.AddHours(16))); // 01:00 del día siguiente en Tokio
+
+        var body = Json(await BuildSut().PortalHome("pat-1", default));
+
+        var tarjeta = body.GetProperty("cards").EnumerateArray()
+            .Single(c => c.GetProperty("kind").GetString() == "appointment");
+        Assert.StartsWith($"{dia.AddDays(1):yyyy-MM-dd} 01:00 · ", tarjeta.GetProperty("detail").GetString(), StringComparison.Ordinal);
     }
 
     [Fact] // filtro: el e-Check-In aparece dentro de 48 h y NO antes.

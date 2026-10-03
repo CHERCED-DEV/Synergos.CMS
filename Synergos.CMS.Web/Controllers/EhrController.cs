@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
@@ -98,6 +100,12 @@ public sealed class EhrController : ControllerBase
     /// <summary>Quién llama: de ahí sale el paciente del portal y el rol de la clínica (#197).</summary>
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>
+    /// La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>), en la que se dice la hora de una cita.
+    /// Los seams guardan UTC: sin zona, la cita de las 9:00 de Bogotá salía «14:00».
+    /// </summary>
+    private readonly IOptions<ListadosSettings> _listados;
+
     public EhrController(
         IPatientRegistry patients,
         IDoctorDirectory doctors,
@@ -111,7 +119,8 @@ public sealed class EhrController : ControllerBase
         IEhrInBasketService inBasket,
         IMessagingService messaging,
         IPriceFormatter priceFormatter,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IOptions<ListadosSettings> listados)
     {
         _patients = patients;
         _doctors = doctors;
@@ -126,6 +135,7 @@ public sealed class EhrController : ControllerBase
         _messaging = messaging;
         _priceFormatter = priceFormatter;
         _gate = gate;
+        _listados = listados;
     }
 
     // ── Quién llama (#197) ─────────────────────────────────────────────
@@ -457,7 +467,9 @@ public sealed class EhrController : ControllerBase
             cards.Add(new HomeCardDto(
                 Id: $"card-appt-{next.Id}", Kind: "appointment",
                 Title: "Tu próxima cita",
-                Detail: $"{next.StartUtc:yyyy-MM-dd HH:mm} · {(string.IsNullOrWhiteSpace(next.Specialty) ? "Consulta" : next.Specialty)} · {next.DoctorName}",
+                // En la hora del SITIO: la agenda guarda UTC, y escribirla tal cual ponía la cita de
+                // las 9:00 de Bogotá a las «14:00». Invariante para que `:` no lo cambie la cultura.
+                Detail: $"{EnLaHoraDelSitio(next.StartUtc).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)} · {(string.IsNullOrWhiteSpace(next.Specialty) ? "Consulta" : next.Specialty)} · {next.DoctorName}",
                 Action: "visits", ActionLabel: "Ver cita", Tone: "brand"));
 
             if (pendingCheckins > 0)
@@ -837,6 +849,14 @@ public sealed class EhrController : ControllerBase
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Un instante de la agenda (UTC) en la zona del sitio. La zona se valida al arrancar, así que
+    /// el respaldo a UTC —el de <c>DataGridResolutor</c>— no se alcanza con la configuración puesta.
+    /// </summary>
+    private DateTime EnLaHoraDelSitio(DateTime utc)
+        => TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.SpecifyKind(utc, DateTimeKind.Utc), _listados.Value.Zona() ?? TimeZoneInfo.Utc);
 
     // Estado de llegada determinista a partir de la hora de la cita vs. ahora.
     private static string DeriveScheduleState(DateTime startUtc, DateTime endUtc, DateTime now)
