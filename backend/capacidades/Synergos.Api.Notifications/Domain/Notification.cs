@@ -22,13 +22,31 @@ public enum Channel
 /// (<see cref="NotificationRules.BodyIsHtml"/>): el marcado lo pone la plantilla, y los valores
 /// entran codificados (#175).
 /// </param>
+/// <param name="Version">
+/// Qué versión de la clave es: la 1 al publicarla, y una más cada vez que se publica con otro
+/// texto (#179). La que vale para enviar es la de número más alto.
+/// </param>
+/// <param name="RetiredAtUtc">Cuándo se retiró la clave; <c>null</c> mientras se puede usar.</param>
 /// <remarks>
-/// <b>La plantilla vive acá y el texto lo escribe el dominio.</b> Es la línea que mantiene esta
+/// <para><b>La plantilla vive acá y el texto lo escribe el dominio.</b> Es la línea que mantiene esta
 /// capacidad agnóstica: Notifications sabe rellenar marcadores y entregar, no sabe qué es una
 /// cita. Si el texto viviera acá cableado por caso de uso, la primera plantilla clínica la
-/// habría atado a Salud.
+/// habría atado a Salud.</para>
+///
+/// <para><b>Una plantilla publicada no se pisa: se versiona</b> (#179). Antes no se podía cambiar
+/// ni retirar —un segundo <c>POST</c> contestaba <c>key_taken</c> y no había <c>PUT</c> ni
+/// <c>DELETE</c>—, así que cambiar la copia de un aviso pedía tocar a mano el almacén. Cada versión
+/// es un registro propio con su id, y cada envío guarda el de la que usó
+/// (<see cref="Delivery.TemplateId"/>): la bitácora sigue diciendo con qué texto salió.</para>
 /// </remarks>
-public sealed record Template(string Id, string Key, Channel Channel, string Subject, string Body);
+public sealed record Template(
+    string Id, string Key, Channel Channel, string Subject, string Body,
+    int Version = 1, DateTimeOffset? RetiredAtUtc = null);
+
+/// <summary>Lo que dejó publicar una plantilla.</summary>
+/// <param name="Template">La versión vigente de la clave tras publicar.</param>
+/// <param name="IsNew"><c>true</c> si se creó una versión; <c>false</c> si ya estaba igual.</param>
+public sealed record SavedTemplate(Template Template, bool IsNew);
 
 /// <summary>
 /// En qué va un envío.
@@ -95,6 +113,9 @@ public enum DeliveryStatus
 /// <param name="StatusAtUtc">Cuándo cambió el estado por última vez.</param>
 /// <param name="Attempts">Cuántas veces se intentó entregar, salieran como salieran (HU #29).</param>
 /// <param name="LastError">Por qué no salió la última vez. Es lo que vuelve accionable un abandono.</param>
+/// <param name="TemplateId">
+/// Qué versión de la plantilla se usó (#179); <c>null</c> en los envíos de antes de versionar.
+/// </param>
 /// <remarks>
 /// <para><b><c>ProviderMessageId</c> es lo que hace posible saber si llegó.</b> El proveedor
 /// avisa del rebote citando <i>su</i> id, no el nuestro. Sin guardarlo, «entregado» y «rebotado»
@@ -114,7 +135,8 @@ public sealed record Delivery(
     string? ProviderMessageId = null,
     DateTimeOffset? StatusAtUtc = null,
     int Attempts = 0,
-    string? LastError = null);
+    string? LastError = null,
+    string? TemplateId = null);
 
 /// <summary>
 /// Por dónde sale de verdad un aviso.

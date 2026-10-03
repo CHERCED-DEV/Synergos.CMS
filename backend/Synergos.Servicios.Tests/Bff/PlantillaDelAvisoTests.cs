@@ -259,8 +259,8 @@ public sealed class PlantillaDelAvisoTests
         Assert.True(sinUsar.Count == 0,
             $"El aviso manda {string.Join(", ", sinUsar.Select(m => "{" + m + "}"))} y la plantilla "
             + $"«{clave}» no lo usa: la guardia recibe el correo sin ese dato, y nada falla. "
-            + "Añadilo a tools/provisionar.plantillas.json —y recordá que la publicada no se pisa: "
-            + "provisionar.sh --verificar dirá que difiere.");
+            + "Añadilo a tools/provisionar.plantillas.json: provisionar.sh lo publica como versión nueva "
+            + "(#179), y --verificar dice que difiere hasta que se corra.");
     }
 
     /// <summary>

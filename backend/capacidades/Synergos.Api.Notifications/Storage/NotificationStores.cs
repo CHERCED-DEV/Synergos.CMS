@@ -14,6 +14,12 @@ public sealed class NotificationStorageOptions
 public interface ITemplateStore
 {
     Template? Find(string id);
+
+    /// <summary>La versión vigente de <paramref name="key"/>: la de número más alto, retirada o no.</summary>
+    /// <remarks>
+    /// Sin distinguir mayúsculas. Si devolviera cualquiera de las versiones, el texto que le llega
+    /// a la persona dependería del orden del almacén (#179).
+    /// </remarks>
     Template? FindByKey(string key);
     IReadOnlyList<Template> All();
     void Put(Template item);
@@ -52,10 +58,7 @@ public sealed class FileSystemTemplateStore : ITemplateStore
     public Template? Find(string id) => _store.Find(id);
 
     public Template? FindByKey(string key)
-    {
-        var hit = _store.Where(t => string.Equals(t.Key, key, StringComparison.OrdinalIgnoreCase));
-        return hit.Count > 0 ? hit[0] : null;
-    }
+        => _store.Where(t => string.Equals(t.Key, key, StringComparison.OrdinalIgnoreCase)).MaxBy(t => t.Version);
 
     public IReadOnlyList<Template> All() => _store.All();
     public void Put(Template item) => _store.Put(item);

@@ -20,10 +20,17 @@ public static class NotificationEndpoints
                 return Invalid("bad_channel", $"'{req.Channel}' no es un canal. Son: {string.Join(", ", Enum.GetNames<Channel>())}.");
             }
 
+            // 201 si nació una versión; 200 si la clave ya decía eso (#179).
             return svc.SaveTemplate(req.Key, canal, req.Subject, req.Body, key).Match(
-                t => Results.Created($"/v1/templates/{t.Id}", TemplateResponse.From(t)),
+                s => s.IsNew
+                    ? Results.Created($"/v1/templates/{s.Template.Id}", TemplateResponse.From(s.Template))
+                    : Results.Ok(TemplateResponse.From(s.Template)),
                 bad => bad.ToProblem());
         });
+
+        // Retira la clave: deja de servir para enviar; sus versiones siguen consultables por id (#179).
+        app.MapDelete("/v1/templates/key/{key}", (string key, NotificationService svc) =>
+            svc.RetireTemplate(key).Map(TemplateResponse.From).ToHttp());
 
         app.MapGet("/v1/templates/{id}", (string id, NotificationService svc) =>
             svc.GetTemplate(id).Map(TemplateResponse.From).ToHttp());

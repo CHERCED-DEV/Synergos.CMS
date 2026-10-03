@@ -73,12 +73,13 @@
 #     precio queda congelado en el primero que se publicó: la capacidad mira el
 #     libro antes que nada y devuelve el anterior, contestando 200. Republicar
 #     lo mismo sigue sin cambiar nada; cambiarlo, ahora sí se ve.
-#   · Las plantillas se BUSCAN por clave antes de publicarse, y la que ya está
-#     NO se pisa: Api.Notifications no tiene cómo reescribir una plantilla viva
-#     (ni PUT ni DELETE; un segundo POST contesta `key_taken`). Si la publicada
-#     coincide con la declarada, no se hace nada. Si difiere sólo en el texto,
-#     se DICE y se respeta. Si usa un marcador que el aviso no manda, es ROJO:
-#     cada aviso saldría `missing_placeholder`, y eso no lo arregla esperar.
+#   · Las plantillas se BUSCAN por clave antes de publicarse. Si la publicada
+#     coincide con la declarada, no se hace nada. Si difiere —en el texto, o en
+#     un marcador que el aviso no manda—, se publica la declarada: Api.Notifications
+#     VERSIONA (#179), así que eso crea la versión siguiente y la vieja queda
+#     consultable por su id, porque los envíos que salieron con ella la citan.
+#     Lo declarado en el repo manda. `--verificar` dice en rojo lo que no
+#     coincide, y no publica nada.
 
 set -euo pipefail
 
@@ -362,8 +363,9 @@ puesto() { echo "+ puesto $1"; }
 falla()  { echo "✗ $1"; fallos=$((fallos + 1)); }
 
 # `curl` con la llave y, cuando escribe, con llave de idempotencia. El código de
-# estado sale por separado del cuerpo: se necesita distinguir 409 `key_taken`
-# —«ya está»— de un 4xx de verdad, y un cuerpo no alcanza para eso.
+# estado sale por separado del cuerpo: se necesita distinguir 201 —«se creó»— de
+# 200 —«ya estaba»—, el 409 `key_taken` de una definición —«ya está»— de un 4xx
+# de verdad, y un cuerpo no alcanza para eso.
 pedir() {  # pedir GET|POST <url> [cuerpo] [llave-idem]
   local metodo="$1" url="$2" cuerpo="${3:-}" idem="${4:-}"
   local args=(--silent --show-error --max-time 30 --write-out '\n%{http_code}'
@@ -443,8 +445,9 @@ definicion "$TRACKING_PREFIX.academy" "$(pipeline_json "$TRACKING_PREFIX.academy
 #
 # Se busca POR CLAVE recorriendo `GET /v1/templates` página a página: la
 # capacidad no tiene «búscame por clave» y sólo sirve por id, que genera ella.
-# Una búsqueda que mirara sólo la primera página diría «falta» con la plantilla
-# puesta en la segunda, y el POST de después contestaría `key_taken`.
+# La lista trae la versión VIGENTE de cada clave no retirada (#179). Una
+# búsqueda que mirara sólo la primera página diría «falta» con la plantilla
+# puesta en la segunda, y la corrida publicaría otra vez lo mismo.
 PAGINA="$(mktemp)"
 trap 'rm -f "$PAGINA"' EXIT
 
@@ -464,30 +467,28 @@ plantilla() {  # plantilla <clave> <cuerpo-del-POST> <huella>
 
   case "$veredicto" in
     IGUAL) ok "plantilla $clave" ;;
-    # Se respeta, y se DICE. Sus marcadores son de los que el aviso manda, así
-    # que el aviso sale — con otro texto. Pisarla no se puede, y aunque se
-    # pudiera, sería borrar lo que alguien ajustó a mano en el servidor.
-    DIFIERE)
-      echo "≠ plantilla $clave — la publicada difiere de la declarada en: $detalle."
-      echo "    Se respeta: Api.Notifications no reescribe una plantilla viva. Sus marcadores"
-      echo "    son de los que el aviso manda, así que el aviso sale, con el texto publicado."
-      ;;
-    CHOCA)
-      falla "plantilla $clave — la publicada usa $detalle y el aviso no lo manda: cada aviso saldría notifications.missing_placeholder. Api.Notifications no reescribe ni borra una plantilla viva (no hay PUT ni DELETE): hay que retirarla de su almacén y volver a correr esto."
-      ;;
-    AUSENTE)
-      if [ "$VERIFICAR" = "1" ]; then falta "plantilla $clave"; return; fi
+    AUSENTE|DIFIERE|CHOCA)
+      if [ "$VERIFICAR" = "1" ]; then
+        case "$veredicto" in
+          AUSENTE) falta "plantilla $clave" ;;
+          DIFIERE) falta "plantilla $clave — la publicada difiere de la declarada en: $detalle. Correr sin --verificar publica la declarada como versión nueva." ;;
+          # La que enseñaba el doc 09 ({cita}): cada aviso saldría rechazado.
+          CHOCA) falla "plantilla $clave — la publicada usa $detalle y el aviso no lo manda: cada aviso saldría notifications.missing_placeholder. Correr sin --verificar publica la declarada como versión nueva." ;;
+        esac
+        return
+      fi
       # La llave lleva la HUELLA del contenido, por lo mismo que la de un precio:
-      # `SaveTemplate` mira el libro de idempotencia antes que nada.
+      # `SaveTemplate` mira el libro de idempotencia antes que nada, y con la
+      # misma llave devolvería la versión vieja.
       r="$(pedir POST "$NOTIFICATIONS_URL/v1/templates" "$cuerpo" "provisionar:plantilla:$clave:$huella")"
       case "$(codigo "$r")" in
-        200|201) puesto "plantilla $clave" ;;
-        # La publicó otro entre la búsqueda y el POST: «ya está», como una definición.
-        409) if printf '%s' "$r" | grep --quiet 'key_taken'; then
-               ok "plantilla $clave (ya estaba)"
-             else
-               falla "plantilla $clave → 409: $(printf '%s' "$r" | head -n-1)"
-             fi ;;
+        201) if [ "$veredicto" = "AUSENTE" ]; then puesto "plantilla $clave"
+             else puesto "plantilla $clave (versión nueva: la publicada $( [ "$veredicto" = CHOCA ] && echo "usaba $detalle" || echo "difería en $detalle"))"; fi ;;
+        # 200: la clave ya decía exactamente esto (la publicó otro entre la
+        # búsqueda y el POST).
+        200) ok "plantilla $clave (ya estaba)" ;;
+        # 409 `channel_change`: la publicada sale por otro canal, y eso es otra
+        # plantilla. No se arregla publicando: se dice.
         *)   falla "plantilla $clave → $(codigo "$r"): $(printf '%s' "$r" | head -n-1)" ;;
       esac
       ;;

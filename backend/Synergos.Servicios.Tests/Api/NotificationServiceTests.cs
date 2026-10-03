@@ -60,7 +60,7 @@ public sealed class NotificationServiceTests
         private readonly Dictionary<string, string> _k = new(StringComparer.Ordinal);
 
         Template? ITemplateStore.Find(string id) => _t.GetValueOrDefault(id);
-        public Template? FindByKey(string key) => _t.Values.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+        public Template? FindByKey(string key) => _t.Values.Where(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)).MaxBy(x => x.Version);
         public IReadOnlyList<Template> All() => _t.Values.ToList();
         public void Put(Template item) => _t[item.Id] = item;
 
@@ -222,16 +222,18 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
-    public async Task Dos_plantillas_con_la_misma_clave_no_conviven()
+    public async Task Una_clave_no_cambia_de_canal()
     {
-        // Con dos, pedir 'cita.recordatorio' devolvería una u otra según el orden del almacén —
-        // y el texto que le llega a la persona cambiaría sin que nadie tocara nada.
-        var (svc, _, _, _) = Nuevo();
+        // Cada envío trae una dirección del canal de la plantilla: si 'cita.recordatorio' pasara a
+        // SMS, todo aviso que hoy sale por correo fallaría por la dirección (#179).
+        var (svc, store, _, _) = Nuevo();
         ConPlantilla(svc);
 
-        var repetida = svc.SaveTemplate("cita.recordatorio", Channel.Sms, "otro", "otro", Llave("t2"));
+        var otroCanal = svc.SaveTemplate("cita.recordatorio", Channel.Sms, "otro", "otro", Llave("t2"));
 
-        Assert.Equal("notifications.key_taken", repetida.Rejection!.Code);
+        Assert.Equal("notifications.channel_change", otroCanal.Rejection!.Code);
+        Assert.Equal(Channel.Email, store.FindByKey("cita.recordatorio")!.Channel);
+        Assert.Single(store.All());
     }
 
     [Fact]
@@ -242,7 +244,112 @@ public sealed class NotificationServiceTests
         var a = svc.SaveTemplate("x", Channel.Email, "a", "b", Llave("misma"));
         var b = svc.SaveTemplate("x", Channel.Email, "a", "b", Llave("misma"));
 
-        Assert.Equal(a.Value.Id, b.Value.Id);
+        Assert.Equal(a.Value.Template.Id, b.Value.Template.Id);
+    }
+
+    // ── Versiones (#179) ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Publicar_otro_texto_crea_la_version_siguiente_y_es_la_que_sale()
+    {
+        var (svc, _, transporte, _) = Nuevo();
+        ConPlantilla(svc);
+        var v1 = svc.ListTemplates(0, 10).Items.Single();
+
+        var v2 = svc.SaveTemplate("cita.recordatorio", Channel.Email, "Recuerda tu cita del {fecha}", "{nombre}: es el {fecha}.", Llave("t2"));
+        var envio = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("e1"));
+
+        Assert.True(v2.Value.IsNew);
+        Assert.Equal(2, v2.Value.Template.Version);
+        Assert.Equal("Recuerda tu cita del 5 de marzo", transporte.Enviados.Single().Asunto);
+        Assert.Equal(v2.Value.Template.Id, envio.Value.TemplateId);
+        // La versión vieja no se pisa: un envío que salió con ella todavía la puede citar.
+        Assert.Equal("Tu cita del {fecha}", svc.GetTemplate(v1.Id).Value.Subject);
+        Assert.Equal(v2.Value.Template.Id, svc.ListTemplates(0, 10).Items.Single().Id);
+    }
+
+    [Fact]
+    public async Task Publicar_lo_mismo_no_crea_version()
+    {
+        // La siembra corre una y otra vez: si cada corrida dejara una versión, la clave crecería
+        // sin que nada cambiara.
+        var (svc, store, _, _) = Nuevo();
+        ConPlantilla(svc);
+
+        var otraVez = svc.SaveTemplate("cita.recordatorio", Channel.Email, "Tu cita del {fecha}", "Hola {nombre}, te esperamos el {fecha}.", Llave("otra-llave"));
+
+        Assert.False(otraVez.Value.IsNew);
+        Assert.Equal(1, otraVez.Value.Template.Version);
+        Assert.Single(store.All());
+    }
+
+    [Fact]
+    public async Task Una_clave_retirada_no_envia_y_publicarla_de_nuevo_la_vuelve_a_poner_en_uso()
+    {
+        var (svc, _, transporte, reloj) = Nuevo();
+        ConPlantilla(svc);
+
+        var retirada = svc.RetireTemplate("cita.recordatorio");
+        var envio = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("e1"));
+
+        Assert.NotNull(retirada.Value.RetiredAtUtc);
+        Assert.Equal("notifications.template_retired", envio.Rejection!.Code);
+        Assert.Empty(transporte.Enviados);
+        Assert.Empty(svc.ListTemplates(0, 10).Items);
+
+        // Retirar lo ya retirado no mueve la fecha.
+        reloj.Avanzar(TimeSpan.FromHours(1));
+        Assert.Equal(retirada.Value.RetiredAtUtc, svc.RetireTemplate("cita.recordatorio").Value.RetiredAtUtc);
+
+        // Con el mismo texto: una clave retirada vuelve como versión nueva, no como la retirada.
+        var vuelta = svc.SaveTemplate("cita.recordatorio", Channel.Email, "Tu cita del {fecha}", "Hola {nombre}, te esperamos el {fecha}.", Llave("t3"));
+        var otra = await svc.SendAsync(Ana, Correo, "cita.recordatorio", Datos, Llave("e2"));
+
+        Assert.True(vuelta.Value.IsNew);
+        Assert.Equal(2, vuelta.Value.Template.Version);
+        Assert.True(otra.IsOk);
+    }
+
+    [Fact]
+    public async Task Retirar_una_clave_que_no_existe_lo_dice()
+    {
+        var (svc, _, _, _) = Nuevo();
+
+        Assert.Equal("notifications.template_not_found", svc.RetireTemplate("no.existe").Rejection!.Code);
+    }
+
+    [Fact]
+    public async Task Una_plantilla_guardada_antes_de_versionar_se_lee_como_la_version_1()
+    {
+        // Con el almacén de verdad en disco: lo que ya está publicado en un volumen no trae
+        // «version» ni «retiredAtUtc», y tiene que seguir enviando.
+        var raiz = Path.Combine(Path.GetTempPath(), "notif-179-" + Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(Path.Combine(raiz, "templates"));
+        try
+        {
+            File.WriteAllText(Path.Combine(raiz, "templates", "t-vieja.json"),
+                """{"id":"t-vieja","key":"cita.recordatorio","channel":0,"subject":"Tu cita","body":"Hola"}""");
+            var almacen = new FileSystemTemplateStore(Microsoft.Extensions.Options.Options.Create(new NotificationStorageOptions { Root = raiz }));
+
+            var vieja = almacen.FindByKey("cita.recordatorio")!;
+
+            Assert.Equal(1, vieja.Version);
+            Assert.Null(vieja.RetiredAtUtc);
+
+            // Y con dos versiones, la vigente es la de número más alto aunque el disco la lea
+            // segunda: el almacén ordena por id, y "a-v1" va antes que "b-v2".
+            File.Move(Path.Combine(raiz, "templates", "t-vieja.json"), Path.Combine(raiz, "templates", "a-v1.json"));
+            File.WriteAllText(Path.Combine(raiz, "templates", "a-v1.json"),
+                """{"id":"a-v1","key":"cita.recordatorio","channel":0,"subject":"Tu cita","body":"Hola"}""");
+            File.WriteAllText(Path.Combine(raiz, "templates", "b-v2.json"),
+                """{"id":"b-v2","key":"cita.recordatorio","channel":0,"subject":"Tu cita nueva","body":"Hola","version":2}""");
+
+            Assert.Equal("b-v2", almacen.FindByKey("cita.recordatorio")!.Id);
+        }
+        finally
+        {
+            Directory.Delete(raiz, recursive: true);
+        }
     }
 
     [Fact]

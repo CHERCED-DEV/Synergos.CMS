@@ -13,9 +13,11 @@ public sealed record SendRequest(
     IReadOnlyDictionary<string, string>? Values);
 
 /// <summary>Cómo sale una plantilla.</summary>
-public sealed record TemplateResponse(string Id, string Key, string Channel, string Subject, string Body)
+public sealed record TemplateResponse(
+    string Id, string Key, string Channel, string Subject, string Body, int Version, DateTimeOffset? RetiredAtUtc)
 {
-    public static TemplateResponse From(Template t) => new(t.Id, t.Key, t.Channel.ToString(), t.Subject, t.Body);
+    public static TemplateResponse From(Template t)
+        => new(t.Id, t.Key, t.Channel.ToString(), t.Subject, t.Body, t.Version, t.RetiredAtUtc);
 }
 
 /// <summary>Cómo sale un envío.</summary>
@@ -36,12 +38,14 @@ public sealed record DeliveryResponse(
     string? ProviderMessageId, DateTimeOffset? StatusAtUtc,
     // Los dos existen para el barrido y para quien mira: sin Attempts no hay forma de saber
     // cuándo rendirse, y sin LastError «se rindió» no es accionable.
-    int Attempts, string? LastError)
+    int Attempts, string? LastError,
+    // La versión de la plantilla con la que salió (#179): GET /v1/templates/{id} la devuelve.
+    string? TemplateId)
 {
     public static DeliveryResponse From(Delivery d) => new(
         d.Id, d.To.Kind, d.To.Id, d.Address, d.Channel.ToString(),
         d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc, d.ProviderMessageId, d.StatusAtUtc,
-        d.Attempts, d.LastError);
+        d.Attempts, d.LastError, d.TemplateId);
 }
 
 /// <summary>

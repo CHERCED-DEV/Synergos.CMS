@@ -47,14 +47,30 @@ public sealed class NotificationService
 
     private DateTimeOffset Now => _clock.GetUtcNow();
 
-    public Result<Template> SaveTemplate(string? key, Channel channel, string? subject, string? body, IdempotencyKey idem)
+    /// <summary>
+    /// Publica una plantilla: la primera versión de una clave, o la siguiente si el texto cambió.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Publicar lo mismo no crea nada</b>: la clave ya dice eso, y contesta la vigente con
+    /// <see cref="SavedTemplate.IsNew"/> en <c>false</c>. Es lo que deja a la siembra
+    /// (<c>tools/provisionar.sh</c>) converger corriendo dos veces sin dejar una versión por
+    /// corrida.</para>
+    ///
+    /// <para><b>Una clave no cambia de canal.</b> Cada envío se pide con una dirección del canal de
+    /// la plantilla (<see cref="NotificationRules.CheckAddress"/>): pasar <c>cita.recordatorio</c> de
+    /// correo a SMS haría que cada aviso que hoy sale falle por la dirección. Eso es otra plantilla,
+    /// con otra clave.</para>
+    ///
+    /// <para><b>Publicar una clave retirada la vuelve a poner en uso</b>, como una versión más.</para>
+    /// </remarks>
+    public Result<SavedTemplate> SaveTemplate(string? key, Channel channel, string? subject, string? body, IdempotencyKey idem)
     {
         lock (_gate)
         {
             if (_idempotency.Find("template", idem) is { } yaEra)
             {
                 return _templates.Find(yaEra) is { } previa
-                    ? Result.Ok(previa)
+                    ? Result.Ok(new SavedTemplate(previa, IsNew: false))
                     : Rejection.Conflict($"{NotificationRules.CodePrefix}.idempotency_orphan",
                         "La llave ya se usó pero la plantilla no está.");
             }
@@ -67,28 +83,73 @@ public sealed class NotificationService
             {
                 return Rejection.Invalid($"{NotificationRules.CodePrefix}.empty_template", "Hacen falta asunto y cuerpo.");
             }
-            if (_templates.FindByKey(key!) is not null)
+
+            var clave = key!.Trim();
+            var vigente = _templates.FindByKey(clave);
+            if (vigente is not null && vigente.Channel != channel)
             {
-                return Rejection.Conflict($"{NotificationRules.CodePrefix}.key_taken", $"Ya hay una plantilla '{key}'.");
+                return Rejection.Conflict($"{NotificationRules.CodePrefix}.channel_change",
+                    $"La plantilla '{clave}' sale por {vigente.Channel}: una clave no cambia de canal, porque cada "
+                    + "envío trae una dirección de ese canal. Publícala con otra clave.");
+            }
+            if (vigente is { RetiredAtUtc: null }
+                && string.Equals(vigente.Subject, subject, StringComparison.Ordinal)
+                && string.Equals(vigente.Body, body, StringComparison.Ordinal))
+            {
+                _idempotency.Remember("template", idem, vigente.Id);
+                return Result.Ok(new SavedTemplate(vigente, IsNew: false));
             }
 
-            var id = Guid.NewGuid().ToString("n");
-            var template = new Template(id, key!.Trim(), channel, subject!, body!);
+            var template = new Template(Guid.NewGuid().ToString("n"), clave, channel, subject!, body!,
+                Version: (vigente?.Version ?? 0) + 1);
             _templates.Put(template);
-            _idempotency.Remember("template", idem, id);
-            return Result.Ok(template);
+            _idempotency.Remember("template", idem, template.Id);
+            return Result.Ok(new SavedTemplate(template, IsNew: true));
         }
     }
 
+    /// <summary>
+    /// Retira una clave: deja de servir para enviar. No borra nada.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la salida que antes no existía (#179): con una plantilla mal publicada, la siembra
+    /// mandaba a «retirarla de su almacén» a mano. Las versiones siguen ahí, cada una por su id,
+    /// porque los envíos que salieron con ellas las citan.</para>
+    ///
+    /// <para>Retirar lo ya retirado no cambia cuándo se retiró: es idempotente sin llave.</para>
+    /// </remarks>
+    public Result<Template> RetireTemplate(string? key)
+    {
+        lock (_gate)
+        {
+            if (string.IsNullOrWhiteSpace(key) || _templates.FindByKey(key!.Trim()) is not { } vigente)
+            {
+                return Rejection.NotFound($"{NotificationRules.CodePrefix}.template_not_found", $"No existe la plantilla '{key}'.");
+            }
+            if (vigente.RetiredAtUtc is not null) return Result.Ok(vigente);
+
+            var retirada = vigente with { RetiredAtUtc = Now };
+            _templates.Put(retirada);
+            return Result.Ok(retirada);
+        }
+    }
+
+    /// <summary>Una versión por su id, también una vieja o retirada: es lo que cita un envío.</summary>
     public Result<Template> GetTemplate(string id)
         => _templates.Find(id) is { } t
             ? Result.Ok(t)
             : Rejection.NotFound($"{NotificationRules.CodePrefix}.template_not_found", $"No existe la plantilla {id}.");
 
+    /// <summary>Las plantillas que se pueden usar: la versión vigente de cada clave no retirada.</summary>
     public Page<Template> ListTemplates(int offset, int limit)
     {
-        var todas = _templates.All().OrderBy(t => t.Key, StringComparer.Ordinal).ToList();
-        return new Page<Template>(todas.Skip(offset).Take(limit).ToList(), todas.Count, offset);
+        var vigentes = _templates.All()
+            .GroupBy(t => t.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.MaxBy(t => t.Version)!)
+            .Where(t => t.RetiredAtUtc is null)
+            .OrderBy(t => t.Key, StringComparer.Ordinal)
+            .ToList();
+        return new Page<Template>(vigentes.Skip(offset).Take(limit).ToList(), vigentes.Count, offset);
     }
 
     /// <summary>
@@ -191,6 +252,11 @@ public sealed class NotificationService
             return Rejection.NotFound($"{NotificationRules.CodePrefix}.template_not_found",
                 $"No existe la plantilla '{templateKey}'.");
         }
+        if (template.RetiredAtUtc is not null)
+        {
+            return Rejection.NotFound($"{NotificationRules.CodePrefix}.template_retired",
+                $"La plantilla '{templateKey}' se retiró: hay que publicarla de nuevo para volver a usarla.");
+        }
 
         var motivo = NotificationRules.CheckAddress(template.Channel, address);
         if (motivo is not null) return Result.Rejected<Delivery>(motivo);
@@ -213,7 +279,8 @@ public sealed class NotificationService
 
         var id = Guid.NewGuid().ToString("n");
         var delivery = new Delivery(id, to, address!, template.Channel, template.Key,
-            relleno.Value.Subject, relleno.Value.Body, DeliveryStatus.Queued, Now, ProviderMessageId: null, StatusAtUtc: Now);
+            relleno.Value.Subject, relleno.Value.Body, DeliveryStatus.Queued, Now, ProviderMessageId: null, StatusAtUtc: Now,
+            TemplateId: template.Id);
 
         _deliveries.Put(delivery);
         _idempotency.Remember("delivery", idem, id);

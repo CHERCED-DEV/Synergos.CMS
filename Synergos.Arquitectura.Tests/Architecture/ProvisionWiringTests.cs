@@ -242,8 +242,8 @@ public sealed class ProvisionWiringTests
     /// <remarks>
     /// <para>Está publicada, así que un «¿existe?» la daría por buena, y cada aviso saldría
     /// <c>missing_placeholder</c>: <c>{cita}</c> dejó de mandarse al promover la máquina a
-    /// <c>Bff.Core</c>. Y no se puede arreglar publicando encima —la capacidad no reescribe una
-    /// plantilla viva—, así que lo único útil es decirlo, y en rojo.</para>
+    /// <c>Bff.Core</c>. <c>--verificar</c> no publica: lo dice, y en rojo. Publicar sí la arregla
+    /// desde #179 (la capacidad versiona): ver la prueba de abajo.</para>
     /// </remarks>
     [Fact]
     public async Task Verificar_con_la_plantilla_que_ensenaba_el_doc_09_sale_rojo_y_nombra_el_marcador()
@@ -298,8 +298,45 @@ public sealed class ProvisionWiringTests
         Assert.True(segunda.Codigo == 0, segunda.Salida);
         Assert.True(notificaciones.Publicadas.Count == 1,
             "La segunda corrida volvió a publicar la plantilla: no la encontró porque estaba en la "
-            + "segunda página. Api.Notifications contestaría key_taken y nadie sabría por qué."
+            + "segunda página, y cada corrida dejaría otra publicación de lo mismo."
             + Environment.NewLine + segunda.Salida);
+        Assert.Contains($"✓ plantilla {ClaveDelAviso}", segunda.Salida, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Una plantilla publicada que difiere de la declarada: <c>--verificar</c> la da en rojo, y
+    /// publicar pone la declarada UNA vez —como versión nueva— y la siguiente corrida ya no toca
+    /// nada (#179).
+    /// </summary>
+    /// <remarks>
+    /// <para>Antes la siembra la «respetaba y lo decía», porque la capacidad no tenía cómo
+    /// reescribirla: una plantilla mal publicada sólo se arreglaba tocando su almacén a mano.
+    /// Ahora lo declarado en el repo manda, y la versión vieja queda en la capacidad, consultable
+    /// por su id.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Una_plantilla_que_difiere_sale_roja_al_verificar_y_publicar_la_converge_una_vez()
+    {
+        var declarada = Declaradas().Single(d => d["key"] == ClaveDelAviso);
+        await using var notificaciones = await NotificationsDeMentira.Levantar(
+            Plantilla(ClaveDelAviso, declarada["subject"] + " (texto viejo)", declarada["body"]));
+
+        var verificar = await Correr(notificaciones.Url, "--verificar");
+        Assert.True(verificar.Codigo != 0,
+            "provisionar.sh --verificar dio por buena una plantilla que difiere de la declarada." + Environment.NewLine + verificar.Salida);
+        Assert.Contains($"FALTA  plantilla {ClaveDelAviso}", verificar.Salida, StringComparison.Ordinal);
+        Assert.Empty(notificaciones.Publicadas);
+
+        var primera = await Correr(notificaciones.Url);
+        Assert.True(primera.Codigo == 0, primera.Salida);
+        var (_, cuerpo) = Assert.Single(notificaciones.Publicadas);
+        Assert.Equal(declarada["subject"], cuerpo["subject"]);
+        Assert.Contains("versión nueva", primera.Salida, StringComparison.Ordinal);
+
+        var segunda = await Correr(notificaciones.Url);
+        Assert.True(segunda.Codigo == 0, segunda.Salida);
+        Assert.True(notificaciones.Publicadas.Count == 1,
+            "La segunda corrida volvió a publicar: no vio la versión que puso la primera." + Environment.NewLine + segunda.Salida);
         Assert.Contains($"✓ plantilla {ClaveDelAviso}", segunda.Salida, StringComparison.Ordinal);
     }
 
@@ -379,9 +416,11 @@ public sealed class ProvisionWiringTests
     /// </summary>
     /// <remarks>
     /// Contesta sólo lo que el guion pregunta: las definiciones de proceso ya están (no son el
-    /// sujeto), las plantillas se listan <b>de a una por página</b> y un POST se apunta. No aplica
-    /// ninguna regla de la capacidad, y a propósito: esas las prueba la capacidad real en
-    /// <c>PlantillaDelAvisoTests</c>. Un doble que las imitara sería un segundo modelo escrito a
+    /// sujeto), las plantillas se listan <b>de a una por página</b> y un POST se apunta. De la
+    /// capacidad imita sólo el contrato de la LISTA —trae la versión vigente de cada clave, así
+    /// que un POST sobre una clave publicada la reemplaza en la lista (#179)—, no sus reglas: ésas
+    /// las prueba la capacidad real en <c>PlantillaDelAvisoTests</c> y
+    /// <c>NotificationServiceTests</c>. Un doble que las imitara sería un segundo modelo escrito a
     /// mano de las mismas reglas (lo que <c>ArnesDeCapacidades</c> explica que no hay que hacer).
     /// </remarks>
     private sealed class NotificationsDeMentira : IAsyncDisposable
@@ -427,6 +466,7 @@ public sealed class ProvisionWiringTests
                 var leido = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(peticion.Body);
                 var cuerpo = new Dictionary<string, string>(leido!, StringComparer.Ordinal);
                 yo.Publicadas.Add((peticion.Headers["Idempotency-Key"].ToString(), cuerpo));
+                yo._plantillas.RemoveAll(p => string.Equals(p["key"], cuerpo["key"], StringComparison.OrdinalIgnoreCase));
                 yo._plantillas.Add(new Dictionary<string, string>(cuerpo, StringComparer.Ordinal) { ["id"] = Guid.NewGuid().ToString("n") });
                 return Results.Created("/v1/templates/x", cuerpo);
             });

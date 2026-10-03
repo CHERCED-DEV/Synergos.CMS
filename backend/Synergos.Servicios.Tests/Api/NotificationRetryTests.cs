@@ -62,7 +62,7 @@ public sealed class NotificationRetryTests
         private readonly Dictionary<string, string> _k = new(StringComparer.Ordinal);
 
         Template? ITemplateStore.Find(string id) => _t.GetValueOrDefault(id);
-        public Template? FindByKey(string key) => _t.Values.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase));
+        public Template? FindByKey(string key) => _t.Values.Where(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)).MaxBy(x => x.Version);
         public IReadOnlyList<Template> All() => _t.Values.ToList();
         public void Put(Template item) => _t[item.Id] = item;
 
