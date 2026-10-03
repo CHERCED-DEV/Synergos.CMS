@@ -23,9 +23,15 @@ public sealed class StubPatientRegistry : IPatientRegistry
     private readonly ConcurrentDictionary<string, EhrPatient> _patients;
 
     public StubPatientRegistry()
+        : this(EhrDemoSeed.Patients())
+    {
+    }
+
+    /// <summary>Un padrón dado, para los tests que necesitan un caso que la siembra no trae.</summary>
+    internal StubPatientRegistry(IEnumerable<EhrPatient> padron)
     {
         _patients = new ConcurrentDictionary<string, EhrPatient>(StringComparer.Ordinal);
-        foreach (var p in EhrDemoSeed.Patients())
+        foreach (var p in padron)
         {
             _patients[p.Id] = p;
         }
@@ -55,4 +61,22 @@ public sealed class StubPatientRegistry : IPatientRegistry
 
     public Task<EhrPatient?> GetAsync(string patientId, CancellationToken cancellationToken = default)
         => Task.FromResult(_patients.TryGetValue(patientId ?? string.Empty, out var p) ? p : null);
+
+    /// <inheritdoc />
+    public Task<EhrPatient?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return Task.FromResult<EhrPatient?>(null);
+        }
+
+        var correo = email.Trim();
+        var suyos = _patients.Values
+            .Where(p => string.Equals(p.Email?.Trim(), correo, StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToList();
+
+        // UNA, o ninguna: con dos historias en el mismo correo elegir sería adivinar.
+        return Task.FromResult(suyos.Count == 1 ? suyos[0] : null);
+    }
 }

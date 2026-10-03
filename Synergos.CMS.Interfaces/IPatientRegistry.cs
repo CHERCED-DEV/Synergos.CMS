@@ -24,6 +24,25 @@ public interface IPatientRegistry
 
     /// <summary>Devuelve un paciente por id, o null si no existe.</summary>
     Task<EhrPatient?> GetAsync(string patientId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// La historia clínica vinculada a un correo, o <c>null</c> si no hay UNA (#197).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es el enlace miembro ↔ paciente</b>: el portal del paciente lo llama con el correo
+    /// del miembro de la sesión (<see cref="IMemberAccessGate.CurrentMemberEmail"/>, server-trusted),
+    /// el mismo molde con que Gobierno, Eventos y Realty saben de quién son los datos. El paciente
+    /// que mande el navegador no cuenta.</para>
+    ///
+    /// <para>Sin distinguir mayúsculas, y sin espacios a los lados: es un correo, y el que se escribió
+    /// al registrarse no tiene por qué coincidir letra por letra con el de la historia.</para>
+    ///
+    /// <para><b>Si dos historias comparten el correo, no se elige ninguna</b>: un acudiente con dos
+    /// hijos inscritos con su correo es el caso real, y devolver la primera sería mostrarle a la
+    /// sesión una historia por el orden de un diccionario. Ahí devuelve <c>null</c>, igual que sin
+    /// coincidencia; decidir cómo un miembro ve varias historias es otra conversación.</para>
+    /// </remarks>
+    Task<EhrPatient?> FindByEmailAsync(string email, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

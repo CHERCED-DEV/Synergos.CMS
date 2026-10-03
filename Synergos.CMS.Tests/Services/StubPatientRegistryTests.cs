@@ -76,4 +76,43 @@ public class StubPatientRegistryTests
 
         Assert.Equal(first, second);
     }
+
+    // ── El enlace miembro ↔ paciente (#197): el correo ─────────────────────────────
+
+    [Fact] // happy: el correo del miembro, escrito como lo escribió al registrarse, da SU historia.
+    public async Task FindByEmail_SinDistinguirMayusculasNiEspacios_DaLaHistoria()
+    {
+        var patient = await Make().FindByEmailAsync("  Jorge.Medina@Example.CO ");
+
+        Assert.NotNull(patient);
+        Assert.Equal("pat-jorge-medina", patient!.Id);
+    }
+
+    [Theory] // empty: sin correo, o con uno que no está en el padrón, no hay historia.
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("nadie@example.co")]
+    public async Task FindByEmail_SinCoincidencia_EsNull(string email)
+    {
+        Assert.Null(await Make().FindByEmailAsync(email));
+    }
+
+    [Fact] // filter: el correo se compara ENTERO — «medina@example.co» no es «jorge.medina@example.co».
+    public async Task FindByEmail_NoBuscaPorFragmento()
+    {
+        Assert.Null(await Make().FindByEmailAsync("medina@example.co"));
+    }
+
+    [Fact] // dos historias en el mismo correo (un acudiente con dos hijos): no se elige ninguna.
+    public async Task FindByEmail_DosHistoriasEnElMismoCorreo_NoEligeNinguna()
+    {
+        var hijo = (await Make().GetAsync("pat-sara-gomez"))!;
+        var registry = new StubPatientRegistry(new[]
+        {
+            hijo,
+            hijo with { Id = "pat-tomas-gomez", FullName = "Tomás Gómez" },
+        });
+
+        Assert.Null(await registry.FindByEmailAsync("familia.gomez@example.co"));
+    }
 }
