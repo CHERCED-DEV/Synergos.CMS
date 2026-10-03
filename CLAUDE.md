@@ -3392,7 +3392,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   Hero, SnippetRef.
 - **Block Grid con areas** (`DTBlockGridSections.config`) permite al
   editor dropear presets al root de `sections` y cualquier elemento
-  de contenido (159 blocks) dentro de las areas.
+  de contenido (154 blocks) dentro de las areas.
 - **Plugin backoffice** `App_Plugins/LayoutComposer/` con custom
   views + SVG thumbnails + JS defaults pre-drop.
 - **Runtime SSR** `Views/Partials/blockgrid/Components/
