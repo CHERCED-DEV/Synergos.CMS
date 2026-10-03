@@ -279,7 +279,7 @@ public sealed class ContratoSynHostTests
             },
             ["fab"] = new (string, object?)[]
             {
-                ("iconKey", "whatsapp"),
+                ("iconKey", "message"),
                 ("actionLink", ElementoFalso.Enlace("https://wa.me/573001234567", "WhatsApp", "_blank")),
                 ("position", "bottom-left"),
                 ("ariaLabel", "Escribinos por WhatsApp"),
