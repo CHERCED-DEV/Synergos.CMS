@@ -51,7 +51,7 @@ public sealed class SelectMultiResolutor : IResolutorSynHost<SelectMultiProps>
                 continue;
             }
 
-            opciones.Add(new SelectMultiItem(value ?? label!, label ?? value!));
+            opciones.Add(new SelectMultiItem(value ?? label!, label ?? value!, LectorDelEditor.Encendido(entrada, "disabled")));
         }
 
         return opciones.Count > 0 ? opciones : null;

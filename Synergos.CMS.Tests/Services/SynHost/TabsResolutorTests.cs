@@ -38,7 +38,7 @@ public sealed class TabsResolutorTests
         Assert.Equal("resumen", tabs[0].GetProperty("id").GetString());
         Assert.Equal("Lo esencial.", tabs[0].GetProperty("content").GetString());
         Assert.False(tabs[1].TryGetProperty("id", out _));
-        Assert.False(tabs[1].TryGetProperty("disabled", out _));
+        Assert.True(tabs[1].GetProperty("disabled").GetBoolean()); // #192, caso 12: ahora viaja
         Assert.Equal("resumen", cable["initialTab"]?.ToString());
     }
 
@@ -60,5 +60,15 @@ public sealed class TabsResolutorTests
         var elemento = ElementoFalso.Con(("tabsJson", Pestanas));
 
         Assert.Equal(Resolutor().Resolver(elemento).Props.Tabs, Resolutor().Resolver(elemento).Props.Tabs);
+    }
+
+    // #192, caso 12: el elemento pinta una pestaña apagada y el record no la traía.
+    [Fact]
+    public void Una_pestana_apagada_viaja()
+    {
+        var pestanas = Resolutor().Resolver(ElementoFalso.Con(
+            ("tabsJson", """[{"label":"Uno"},{"label":"Dos","disabled":true}]"""))).Props.Tabs!;
+
+        Assert.Equal(new bool?[] { null, true }, pestanas.Select(p => p.Disabled).ToArray());
     }
 }

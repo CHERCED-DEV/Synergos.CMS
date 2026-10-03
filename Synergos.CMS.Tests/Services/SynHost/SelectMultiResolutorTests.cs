@@ -39,7 +39,7 @@ public sealed class SelectMultiResolutorTests
         Assert.Equal(2, options.GetArrayLength());
         Assert.Equal("piscina", options[0].GetProperty("value").GetString());
         Assert.Equal("Gimnasio", options[1].GetProperty("label").GetString());
-        Assert.False(options[1].TryGetProperty("disabled", out _));
+        Assert.True(options[1].GetProperty("disabled").GetBoolean()); // #192, caso 11: ahora viaja
         Assert.Equal(3, ((JsonElement)cable["maxSelections"]!).GetInt32());
     }
 
@@ -61,5 +61,16 @@ public sealed class SelectMultiResolutorTests
         var elemento = ElementoFalso.Con(("optionsJson", Opciones));
 
         Assert.Equal(Resolutor().Resolver(elemento).Props.Options, Resolutor().Resolver(elemento).Props.Options);
+    }
+
+    // #192, caso 11: el elemento pinta una opción apagada y el record no la traía. Sólo viaja el
+    // encendido: disabled:false es no decir nada.
+    [Fact]
+    public void Una_opcion_apagada_viaja_y_una_encendida_no_lleva_la_clave()
+    {
+        var opciones = Resolutor().Resolver(ElementoFalso.Con(
+            ("optionsJson", """[{"value":"a","label":"A","disabled":true},{"value":"b","label":"B","disabled":false},{"value":"c","label":"C","disabled":"true"}]"""))).Props.Options!;
+
+        Assert.Equal(new bool?[] { true, null, true }, opciones.Select(o => o.Disabled).ToArray());
     }
 }

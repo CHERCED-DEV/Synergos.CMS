@@ -31,4 +31,4 @@ public sealed record StepperProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? CurrentStep);
 
 /// <summary>Un paso: el texto que se pinta junto a su número.</summary>
-public sealed record StepperItem(string Title);
+public sealed record StepperItem(string Title, string? Description = null, string? Id = null);

@@ -60,4 +60,14 @@ public sealed class TourGuideResolutorTests
 
         Assert.Equal(Resolutor().Resolver(elemento).Props.Steps, Resolutor().Resolver(elemento).Props.Steps);
     }
+
+    // #192, caso 14: el elemento pinta el lado de cada paso y el record no lo traía.
+    [Fact]
+    public void El_lado_de_un_paso_viaja_en_minusculas()
+    {
+        var paso = Resolutor().Resolver(ElementoFalso.Con(
+            ("stepsJson", """[{"selector":".menu","title":"Menú","placement":"Bottom"}]"""))).Props.Steps!.Single();
+
+        Assert.Equal("bottom", paso.Placement);
+    }
 }

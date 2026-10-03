@@ -13,7 +13,7 @@ namespace Synergos.CMS.Tests.Services.SynHost;
 /// </summary>
 public sealed class StepperResolutorTests
 {
-    private const string Pasos = """[{"label":"Datos"},{"label":"Pago","description":"no viaja"},{"title":"Confirmación"}]""";
+    private const string Pasos = """[{"label":"Datos"},{"label":"Pago","description":"Con tarjeta o PSE"},{"title":"Confirmación"}]""";
 
     private readonly ILogger<StepperResolutor> _log = Substitute.For<ILogger<StepperResolutor>>();
 
@@ -35,7 +35,7 @@ public sealed class StepperResolutorTests
         Assert.Equal(new[] { "steps", "currentStep" }, cable.Keys);
         var steps = (JsonElement)cable["steps"]!;
         Assert.Equal(new[] { "Datos", "Pago", "Confirmación" }, steps.EnumerateArray().Select(s => s.GetProperty("title").GetString()));
-        Assert.False(steps[1].TryGetProperty("description", out _));
+        Assert.Equal("Con tarjeta o PSE", steps[1].GetProperty("description").GetString()); // #192, caso 13: ahora viaja
         Assert.Equal(JsonValueKind.Number, ((JsonElement)cable["currentStep"]!).ValueKind);
         Assert.Equal(1, ((JsonElement)cable["currentStep"]!).GetInt32());
     }
@@ -58,5 +58,15 @@ public sealed class StepperResolutorTests
         var elemento = ElementoFalso.Con(("stepsJson", Pasos), ("currentStep", "2"));
 
         Assert.Equal(Resolutor().Resolver(elemento).Props.Steps, Resolutor().Resolver(elemento).Props.Steps);
+    }
+
+    // #192, caso 13: el elemento pinta la descripción y el id de cada paso; StepperItem sólo traía el título.
+    [Fact]
+    public void La_descripcion_y_el_id_de_un_paso_viajan()
+    {
+        var paso = Resolutor().Resolver(ElementoFalso.Con(
+            ("stepsJson", """[{"label":"Datos","description":"Tus datos de contacto","id":"datos"}]"""))).Props.Steps!.Single();
+
+        Assert.Equal(new StepperItem("Datos", "Tus datos de contacto", "datos"), paso);
     }
 }

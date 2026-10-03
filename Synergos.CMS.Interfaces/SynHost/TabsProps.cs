@@ -19,4 +19,4 @@ public sealed record TabsProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? InitialTab);
 
 /// <summary>Una pestaña: su rótulo, su contenido y el id con el que se enlaza.</summary>
-public sealed record TabsItem(string Label, string? Id = null, string? Content = null);
+public sealed record TabsItem(string Label, string? Id = null, string? Content = null, bool? Disabled = null);

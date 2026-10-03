@@ -49,7 +49,10 @@ public sealed class StepperResolutor : IResolutorSynHost<StepperProps>
                 continue;
             }
 
-            pasos.Add(new StepperItem(titulo));
+            pasos.Add(new StepperItem(
+                titulo,
+                LectorDelEditor.Cadena(entrada, "description"),
+                LectorDelEditor.Cadena(entrada, "id")));
         }
 
         return pasos.Count > 0 ? pasos : null;

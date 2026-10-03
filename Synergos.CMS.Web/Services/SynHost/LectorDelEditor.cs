@@ -240,6 +240,26 @@ public sealed class LectorDelEditor
            && valor.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
 
     /// <summary>
+    /// <c>true</c> si <paramref name="clave"/> está encendida en una entrada de una lista JSON
+    /// (<c>true</c> o el texto <c>"true"</c>); <c>null</c> en cualquier otro caso.
+    /// </summary>
+    /// <remarks>
+    /// Sólo viaja el encendido (#192, casos 11 y 12): <c>disabled: false</c> es lo mismo que no
+    /// decir nada, y mandarlo sería ruido en cada ítem.
+    /// </remarks>
+    public static bool? Encendido(JsonElement entrada, string clave)
+    {
+        if (entrada.ValueKind != JsonValueKind.Object || !entrada.TryGetProperty(clave, out var valor))
+        {
+            return null;
+        }
+
+        var encendido = valor.ValueKind == JsonValueKind.True
+            || (valor.ValueKind == JsonValueKind.String && string.Equals(valor.GetString()?.Trim(), "true", StringComparison.OrdinalIgnoreCase));
+        return encendido ? true : null;
+    }
+
+    /// <summary>
     /// Una entrada de una lista JSON que ES una cadena (<c>["#ff6600", "#0066ff"]</c>), recortada;
     /// <c>null</c> si la entrada no es una cadena o está vacía.
     /// </summary>

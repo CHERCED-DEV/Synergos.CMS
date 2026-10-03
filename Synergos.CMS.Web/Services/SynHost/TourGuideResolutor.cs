@@ -46,7 +46,8 @@ public sealed class TourGuideResolutor : IResolutorSynHost<TourGuideProps>
             var paso = new TourGuideStep(
                 LectorDelEditor.Cadena(entrada, "selector") ?? LectorDelEditor.Cadena(entrada, "target"),
                 LectorDelEditor.Cadena(entrada, "title"),
-                LectorDelEditor.Cadena(entrada, "content") ?? LectorDelEditor.Cadena(entrada, "body"));
+                LectorDelEditor.Cadena(entrada, "content") ?? LectorDelEditor.Cadena(entrada, "body"),
+                LectorDelEditor.Cadena(entrada, "placement")?.ToLowerInvariant());
 
             if (paso is { Title: null, Body: null })
             {

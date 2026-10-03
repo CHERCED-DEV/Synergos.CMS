@@ -187,17 +187,17 @@ public sealed class ContratoSynHostTests
             ["select-multi"] = new (string, object?)[]
             {
                 ("label", "Amenidades"),
-                ("optionsJson", """[{"value":"piscina","label":"Piscina"},{"value":"gym","label":"Gimnasio"},{"value":"bbq","label":"Zona BBQ"}]"""),
+                ("optionsJson", """[{"value":"piscina","label":"Piscina"},{"value":"gym","label":"Gimnasio"},{"value":"bbq","label":"Zona BBQ","disabled":true}]"""),
                 ("maxSelections", "2"),
             },
             ["stepper"] = new (string, object?)[]
             {
-                ("stepsJson", """[{"label":"Datos"},{"label":"Pago"},{"label":"Confirmación"}]"""),
+                ("stepsJson", """[{"label":"Datos","description":"Tus datos de contacto","id":"datos"},{"label":"Pago"},{"label":"Confirmación"}]"""),
                 ("currentStep", "1"),
             },
             ["tabs"] = new (string, object?)[]
             {
-                ("tabsJson", """[{"id":"resumen","label":"Resumen","content":"Lo esencial de la estadía."},{"id":"precios","label":"Precios","content":"Desde $120.000 por noche."}]"""),
+                ("tabsJson", """[{"id":"resumen","label":"Resumen","content":"Lo esencial de la estadía."},{"id":"precios","label":"Precios","content":"Desde $120.000 por noche."},{"id":"politicas","label":"Políticas","content":"Próximamente.","disabled":true}]"""),
                 ("initialTab", "precios"),
             },
             ["timeline"] = new (string, object?)[]
@@ -206,12 +206,12 @@ public sealed class ContratoSynHostTests
             },
             ["tour-guide"] = new (string, object?)[]
             {
-                ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal."},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),
+                ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal.","placement":"bottom"},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),
                 ("autoStart", true),
             },
             ["tree-view"] = new (string, object?)[]
             {
-                ("treeJson", """[{"label":"Productos","children":[{"label":"Hogar","children":[{"label":"Cocina"}]},{"label":"Jardín"}]},{"label":"Servicios"}]"""),
+                ("treeJson", """[{"label":"Productos","id":"productos","icon":"tag","expanded":true,"children":[{"label":"Hogar","children":[{"label":"Cocina"}]},{"label":"Jardín"}]},{"label":"Servicios","href":"/servicios"}]"""),
                 ("expandAll", true),
                 ("ariaLabel", "Catálogo de la tienda"),
             },

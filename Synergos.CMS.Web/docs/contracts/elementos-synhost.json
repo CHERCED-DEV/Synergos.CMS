@@ -2515,7 +2515,8 @@
           },
           {
             "value": "bbq",
-            "label": "Zona BBQ"
+            "label": "Zona BBQ",
+            "disabled": true
           }
         ],
         "maxSelections": 2
@@ -2678,7 +2679,9 @@
         "culture": "es-CO",
         "steps": [
           {
-            "title": "Datos"
+            "title": "Datos",
+            "description": "Tus datos de contacto",
+            "id": "datos"
           },
           {
             "title": "Pago"
@@ -2753,6 +2756,12 @@
             "label": "Precios",
             "id": "precios",
             "content": "Desde $120.000 por noche."
+          },
+          {
+            "label": "Políticas",
+            "id": "politicas",
+            "content": "Próximamente.",
+            "disabled": true
           }
         ],
         "initialTab": "precios"
@@ -2905,7 +2914,8 @@
           {
             "target": ".site-header",
             "title": "Bienvenido",
-            "body": "Este es el menú principal."
+            "body": "Este es el menú principal.",
+            "placement": "bottom"
           },
           {
             "target": "#buscar",
@@ -2998,10 +3008,14 @@
               {
                 "label": "Jardín"
               }
-            ]
+            ],
+            "id": "productos",
+            "icon": "tag",
+            "expanded": true
           },
           {
-            "label": "Servicios"
+            "label": "Servicios",
+            "href": "/servicios"
           }
         ],
         "expandAll": true,
@@ -3434,6 +3448,11 @@
           "nombre": "label",
           "tipo": "string",
           "opcional": false
+        },
+        {
+          "nombre": "disabled",
+          "tipo": "boolean",
+          "opcional": true
         }
       ]
     },
@@ -3444,6 +3463,16 @@
           "nombre": "title",
           "tipo": "string",
           "opcional": false
+        },
+        {
+          "nombre": "description",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": true
         }
       ]
     },
@@ -3463,6 +3492,11 @@
         {
           "nombre": "content",
           "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "disabled",
+          "tipo": "boolean",
           "opcional": true
         }
       ]
@@ -3504,6 +3538,11 @@
           "nombre": "body",
           "tipo": "string",
           "opcional": true
+        },
+        {
+          "nombre": "placement",
+          "tipo": "string",
+          "opcional": true
         }
       ]
     },
@@ -3518,6 +3557,26 @@
         {
           "nombre": "children",
           "tipo": "TreeViewNode[]",
+          "opcional": true
+        },
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "href",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "icon",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "expanded",
+          "tipo": "boolean",
           "opcional": true
         }
       ]

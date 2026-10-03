@@ -28,4 +28,10 @@ public sealed record TreeViewProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Label);
 
 /// <summary>Un nodo del árbol: su rótulo y, si tiene, sus hijos.</summary>
-public sealed record TreeViewNode(string Label, IReadOnlyList<TreeViewNode>? Children = null);
+public sealed record TreeViewNode(
+    string Label,
+    IReadOnlyList<TreeViewNode>? Children = null,
+    string? Id = null,
+    string? Href = null,
+    string? Icon = null,
+    bool? Expanded = null);

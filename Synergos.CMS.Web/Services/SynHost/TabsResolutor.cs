@@ -51,7 +51,8 @@ public sealed class TabsResolutor : IResolutorSynHost<TabsProps>
             pestanas.Add(new TabsItem(
                 rotulo,
                 LectorDelEditor.Cadena(entrada, "id"),
-                LectorDelEditor.Cadena(entrada, "content")));
+                LectorDelEditor.Cadena(entrada, "content"),
+                LectorDelEditor.Encendido(entrada, "disabled")));
         }
 
         return pestanas.Count > 0 ? pestanas : null;

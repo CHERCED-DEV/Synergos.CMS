@@ -55,7 +55,13 @@ public sealed class TreeViewResolutor : IResolutorSynHost<TreeViewProps>
             var hijos = entrada.TryGetProperty("children", out var crudo) && crudo.ValueKind != JsonValueKind.Null
                 ? Nodos(editor, editor.ListaJson("treeJson", crudo.GetRawText()))
                 : null;
-            nodos.Add(new TreeViewNode(rotulo, hijos));
+            nodos.Add(new TreeViewNode(
+                rotulo,
+                hijos,
+                LectorDelEditor.Cadena(entrada, "id"),
+                LectorDelEditor.Cadena(entrada, "href") ?? LectorDelEditor.Cadena(entrada, "url"),
+                LectorDelEditor.Cadena(entrada, "icon"),
+                LectorDelEditor.Encendido(entrada, "expanded")));
         }
 
         return nodos.Count > 0 ? nodos : null;

@@ -25,4 +25,4 @@ public sealed record SelectMultiProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? MaxSelections);
 
 /// <summary>Una opción: el valor que se emite al elegirla y el texto que se pinta.</summary>
-public sealed record SelectMultiItem(string Value, string Label);
+public sealed record SelectMultiItem(string Value, string Label, bool? Disabled = null);

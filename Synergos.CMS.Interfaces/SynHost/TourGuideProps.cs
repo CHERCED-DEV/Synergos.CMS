@@ -28,4 +28,4 @@ public sealed record TourGuideProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? AutoStart);
 
 /// <summary>Un paso del recorrido: a qué apunta (selector CSS), su título y su texto.</summary>
-public sealed record TourGuideStep(string? Target = null, string? Title = null, string? Body = null);
+public sealed record TourGuideStep(string? Target = null, string? Title = null, string? Body = null, string? Placement = null);

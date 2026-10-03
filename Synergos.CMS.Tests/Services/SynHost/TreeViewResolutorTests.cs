@@ -38,7 +38,7 @@ public sealed class TreeViewResolutorTests
         Assert.Equal(2, tree.GetArrayLength());
         var cocina = tree[0].GetProperty("children")[0].GetProperty("children")[0];
         Assert.Equal("Cocina", cocina.GetProperty("label").GetString());
-        Assert.False(cocina.TryGetProperty("href", out _));
+        Assert.Equal("/cocina", cocina.GetProperty("href").GetString()); // #192, caso 15: ahora viaja
         Assert.False(tree[1].TryGetProperty("children", out _));
         Assert.True(((JsonElement)cable["expandAll"]!).GetBoolean());
         Assert.Equal("Catálogo", cable["label"]?.ToString());
@@ -65,5 +65,16 @@ public sealed class TreeViewResolutorTests
         Assert.Equal(
             JsonSerializer.Serialize(Resolutor().Resolver(elemento).Props, SolicitudSynHost.Cable),
             JsonSerializer.Serialize(Resolutor().Resolver(elemento).Props, SolicitudSynHost.Cable));
+    }
+
+    // #192, caso 15: el elemento pinta id, enlace, icono y el nodo abierto; el record sólo traía label/children.
+    [Fact]
+    public void El_id_el_enlace_el_icono_y_el_abierto_de_un_nodo_viajan()
+    {
+        var nodo = Resolutor().Resolver(ElementoFalso.Con(
+            ("treeJson", """[{"label":"Hogar","id":"hogar","url":"/hogar","icon":"home","expanded":true,"children":[{"label":"Cocina"}]}]"""))).Props.Tree!.Single();
+
+        Assert.Equal(("hogar", "/hogar", "home", (bool?)true), (nodo.Id, nodo.Href, nodo.Icon, nodo.Expanded));
+        Assert.Null(nodo.Children!.Single().Expanded);
     }
 }
