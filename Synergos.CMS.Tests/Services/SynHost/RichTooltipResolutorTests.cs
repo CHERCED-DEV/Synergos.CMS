@@ -37,8 +37,7 @@ public sealed class RichTooltipResolutorTests
     }
 
     [Theory]
-    [InlineData("bottom-start", "bottom")]
-    [InlineData("top-end", "top")]
+    [InlineData("bottom", "bottom")]
     [InlineData("Left", "left")]
     public void El_placement_viaja_como_el_lado_que_pinta_el_elemento(string delDataType, string lado)
     {

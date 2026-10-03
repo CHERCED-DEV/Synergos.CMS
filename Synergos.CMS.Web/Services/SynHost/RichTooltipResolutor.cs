@@ -5,8 +5,9 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary><c>elementSynRichTooltip</c> → <see cref="RichTooltipProps"/>.</summary>
 /// <remarks>
-/// El RTE viaja como texto plano en <c>body</c> y el placement del DataType como el lado que el
-/// elemento sabe pintar.
+/// El contenido viaja en <c>body</c> como texto plano, y el placement tal cual: el DataType ya no
+/// ofrece las alineaciones (-start/-end) que ningún elemento pinta, y el contenido ya no es un RTE
+/// cuyo formato se perdía (#192, caso 16). Lo que un contenido viejo guarde con etiquetas se limpia.
 /// </remarks>
 public sealed class RichTooltipResolutor : IResolutorSynHost<RichTooltipProps>
 {
@@ -25,21 +26,6 @@ public sealed class RichTooltipResolutor : IResolutorSynHost<RichTooltipProps>
         return new ElementoResuelto<RichTooltipProps>(new RichTooltipProps(
             TriggerText: editor.Texto("triggerText"),
             Body: editor.TextoPlano("tooltipContent"),
-            Placement: Lado(editor.Texto("placement"))));
-    }
-
-    /// <summary>
-    /// El lado de un placement del DataType (<c>DTSelectPlacement</c>): «bottom-start» → «bottom».
-    /// La alineación la ofrece el DataType y el elemento no la pinta.
-    /// </summary>
-    private static string? Lado(string? placement)
-    {
-        if (placement is null)
-        {
-            return null;
-        }
-
-        var guion = placement.IndexOf('-', StringComparison.Ordinal);
-        return (guion > 0 ? placement[..guion] : placement).ToLowerInvariant();
+            Placement: editor.Texto("placement")?.ToLowerInvariant()));
     }
 }

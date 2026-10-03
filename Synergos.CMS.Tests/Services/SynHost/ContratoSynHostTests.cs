@@ -303,7 +303,7 @@ public sealed class ContratoSynHostTests
                 ("triggerText", "Cuota de manejo"),
                 ("tooltipContent", new Umbraco.Cms.Core.Strings.HtmlEncodedString(
                     "<p>Cobro <strong>mensual</strong> por administrar la tarjeta.</p><p>Se exonera con compras desde $&nbsp;300.000.</p>")),
-                ("placement", "bottom-start"),
+                ("placement", "bottom"),
             },
             ["countdown-clock"] = new (string, object?)[]
             {
