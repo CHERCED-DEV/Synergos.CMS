@@ -14,6 +14,20 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// </remarks>
 public sealed class ColorSwatchesResolutor : IResolutorSynHost<ColorSwatchesProps>
 {
+    /// <summary>
+    /// Las formas que el DataType (<c>DTSelectSwatchShape</c>) y el elemento llaman distinto (#192,
+    /// caso 5): la muestra cuadrada es <c>square</c>, la ficha alargada <c>pill</c> y el punto
+    /// <c>circle</c>. Se traduce aquí, sin tocar lo que el contenido ya guarda; antes las tres
+    /// caían al círculo y el editor elegía sin efecto.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> FormaEnElElemento =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["swatch"] = "square",
+            ["chip"] = "pill",
+            ["dot"] = "circle",
+        };
+
     private readonly IPublishedValueFallback _fallback;
     private readonly ILogger<ColorSwatchesResolutor> _log;
 
@@ -28,8 +42,13 @@ public sealed class ColorSwatchesResolutor : IResolutorSynHost<ColorSwatchesProp
         var editor = new LectorDelEditor(elemento, _fallback, _log);
         return new ElementoResuelto<ColorSwatchesProps>(new ColorSwatchesProps(
             Swatches: Muestras(editor, editor.Texto("swatchesJson")),
-            Shape: editor.Texto("shape")?.ToLowerInvariant()));
+            Shape: Forma(editor.Texto("shape"))));
     }
+
+    private static string? Forma(string? forma)
+        => forma is not null && FormaEnElElemento.TryGetValue(forma, out var enElElemento)
+            ? enElElemento
+            : forma?.ToLowerInvariant();
 
     private static IReadOnlyList<ColorSwatchesItem>? Muestras(LectorDelEditor editor, string? json)
     {

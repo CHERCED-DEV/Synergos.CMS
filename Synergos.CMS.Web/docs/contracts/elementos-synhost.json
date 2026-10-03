@@ -667,15 +667,15 @@
           "valores": [
             {
               "editor": "swatch",
-              "viaja": "swatch"
+              "viaja": "square"
             },
             {
               "editor": "chip",
-              "viaja": "chip"
+              "viaja": "pill"
             },
             {
               "editor": "dot",
-              "viaja": "dot"
+              "viaja": "circle"
             },
             {
               "editor": "circle",
@@ -2192,15 +2192,15 @@
           "valores": [
             {
               "editor": "top-left",
-              "viaja": "top-left"
+              "viaja": "bottom-left"
             },
             {
               "editor": "top-center",
-              "viaja": "top-center"
+              "viaja": "bottom-center"
             },
             {
               "editor": "top-right",
-              "viaja": "top-right"
+              "viaja": "bottom-right"
             },
             {
               "editor": "bottom-left",
