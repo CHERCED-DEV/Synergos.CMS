@@ -1,14 +1,13 @@
 using System.Globalization;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Services.Impl;
 
 /// <summary>
-/// Default <see cref="IPriceFormatter"/>. Lógica pura es-CO: miles con
-/// punto, sin decimales, seguido del código de moneda. Replica el
-/// patrón visual que antes vivía inline en los renderers de Shop
-/// (<c>amount.ToString("N0", es-CO) + " " + currency</c>).
+/// Default <see cref="IPriceFormatter"/>: el importe en la cultura del producto, es-CO, con SU
+/// moneda — <c>$ 1.500.000</c> en pesos, <c>USD 99.000</c> en dólares.
 /// </summary>
 /// <remarks>
 /// Vive en <c>Synergos.CMS.Application</c> — cero dependencia de
@@ -17,6 +16,10 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <c>IOptions&lt;CartSettings&gt;.Value</c> y la inyecta, honrando la
 /// decisión de no referenciar <c>Microsoft.Extensions.Options</c> desde
 /// Application (mismo patrón que <c>AppsettingsFeatureGate</c>).
+/// <para><b>La moneda se ignoraba</b> («la demo es mono-moneda COP»): 99.000 USD salían
+/// «$ 99.000», que en un sitio colombiano se lee como pesos. La regla es
+/// <see cref="TextoDelImporte"/>, la misma de los listados del servidor: la moneda viaja con el
+/// importe.</para>
 /// </remarks>
 public sealed class EsCoPriceFormatter : IPriceFormatter
 {
@@ -32,13 +35,5 @@ public sealed class EsCoPriceFormatter : IPriceFormatter
     }
 
     public string Format(decimal amount, string? currency = null)
-    {
-        // Formato símbolo-prefijo es-CO ('$ 5.200.000') para alinear con las apps
-        // Angular vivas (Intl currency es-CO) — antes emitía código-sufijo
-        // ('5.200.000 COP'), dos registros en el mismo journey. El código de moneda
-        // queda informativo (demo mono-moneda COP; el símbolo de cultura es '$').
-        _ = string.IsNullOrWhiteSpace(currency) ? _defaultCurrency : currency.Trim();
-
-        return amount.ToString("C0", EsCo);
-    }
+        => TextoDelImporte.En(amount, string.IsNullOrWhiteSpace(currency) ? _defaultCurrency : currency, EsCo);
 }

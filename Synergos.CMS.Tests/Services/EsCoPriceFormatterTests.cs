@@ -32,16 +32,35 @@ public class EsCoPriceFormatterTests
         Assert.Equal("$ 89.000", Make().Format(89_000.49m));
     }
 
+    /// <summary>
+    /// Un importe en otra moneda lleva su código ISO delante y NO el símbolo del peso.
+    /// </summary>
+    /// <remarks>
+    /// <para>La moneda se IGNORABA (<c>_ = …</c>, «la demo es mono-moneda COP»), así que 99.000 USD
+    /// salían «$ 99.000»: en un sitio colombiano eso se lee como pesos, una cifra 4.000 veces menor.
+    /// Este test fijaba ese comportamiento y su comentario anunciaba el día en que se pondría rojo
+    /// para decidirlo a conciencia: la regla del repo es que la moneda viaja con el importe.</para>
+    ///
+    /// <para>Es la MISMA regla que ya seguían los listados del servidor
+    /// (<c>FormatoDelListado.Precio</c>: «USD 1.200»), y ahora es una sola pieza para los dos.</para>
+    /// </remarks>
     [Fact]
-    public void Format_MonedaExplicita_SeIgnora_DemoMonoMoneda()
+    public void Format_OtraMoneda_LlevaSuCodigo_YNoElSimboloDelPeso()
     {
-        // El parámetro de moneda se IGNORA hoy: `EsCoPriceFormatter` lo descarta con
-        // `_ = ...` porque la demo es mono-moneda COP y el símbolo de la cultura es
-        // '$'. Este test se llamaba "UsesProvided" y afirmaba "99.000 USD" — mentía
-        // en las dos mitades. Ahora fija lo que el código HACE, que es lo único que
-        // una prueba puede defender: si algún día se soporta multi-moneda, este test
-        // se pone rojo y obliga a decidirlo a conciencia.
-        Assert.Equal("$ 99.000", Make().Format(99_000m, "USD"));
+        Assert.Equal("USD 99.000", Make().Format(99_000m, "USD"));
+        Assert.Equal("EUR 1.250", Make().Format(1_250m, " eur "));
+    }
+
+    [Fact] // la moneda del producto, escrita como venga, sigue saliendo con su símbolo.
+    public void Format_COP_EnMinusculas_SaleConSimbolo()
+    {
+        Assert.Equal("$ 99.000", Make().Format(99_000m, "cop"));
+    }
+
+    [Fact] // sin moneda, la del carrito; y si la del carrito es otra, también lleva su código.
+    public void Format_SinMoneda_UsaLaDelCarrito_ConSuRegla()
+    {
+        Assert.Equal("USD 50", Make("USD").Format(50m));
     }
 
     [Theory]

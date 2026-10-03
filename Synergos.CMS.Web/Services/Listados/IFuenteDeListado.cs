@@ -1,4 +1,5 @@
 using System.Globalization;
+using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Interfaces.SynHost;
 
 namespace Synergos.CMS.Web.Services.Listados;
@@ -40,15 +41,12 @@ public static class FormatoDelListado
     /// Un precio con su moneda. En la moneda de la cultura, con su símbolo y sin decimales
     /// (<c>$ 480.000</c> en es-CO); en otra, con su código ISO delante, para no confundirla.
     /// </summary>
+    /// <remarks>
+    /// La regla es <see cref="TextoDelImporte"/>, la misma que usan las APIs: vivía escrita acá y el
+    /// formateador de las APIs no la seguía.
+    /// </remarks>
     public static string Precio(decimal monto, string moneda, CultureInfo cultura)
-    {
-        ArgumentNullException.ThrowIfNull(cultura);
-        var codigo = moneda?.Trim().ToUpperInvariant() ?? string.Empty;
-        var deLaCultura = MonedaDe(cultura);
-        return codigo.Length == 0 || string.Equals(codigo, deLaCultura, StringComparison.Ordinal)
-            ? monto.ToString("C0", cultura)
-            : $"{codigo} {monto.ToString("N0", cultura)}";
-    }
+        => TextoDelImporte.En(monto, moneda, cultura);
 
     /// <summary>
     /// El día de un instante en la zona del sitio, en la forma corta de la cultura. Los catálogos
@@ -100,16 +98,4 @@ public static class FormatoDelListado
         => new(texto.Normalize(System.Text.NormalizationForm.FormD)
             .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
             .ToArray());
-
-    private static string MonedaDe(CultureInfo cultura)
-    {
-        try
-        {
-            return new RegionInfo(cultura.Name).ISOCurrencySymbol;
-        }
-        catch (ArgumentException)
-        {
-            return string.Empty;
-        }
-    }
 }
