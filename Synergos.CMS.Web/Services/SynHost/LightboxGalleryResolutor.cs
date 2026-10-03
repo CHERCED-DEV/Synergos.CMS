@@ -24,7 +24,7 @@ public sealed class LightboxGalleryResolutor : IResolutorSynHost<LightboxGallery
         var editor = new LectorDelEditor(elemento, _fallback, _log);
         return new ElementoResuelto<LightboxGalleryProps>(new LightboxGalleryProps(
             Images: Imagenes(editor),
-            Columns: editor.Entero("columns")));
+            Columns: editor.EnteroPositivo("columns")));
     }
 
     private static IReadOnlyList<LightboxGalleryImage>? Imagenes(LectorDelEditor editor)

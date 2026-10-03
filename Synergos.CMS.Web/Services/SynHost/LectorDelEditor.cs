@@ -328,6 +328,18 @@ public sealed class LectorDelEditor
         return null;
     }
 
+    /// <summary>
+    /// El entero de <paramref name="alias"/> cuando sólo tiene sentido positivo (columnas, cuántos
+    /// se ven, un zoom): <c>null</c> si es 0 o negativo.
+    /// </summary>
+    /// <remarks>
+    /// <c>Umbraco.Integer</c> devuelve <c>0</c> cuando el editor lo dejó en blanco (#192, caso 25):
+    /// con un TextBox el vacío no viajaba y el elemento aplicaba su valor por defecto; con el campo
+    /// numérico, sin esto, un bloque sin tocar mandaría «0 columnas». La misma regla que ya aplica
+    /// <c>seat-map</c> a <c>maxSelectable</c>.
+    /// </remarks>
+    public int? EnteroPositivo(string alias) => Entero(alias) is > 0 and var valor ? valor : null;
+
     private const string EsperadoSinAmbiguedad =
         "un número con una sola lectura («1.234» es mil doscientos treinta y cuatro en es-CO y uno coma dos a la inglesa: escribilo sin separador de miles)";
 

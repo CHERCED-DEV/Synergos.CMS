@@ -188,6 +188,23 @@ public sealed class LectorDelEditorTests
         Assert.Equal(lector.Opciones("platforms"), lector.Opciones("platforms"));
     }
 
+    // ── EnteroPositivo: el 0 de un Umbraco.Integer sin tocar es ausencia (#192, caso 25) ──────
+
+    [Theory]
+    [InlineData("3", 3)]
+    [InlineData("0", null)]
+    [InlineData("-2", null)]
+    public void Un_entero_que_solo_tiene_sentido_positivo_no_viaja_en_cero(string guardado, int? esperado)
+    {
+        Assert.Equal(esperado, Lector(ElementoFalso.Con(("columns", guardado))).EnteroPositivo("columns"));
+    }
+
+    [Fact]
+    public void Un_entero_positivo_sin_nada_escrito_no_viaja()
+    {
+        Assert.Null(Lector(ElementoFalso.Con()).EnteroPositivo("columns"));
+    }
+
     // ── Numero y Entero: lo que escribe un editor es-CO ────────────────────────────────────
     //
     // El punto es el separador de MILES del editor es-CO y la coma el decimal. Leer «500.000» con

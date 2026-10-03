@@ -26,7 +26,7 @@ public sealed class MapPinResolutor : IResolutorSynHost<MapPinProps>
         return new ElementoResuelto<MapPinProps>(new MapPinProps(
             CenterLat: editor.Numero("centerLat"),
             CenterLng: editor.Numero("centerLng"),
-            ZoomLevel: editor.Entero("zoomLevel"),
+            ZoomLevel: editor.EnteroPositivo("zoomLevel"),
             Pins: Pines(editor)));
     }
 

@@ -24,7 +24,7 @@ public sealed class AvatarGroupResolutor : IResolutorSynHost<AvatarGroupProps>
         var editor = new LectorDelEditor(elemento, _fallback, _log);
         return new ElementoResuelto<AvatarGroupProps>(new AvatarGroupProps(
             Avatars: Integrantes(editor),
-            MaxVisible: editor.Entero("maxVisible"),
+            MaxVisible: editor.EnteroPositivo("maxVisible"),
             Label: editor.Texto("ariaLabel")));
     }
 
