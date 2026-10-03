@@ -554,6 +554,38 @@ public sealed class ContratoSynHostTests
     }
 
     /// <summary>
+    /// Ninguna funcionalidad le ofrece al editor <c>compIntegration</c>: el JSON libre y el modo de
+    /// integración no viajan a una funcionalidad (ADR 0135 §6, <c>SolicitudSynHost.Para</c>), y lo
+    /// de negocio lo fija el sitio (ADR 0137, cambio 6).
+    /// </summary>
+    /// <remarks>
+    /// Un campo que el servidor descarta y el editor sigue viendo es una mentira del backoffice: se
+    /// escribe, se guarda y no hace nada. Las funcionalidades se descubren de los records y su
+    /// ElementType se sigue desde la vista, como en el gate de vocabulario.
+    /// </remarks>
+    [Fact]
+    public void Ninguna_funcionalidad_le_ofrece_al_editor_compIntegration()
+    {
+        var repo = RepoRoot();
+        var funcionalidades = Records()
+            .Where(r => SolicitudSynHost.Elemento(r).Tipo == TipoDeColocable.Funcionalidad)
+            .ToList();
+
+        // Sin piso, un descubrimiento roto pasaría en verde: eventos es el piloto.
+        Assert.Contains(typeof(EventosProps), funcionalidades);
+
+        var conIntegracion = funcionalidades
+            .SelectMany(r => SelectoresDeUSync.ElementTypesDe(repo, r).Select(et => (Record: r, ElementType: et)))
+            .Where(p => SelectoresDeUSync.Composiciones(repo, p.ElementType).Contains("compIntegration"))
+            .Select(p => $"{SolicitudSynHost.Elemento(p.Record).Nombre} ({p.ElementType})")
+            .ToList();
+
+        Assert.True(conIntegracion.Count == 0,
+            "Estas funcionalidades le siguen ofreciendo al editor compIntegration, que el servidor descarta: "
+            + string.Join(", ", conIntegracion) + ". Quitar la composición del ElementType (medir antes el contenido).");
+    }
+
+    /// <summary>
     /// La mitad CMS del gate de vocabulario (#181) encuentra lo que tiene que cruzar: el
     /// ElementType de cada record, y selectores en ellos.
     /// </summary>

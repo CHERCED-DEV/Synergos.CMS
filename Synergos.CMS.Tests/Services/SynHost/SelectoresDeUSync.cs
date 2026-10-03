@@ -115,6 +115,35 @@ internal static class SelectoresDeUSync
     }
 
     /// <summary>
+    /// Las composiciones de <paramref name="aliasDelElementType"/> a cualquier profundidad: lo que el
+    /// editor ve en el bloque aunque el ElementType no lo declare.
+    /// </summary>
+    public static IReadOnlySet<string> Composiciones(string repo, string aliasDelElementType)
+    {
+        var (tipos, _) = Leidos.GetOrAdd(repo, r => (TiposDeContenido(r), DataTypes(r)));
+
+        if (!tipos.TryGetValue(aliasDelElementType, out var propio))
+        {
+            throw new InvalidOperationException($"No hay ContentType «{aliasDelElementType}» en uSync/v9/ContentTypes.");
+        }
+
+        var vistas = new HashSet<string>(StringComparer.Ordinal);
+        var pendientes = new Queue<XElement>([propio]);
+        while (pendientes.TryDequeue(out var actual))
+        {
+            foreach (var composicion in actual.Descendants("Composition").Select(c => c.Value.Trim()))
+            {
+                if (vistas.Add(composicion) && tipos.TryGetValue(composicion, out var tipo))
+                {
+                    pendientes.Enqueue(tipo);
+                }
+            }
+        }
+
+        return vistas;
+    }
+
+    /// <summary>
     /// uSync leído UNA vez por proceso: son ~390 XML y la derivación pregunta por cada uno de los
     /// 36 elementos. Una mutación del schema se ve en la corrida siguiente, que es como corre.
     /// </summary>
