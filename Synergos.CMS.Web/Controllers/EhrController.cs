@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
 
@@ -159,7 +160,7 @@ public sealed class EhrController : ControllerBase
         var copago = await _scheduling.CopayAsync(cancellationToken);
         return copago is null
             ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "No se pudo calcular el copago." })
-            : Ok(new CopayDto(copago.Amount, (long)Math.Round(copago.Amount * 100m, MidpointRounding.ToEven), copago.Currency));
+            : Ok(new CopayDto(copago.Amount, UnidadesMenores.Desde(copago.Amount, copago.Currency), copago.Currency));
     }
 
     // ── 4. Citas por fecha ─────────────────────────────────────────────
@@ -306,8 +307,10 @@ public sealed class EhrController : ControllerBase
         // Las conversaciones CLÍNICAS del paciente. No es un contador de «sin leer» y no
         // se puede convertir en uno: ver la nota de PortalHomeResponse.UnreadMessages.
         var clinicalThreads = inbox.Count(t => IsClinicalContext(t.ContextRef));
-        var balanceMinor = statement is null ? 0L : (long)decimal.Truncate(Math.Max(0m, statement.Balance));
+        var saldo = statement is null ? 0m : Math.Max(0m, statement.Balance);
         var currency = statement?.Currency ?? "COP";
+        // En las unidades MENORES de la moneda (#196, G-13): la UI las divide para pintarlas.
+        var balanceMinor = UnidadesMenores.Desde(saldo, currency);
 
         // e-Check-In disponible = próxima cita en ventana de 48h sin check-in previo.
         var pendingCheckins = next is not null
@@ -369,7 +372,7 @@ public sealed class EhrController : ControllerBase
             cards.Add(new HomeCardDto(
                 Id: "card-balance", Kind: "balance",
                 Title: "Saldo pendiente",
-                Detail: $"Tienes un saldo de {balanceMinor:N0} {currency} por pagar.",
+                Detail: $"Tienes un saldo de {saldo:N0} {currency} por pagar.",
                 Action: "billing", ActionLabel: "Pagar ahora", Tone: "warning"));
         }
 
@@ -892,19 +895,20 @@ public sealed class EhrController : ControllerBase
 
     private static BillingDto ToBillingDto(EhrBillingStatement s)
     {
-        // amountMinor = responsabilidad del paciente por línea (lo que debe/pagó);
-        // COP no tiene subdivisión menor, así que la unidad menor entera = el monto COP.
+        // amountMinor = responsabilidad del paciente por línea (lo que debe/pagó), en las unidades
+        // MENORES de la moneda (#196, G-13). Decía «COP no tiene subdivisión menor» y mandaba
+        // pesos: la UI los divide por 100 y un saldo de 123.500 se pintaba $ 1.235.
         var lines = s.Statement
             .Select(l => new BillingLineDto(
                 Id: l.Id,
                 Date: l.ServiceDateUtc.ToString("yyyy-MM-dd"),
                 Description: l.Description,
-                AmountMinor: (long)decimal.Truncate(l.PatientResponsibility)))
+                AmountMinor: UnidadesMenores.Desde(l.PatientResponsibility, s.Currency)))
             .ToList();
         var statement = new BillingStatementDto(
             PatientId: s.PatientId,
             Currency: s.Currency,
-            BalanceMinor: (long)decimal.Truncate(s.Balance),
+            BalanceMinor: UnidadesMenores.Desde(s.Balance, s.Currency),
             PlanActive: !string.IsNullOrWhiteSpace(s.Plan.PlanName),
             Lines: lines);
         return new BillingDto(statement);

@@ -106,7 +106,7 @@ public sealed class GovFeeStatusContractTests
         var app = SeguimientoDelCiudadano(42_000m, "Unavailable");
 
         Assert.Equal("unavailable", app.GetProperty("feeStatus").GetString());
-        Assert.Equal(42_000L, app.GetProperty("feeMinor").GetInt64());
+        Assert.Equal(4_200_000L, app.GetProperty("feeMinor").GetInt64()); // 42.000 pesos en centavos (#196, G-13)
     }
 
     [Fact] // vacío: sin estado, nulo — que es «no consta» y NO «cobrada».
@@ -119,7 +119,7 @@ public sealed class GovFeeStatusContractTests
         Assert.True(app.TryGetProperty("feeStatus", out var estado));
         Assert.Equal(JsonValueKind.Null, estado.ValueKind);
         // Y el monto acompaña: es lo que distingue «exento» de «no se sabe».
-        Assert.Equal(42_000L, app.GetProperty("feeMinor").GetInt64());
+        Assert.Equal(4_200_000L, app.GetProperty("feeMinor").GetInt64()); // 42.000 pesos en centavos (#196, G-13)
     }
 
     [Fact] // filtro: el nombre del motor de pago se traduce al slug que el resto del borde usa.
@@ -147,7 +147,7 @@ public sealed class GovFeeStatusContractTests
             .GetProperty("cases");
 
         Assert.Equal("unavailable", cases[0].GetProperty("feeStatus").GetString());
-        Assert.Equal(42_000L, cases[0].GetProperty("feeMinor").GetInt64());
+        Assert.Equal(4_200_000L, cases[0].GetProperty("feeMinor").GetInt64()); // 42.000 pesos en centavos (#196, G-13)
         // El exento sale nulo y con tasa cero: las dos cosas juntas dicen «no hay cobro».
         Assert.Equal(JsonValueKind.Null, cases[1].GetProperty("feeStatus").ValueKind);
         Assert.Equal(0L, cases[1].GetProperty("feeMinor").GetInt64());
@@ -167,6 +167,6 @@ public sealed class GovFeeStatusContractTests
             .GetProperty("case").GetProperty("application");
 
         Assert.Equal("unavailable", app.GetProperty("feeStatus").GetString());
-        Assert.Equal(42_000L, app.GetProperty("feeMinor").GetInt64());
+        Assert.Equal(4_200_000L, app.GetProperty("feeMinor").GetInt64()); // 42.000 pesos en centavos (#196, G-13)
     }
 }

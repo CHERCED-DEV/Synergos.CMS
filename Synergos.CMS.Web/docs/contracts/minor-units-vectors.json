@@ -1,0 +1,30 @@
+{
+  "queEsEsto": [
+    "Vectores de oro de las UNIDADES MENORES de un importe (#196, G-13). Los ejecutan los dos lados:",
+    "el CMS (`UnidadesMenores` de Synergos.CMS.Application, con el que se emiten los `*Minor` de las",
+    "APIs) y el UI (`aMenores`/`desdeMenores` de vitals/core/src/formato, con el que se pintan).",
+    "",
+    "POR QUÉ EXISTE. Cada borde decidía la unidad por su cuenta: el copago de salud mandaba centavos y",
+    "la tasa de un trámite y la facturación de salud mandaban pesos con el nombre `feeMinor` y",
+    "`balanceMinor`. La UI divide por los decimales de la moneda, y una tasa de 189.000 se pintaba",
+    "$ 1.890: la pantalla cobraba cien veces menos de lo que se cobra.",
+    "",
+    "LA REGLA. menores = importe × 10^decimales(moneda), redondeado al par; decimales según CLDR (la",
+    "tabla de Intl en el navegador): 2 para casi todas, 0 para CLP, JPY, IQD…, 3 para KWD, BHD…; sin",
+    "moneda, 2. Las expectativas se derivaron a mano; IQD está porque CLDR (0) e ISO-4217 (3) no",
+    "coinciden, y lo que importa es que los dos lados digan lo mismo."
+  ],
+  "vectores": [
+    { "nombre": "la tasa de un pasaporte en pesos", "moneda": "COP", "importe": 189000, "menores": 18900000 },
+    { "nombre": "un saldo de salud", "moneda": "COP", "importe": 123500, "menores": 12350000 },
+    { "nombre": "una comisión con centavos", "moneda": "COP", "importe": 22500.12, "menores": 2250012 },
+    { "nombre": "dólares", "moneda": "USD", "importe": 12.5, "menores": 1250 },
+    { "nombre": "medio centavo: al par, el de abajo (mitad-arriba daría 13)", "moneda": "USD", "importe": 0.125, "menores": 12 },
+    { "nombre": "euros, en minúsculas", "moneda": "eur", "importe": 0.99, "menores": 99 },
+    { "nombre": "yenes no tienen decimales", "moneda": "JPY", "importe": 5000, "menores": 5000 },
+    { "nombre": "pesos chilenos tampoco", "moneda": "CLP", "importe": 5000, "menores": 5000 },
+    { "nombre": "dinares de Kuwait tienen tres", "moneda": "KWD", "importe": 1.234, "menores": 1234 },
+    { "nombre": "dinares iraquíes: CLDR dice cero aunque ISO diga tres", "moneda": "IQD", "importe": 1500, "menores": 1500 },
+    { "nombre": "sin moneda, dos decimales", "moneda": "", "importe": 10.5, "menores": 1050 }
+  ]
+}

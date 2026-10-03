@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
@@ -210,7 +211,7 @@ public sealed class GovController : ControllerBase
             Steps: detail.Steps.Select(st => new StepDto(st.Id, st.Title, st.Detail)).ToList(),
             Eligibility: detail.Eligibility,
             Required: detail.Required,
-            FeeMinor: s.FeeMinor,
+            FeeMinor: ToFeeMinor(s.FeeMinor, s.Currency),
             Currency: s.Currency)));
     }
 
@@ -305,7 +306,7 @@ public sealed class GovController : ControllerBase
             Timeline: detail.Timeline.Select(ToTimelineDto).ToList(),
             Documents: detail.Documents.Select(ToDocumentDto).ToList(),
             Messages: messages,
-            FeeMinor: ToFeeMinor(detail.FeeMinor),
+            FeeMinor: ToFeeMinor(detail.FeeMinor, detail.Currency),
             FeeStatus: ToFeeStatusSlug(detail.FeeStatus))));
     }
 
@@ -663,7 +664,7 @@ public sealed class GovController : ControllerBase
         Category: t.Category,
         Agency: t.Agency,
         EstimatedDays: t.EstimatedDays,
-        FeeMinor: t.FeeMinor,
+        FeeMinor: ToFeeMinor(t.FeeMinor, t.Currency),
         Currency: t.Currency);
 
     private static FieldDto ToFieldDto(TramiteFormField f)
@@ -691,7 +692,7 @@ public sealed class GovController : ControllerBase
         Status: GovStatusSlugs.ToSlug(c.Status),
         SubmittedAt: c.RadicadoAt,
         CurrentStage: c.CurrentStage,
-        FeeMinor: ToFeeMinor(c.FeeMinor),
+        FeeMinor: ToFeeMinor(c.FeeMinor, c.Currency),
         FeeStatus: ToFeeStatusSlug(c.FeeStatus));
 
     private static ApplicationSummaryDto ToApplicationSummaryFromInbox(CaseInboxItem i) => new(
@@ -702,10 +703,14 @@ public sealed class GovController : ControllerBase
         Status: GovStatusSlugs.ToSlug(i.Status),
         SubmittedAt: i.RadicadoAt,
         CurrentStage: i.CurrentStage,
-        FeeMinor: ToFeeMinor(i.FeeMinor),
+        FeeMinor: ToFeeMinor(i.FeeMinor, currency: null),
         FeeStatus: ToFeeStatusSlug(i.FeeStatus));
 
-    private static long ToFeeMinor(decimal fee) => (long)decimal.Truncate(Math.Max(0m, fee));
+    // La tasa viaja en las unidades MENORES de su moneda (COP: centavos), con la tabla con la que
+    // la UI la divide para pintarla (#196, G-13). Antes salía el monto en pesos con el nombre
+    // feeMinor, y una tasa de 189.000 se pintaba $ 1.890. La bandeja no trae la moneda del
+    // expediente (sólo dice si hay tasa): sin moneda, los dos decimales de casi todas.
+    private static long ToFeeMinor(decimal fee, string? currency) => UnidadesMenores.Desde(Math.Max(0m, fee), currency);
 
     /// <summary>
     /// El estado del cobro de la tasa como lo lee la UI, o <c>null</c> cuando no consta.
@@ -766,7 +771,7 @@ public sealed class GovController : ControllerBase
         SubmittedAt: i.RadicadoAt,
         Priority: i.Priority.ToString().ToLowerInvariant(),
         SlaDaysLeft: i.SlaDaysLeft,
-        FeeMinor: ToFeeMinor(i.FeeMinor),
+        FeeMinor: ToFeeMinor(i.FeeMinor, currency: null),
         FeeStatus: ToFeeStatusSlug(i.FeeStatus));
 
     // El detalle del funcionario muestra las respuestas con su ETIQUETA humana (no el
@@ -788,7 +793,7 @@ public sealed class GovController : ControllerBase
                 Status: GovStatusSlugs.ToSlug(c.Status),
                 SubmittedAt: c.RadicadoAt,
                 CurrentStage: c.CurrentStage,
-                FeeMinor: ToFeeMinor(c.FeeMinor),
+                FeeMinor: ToFeeMinor(c.FeeMinor, c.Currency),
                 FeeStatus: ToFeeStatusSlug(c.FeeStatus)),
             Answers: c.FormData
                 .Select(kv => new AnswerDto(labels.GetValueOrDefault(kv.Key, kv.Key), kv.Value))

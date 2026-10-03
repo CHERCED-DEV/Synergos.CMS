@@ -751,11 +751,11 @@ public sealed class EhrControllerTests
 
         var statement = Json(await BuildSut().Billing("pat-1", default)).GetProperty("statement");
 
-        Assert.Equal(36_000L, statement.GetProperty("balanceMinor").GetInt64());
+        Assert.Equal(3_600_000L, statement.GetProperty("balanceMinor").GetInt64()); // 36.000 pesos en centavos (#196, G-13)
         Assert.True(statement.GetProperty("planActive").GetBoolean());
         // amountMinor = responsabilidad del paciente, no el cargo bruto: cobrar 180.000 donde
         // el paciente debe 36.000 es el defecto que no se ve hasta que alguien paga.
-        Assert.Equal(36_000L, statement.GetProperty("lines")[0].GetProperty("amountMinor").GetInt64());
+        Assert.Equal(3_600_000L, statement.GetProperty("lines")[0].GetProperty("amountMinor").GetInt64());
     }
 
     // El home NO cuenta «sin leer»: no hay read-receipts en `IMessagingService`, así que
