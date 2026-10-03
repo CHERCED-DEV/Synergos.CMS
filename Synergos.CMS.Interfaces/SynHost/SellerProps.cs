@@ -8,9 +8,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// API sale de <c>Synergos:Features:Seller</c>, por sitio (ADR 0137, escala #196). El JSON libre
 /// del editor no viaja: medido el 2026-10-02, ningún bloque lo usaba.</para>
 ///
-/// <para>El ElementType tiene también `subheading`: la vista lo mandaba y el elemento lo tiraba (D1, medido el 2026-10-02 en los 11 bloques). No se declara acá.</para>
+/// <para>El subtítulo viaja y se pinta bajo el título de la consola, como en academy: la vista lo
+/// mandaba y el elemento lo tiraba (D1, medido en los 11 bloques el 2026-10-02 y el 2026-10-03).</para>
 /// </remarks>
 [ElementoSynHost("seller", TipoDeColocable.Funcionalidad)]
 public sealed record SellerProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
+    [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase);

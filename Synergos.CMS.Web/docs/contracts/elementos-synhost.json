@@ -379,6 +379,12 @@
           "origen": "contenido"
         },
         {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
           "nombre": "apiBase",
           "tipo": "string",
           "opcional": false,
@@ -388,6 +394,7 @@
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Conecta, publica y crece tu audiencia",
+        "subheading": "Sigue autores, publica historias y reacciona en tiempo real",
         "apiBase": "/api/blogs"
       }
     },
@@ -2113,6 +2120,12 @@
           "origen": "contenido"
         },
         {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
           "nombre": "apiBase",
           "tipo": "string",
           "opcional": false,
@@ -2122,6 +2135,7 @@
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Tu negocio, en un solo panel",
+        "subheading": "Ventas, publicaciones, mensajes y devoluciones",
         "apiBase": "/api/shop"
       }
     },

@@ -27,6 +27,7 @@ public sealed class BlogsResolutor : IResolutorSynHost<BlogsProps>
 
         return new ElementoResuelto<BlogsProps>(new BlogsProps(
             Heading: editor.Texto("heading"),
+            Subheading: editor.Texto("subheading"),
             ApiBase: _negocio.Actual().ApiBase));
     }
 }

@@ -27,6 +27,7 @@ public sealed class SellerResolutor : IResolutorSynHost<SellerProps>
 
         return new ElementoResuelto<SellerProps>(new SellerProps(
             Heading: editor.Texto("heading"),
+            Subheading: editor.Texto("subheading"),
             ApiBase: _negocio.Actual().ApiBase));
     }
 }

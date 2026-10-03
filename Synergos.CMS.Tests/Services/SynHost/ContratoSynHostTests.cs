@@ -92,6 +92,7 @@ public sealed class ContratoSynHostTests
             ["blogs"] = new (string, object?)[]
             {
                 ("heading", "Conecta, publica y crece tu audiencia"),
+                ("subheading", "Sigue autores, publica historias y reacciona en tiempo real"),
             },
             ["booking-wizard"] = new (string, object?)[]
             {
@@ -107,6 +108,7 @@ public sealed class ContratoSynHostTests
             ["seller"] = new (string, object?)[]
             {
                 ("heading", "Tu negocio, en un solo panel"),
+                ("subheading", "Ventas, publicaciones, mensajes y devoluciones"),
             },
             ["storefront"] = new (string, object?)[]
             {
