@@ -338,6 +338,30 @@ public sealed class HttpHotelBookingServiceTests
         Assert.Contains("150000", cuerpo, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// «Hoy» es el día del SITIO: a las 22:30 del 2 en Bogotá (03:30Z del 3), la política se
+    /// evalúa con el 2. En UTC era el 3, y una cancelación gratuita salía como tardía.
+    /// </summary>
+    [Fact]
+    public async Task La_politica_se_evalua_al_dia_de_hoy_en_el_sitio()
+    {
+        var politica = Politica();
+        var svc = new HttpHotelBookingService(
+            new FabricaFalsa(Feliz()),
+            new Monitor<ViajesSettings>(new ViajesSettings { Mode = "Bff" }),
+            politica,
+            new InMemoryJsonEntityStore(),
+            NullLogger<HttpHotelBookingService>.Instance,
+            now: () => new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero),
+            zonaDelSitio: new ListadosSettings().Zona());
+        var reserva = await svc.HoldAsync(Peticion());
+        await svc.PayAsync(reserva.Id);
+
+        await svc.CancelAsync(reserva.Id, null);
+
+        politica.Received(1).Evaluate(Arg.Any<string>(), Arg.Any<DateOnly>(), new DateOnly(2026, 10, 2));
+    }
+
     [Fact] // una tarifa no reembolsable retiene TODO: no se devuelve nada.
     public async Task Una_tarifa_no_reembolsable_retiene_el_total()
     {

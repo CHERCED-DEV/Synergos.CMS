@@ -25,12 +25,14 @@ public class StubCourseCatalogProviderTests
         => new(stream ?? ContentStream());
 
     /// <summary>El mismo catálogo, con el reloj fijado para poder afirmar una fecha.</summary>
-    private static StubCourseCatalogProvider MakeAt(DateTimeOffset now, IContentStream? stream = null)
+    private static StubCourseCatalogProvider MakeAt(
+        DateTimeOffset now, IContentStream? stream = null, TimeZoneInfo? zonaDelSitio = null)
         => new(
             stream ?? ContentStream(),
             new InMemoryCatalogIndex<CourseSummary>(
                 StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged),
-            () => now);
+            () => now,
+            zonaDelSitio);
 
     [Fact] // empty: filtro sin matches → lista vacía (no lanza)
     public async Task Search_NoMatch_ReturnsEmpty()
@@ -241,6 +243,29 @@ public class StubCourseCatalogProviderTests
 
         Assert.NotEmpty(result.Courses);
         Assert.All(result.Courses, c => Assert.Equal(CourseStatuses.Published, c.Status));
+    }
+
+    [Fact] // el día de la publicación es el del sitio: las 22:30 del 2 en Bogotá no son el 3.
+    public async Task PublishCourse_LaFechaEsElDiaDelSitio()
+    {
+        var provider = MakeAt(
+            new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero), zonaDelSitio: new ListadosSettings().Zona());
+
+        var published = await provider.PublishCourseAsync(new CourseDraft(
+            Title: "Angular moderno",
+            Summary: "Signals y zoneless",
+            Description: "",
+            School: "",
+            Category: "Desarrollo",
+            Level: "Intermedio",
+            InstructorId: "ins-elena",
+            Price: 300_000m,
+            Modules: new[]
+            {
+                new CourseDraftModule("Fundamentos", new[] { new CourseDraftLesson("Signals", null, 12) }),
+            }));
+
+        Assert.Equal(new DateOnly(2026, 10, 2), published.Course.PublishedAt);
     }
 
     /// <summary>

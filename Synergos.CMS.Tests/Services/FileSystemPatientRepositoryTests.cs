@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 
@@ -129,6 +131,27 @@ public sealed class FileSystemPatientRepositoryTests
         var only = Assert.Single(list);
         Assert.Equal("Vigente", only.DisplayName);
         Assert.True(only.AgeYears > 0);
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    [Fact] // la edad se cuenta con el «hoy» del sitio: las 22:30 del 2 en Bogotá no son el 3.
+    public async Task List_LaEdadSeCuentaConElDiaDelSitio()
+    {
+        var sut = new FileSystemPatientRepository(
+            _store,
+            new RelojFijo(new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero)),
+            Options.Create(new ListadosSettings()));
+        await sut.UpsertAsync(
+            Patient(Guid.Empty, "Cumple mañana", Guid.NewGuid()) with { DateOfBirth = new DateTime(1990, 10, 3) },
+            CancellationToken.None);
+
+        var only = Assert.Single(await sut.ListAsync(new PatientQuery(), CancellationToken.None));
+
+        Assert.Equal(35, only.AgeYears);
     }
 
     [Fact]

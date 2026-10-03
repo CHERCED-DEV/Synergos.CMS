@@ -56,6 +56,9 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
     private readonly string _resourceType;
     private readonly RealtyVisitLedger? _ledger;
 
+    /// <summary>La zona del sitio: en ella son las horas de visita (<see cref="VisitAgenda"/>).</summary>
+    private readonly TimeZoneInfo? _zona;
+
     // Serializa el read-modify-write de apartar un slot. No se puede usar lock{}
     // porque el cuerpo hace await; SemaphoreSlim es el equivalente async — mismo
     // criterio que StubOrderTrackingService.
@@ -115,13 +118,15 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
         Func<DateTimeOffset>? now,
         IJsonEntityStore? store,
         string? storeNamespace,
-        RealtyVisitLedger? ledger)
+        RealtyVisitLedger? ledger,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _store = store ?? new InMemoryJsonEntityStore();
         _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
         _ledger = ledger;
+        _zona = zonaDelSitio;
     }
 
     public async Task<IReadOnlyList<VisitSlot>> GetSlotsAsync(string listingId, CancellationToken cancellationToken = default)
@@ -257,7 +262,7 @@ public sealed class StubVisitSchedulingService : IVisitSchedulingService, IDispo
     // Api.Booking (HU #33a)—, que es el listón de CLAUDE.md §6. Mientras hubo uno solo, vivir acá
     // dentro estaba bien.
     private IEnumerable<VisitSlot> BuildSlots(string listingId)
-        => VisitAgenda.For(listingId, _now());
+        => VisitAgenda.For(listingId, _now(), _zona);
 
     // La clave del store reproduce la del diccionario que había antes
     // ("(listado)/(slot)"), en minúsculas porque aquel comparaba con

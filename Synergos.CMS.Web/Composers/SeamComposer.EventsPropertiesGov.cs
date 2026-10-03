@@ -226,7 +226,9 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<IOptionsMonitor<RealtySettings>>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<HttpVisitSchedulingService>>(),
-                    sp.GetRequiredService<RealtyVisitLedger>()));
+                    sp.GetRequiredService<RealtyVisitLedger>(),
+                    // Las horas de visita son las del sitio (Synergos:Listados), no las de UTC.
+                    sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
         }
         else
         {
@@ -236,7 +238,9 @@ public sealed partial class SeamComposer
                     null,
                     sp.GetRequiredService<IJsonEntityStore>(),
                     "realty-visits",
-                    sp.GetRequiredService<RealtyVisitLedger>()));
+                    sp.GetRequiredService<RealtyVisitLedger>(),
+                    // Las horas de visita son las del sitio (Synergos:Listados), no las de UTC.
+                    sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
         }
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
         // La configuración de negocio de Propiedades (ADR 0137, #196): la API y la tasa con que

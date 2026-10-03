@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -68,6 +70,12 @@ public sealed class ShopCatalogController : ControllerBase
     /// </summary>
     private readonly IShopQuery _shopQuery;
 
+    /// <summary>El reloj: de él sale el día de una reseña.</summary>
+    private readonly TimeProvider _reloj;
+
+    /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>). Sin ella, UTC.</summary>
+    private readonly TimeZoneInfo _zona;
+
     public ShopCatalogController(
         IProductCatalogProvider catalog,
         IShopOrderService orders,
@@ -78,8 +86,12 @@ public sealed class ShopCatalogController : ControllerBase
         IMessagingService messaging,
         IMemberAccessGate gate,
         IShopQuery shopQuery,
-        ICatalogSocialProof socialProof)
+        ICatalogSocialProof socialProof,
+        TimeProvider? reloj = null,
+        IOptions<ListadosSettings>? listados = null)
     {
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
         _socialProof = socialProof;
         _catalog = catalog;
         _orders = orders;
@@ -460,7 +472,9 @@ public sealed class ShopCatalogController : ControllerBase
                 Rating: request.Rating,
                 Title: (request.Title ?? string.Empty).Trim(),
                 Body: request.Body.Trim(),
-                Date: DateOnly.FromDateTime(DateTime.UtcNow)),
+                // El día del SITIO: la reseña escrita a las 22:30 en Bogotá es de ese día, y con
+                // el de UTC la tarjeta la fechaba al siguiente.
+                Date: DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_reloj.GetUtcNow(), _zona).DateTime)),
             cancellationToken).ConfigureAwait(false);
 
         var proof = await _socialProof.GetAsync(product.Sku, cancellationToken).ConfigureAwait(false);

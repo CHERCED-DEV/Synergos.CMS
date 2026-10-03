@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -40,18 +41,26 @@ public sealed class BookingController : ControllerBase
     private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<BookingController> _logger;
 
+    /// <summary>«Hoy» en el sitio: el reloj inyectado y la zona de Synergos:Listados.</summary>
+    private readonly TimeProvider _reloj;
+    private readonly TimeZoneInfo _zona;
+
     public BookingController(
         IRoomAvailabilityProvider availability,
         IHotelBookingService booking,
         ICancellationPolicyEvaluator cancellationPolicy,
         IPriceFormatter priceFormatter,
-        ILogger<BookingController> logger)
+        ILogger<BookingController> logger,
+        TimeProvider? reloj = null,
+        Microsoft.Extensions.Options.IOptions<ListadosSettings>? listados = null)
     {
         _availability = availability;
         _booking = booking;
         _cancellationPolicy = cancellationPolicy;
         _priceFormatter = priceFormatter;
         _logger = logger;
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
     }
 
     // ── 1. Search ──────────────────────────────────────────────────
@@ -90,7 +99,9 @@ public sealed class BookingController : ControllerBase
             return BadRequest(new { error = ex.Motivo() });
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // «Hoy» en el SITIO: la política cuenta días hasta el check-in del hotel; en UTC, desde las
+        // siete de la noche en Bogotá, la tarjeta anunciaba «tardía» una cancelación aún gratuita.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_reloj.GetUtcNow(), _zona).DateTime);
         var results = offers.Select(offer =>
         {
             var policy = _cancellationPolicy.Evaluate(offer.RatePlanCode, request.CheckIn, today);

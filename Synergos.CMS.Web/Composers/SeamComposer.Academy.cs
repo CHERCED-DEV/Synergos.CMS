@@ -66,13 +66,17 @@ public sealed partial class SeamComposer
         // Las DOS implementaciones se registran por su tipo concreto, y `ICourseCatalogProvider`
         // apunta a la que el flag elija. Es lo que permite que la property injection de
         // EnrollmentMetrics (abajo) aterrice en la instancia que de verdad sirve el catálogo.
+        // El día con que se fecha una publicación es el del sitio (Synergos:Listados).
         services.AddSingleton<StubCourseCatalogProvider>(sp =>
-            new StubCourseCatalogProvider(sp.GetRequiredService<IContentStream>()));
+            new StubCourseCatalogProvider(
+                sp.GetRequiredService<IContentStream>(),
+                sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
         services.AddSingleton<CatalogCourseCatalogProvider>(sp =>
             new CatalogCourseCatalogProvider(
                 sp.GetRequiredService<ICatalogSource<AuthoredCourse>>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
-                sp.GetRequiredService<IContentStream>()));
+                sp.GetRequiredService<IContentStream>(),
+                sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
         services.AddSingleton<ICourseCatalogProvider>(sp =>
             IsCmsSource(sp, UmbracoCourseCatalogSource.Vertical)
                 ? sp.GetRequiredService<CatalogCourseCatalogProvider>()

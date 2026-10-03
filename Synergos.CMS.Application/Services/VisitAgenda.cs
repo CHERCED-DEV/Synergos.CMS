@@ -27,7 +27,11 @@ public static class VisitAgenda
     /// <summary>Cuántos días de agenda se ofrecen.</summary>
     private const int Dias = 3;
 
-    /// <summary>Las horas de visita, en UTC.</summary>
+    /// <summary>
+    /// Las horas de visita, en la hora LOCAL del sitio: «a las 9 y a las 11» es la mañana del
+    /// agente. Eran horas UTC —las 4:00 y las 6:00 de Bogotá—, y la pantalla las escribía en UTC
+    /// también, así que se leía «09:00» sobre una visita que la capacidad apartaba de madrugada.
+    /// </summary>
     private static readonly int[] Horas = { 9, 11 };
 
     /// <summary>Cuánto dura una visita. Es lo que se aparta como ventana en la capacidad.</summary>
@@ -41,16 +45,22 @@ public static class VisitAgenda
     /// almacén (en el stub) o <c>Api.Booking</c> (cableado). Mezclar las dos cosas acá dejaría a
     /// este tipo necesitando un almacén, y entonces ya no sería una función del listado.
     /// </remarks>
-    public static IReadOnlyList<VisitSlot> For(string listingId, DateTimeOffset ahora)
+    /// <param name="listingId">El listado.</param>
+    /// <param name="ahora">El instante de la consulta.</param>
+    /// <param name="zonaDelSitio">La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>): en ella
+    /// son «mañana» y las horas de visita. Sin ella, UTC —lo que hacía siempre—.</param>
+    public static IReadOnlyList<VisitSlot> For(string listingId, DateTimeOffset ahora, TimeZoneInfo? zonaDelSitio = null)
     {
-        var baseDay = ahora.UtcDateTime.Date.AddDays(PrimerDia);
+        var zona = zonaDelSitio ?? TimeZoneInfo.Utc;
+        var baseDay = TimeZoneInfo.ConvertTime(ahora, zona).Date.AddDays(PrimerDia);
         var slots = new List<VisitSlot>(Dias * Horas.Length);
 
         for (var day = 0; day < Dias; day++)
         {
             foreach (var hour in Horas)
             {
-                var start = new DateTimeOffset(baseDay.AddDays(day).AddHours(hour), TimeSpan.Zero);
+                var local = baseDay.AddDays(day).AddHours(hour);
+                var start = new DateTimeOffset(local, zona.GetUtcOffset(local)).ToUniversalTime();
                 slots.Add(new VisitSlot($"{listingId}-{start:yyyyMMddHHmm}", start));
             }
         }
@@ -59,7 +69,7 @@ public static class VisitAgenda
     }
 
     /// <summary>La franja concreta, o <c>null</c> si ese id no es de este listado.</summary>
-    public static VisitSlot? Find(string listingId, string slotId, DateTimeOffset ahora)
-        => For(listingId, ahora).FirstOrDefault(s =>
+    public static VisitSlot? Find(string listingId, string slotId, DateTimeOffset ahora, TimeZoneInfo? zonaDelSitio = null)
+        => For(listingId, ahora, zonaDelSitio).FirstOrDefault(s =>
             string.Equals(s.Id, slotId, StringComparison.OrdinalIgnoreCase));
 }

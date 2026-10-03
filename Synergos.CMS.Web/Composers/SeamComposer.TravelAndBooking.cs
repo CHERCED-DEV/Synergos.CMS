@@ -70,7 +70,8 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<ICancellationPolicyEvaluator>(),
                 sp.GetRequiredService<IJsonEntityStore>(),
                 sp.GetRequiredService<ILogger<HttpHotelBookingService>>(),
-                sp.GetRequiredService<IAuditTrailWriter>()));
+                sp.GetRequiredService<IAuditTrailWriter>(),
+                zonaDelSitio: sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
 
             // Y el carrito multi-producto, que hasta la HU #40 se quedaba acá (TravelCartItem no
             // llevaba fechas, y un apartado de Api.Booking ES una ventana sobre un recurso). Va
@@ -89,7 +90,8 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<IReservationService>(),
                     sp.GetRequiredService<IPaymentProvider>(),
                     sp.GetRequiredService<ICancellationPolicyEvaluator>(),
-                    sp.GetRequiredService<IAuditTrailWriter>()));
+                    sp.GetRequiredService<IAuditTrailWriter>(),
+                    zonaDelSitio: sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
 
             services.AddSingleton<ITravelCartEngine>(sp => new InProcessTravelCartEngine(
                 sp.GetRequiredService<IReservationService>(),

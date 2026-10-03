@@ -134,9 +134,23 @@ public sealed class BookingControllerTests
     /// </remarks>
     private BookingController BuildSut() => new(
         _availability,
-        new StubHotelBookingService(_reservations, _payments, _policy, _audit),
+        new StubHotelBookingService(_reservations, _payments, _policy, _audit, () => _reloj.GetUtcNow(), Bogota),
         _policy, _priceFormatter,
-        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance);
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<BookingController>.Instance,
+        _reloj, Microsoft.Extensions.Options.Options.Create(new Synergos.CMS.Application.Configuration.ListadosSettings()));
+
+    /// <summary>El reloj del motor y del controlador: el del sistema, salvo en los tests del borde del día.</summary>
+    private TimeProvider _reloj = TimeProvider.System;
+
+    private static readonly TimeZoneInfo Bogota = new Synergos.CMS.Application.Configuration.ListadosSettings().Zona()!;
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    /// <summary>Las 03:30Z del 3 de octubre: las 22:30 del 2 en Bogotá.</summary>
+    private static readonly DateTimeOffset CercaDeMedianocheUtc = new(2026, 10, 3, 3, 30, 0, TimeSpan.Zero);
 
     /// <summary>El estado vigente, o revienta: un test que llega aquí sin reserva miente.</summary>
     private Reservation Actual() => _estado ?? throw new InvalidOperationException("Sin reserva en el motor.");
@@ -562,15 +576,35 @@ public sealed class BookingControllerTests
         await _payments.Received(1).RefundAsync(SesionPago, Total, Arg.Any<CancellationToken>());
     }
 
-    [Fact] // la política se evalúa con las fechas DE LA RESERVA y contra hoy (UTC)
+    /// <summary>
+    /// La política se evalúa con las fechas DE LA RESERVA y contra «hoy» EN EL SITIO.
+    /// </summary>
+    /// <remarks>
+    /// Contaba «hoy» en UTC: desde las siete de la noche en Bogotá era mañana, y como la política
+    /// cuenta días hasta el check-in, una cancelación todavía gratuita se cobraba como tardía. El
+    /// reloj va a las 22:30 del 2 en Bogotá (03:30Z del 3), donde las dos lecturas difieren.
+    /// </remarks>
+    [Fact]
     public async Task Cancel_evalua_la_politica_del_rate_plan_de_la_reserva_al_dia_de_hoy()
     {
         ReservaPagada();
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
 
         await BuildSut().Cancel(new BookingController.CancelRequest(ReservaId, null), default);
 
-        _policy.Received(1).Evaluate(Tarifa, CheckIn, hoy);
+        _policy.Received(1).Evaluate(Tarifa, CheckIn, new DateOnly(2026, 10, 2));
+    }
+
+    [Fact] // la búsqueda anuncia la política con el mismo «hoy» del sitio que la cobra.
+    public async Task Search_anuncia_la_politica_al_dia_de_hoy_en_el_sitio()
+    {
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        _availability.SearchAsync(Arg.Any<AvailabilityQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { new RoomOffer("DBL", "Doble Superior", Tarifa, "Desayuno", Total, "COP", true, 2, 3) });
+
+        await BuildSut().Search(new BookingController.SearchRequest(CheckIn, CheckOut, UnaHabitacion()), default);
+
+        _policy.Received(1).Evaluate(Tarifa, CheckIn, new DateOnly(2026, 10, 2));
     }
 
     [Fact] // filter: tarifa no reembolsable → se cancela, pero NO se toca el motor de pago

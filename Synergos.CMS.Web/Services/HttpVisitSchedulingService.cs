@@ -68,6 +68,9 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
     private readonly ILogger<HttpVisitSchedulingService> _log;
     private readonly RealtyVisitLedger? _registro;
 
+    /// <summary>La zona del sitio: en ella son las horas de visita (<see cref="VisitAgenda"/>).</summary>
+    private readonly TimeZoneInfo? _zona;
+
     /// <param name="clientes">Fábrica del cliente nombrado hacia la capacidad.</param>
     /// <param name="opciones">La sección del vertical, enlazada por el composer.</param>
     /// <param name="reloj">Reloj inyectable.</param>
@@ -82,13 +85,15 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         IOptionsMonitor<RealtySettings> opciones,
         TimeProvider reloj,
         ILogger<HttpVisitSchedulingService> log,
-        RealtyVisitLedger? registro = null)
+        RealtyVisitLedger? registro = null,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         _clientes = clientes;
         _opciones = opciones;
         _reloj = reloj;
         _log = log;
         _registro = registro;
+        _zona = zonaDelSitio;
     }
 
     private RealtySettings Config => _opciones.CurrentValue;
@@ -106,7 +111,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         if (string.IsNullOrWhiteSpace(listingId)) return Array.Empty<VisitSlot>();
 
         var listado = listingId.Trim();
-        var agenda = VisitAgenda.For(listado, _reloj.GetUtcNow());
+        var agenda = VisitAgenda.For(listado, _reloj.GetUtcNow(), _zona);
 
         string? recurso;
         try
@@ -175,7 +180,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         var listado = listingId.Trim();
         var slotId = slot.Trim();
 
-        var franja = VisitAgenda.Find(listado, slotId, _reloj.GetUtcNow())
+        var franja = VisitAgenda.Find(listado, slotId, _reloj.GetUtcNow(), _zona)
             ?? throw new ArgumentException(
                 $"El slot '{slotId}' no existe para el listado '{listado}'.", nameof(slot));
 

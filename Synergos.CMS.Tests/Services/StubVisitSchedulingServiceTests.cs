@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
@@ -58,6 +59,23 @@ public class StubVisitSchedulingServiceTests
         // (No exponemos el id de reserva; verificamos vía idempotencia + estado.)
         var repeat = await svc.BookAsync("prop-002", slots[0].Id, Contact());
         Assert.Equal(ReservationStatus.Confirmed.ToString(), repeat.Status);
+    }
+
+    [Fact] // filter: «mañana» y las horas de visita son las del sitio, no las de UTC
+    public async Task GetSlots_LasHorasSonLasDelSitio()
+    {
+        // Las 22:30 del 2 de octubre en Bogotá. «Mañana» es el 3 y la primera visita es a las 9
+        // de la mañana —las 14:00 UTC—, no a las 9 UTC del 4: las 4 de la madrugada del sitio.
+        var ahora = new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero);
+        var bogota = new ListadosSettings().Zona()!;
+        var svc = new StubVisitSchedulingService(new StubReservationService(), () => ahora, null, null, null, bogota);
+
+        var slots = await svc.GetSlotsAsync("prop-001");
+        var visita = await svc.BookAsync("prop-001", slots[0].Id, Contact());
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero), slots[0].StartUtc);
+        Assert.Equal(new[] { 9, 11 }, slots.Select(s => TimeZoneInfo.ConvertTime(s.StartUtc, bogota).Hour).Distinct());
+        Assert.Equal(ReservationStatus.Confirmed.ToString(), visita.Status);
     }
 
     [Fact] // filter: slot inexistente lanza ArgumentException

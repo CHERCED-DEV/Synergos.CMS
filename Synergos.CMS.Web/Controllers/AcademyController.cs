@@ -1,6 +1,8 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -48,14 +50,19 @@ public sealed class AcademyController : ControllerBase
     /// </remarks>
     private readonly IEnrollmentMetrics _metrics;
 
+    /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>). Sin ella, UTC.</summary>
+    private readonly TimeZoneInfo _zona;
+
     public AcademyController(
         ICourseCatalogProvider catalog,
         IEnrollmentService enrollments,
         ICertificateService certificates,
         IPriceFormatter priceFormatter,
         IMemberAccessGate gate,
-        IEnrollmentMetrics metrics)
+        IEnrollmentMetrics metrics,
+        IOptions<ListadosSettings>? listados = null)
     {
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
         _catalog = catalog;
         _enrollments = enrollments;
         _certificates = certificates;
@@ -633,8 +640,11 @@ public sealed class AcademyController : ControllerBase
                     // Fecha SIN hora, y no es cosmético: la celda pinta el valor CRUDO
                     // (`{{ row.enrolledAt }}`, sin pasar por formatDate como sí hace
                     // `lastActivityAt`), así que un ISO completo sacaría la T y el desfase
-                    // horario a la tabla. Es la forma que el mock ya usa.
-                    EnrolledAt: row.EnrolledAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+                    // horario a la tabla. Es la forma que el mock ya usa. Y es el día del SITIO:
+                    // con el del instante UTC, quien se inscribió a las 22:30 en Bogotá salía
+                    // inscrito al día siguiente.
+                    EnrolledAt: TimeZoneInfo.ConvertTime(row.EnrolledAt, _zona)
+                        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
             }
         }
 

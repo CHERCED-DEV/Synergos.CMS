@@ -57,6 +57,9 @@ public sealed class HttpHotelBookingService : IHotelBookingService
     private readonly ILogger<HttpHotelBookingService> _log;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <summary>La zona del sitio: en ella es «hoy» al evaluar la política de cancelación.</summary>
+    private readonly TimeZoneInfo _zona;
+
     public HttpHotelBookingService(
         IHttpClientFactory clients,
         IOptionsMonitor<ViajesSettings> settings,
@@ -64,7 +67,8 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         IJsonEntityStore store,
         ILogger<HttpHotelBookingService> log,
         IAuditTrailWriter? audit = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         // El mensaje de caída es de este consumidor: quien está reservando una habitación
         // necesita saber que NO se le cobró, que es lo único accionable de un fallo de red.
@@ -75,6 +79,7 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         _log = log;
         _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _zona = zonaDelSitio ?? TimeZoneInfo.Utc;
     }
 
     // ── Apartar ─────────────────────────────────────────────────────────────
@@ -222,7 +227,9 @@ public sealed class HttpHotelBookingService : IHotelBookingService
         var reserva = await LeerAsync(reservationId, cancellationToken).ConfigureAwait(false);
         if (reserva is null) return null;
 
-        var hoy = DateOnly.FromDateTime(_now().UtcDateTime);
+        // «Hoy» en el SITIO: la política cuenta días hasta el check-in del hotel, y en UTC, desde las
+        // siete de la noche en Bogotá, una cancelación gratuita se cobraba como tardía.
+        var hoy = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_now(), _zona).DateTime);
         var politica = _cancellationPolicy.Evaluate(reserva.RatePlanCode, reserva.CheckIn, hoy);
 
         // Cancelar dos veces NO devuelve dos veces. La guarda mira el ESTADO que este lado

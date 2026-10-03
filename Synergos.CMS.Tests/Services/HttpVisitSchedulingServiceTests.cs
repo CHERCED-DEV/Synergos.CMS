@@ -111,6 +111,14 @@ public sealed class HttpVisitSchedulingServiceTests
 
     private static VisitContact Ana => new("Ana Pérez", "Ana@Ejemplo.CO", "3001234567");
 
+    /// <summary>Las 22:30 del 2 de octubre en Bogotá: en UTC ya es el 3.</summary>
+    private static readonly DateTimeOffset CercaDeMedianocheUtc = new(2026, 10, 3, 3, 30, 0, TimeSpan.Zero);
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
     // ── La agenda ───────────────────────────────────────────────────────────
 
     [Fact]
@@ -199,6 +207,30 @@ public sealed class HttpVisitSchedulingServiceTests
 
         var slot = VisitAgenda.For("L1", Ahora)[0].Id;
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.BookAsync("L1", slot, Ana));
+    }
+
+    [Fact]
+    public async Task La_agenda_es_la_mañana_del_sitio_y_se_aparta_esa_franja()
+    {
+        // «Mañana a las 9» es la mañana del agente. Con la agenda en UTC, a las 22:30 de Bogotá
+        // la primera visita salía para el 4 a las 9 UTC —las 4 de la madrugada del sitio— y la
+        // ficha la pintaba «09:00» igual.
+        var cap = new Capacidad();
+        var svc = new HttpVisitSchedulingService(
+            new Fabrica(cap),
+            new OptionsMonitorFalso(new RealtySettings()),
+            new RelojFijo(CercaDeMedianocheUtc),
+            NullLogger<HttpVisitSchedulingService>.Instance,
+            registro: null,
+            zonaDelSitio: new ListadosSettings().Zona());
+
+        var slots = await svc.GetSlotsAsync("L1");
+        var visita = await svc.BookAsync("L1", slots[0].Id, Ana);
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero), slots[0].StartUtc);
+        Assert.Equal("Confirmed", visita.Status);
+        var cuerpo = cap.Llamadas.Single(l => l.Uri.EndsWith("/v1/holds", StringComparison.Ordinal)).Body!;
+        Assert.Contains("2026-10-03T14:00", cuerpo, StringComparison.Ordinal);
     }
 
     // ── Agendar ─────────────────────────────────────────────────────────────

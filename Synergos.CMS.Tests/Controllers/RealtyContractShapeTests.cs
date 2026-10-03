@@ -1,7 +1,9 @@
 using Synergos.CMS.Application.Services.Impl;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -48,8 +50,11 @@ public sealed class RealtyContractShapeTests
         _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
     }
 
+    // La zona del sitio, como la cablea el composer: la agenda y las fechas que lee la pantalla
+    // son las de Bogotá (Synergos:Listados:ZonaHoraria), no las de UTC.
     private RealtyController BuildSut() => new(
-        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger);
+        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger,
+        Options.Create(new ListadosSettings()));
 
     private static JsonElement Json(IActionResult result)
     {
@@ -156,7 +161,7 @@ public sealed class RealtyContractShapeTests
     [Fact] // happy: el cuerpo REAL manda slot como OBJETO; declarado string moría en el binding
     public async Task Visit_AceptaElSlotComoObjeto_YLoResuelveContraLaAgenda()
     {
-        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
+        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.FromHours(-5));
         _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
             .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
         _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -191,10 +196,50 @@ public sealed class RealtyContractShapeTests
         Assert.Equal("09:00", visita.GetProperty("slot").GetProperty("time").GetString());
     }
 
+    [Fact] // filter: la franja se lee y se escribe en la hora del sitio, no en la de UTC
+    public async Task Visit_LaFranjaEsLaDelSitio_AlLeerlaYAlDevolverla()
+    {
+        // Las 9 de la mañana en Bogotá son las 14:00 UTC. La pantalla manda «09:00» —lo que
+        // pintó— y el borde comparaba contra el ToString del instante UTC: «14:00». Ninguna
+        // franja casaba y la visita se rechazaba con «el agente no atiende a esa hora».
+        var inicio = new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero);
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
+            .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202610031400", inicio) });
+        _visits.BookAsync("L-1", "L-1-202610031400", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new VisitResult("visit_3", "Confirmed"));
+        var request = JsonSerializer.Deserialize<RealtyController.VisitRequest>(
+            """
+            {
+              "listingId": "L-1",
+              "slot": { "date": "2026-10-03", "time": "09:00" },
+              "contact": { "name": "Ana Ruiz", "email": "ana@correo.co", "phone": "3001234567" }
+            }
+            """, Web);
+
+        var slot = Json(await BuildSut().Visit(request, default)).GetProperty("visit").GetProperty("slot");
+
+        Assert.Equal("2026-10-03", slot.GetProperty("date").GetString());
+        Assert.Equal("09:00", slot.GetProperty("time").GetString());
+    }
+
+    [Fact] // filter: «mis visitas» pinta el día y la hora del sitio
+    public async Task MisVisitas_LaFranjaEsLaDelSitio()
+    {
+        // Una visita a las 7 de la noche del 2 en Bogotá: en UTC ya es la medianoche del 3.
+        await _visitLedger.RecordAsync(
+            "visit_tarde", "L-1", "s1", new DateTimeOffset(2026, 10, 3, 0, 0, 0, TimeSpan.Zero),
+            new VisitContact("Agente", "agente@inmo.co"), "Confirmed");
+
+        var slot = Json(await BuildSut().MyVisits(default)).GetProperty("visits")[0].GetProperty("slot");
+
+        Assert.Equal("2026-10-02", slot.GetProperty("date").GetString());
+        Assert.Equal("19:00", slot.GetProperty("time").GetString());
+    }
+
     [Fact] // filter: una modalidad que no se reconoce se RECHAZA y no se anota como «no consta»
     public async Task Visit_ModalidadDesconocida_SeRechaza_YNoTocaElSeam()
     {
-        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
+        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.FromHours(-5));
         _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
             .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
 
@@ -218,7 +263,7 @@ public sealed class RealtyContractShapeTests
     [Fact] // empty: SIN modalidad se agenda igual, y lo que viaja es `null` — no «presencial»
     public async Task Visit_SinModalidad_PasaNull_YEmiteNull()
     {
-        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.Zero);
+        var inicio = new DateTimeOffset(2026, 7, 10, 9, 0, 0, TimeSpan.FromHours(-5));
         _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>())
             .Returns(new[] { new Synergos.CMS.Interfaces.VisitSlot("L-1-202607100900", inicio) });
         _visits.BookAsync("L-1", "L-1-202607100900", Arg.Any<VisitContact>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -369,13 +414,32 @@ public sealed class RealtyContractShapeTests
             {
                 new SavedSearch("bus-1", "agente@inmo.co", "Apartamentos en Chicó",
                     new PropertyQuery(Text: "Chicó", Operation: "venta"),
-                    new DateTimeOffset(2026, 6, 20, 0, 0, 0, TimeSpan.Zero)),
+                    new DateTimeOffset(2026, 6, 20, 10, 0, 0, TimeSpan.FromHours(-5))),
             });
 
         var busqueda = Json(await BuildSut().Saved(default)).GetProperty("searches")[0];
 
         Assert.Equal("2026-06-20", busqueda.GetProperty("createdAt").GetString());
         Assert.Equal("sale", busqueda.GetProperty("operation").GetString());
+    }
+
+    [Fact] // filter: el día de la búsqueda guardada es el del sitio
+    public async Task Saved_CreatedAt_EsElDiaDelSitio()
+    {
+        // Guardada a las 22:30 del 2 de octubre en Bogotá: en UTC ya es el 3.
+        _collections.GetAsync("agente@inmo.co", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<UserCollectionItem>());
+        _savedSearches.GetForOwnerAsync("agente@inmo.co", Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new SavedSearch("bus-2", "agente@inmo.co", "Casas en Chía",
+                    new PropertyQuery(Text: "Chía", Operation: "venta"),
+                    new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero)),
+            });
+
+        var busqueda = Json(await BuildSut().Saved(default)).GetProperty("searches")[0];
+
+        Assert.Equal("2026-10-02", busqueda.GetProperty("createdAt").GetString());
     }
 
     [Fact] // happy: el texto viaja como `q` y el borde solo leía `text` → se guardaba vacía

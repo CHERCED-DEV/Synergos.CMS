@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services;
@@ -16,7 +18,19 @@ public sealed class FileSystemPatientRepository : IPatientRepository
 
     private readonly IPhiStore _store;
 
-    public FileSystemPatientRepository(IPhiStore store) => _store = store;
+    /// <summary>El reloj y la zona del sitio: de ellos sale el «hoy» con que se cuenta la edad.</summary>
+    private readonly TimeProvider _reloj;
+    private readonly TimeZoneInfo _zona;
+
+    public FileSystemPatientRepository(
+        IPhiStore store,
+        TimeProvider? reloj = null,
+        IOptions<ListadosSettings>? listados = null)
+    {
+        _store = store;
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
+    }
 
     public async Task<PatientRecord?> GetAsync(Guid patientKey, CancellationToken cancellationToken)
     {
@@ -113,9 +127,11 @@ public sealed class FileSystemPatientRepository : IPatientRepository
         return best?.PatientKey;
     }
 
-    private static int AgeYears(DateTime dateOfBirth)
+    // «Hoy» en el SITIO: con el de UTC, desde las siete de la noche en Bogotá el paciente que
+    // cumple años mañana ya salía con un año más en la lista del consultorio.
+    private int AgeYears(DateTime dateOfBirth)
     {
-        var today = DateTime.UtcNow.Date;
+        var today = TimeZoneInfo.ConvertTime(_reloj.GetUtcNow(), _zona).Date;
         var age = today.Year - dateOfBirth.Year;
         if (dateOfBirth.Date > today.AddYears(-age)) age--;
         return age < 0 ? 0 : age;

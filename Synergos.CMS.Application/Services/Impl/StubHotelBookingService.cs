@@ -27,18 +27,23 @@ public sealed class StubHotelBookingService : IHotelBookingService
     private readonly IAuditTrailWriter? _audit;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <summary>La zona del sitio: en ella es «hoy» al evaluar la política de cancelación.</summary>
+    private readonly TimeZoneInfo _zona;
+
     public StubHotelBookingService(
         IReservationService reservations,
         IPaymentProvider payments,
         ICancellationPolicyEvaluator cancellationPolicy,
         IAuditTrailWriter? audit = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _cancellationPolicy = cancellationPolicy ?? throw new ArgumentNullException(nameof(cancellationPolicy));
         _audit = audit;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _zona = zonaDelSitio ?? TimeZoneInfo.Utc;
     }
 
     public Task<Reservation> HoldAsync(ReservationRequest request, CancellationToken cancellationToken = default)
@@ -141,7 +146,10 @@ public sealed class StubHotelBookingService : IHotelBookingService
         var reservation = await _reservations.GetAsync(reservationId, cancellationToken);
         if (reservation is null) return null;
 
-        var today = DateOnly.FromDateTime(_now().UtcDateTime);
+        // «Hoy» en el SITIO: la política cuenta los días hasta el check-in, que
+        // es un día del calendario del hotel. En UTC, desde las siete de la noche en Bogotá era mañana,
+        // y una cancelación todavía gratuita se cobraba como tardía.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_now(), _zona).DateTime);
 
         // Cancelar dos veces NO reembolsa dos veces.
         //

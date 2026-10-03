@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
@@ -48,6 +50,9 @@ public sealed class RealtyController : ControllerBase
     /// <summary>El registro del artefacto del vertical: las visitas agendadas (#158).</summary>
     private readonly RealtyVisitLedger _visitLedger;
 
+    /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>). Sin ella, UTC.</summary>
+    private readonly TimeZoneInfo _zona;
+
     public RealtyController(
         IPropertyCatalogProvider catalog,
         IVisitSchedulingService visits,
@@ -57,7 +62,8 @@ public sealed class RealtyController : ControllerBase
         ISavedSearchService savedSearches,
         IPriceFormatter priceFormatter,
         IMemberAccessGate gate,
-        RealtyVisitLedger visitLedger)
+        RealtyVisitLedger visitLedger,
+        IOptions<ListadosSettings>? listados = null)
     {
         _catalog = catalog;
         _visits = visits;
@@ -68,6 +74,20 @@ public sealed class RealtyController : ControllerBase
         _gate = gate;
         _priceFormatter = priceFormatter;
         _visitLedger = visitLedger;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
+    }
+
+    /// <summary>
+    /// La franja como la lee la pantalla (<c>slot:{date,time}</c>), en la hora del sitio. Se
+    /// escribía con el <c>ToString</c> del instante UTC: la visita de las 9 de la mañana salía
+    /// «14:00», y la que la pantalla mandaba de vuelta como «09:00» no casaba con ninguna.
+    /// </summary>
+    private VisitSlotDto FranjaEnElSitio(DateTimeOffset inicioUtc)
+    {
+        var local = TimeZoneInfo.ConvertTime(inicioUtc, _zona);
+        return new VisitSlotDto(
+            local.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            local.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture));
     }
 
 
@@ -306,9 +326,7 @@ public sealed class RealtyController : ControllerBase
             // comentario no está arreglado, está blindado.
             Mode: mode,
             ListingTitle: await TituloDelListadoAsync(listingId, cancellationToken),
-            Slot: slot is null ? null : new VisitSlotDto(
-                slot.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-                slot.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)))));
+            Slot: slot is null ? null : FranjaEnElSitio(slot.StartUtc))));
     }
 
     // ── Mis visitas (el EJE 3 del vertical) ─────────────────────────────
@@ -368,9 +386,7 @@ public sealed class RealtyController : ControllerBase
             // hoy ni con la de la agenda de AHORA: la agenda se deriva del reloj, así que
             // recalcularla meses después daría una hora plausible y distinta de la que esa
             // persona tiene apuntada — `feedback_a_derived_fallback_must_never_overwrite_what_arrived`.
-            Slot: v.StartUtc is null ? null : new VisitSlotDto(
-                v.StartUtc.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-                v.StartUtc.Value.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture))))
+            Slot: v.StartUtc is null ? null : FranjaEnElSitio(v.StartUtc.Value)))
             .ToList()));
     }
 
@@ -443,10 +459,9 @@ public sealed class RealtyController : ControllerBase
             return (null, "slot.date y slot.time son requeridos.");
         }
 
+        // La pantalla manda la franja como la leyó: en la hora del sitio.
         var match = (await _visits.GetSlotsAsync(listingId, cancellationToken))
-            .FirstOrDefault(s =>
-                string.Equals(s.StartUtc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), date, StringComparison.Ordinal)
-                && string.Equals(s.StartUtc.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), time, StringComparison.Ordinal));
+            .FirstOrDefault(s => FranjaEnElSitio(s.StartUtc) == new VisitSlotDto(date, time));
 
         return match is null
             ? (null, $"El agente no atiende visitas el {date} a las {time}.")
@@ -834,15 +849,16 @@ public sealed class RealtyController : ControllerBase
             _ => operation ?? string.Empty
         };
 
-    private static SavedSearchDto ToSavedSearchDto(SavedSearch s) => new(
+    private SavedSearchDto ToSavedSearchDto(SavedSearch s) => new(
         Id: s.Id,
         Label: s.Label,
         Criteria: SearchCriteria.From(s.Criteria),
         SavedAt: s.SavedAt,
         // Contrato UI (SavedSearch): `createdAt` (ISO corta) y `operation`. Sin `createdAt`
         // la tarjeta rellenaba con la fecha de HOY, así que toda búsqueda guardada decía
-        // haberse guardado hoy. `savedAt` se conserva para consumers previos.
-        CreatedAt: s.SavedAt.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+        // haberse guardado hoy. `savedAt` se conserva para consumers previos. El día es el del
+        // sitio: la guardada a las 22:30 de Bogotá es de ESE día, no del siguiente de UTC.
+        CreatedAt: TimeZoneInfo.ConvertTime(s.SavedAt, _zona).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         Operation: MapOperation(s.Criteria.Operation ?? string.Empty));
 
     private static AgentLeadDto ToAgentLeadDto(AgentLead l, string listingTitle = "") => new(

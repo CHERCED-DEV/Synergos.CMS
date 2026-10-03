@@ -303,6 +303,18 @@ public class CatalogCourseCatalogProviderTests
             new CourseDraftModule("Fundamentos", new[] { new CourseDraftLesson("Signals", null, 12) }),
         });
 
+    [Fact] // el día de la publicación es el del sitio: las 22:30 del 2 en Bogotá no son el 3.
+    public async Task PublishCourse_LaFechaEsElDiaDelSitio()
+    {
+        var publicado = await new CatalogCourseCatalogProvider(
+            new FakeSource(), new InMemoryJsonEntityStore(), Feed(),
+            new InMemoryCatalogIndex<CourseSummary>(StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged),
+            () => new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero),
+            new ListadosSettings().Zona()).PublishCourseAsync(Draft());
+
+        Assert.Equal(new DateOnly(2026, 10, 2), publicado.Course.PublishedAt);
+    }
+
     /// <summary>
     /// La fecha con la que se publicó SOBREVIVE al reinicio.
     /// </summary>

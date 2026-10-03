@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -38,7 +40,8 @@ public class ShopReviewSubmissionTests
         bool authenticated = true,
         Guid? memberKey = null,
         IReadOnlyList<ShopOrder>? orders = null,
-        bool productExists = true)
+        bool productExists = true,
+        TimeProvider? reloj = null)
     {
         var gate = Substitute.For<IMemberAccessGate>();
         gate.IsAuthenticated.Returns(authenticated);
@@ -64,7 +67,9 @@ public class ShopReviewSubmissionTests
             Substitute.For<IMessagingService>(),
             gate,
             shopQuery,
-            socialProof);
+            socialProof,
+            reloj,
+            Options.Create(new ListadosSettings()));
 
         return new Harness(controller, socialProof);
     }
@@ -135,6 +140,26 @@ public class ShopReviewSubmissionTests
                 && r.AuthorKey == Comprador          // del gate, no del body
                 && r.AuthorName == "Ana Torres"      // del gate, no del body
                 && r.Rating == 4),
+            Arg.Any<CancellationToken>());
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    [Fact]
+    public async Task La_resena_lleva_el_dia_del_sitio()
+    {
+        // Las 22:30 del 2 de octubre en Bogotá: en UTC ya es el 3, y la tarjeta la fechaba así.
+        var h = Make(
+            orders: new[] { Order(OrderStatus.Paid, Sku) },
+            reloj: new RelojFijo(new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero)));
+
+        await h.Controller.SubmitReview(Sku, Body(), CancellationToken.None);
+
+        await h.SocialProof.Received(1).UpsertReviewAsync(
+            Arg.Is<CustomerReview>(r => r.Date == new DateOnly(2026, 10, 2)),
             Arg.Any<CancellationToken>());
     }
 

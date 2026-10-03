@@ -69,8 +69,11 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     /// una instancia distinta → el panel del instructor mostraría 0 alumnos y $0, en
     /// silencio y con los tests en verde (los tests cablean la inyección ellos mismos).
     /// </summary>
-    public StubCourseCatalogProvider(IContentStream contentStream)
-        : this(contentStream, new InMemoryCatalogIndex<CourseSummary>(Descriptor, CatalogSettings.Unpaged))
+    /// <param name="zonaDelSitio">La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>): en ella
+    /// es el día con que se fecha una publicación. Sin ella, UTC.</param>
+    public StubCourseCatalogProvider(IContentStream contentStream, TimeZoneInfo? zonaDelSitio = null)
+        : this(contentStream, new InMemoryCatalogIndex<CourseSummary>(Descriptor, CatalogSettings.Unpaged),
+            zonaDelSitio: zonaDelSitio)
     {
     }
 
@@ -82,14 +85,17 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     internal StubCourseCatalogProvider(
         IContentStream contentStream,
         ICatalogIndex<CourseSummary> index,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _zona = zonaDelSitio ?? TimeZoneInfo.Utc;
     }
 
     private readonly Func<DateTimeOffset> _now;
+    private readonly TimeZoneInfo _zona;
 
     // Vista unificada del catálogo: cursos sembrados + publicados en runtime.
     private IEnumerable<AcademyDemoSeed.SeedCourse> AllCourses()
@@ -328,7 +334,9 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             Rating: 0.0, // sin reseñas todavía
                          // Publicar ES el acto que le pone fecha: no se hereda de nada ni se deja sin
                          // poner, porque de éste sí se sabe (#102).
-            PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime),
+                         // Y es el día del SITIO: el de UTC, desde las siete de la noche
+                         // en Bogotá, ya era mañana.
+            PublishedAt: DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_now(), _zona).DateTime),
             Outcomes: draft.Outcomes ?? Array.Empty<string>(),
             Modules: seedModules);
 

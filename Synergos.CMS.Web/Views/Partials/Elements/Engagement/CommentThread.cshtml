@@ -7,7 +7,9 @@
     propio form de "responder" (parentId oculto) y cada comentario
     (top o reply) un botón de "me gusta" con su contador.
 
-    Consume ICommentReader + IMemberAccessGate + IOptions<CommentsSettings>.
+    Consume ICommentReader + IMemberAccessGate + IOptions<CommentsSettings> +
+    IOptions<ListadosSettings> (la zona del sitio: en ella se escribe la hora
+    de cada comentario).
     (LECTOR y no escritor a propósito: que esta vista no pueda escribir es una
     propiedad del TIPO, no una convención — ver el corte de ICommentReader/Writer.)
 
@@ -19,6 +21,7 @@
 @inject Synergos.CMS.Interfaces.ICommentReader CommentsRepo
 @inject Synergos.CMS.Interfaces.IMemberAccessGate MemberGate
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CommentsSettings> CommentsOptions
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.ListadosSettings> ListadosOptions
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
@@ -50,6 +53,13 @@
     var canPost = !settings.RequireAuthentication || MemberGate.IsAuthenticated;
     var coCulture = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
 
+    // La hora del comentario, en la del SITIO: se escribía la del instante UTC, así que el
+    // comentario de las 22:30 en Bogotá decía «03:30» del día siguiente.
+    var zonaDelSitio = ListadosOptions.Value.Zona() ?? TimeZoneInfo.Utc;
+    string HoraDelSitio(DateTime creadoUtc) => TimeZoneInfo
+        .ConvertTimeFromUtc(DateTime.SpecifyKind(creadoUtc, DateTimeKind.Utc), zonaDelSitio)
+        .ToString("dd MMM yyyy HH:mm", coCulture);
+
     // Árbol de 2 niveles: top-level (ParentId==null) en orden natural y
     // las replies agrupadas bajo el Id de su padre (Comment.Id es hex "N").
     var topLevel = comments.Where(c => c.ParentId is null).ToList();
@@ -77,7 +87,7 @@
                     <header class="syn-comment-thread__meta">
                         <span class="syn-comment-thread__author">@comment.AuthorName</span>
                         <time class="syn-comment-thread__date" datetime="@comment.CreatedAtUtc.ToString("O")">
-                            @comment.CreatedAtUtc.ToString("dd MMM yyyy HH:mm", coCulture)
+                            @HoraDelSitio(comment.CreatedAtUtc)
                         </time>
                     </header>
                     <p class="syn-comment-thread__body">@comment.Body</p>
@@ -111,7 +121,7 @@
                                     <header class="syn-comment-thread__meta">
                                         <span class="syn-comment-thread__author">@reply.AuthorName</span>
                                         <time class="syn-comment-thread__date" datetime="@reply.CreatedAtUtc.ToString("O")">
-                                            @reply.CreatedAtUtc.ToString("dd MMM yyyy HH:mm", coCulture)
+                                            @HoraDelSitio(reply.CreatedAtUtc)
                                         </time>
                                     </header>
                                     <p class="syn-comment-thread__body">@reply.Body</p>

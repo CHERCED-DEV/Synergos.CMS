@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -28,8 +30,10 @@ public sealed class InstructorRosterWiringTests
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
     private readonly IEnrollmentMetrics _metrics = Substitute.For<IEnrollmentMetrics>();
 
+    // Con la zona del sitio, como la resuelve el contenedor: el día de la inscripción es el de Bogotá.
     private AcademyController BuildSut()
-        => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate, _metrics);
+        => new(_catalog, _enrollments, _certificates, _priceFormatter, _gate, _metrics,
+            Options.Create(new ListadosSettings()));
 
     private static CourseSummary Course(string id, string title) => new(
         Id: id, Title: title, Summary: "Resumen", Category: "Datos", Level: "beginner",
@@ -115,6 +119,18 @@ public sealed class InstructorRosterWiringTests
         var consola = await Consola();
 
         Assert.Equal("2026-06-20", consola.Students.Single(s => s.CourseId == "excel").EnrolledAt);
+    }
+
+    [Fact] // el día de la inscripción es el del sitio: las 22:30 del 2 en Bogotá no son el 3.
+    public async Task La_fecha_de_inscripcion_es_el_dia_del_sitio()
+    {
+        DosCursosConUnAlumnoCadaUno();
+        _metrics.GetCourseRosterAsync("excel", Arg.Any<CancellationToken>()).Returns(
+            new[] { new CourseRosterEntry("ana-op", "Ana Rincón", "excel", 40, new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero)) });
+
+        var consola = await Consola();
+
+        Assert.Equal("2026-10-02", consola.Students.Single(s => s.CourseId == "excel").EnrolledAt);
     }
 
     [Fact] // instructor sin cursos → lista vacía, no 500 ni null

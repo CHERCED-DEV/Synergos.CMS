@@ -77,12 +77,16 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider, IDisp
     /// <summary>Cache del mapping durable. Se releé cuando aparece una lección sin sembrar.</summary>
     private Dictionary<string, SeededLesson>? _seeded;
 
+    /// <param name="zonaDelSitio">La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>): en ella
+    /// es el día con que se fecha una publicación. Sin ella, UTC.</param>
     public CatalogCourseCatalogProvider(
         ICatalogSource<AuthoredCourse> source,
         IJsonEntityStore store,
-        IContentStream contentStream)
+        IContentStream contentStream,
+        TimeZoneInfo? zonaDelSitio = null)
         : this(source, store, contentStream,
-            new InMemoryCatalogIndex<CourseSummary>(StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged))
+            new InMemoryCatalogIndex<CourseSummary>(StubCourseCatalogProvider.Descriptor, CatalogSettings.Unpaged),
+            zonaDelSitio: zonaDelSitio)
     {
     }
 
@@ -95,16 +99,19 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider, IDisp
         IJsonEntityStore store,
         IContentStream contentStream,
         ICatalogIndex<CourseSummary> index,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        TimeZoneInfo? zonaDelSitio = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _zona = zonaDelSitio ?? TimeZoneInfo.Utc;
     }
 
     private readonly Func<DateTimeOffset> _now;
+    private readonly TimeZoneInfo _zona;
 
     public async Task<CourseSearchResult> SearchAsync(CourseQuery query, CancellationToken cancellationToken = default)
     {
@@ -255,7 +262,9 @@ public sealed class CatalogCourseCatalogProvider : ICourseCatalogProvider, IDisp
             // estaban en el overlay antes de este campo se releen sin él y quedan en «no
             // consta» — es la verdad sobre ellos, y no hay de dónde sacarla (#102).
             Status: CourseStatuses.Published,
-            PublishedAt: DateOnly.FromDateTime(_now().UtcDateTime));
+            // El día del SITIO: el curso publicado a las 22:30 en Bogotá es de ese día, no del
+            // siguiente de UTC.
+            PublishedAt: DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_now(), _zona).DateTime));
 
         var authored = new AuthoredCourse(
             new CourseDetail(
