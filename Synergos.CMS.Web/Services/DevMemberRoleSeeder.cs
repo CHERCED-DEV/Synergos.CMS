@@ -32,8 +32,8 @@ public sealed class DevMemberRoleSeeder
     /// Los roles de dominio que los guards del proyecto consultan hoy. Están aquí —y no
     /// en config— porque son el CONTRATO con el código: <c>GovController</c> pide
     /// "funcionario,admin", <c>EventosController</c> "organizador,admin" y
-    /// <c>DefaultPhiAccessGuard</c> "doctor,nurse,reception". Cambiar uno aquí sin
-    /// cambiarlo allá no arreglaría nada.
+    /// <c>DefaultPhiAccessGuard</c> "doctor,nurse,reception" y <c>EhrController</c>
+    /// "medico,enfermeria,admin" (#197). Cambiar uno aquí sin cambiarlo allá no arreglaría nada.
     /// </summary>
     public static readonly IReadOnlyList<string> DomainRoles = new[]
     {
@@ -44,6 +44,8 @@ public sealed class DevMemberRoleSeeder
         "doctor",       // Healthcare — PHI (ADR 0098)
         "nurse",
         "reception",
+        "medico",       // Salud EHR-lite — la superficie clínica de /api/ehr (#197)
+        "enfermeria",
         "admin",        // superusuario transversal
     };
 

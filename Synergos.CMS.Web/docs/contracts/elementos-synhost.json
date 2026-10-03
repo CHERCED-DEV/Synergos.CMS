@@ -1032,12 +1032,6 @@
       "diccionario": [],
       "campos": [
         {
-          "nombre": "patient",
-          "tipo": "string",
-          "opcional": true,
-          "origen": "sesion"
-        },
-        {
           "nombre": "apiBase",
           "tipo": "string",
           "opcional": false,
@@ -1046,7 +1040,6 @@
       ],
       "ejemplo": {
         "culture": "es-CO",
-        "patient": "pat-jorge-medina",
         "apiBase": "/api/ehr"
       }
     },

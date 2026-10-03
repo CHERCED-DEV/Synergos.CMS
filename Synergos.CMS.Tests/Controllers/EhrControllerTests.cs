@@ -59,11 +59,47 @@ public sealed class EhrControllerTests
     private readonly IClinicalBillingService _billing = Substitute.For<IClinicalBillingService>();
     private readonly IEhrInBasketService _inBasket = Substitute.For<IEhrInBasketService>();
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
+    private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
         _results, _medications, _orders, _billing, _inBasket, _messaging,
-        new EsCoPriceFormatter(new CartSettings()));
+        new EsCoPriceFormatter(new CartSettings()), _gate);
+
+    /// <summary>
+    /// La sesión de partida (#197): un PACIENTE —un miembro sin rol clínico cuyo correo lleva a la
+    /// historia <c>pat-1</c>—, que es quien usa el portal. Lo clínico lo pide cada test con
+    /// <see cref="Clinico"/>, y lo anónimo con <see cref="Anonimo"/>.
+    /// </summary>
+    public EhrControllerTests()
+    {
+        SesionDe("jorge@correo.co");
+        _patients.FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Paciente());
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<MedicalDoctor>());
+    }
+
+    /// <summary>
+    /// Un miembro con sesión y estos roles. <c>HasAnyRole</c> se responde como el gate de verdad
+    /// —el CSV pedido contra los roles del miembro—, así que un test con el rol equivocado sale 403
+    /// aunque el controlador pida otra lista.
+    /// </summary>
+    private void SesionDe(string correo, params string[] roles)
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberEmail.Returns(correo);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(ci => (ci.Arg<string?>() ?? string.Empty)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Any(r => roles.Contains(r, StringComparer.OrdinalIgnoreCase)));
+    }
+
+    private void Clinico(string rol = "medico", string correo = "medica@clinica.co") => SesionDe(correo, rol);
+
+    private void Anonimo()
+    {
+        _gate.IsAuthenticated.Returns(false);
+        _gate.CurrentMemberEmail.Returns((string?)null);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+    }
 
     private static JsonElement Json(IActionResult result)
     {
@@ -122,8 +158,15 @@ public sealed class EhrControllerTests
         PrescribedByDoctorId: "doc-1", PrescribedByDoctorName: "Dra. Ana Rojas",
         PrescribedAtUtc: new DateTime(2026, 1, 2), Status: "active", RefillsRemaining: 2);
 
-    private void PadronDevuelve(EhrPatient? p) =>
+    /// <summary>
+    /// Lo que devuelve el padrón: por id (la clínica) y por el correo de la sesión (el portal, #197).
+    /// <c>null</c> es, para el portal, un miembro cuya cuenta no tiene historia vinculada.
+    /// </summary>
+    private void PadronDevuelve(EhrPatient? p)
+    {
         _patients.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(p);
+        _patients.FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(p);
+    }
 
     private void AgendaDelDiaDevuelve(params ClinicalAppointment[] citas) =>
         _scheduling.GetByDateAsync(Arg.Any<DateOnly>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -187,8 +230,8 @@ public sealed class EhrControllerTests
         var respuestas = new List<string>();
         foreach (var id in DieciseisIds())
         {
-            _patients.GetAsync(id, Arg.Any<CancellationToken>())
-                .Returns(Paciente(id: id, age: 52, gender: "F"));
+            // El paciente es el de la sesión (#197): cada vuelta, una sesión vinculada a otro id.
+            PadronDevuelve(Paciente(id: id, age: 52, gender: "F"));
             respuestas.Add(Raw(await BuildSut().Health(id, default)).Replace(id, "{ID}", StringComparison.Ordinal));
         }
 
@@ -198,6 +241,8 @@ public sealed class EhrControllerTests
     [Fact] // Si el paciente llegó antes es un HECHO; salía de una moneda al aire.
     public async Task Schedule_NoEmiteCheckedInAhead()
     {
+        Clinico();
+
         AgendaDelDiaDevuelve(Cita());
 
         var body = Json(await BuildSut().Schedule("2026-09-20", default));
@@ -209,6 +254,8 @@ public sealed class EhrControllerTests
     [Fact] // Misma propiedad sobre el tablero: la fila no puede depender del id de la cita.
     public async Task Schedule_LaFilaDelTablero_NoDependeDelIdDeLaCita()
     {
+        Clinico();
+
         var inicio = DateTime.UtcNow.AddDays(10).Date.AddHours(9);
         var respuestas = new List<string>();
         foreach (var id in Enumerable.Range(1, 16).Select(i => "appt-" + new string('x', i)))
@@ -419,6 +466,8 @@ public sealed class EhrControllerTests
     [Fact] // «Este paciente está activo» — un episodio de atención abierto que nadie registró.
     public async Task Patients_NoDeclaraSiElPacienteEstaActivo()
     {
+        Clinico();
+
         _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new[] { Paciente() });
 
@@ -431,6 +480,8 @@ public sealed class EhrControllerTests
     [Fact]
     public async Task Patients_LaFichaDelPaciente_NoSeDerivaDelIdentificador()
     {
+        Clinico();
+
         var respuestas = new List<string>();
         foreach (var id in DieciseisIds())
         {
@@ -457,6 +508,8 @@ public sealed class EhrControllerTests
     [Fact]
     public async Task Chart_LasCitasDelPaciente_SePidenDeUnaVez_YNoDiaPorDia()
     {
+        Clinico();
+
         PadronDevuelve(Paciente());
         CitasDelPacienteDevuelven(Cita());
 
@@ -485,6 +538,8 @@ public sealed class EhrControllerTests
     [Fact] // La ventana es la MISMA que barría el bucle: esto no estrecha ni ensancha nada.
     public async Task Chart_LaVentanaDeCitas_SigueSiendoLaDeAntes()
     {
+        Clinico();
+
         PadronDevuelve(Paciente());
         CitasDelPacienteDevuelven();
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -496,64 +551,288 @@ public sealed class EhrControllerTests
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
-    // 2 · Los caminos de rechazo (el borde es anónimo: lo mínimo es no inventarse el sujeto)
+    // 2 · Quién llama (#197): el paciente sale de la sesión y la clínica exige rol
     // ══════════════════════════════════════════════════════════════════════════════
+    //
+    // Antes el borde era anónimo y el sujeto lo ponía el navegador: `?patient=` de otro era leer
+    // su historia, y un 400 con el parámetro en blanco era todo lo que había que probar. Ahora
+    // el paciente del portal es el de la historia vinculada al correo del miembro, y lo que mande
+    // el navegador se IGNORA. Los tests del IDOR miran el ARGUMENTO que llega a los seams, no el
+    // código de respuesta: un 200 sale igual con el hueco abierto
+    // (`feedback_guard_must_rewrite_the_usage`).
+
+    /// <summary>Lo que se pide al portal, con el paciente que manda la petición —que se ignora—.</summary>
+    private Task<IActionResult> Portal(string accion, string pacienteDeLaPeticion) => accion switch
+    {
+        "portal/home" => BuildSut().PortalHome(pacienteDeLaPeticion, default),
+        "results" => BuildSut().Results(pacienteDeLaPeticion, default),
+        "medications" => BuildSut().Medications(pacienteDeLaPeticion, default),
+        "billing" => BuildSut().Billing(pacienteDeLaPeticion, default),
+        "health" => BuildSut().Health(pacienteDeLaPeticion, default),
+        "refill" => BuildSut().Refill(
+            new EhrController.RefillBody(PatientId: pacienteDeLaPeticion, MedicationId: "med-1"), default),
+        "messages" => BuildSut().Messages(pacienteDeLaPeticion, default),
+        _ => throw new ArgumentOutOfRangeException(nameof(accion), accion, null),
+    };
+
+    public static TheoryData<string> AccionesDelPortal() => new()
+    {
+        "portal/home", "results", "medications", "billing", "health", "refill", "messages",
+    };
+
+    /// <summary>Todo lo que recibieron los seams que leen datos de un paciente, como texto.</summary>
+    /// <remarks>
+    /// Los argumentos se miran por su <c>ToString()</c>: un id llega suelto o dentro de un record
+    /// (<c>RefillRequest { PatientId = … }</c>), y así una sola regla cubre las dos formas.
+    /// </remarks>
+    private List<string> LoQueRecibieronLosSeams()
+        => new object[] { _patients, _records, _scheduling, _results, _medications, _billing, _messaging }
+            .SelectMany(s => s.ReceivedCalls())
+            .SelectMany(c => c.GetArguments())
+            .Select(a => a?.ToString() ?? string.Empty)
+            .ToList();
+
+    [Theory, MemberData(nameof(AccionesDelPortal))] // EL IDOR: la sesión de A y el paciente de B.
+    public async Task Portal_ConLaSesionDeA_YElPacienteDeB_LosSeamsRecibenA(string accion)
+    {
+        SesionDe("ana@correo.co");
+        PadronDevuelve(Paciente(id: "pat-A"));
+        _medications.RequestRefillAsync(Arg.Any<RefillRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new EhrRefillRequest("rf-1", ci.Arg<RefillRequest>().PatientId, "med-1", "Losartán",
+                "doc-1", DateTime.UnixEpoch, "pending", null));
+
+        await Portal(accion, "pat-B");
+
+        var recibido = LoQueRecibieronLosSeams();
+        Assert.DoesNotContain(recibido, a => a.Contains("pat-B", StringComparison.Ordinal));
+        Assert.Contains(recibido, a => a.Contains("pat-A", StringComparison.Ordinal));
+        await _patients.Received().FindByEmailAsync("ana@correo.co", Arg.Any<CancellationToken>());
+    }
+
+    [Theory, MemberData(nameof(AccionesDelPortal))] // anónimo: 401, y ni se pregunta por nadie.
+    public async Task Portal_Anonimo_401_YNoTocaLosSeams(string accion)
+    {
+        Anonimo();
+
+        var respuesta = await Portal(accion, "pat-1");
+
+        var rechazo = Assert.IsType<UnauthorizedObjectResult>(respuesta);
+        Assert.Contains("error", JsonSerializer.Serialize(rechazo.Value, Web), StringComparison.Ordinal);
+        Assert.Empty(LoQueRecibieronLosSeams());
+    }
+
+    [Theory, MemberData(nameof(AccionesDelPortal))] // un miembro sin historia: 404 con el motivo, no la del de la URL.
+    public async Task Portal_MiembroSinHistoriaVinculada_404(string accion)
+    {
+        PadronDevuelve(null);
+
+        var respuesta = await Portal(accion, "pat-1");
+
+        var rechazo = Assert.IsType<NotFoundObjectResult>(respuesta);
+        Assert.Equal("Tu cuenta no tiene una historia clínica vinculada.",
+            JsonSerializer.SerializeToElement(rechazo.Value, Web).GetProperty("error").GetString());
+        Assert.DoesNotContain(LoQueRecibieronLosSeams(), a => a.Contains("pat-1", StringComparison.Ordinal));
+    }
+
+    [Fact] // el paciente se agenda a SÍ MISMO: el `patientId` del cuerpo no cuenta.
+    public async Task Appointment_ElPaciente_SeAgendaASiMismo()
+    {
+        SesionDe("ana@correo.co");
+        PadronDevuelve(Paciente(id: "pat-A"));
+        _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Cita(patientId: ci.Arg<BookAppointmentRequest>().PatientId));
+
+        await BuildSut().BookAppointment(new EhrController.BookAppointmentBody(
+            "pat-B", "doc-1", JsonSerializer.SerializeToElement("2026-11-02T14:00:00Z")), default);
+
+        await _scheduling.Received(1).BookAsync(
+            Arg.Is<BookAppointmentRequest>(r => r.PatientId == "pat-A"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // …y el clínico agenda a nombre del paciente que dice el cuerpo.
+    public async Task Appointment_ElClinico_AgendaAlPacienteDelCuerpo()
+    {
+        Clinico("enfermeria");
+        _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Cita(patientId: ci.Arg<BookAppointmentRequest>().PatientId));
+
+        await BuildSut().BookAppointment(new EhrController.BookAppointmentBody(
+            "pat-B", "doc-1", JsonSerializer.SerializeToElement("2026-11-02T14:00:00Z")), default);
+
+        await _scheduling.Received(1).BookAsync(
+            Arg.Is<BookAppointmentRequest>(r => r.PatientId == "pat-B"), Arg.Any<CancellationToken>());
+        await _patients.DidNotReceive().FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // escribir con el nombre de otro era hablarle a su médico por él.
+    public async Task Message_ElRemitente_EsElPacienteDeLaSesion()
+    {
+        SesionDe("ana@correo.co");
+        PadronDevuelve(Paciente(id: "pat-A"));
+        _messaging.StartThreadAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new MessageThread("t-1", ci.ArgAt<string>(0), new[] { ci.ArgAt<string>(1), "doc-1" },
+                Array.Empty<ThreadMessage>(), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch));
+
+        await BuildSut().SendMessage(new EhrController.SendMessageBody(
+            From: "pat-B", To: "doc-1", Body: "Hola", User: "pat-B"), default);
+
+        await _messaging.Received(1).StartThreadAsync(
+            Arg.Any<string>(), "pat-A", "doc-1", "Hola", Arg.Any<CancellationToken>());
+        Assert.DoesNotContain(LoQueRecibieronLosSeams(), a => a.Contains("pat-B", StringComparison.Ordinal));
+    }
+
+    /// <summary>La superficie clínica, con lo mínimo que cada acción necesita para llegar a su seam.</summary>
+    private Task<IActionResult> Clinica(string accion) => accion switch
+    {
+        "patients" => BuildSut().Patients(null, default),
+        "patient" => BuildSut().Patient("pat-1", default),
+        "appointments" => BuildSut().Appointments("2026-09-20", null, default),
+        "schedule" => BuildSut().Schedule("2026-09-20", default),
+        "encounter" => BuildSut().AddEncounter(new EhrController.AddEncounterBody(
+            "pat-1", new EhrController.SoapBody("s", null, "a", "p", null), "doc-1", null, null), default),
+        "prescription" => BuildSut().AddPrescription(new EhrController.AddPrescriptionBody(
+            "pat-1", new[] { new EhrController.PrescriptionItemBody(Drug: "Losartán", Dose: "50 mg") }, "doc-1", null), default),
+        "inbasket" => BuildSut().InBasket("doc-1", null, default),
+        "order" => BuildSut().PlaceOrder(new EhrController.PlaceOrderBody(
+            PatientId: "pat-1", Kind: "lab", Detail: "Hemograma", Provider: "doc-1"), default),
+        _ => throw new ArgumentOutOfRangeException(nameof(accion), accion, null),
+    };
+
+    public static TheoryData<string> AccionesClinicas() => new()
+    {
+        "patients", "patient", "appointments", "schedule", "encounter", "prescription", "inbasket", "order",
+    };
+
+    /// <summary>Si algún seam clínico recibió algo.</summary>
+    private bool AlgunSeamClinicoRecibio()
+        => new object[] { _patients, _records, _prescriptions, _scheduling, _inBasket, _orders }
+            .Any(s => s.ReceivedCalls().Any());
+
+    [Theory, MemberData(nameof(AccionesClinicas))]
+    public async Task Clinica_Anonimo_401(string accion)
+    {
+        Anonimo();
+
+        Assert.IsType<UnauthorizedObjectResult>(await Clinica(accion));
+        Assert.False(AlgunSeamClinicoRecibio());
+    }
+
+    [Theory, MemberData(nameof(AccionesClinicas))] // tener una historia no hace a nadie clínico.
+    public async Task Clinica_SinRolClinico_403_YNoTocaLosSeams(string accion)
+    {
+        var respuesta = await Clinica(accion);
+
+        // StatusCode(403) y no Forbid(): con auth de miembros, Forbid redirige al login.
+        var rechazo = Assert.IsType<ObjectResult>(respuesta);
+        Assert.Equal(Microsoft.AspNetCore.Http.StatusCodes.Status403Forbidden, rechazo.StatusCode);
+        Assert.False(AlgunSeamClinicoRecibio());
+    }
+
+    [Theory] // quién entra a la clínica: médico, enfermería, admin — y nadie más.
+    [InlineData("medico", true)]
+    [InlineData("enfermeria", true)]
+    [InlineData("admin", true)]
+    [InlineData("organizador", false)]
+    // El vocabulario del núcleo PHI (`DefaultPhiAccessGuard`: doctor,nurse,reception) NO entra
+    // acá: queda fijado para que unificarlos sea una decisión y no un accidente.
+    [InlineData("doctor", false)]
+    public async Task Clinica_LosRolesQueEntran(string rol, bool entra)
+    {
+        Clinico(rol);
+        _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<EhrPatient>());
+
+        var respuesta = await BuildSut().Patients(null, default);
+
+        Assert.Equal(entra, respuesta is OkObjectResult);
+    }
+
+    [Fact] // la bandeja es la del médico de la sesión, no la que diga la URL.
+    public async Task InBasket_ElMedicoVinculado_LeeSuBandeja_YNoLaDeLaUrl()
+    {
+        Clinico(correo: "Ana.Rios@Clinica.co");
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Medico(id: "doc-ana", email: "ana.rios@clinica.co"), Medico(id: "doc-otro", email: "otro@clinica.co") });
+        _inBasket.GetForProviderAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<EhrInBasketItem>());
+
+        await BuildSut().InBasket("doc-otro", null, default);
+
+        await _inBasket.Received(1).GetForProviderAsync("doc-ana", null, Arg.Any<CancellationToken>());
+        await _inBasket.DidNotReceive().GetForProviderAsync("doc-otro", Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // la nota la firma el médico de la sesión, aunque el cuerpo diga otro.
+    public async Task Encounter_LoFirmaElMedicoDeLaSesion()
+    {
+        Clinico(correo: "ana.rios@clinica.co");
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Medico(id: "doc-ana", email: "ana.rios@clinica.co") });
+        _records.AddEncounterAsync(Arg.Any<AddEncounterRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new ClinicalEncounter("enc-1", "pat-1", ci.Arg<AddEncounterRequest>().DoctorId, "Dra. Ana Ríos",
+                DateTime.UnixEpoch, "Control", ci.Arg<AddEncounterRequest>().Soap, null, true));
+
+        await BuildSut().AddEncounter(new EhrController.AddEncounterBody(
+            "pat-1", new EhrController.SoapBody("s", null, "a", "p", null), "doc-otro", null, null), default);
+
+        await _records.Received(1).AddEncounterAsync(
+            Arg.Is<AddEncounterRequest>(r => r.DoctorId == "doc-ana"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // el clínico lee los mensajes como su médico vinculado; `?user=` no cuenta.
+    public async Task Messages_ElClinico_LeeComoSuMedicoVinculado()
+    {
+        Clinico(correo: "ana.rios@clinica.co");
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Medico(id: "doc-ana", email: "ana.rios@clinica.co") });
+
+        await BuildSut().Messages("pat-1", default);
+
+        await _messaging.Received(1).GetInboxAsync("doc-ana", Arg.Any<CancellationToken>());
+        await _messaging.DidNotReceive().GetInboxAsync("pat-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // `doctors` y `copay` no son datos de nadie: siguen abiertos.
+    public async Task Doctors_Y_Copago_SiguenPublicos()
+    {
+        Anonimo();
+        _scheduling.CopayAsync(Arg.Any<CancellationToken>()).Returns(new ClinicalCopay(80_000m, "COP"));
+
+        Assert.IsType<OkObjectResult>(await BuildSut().Doctors(null, default));
+        Assert.IsType<OkObjectResult>(await BuildSut().Copay(default));
+    }
+
+    [Theory, MemberData(nameof(SinSujeto))] // un clínico sin médico vinculado tiene que decir de quién es la bandeja.
+    public async Task InBasket_SinProveedor_400(string provider)
+    {
+        Clinico("enfermeria");
+        Assert.IsType<BadRequestObjectResult>(await BuildSut().InBasket(provider, null, default));
+    }
 
     public static TheoryData<string> SinSujeto() => new() { "", "   " };
 
     [Theory, MemberData(nameof(SinSujeto))]
-    public async Task Health_SinPaciente_400(string patient)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Health(patient, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task PortalHome_SinPaciente_400(string patient)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().PortalHome(patient, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task Results_SinPaciente_400(string patient)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Results(patient, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task Medications_SinPaciente_400(string patient)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Medications(patient, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task Billing_SinPaciente_400(string patient)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Billing(patient, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task Messages_SinUsuario_400(string user)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Messages(user, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
-    public async Task InBasket_SinProveedor_400(string provider)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().InBasket(provider, null, default));
-
-    [Theory, MemberData(nameof(SinSujeto))]
     public async Task Patient_SinId_400(string id)
-        => Assert.IsType<BadRequestObjectResult>(await BuildSut().Patient(id, default));
+    {
+        Clinico();
+        Assert.IsType<BadRequestObjectResult>(await BuildSut().Patient(id, default));
+    }
 
     [Fact]
     public async Task Patient_Inexistente_404()
     {
+        Clinico();
+
         PadronDevuelve(null);
         Assert.IsType<NotFoundObjectResult>(await BuildSut().Patient("pat-fantasma", default));
     }
 
     [Fact]
-    public async Task Health_PacienteInexistente_404_YNoConsultaLaHistoria()
+    public async Task Health_SinHistoriaVinculada_404_YNoConsultaLaHistoria()
     {
         PadronDevuelve(null);
 
         Assert.IsType<NotFoundObjectResult>(await BuildSut().Health("pat-fantasma", default));
         await _records.DidNotReceive().GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task PortalHome_PacienteInexistente_404()
-    {
-        PadronDevuelve(null);
-        Assert.IsType<NotFoundObjectResult>(await BuildSut().PortalHome("pat-fantasma", default));
     }
 
     [Fact] // sin estado de cuenta NO se devuelve un saldo 0 — eso diría «no debe nada».
@@ -570,6 +849,8 @@ public sealed class EhrControllerTests
     [Fact] // vacío: un padrón sin resultados es una lista vacía, no un null que la app descarta.
     public async Task Patients_PadronVacio_DevuelveListaVacia()
     {
+        Clinico();
+
         _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<EhrPatient>());
 
@@ -581,6 +862,8 @@ public sealed class EhrControllerTests
     [Fact] // filtro: el término de búsqueda llega TAL CUAL al padrón (la caja de búsqueda no era decorativa).
     public async Task Patients_ElTerminoDeBusqueda_LlegaAlPadron()
     {
+        Clinico();
+
         _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<EhrPatient>());
 
@@ -592,6 +875,8 @@ public sealed class EhrControllerTests
     [Fact] // happy: el sexo del padrón es texto libre y la app lee el código 'M'|'F'|'X'.
     public async Task Patients_ElSexo_SaleComoCodigo()
     {
+        Clinico();
+
         _patients.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new[] { Paciente(id: "p1", gender: "Femenino"), Paciente(id: "p2", gender: "") });
 
@@ -616,6 +901,8 @@ public sealed class EhrControllerTests
     [Fact] // filtro: fecha y médico llegan los DOS a la agenda.
     public async Task Appointments_FechaYMedico_LleganALaAgenda()
     {
+        Clinico();
+
         AgendaDelDiaDevuelve();
 
         await BuildSut().Appointments("2026-09-20", "doc-7", default);
@@ -627,6 +914,8 @@ public sealed class EhrControllerTests
     [Fact] // vacío: una fecha ilegible cae a HOY, no vacía el tablero ni revienta.
     public async Task Appointments_FechaIlegible_CaeAHoy()
     {
+        Clinico();
+
         AgendaDelDiaDevuelve();
 
         await BuildSut().Appointments("no-es-una-fecha", null, default);
@@ -638,6 +927,8 @@ public sealed class EhrControllerTests
     [Fact] // filtro: el tablero del día ordena por hora, que es como se lee de arriba abajo.
     public async Task Schedule_OrdenaPorHora()
     {
+        Clinico();
+
         var dia = DateTime.UtcNow.AddDays(10).Date;
         AgendaDelDiaDevuelve(
             Cita(id: "a-tarde", startUtc: dia.AddHours(15)),
@@ -653,6 +944,8 @@ public sealed class EhrControllerTests
     [Fact] // happy: el estado sale del RELOJ (cita ya terminada), no del identificador.
     public async Task Schedule_ElEstado_SaleDelReloj()
     {
+        Clinico();
+
         var ayer = DateTime.UtcNow.AddDays(-1);
         AgendaDelDiaDevuelve(Cita(id: "a-1", startUtc: ayer));
 
@@ -718,6 +1011,8 @@ public sealed class EhrControllerTests
     [Fact] // filtro: el tipo llega a la cola del proveedor.
     public async Task InBasket_ElTipo_LlegaALaCola()
     {
+        Clinico();
+
         _inBasket.GetForProviderAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<EhrInBasketItem>());
 
@@ -729,6 +1024,8 @@ public sealed class EhrControllerTests
     [Fact] // happy: 'message' del seam es 'advice' en la bandeja del clínico (lo que la app conoce).
     public async Task InBasket_UnMensaje_LlegaComoAdvice()
     {
+        Clinico();
+
         _inBasket.GetForProviderAsync("doc-1", null, Arg.Any<CancellationToken>()).Returns(new[]
         {
             new EhrInBasketItem("i-1", "message", "doc-1", "pat-1", "Jorge Medina",

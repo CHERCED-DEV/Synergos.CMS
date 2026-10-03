@@ -15,26 +15,37 @@ namespace Synergos.CMS.Web.Controllers;
 /// (<c>/api/healthcare</c>, ADR 0098).
 /// </summary>
 /// <remarks>
-/// <strong>DEV-ONLY (<see cref="DevSeedOnlyAttribute"/>, ADR 0013).</strong> Estos
-/// endpoints son anónimos a propósito — la premisa del demo es entrar y caer en el
-/// panel sin login. Eso es aceptable SOLO porque la data es fabricada
-/// (<c>EhrDemoSeed</c>, 5 pacientes de mentira) y porque el flag los hace 404 fuera
-/// de dev. Las dos mitades de esa frase se sostienen mutuamente:
+/// <para><strong>DEV-ONLY (<see cref="DevSeedOnlyAttribute"/>, ADR 0013)</strong>, y la data es
+/// fabricada (<c>EhrDemoSeed</c>, 5 pacientes de mentira). <strong>PHI real NUNCA pasa por
+/// aquí</strong>: va por <c>/api/healthcare</c>, que gatea con <see cref="IPhiAccessGuard"/>
+/// (rol + pertenencia + consentimiento, auditado, fail-closed).</para>
+///
+/// <para><strong>Dos superficies, y quién entra a cada una sale de la SESIÓN (#197).</strong> Esto
+/// decía que si algún día el dashboard servía pacientes reales no bastaba con pedir login, porque
+/// <c>patientId</c>/<c>patient</c>/<c>user</c>/<c>provider</c> los ponía el navegador y cualquier
+/// miembro leería historias ajenas —el IDOR que T2 cerró en Tienda—, y que había que partir la
+/// clínica (rol) del portal del paciente (pertenencia). Lo que era advertencia ahora es la regla:</para>
 /// <list type="bullet">
-/// <item><strong>PHI real NUNCA pasa por aquí.</strong> Va por <c>/api/healthcare</c>,
-///   que gatea con <see cref="IPhiAccessGuard"/> (rol + pertenencia + consentimiento,
-///   auditado, fail-closed). Enchufar un adapter HIS/DB real detrás de estos seams
-///   publicaría el censo entero a cualquier anónimo, con build verde y sin que nadie
-///   toque este archivo.</item>
-/// <item>Si algún día este dashboard debe servir pacientes reales, NO basta con pedir
-///   login: <c>patientId</c>/<c>patient</c>/<c>user</c>/<c>provider</c> los pone el
-///   caller, así que cualquier member autenticado leería historias ajenas (el mismo
-///   IDOR que T2 cerró en Tienda). Exige partir las dos superficies que hoy conviven
-///   aquí — la clínica (rol) y el portal del paciente (pertenencia) — y es una
-///   decisión de arquitectura, no un parche.</item>
+/// <item><b>Portal del paciente</b> (<c>portal/home</c>, <c>results</c>, <c>medications</c>,
+///   <c>refill</c>, <c>billing</c>, <c>health</c>, y <c>appointment</c> cuando quien reserva no es
+///   clínico): el paciente es el de la historia vinculada al correo del miembro
+///   (<see cref="IPatientRegistry.FindByEmailAsync"/>, el molde de Gobierno, Eventos y Realty). El
+///   paciente que mande el navegador SE IGNORA —no se rechaza: la app vieja lo seguirá mandando
+///   un tiempo—. Anónimo → 401; miembro sin historia vinculada → 404.</item>
+/// <item><b>Superficie clínica</b> (<c>patients</c>, <c>patient/{id}</c>, <c>appointments</c>,
+///   <c>schedule</c> —el tablero del día de la clínica, con los pacientes de todos—,
+///   <c>encounter</c>, <c>prescription</c>, <c>inbasket</c>, <c>order</c>): rol
+///   <see cref="RolesClinicos"/>. Anónimo → 401; sin rol → <c>StatusCode(403)</c>, NO
+///   <c>Forbid()</c>, que con auth de miembros redirige al login. El médico que firma sale del
+///   directorio por el correo del miembro; sin médico vinculado (enfermería, admin, o un
+///   directorio sin correos, que es el sembrado) se toma el que mande el clínico.</item>
+/// <item><b>Mensajes</b>: quien lee o escribe sale de la sesión —el médico vinculado si el miembro
+///   es clínico, su paciente si no—; el destinatario sigue viniendo del cuerpo.</item>
+/// <item><c>doctors</c> y <c>copay</c> siguen públicos: no son datos de nadie.</item>
 /// </list>
-/// La capa Web SOLO orquesta y mapea a DTOs JSON estables — toda la lógica vive en
-/// los seams (Application, sin Umbraco — ADR 0002):
+///
+/// <para>La capa Web SOLO orquesta y mapea a DTOs JSON estables — toda la lógica vive en los seams
+/// (Application, sin Umbraco — ADR 0002):</para>
 /// <list type="bullet">
 /// <item><see cref="IPatientRegistry"/> / <see cref="IDoctorDirectory"/> — padrón + staff.</item>
 /// <item><see cref="IClinicalRecordService"/> — historia + encuentros (SOAP); cada
@@ -55,6 +66,16 @@ public sealed class EhrController : ControllerBase
     /// <summary>Contexto de los hilos de mensajería del In Basket clínico (SH-7 v3).</summary>
     private const string ClinicalMessageContext = "clinical";
 
+    /// <summary>
+    /// Los roles de la superficie clínica (#197): médico, enfermería y el superusuario transversal.
+    /// </summary>
+    /// <remarks>
+    /// Son grupos que crea <c>DevMemberRoleSeeder</c>. Ojo: el núcleo PHI de producción
+    /// (<c>DefaultPhiAccessGuard</c>) pide <c>doctor,nurse,reception</c> —otro vocabulario para
+    /// las mismas personas—; unificarlos es una decisión aparte.
+    /// </remarks>
+    internal const string RolesClinicos = "medico,enfermeria,admin";
+
     private readonly IPatientRegistry _patients;
     private readonly IDoctorDirectory _doctors;
     private readonly IClinicalRecordService _records;
@@ -74,6 +95,9 @@ public sealed class EhrController : ControllerBase
     /// </summary>
     private readonly IPriceFormatter _priceFormatter;
 
+    /// <summary>Quién llama: de ahí sale el paciente del portal y el rol de la clínica (#197).</summary>
+    private readonly IMemberAccessGate _gate;
+
     public EhrController(
         IPatientRegistry patients,
         IDoctorDirectory doctors,
@@ -86,7 +110,8 @@ public sealed class EhrController : ControllerBase
         IClinicalBillingService billing,
         IEhrInBasketService inBasket,
         IMessagingService messaging,
-        IPriceFormatter priceFormatter)
+        IPriceFormatter priceFormatter,
+        IMemberAccessGate gate)
     {
         _patients = patients;
         _doctors = doctors;
@@ -100,6 +125,73 @@ public sealed class EhrController : ControllerBase
         _inBasket = inBasket;
         _messaging = messaging;
         _priceFormatter = priceFormatter;
+        _gate = gate;
+    }
+
+    // ── Quién llama (#197) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// El paciente de la sesión: la historia vinculada al correo del miembro. 401 si es anónimo,
+    /// 404 si su cuenta no tiene historia.
+    /// </summary>
+    /// <remarks>
+    /// Es la ÚNICA fuente del paciente en el portal. Lo que mande el navegador no se consulta: con
+    /// la sesión de A y <c>?patient=</c> de B, los seams reciben A.
+    /// </remarks>
+    private async Task<(IActionResult? Denegado, EhrPatient? Paciente)> PacienteDeLaSesionAsync(CancellationToken ct)
+    {
+        var correo = _gate.CurrentMemberEmail;
+        if (!_gate.IsAuthenticated || string.IsNullOrWhiteSpace(correo))
+        {
+            return (Unauthorized(new { error = "Inicia sesión para ver tu historia clínica." }), null);
+        }
+
+        var paciente = await _patients.FindByEmailAsync(correo, ct);
+        return paciente is null
+            ? (NotFound(new { error = "Tu cuenta no tiene una historia clínica vinculada." }), null)
+            : (null, paciente);
+    }
+
+    /// <summary>Si quien llama es personal clínico.</summary>
+    private bool EsClinico => _gate.IsAuthenticated && _gate.HasAnyRole(RolesClinicos);
+
+    /// <summary>Exige rol clínico. 401 anónimo; 403 sin rol.</summary>
+    private IActionResult? ExigirClinico()
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicia sesión como personal clínico." });
+        }
+        if (!_gate.HasAnyRole(RolesClinicos))
+        {
+            // StatusCode(403) y NO Forbid(): con auth de miembros Forbid redirige al login.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Tu cuenta no tiene permiso clínico." });
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// El médico del directorio con el correo del miembro, o <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MedicalDoctor.Email"/> existe y lo llena el directorio que sale del contenido
+    /// (<c>professionalEmail</c>); el staff sembrado no tiene correo, así que con el directorio de
+    /// demo nadie queda vinculado y el clínico sigue mandando el médico en el cuerpo. Enfermería y
+    /// admin tampoco son un médico. Con dos médicos en el mismo correo no se elige ninguno.
+    /// </remarks>
+    private async Task<MedicalDoctor?> MedicoDeLaSesionAsync(CancellationToken ct)
+    {
+        var correo = _gate.CurrentMemberEmail?.Trim();
+        if (!_gate.IsAuthenticated || string.IsNullOrEmpty(correo))
+        {
+            return null;
+        }
+
+        var suyos = (await _doctors.ListAsync(null, ct))
+            .Where(d => string.Equals(d.Email?.Trim(), correo, StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToList();
+        return suyos.Count == 1 ? suyos[0] : null;
     }
 
     // ── 1. Pacientes (lista buscable) ──────────────────────────────────
@@ -107,6 +199,8 @@ public sealed class EhrController : ControllerBase
     [HttpGet("patients")]
     public async Task<IActionResult> Patients([FromQuery] string? q, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         var patients = await _patients.SearchAsync(q, cancellationToken);
         return Ok(new PatientsResponse(patients.Select(ToPatientDto).ToList()));
     }
@@ -116,6 +210,8 @@ public sealed class EhrController : ControllerBase
     [HttpGet("patient/{id}")]
     public async Task<IActionResult> Patient(string id, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         if (string.IsNullOrWhiteSpace(id))
         {
             return BadRequest(new { error = "El id del paciente es requerido." });
@@ -177,6 +273,10 @@ public sealed class EhrController : ControllerBase
     [HttpGet("appointments")]
     public async Task<IActionResult> Appointments([FromQuery] string? date, [FromQuery] string? doctorId, CancellationToken cancellationToken)
     {
+        // La agenda de la clínica: citas de todos los pacientes. `doctorId` es un FILTRO de qué
+        // agenda mirar, no la identidad de quien llama.
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         // Sin fecha → hoy (UTC), para que el dashboard caiga con el schedule del día.
         var day = ParseDateOrToday(date);
         var appointments = await _scheduling.GetByDateAsync(day, doctorId, cancellationToken);
@@ -185,11 +285,26 @@ public sealed class EhrController : ControllerBase
 
     // ── 5. Reservar cita ───────────────────────────────────────────────
     // POST /api/ehr/appointment { patientId, doctorId, slot } → { appointment }
+    //
+    // Dos caras (#197): el clínico agenda a nombre del paciente que dice el cuerpo; el paciente se
+    // agenda a sí mismo —el de su sesión— y el `patientId` del cuerpo se ignora.
     [HttpPost("appointment")]
     public async Task<IActionResult> BookAppointment([FromBody] BookAppointmentBody? body, CancellationToken cancellationToken)
     {
+        string paraQuien;
+        if (EsClinico)
+        {
+            paraQuien = body?.PatientId?.Trim() ?? string.Empty;
+        }
+        else
+        {
+            var (denegado, paciente) = await PacienteDeLaSesionAsync(cancellationToken);
+            if (denegado is not null) { return denegado; }
+            paraQuien = paciente!.Id;
+        }
+
         if (body is null
-            || string.IsNullOrWhiteSpace(body.PatientId)
+            || string.IsNullOrWhiteSpace(paraQuien)
             || string.IsNullOrWhiteSpace(body.DoctorId))
         {
             return BadRequest(new { error = "patientId, doctorId y slot son requeridos." });
@@ -202,7 +317,7 @@ public sealed class EhrController : ControllerBase
         try
         {
             var appointment = await _scheduling.BookAsync(
-                new BookAppointmentRequest(body.PatientId.Trim(), body.DoctorId.Trim(), slot),
+                new BookAppointmentRequest(paraQuien, body.DoctorId.Trim(), slot),
                 cancellationToken);
             return Ok(new AppointmentEnvelope(ToAppointmentDto(appointment)));
         }
@@ -222,17 +337,22 @@ public sealed class EhrController : ControllerBase
     [HttpPost("encounter")]
     public async Task<IActionResult> AddEncounter([FromBody] AddEncounterBody? body, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         if (body is null || string.IsNullOrWhiteSpace(body.PatientId) || body.Soap is null)
         {
             return BadRequest(new { error = "patientId y soap son requeridos." });
         }
+
+        // Quien firma la nota: el médico de la sesión; sin médico vinculado, el que diga el cuerpo.
+        var autor = (await MedicoDeLaSesionAsync(cancellationToken))?.Id ?? (body.DoctorId ?? string.Empty).Trim();
 
         try
         {
             var encounter = await _records.AddEncounterAsync(
                 new AddEncounterRequest(
                     PatientId: body.PatientId.Trim(),
-                    DoctorId: (body.DoctorId ?? string.Empty).Trim(),
+                    DoctorId: autor,
                     ReasonForVisit: body.ReasonForVisit ?? string.Empty,
                     Soap: new SoapNote(
                         Subjective: body.Soap.Subjective ?? string.Empty,
@@ -257,17 +377,22 @@ public sealed class EhrController : ControllerBase
     [HttpPost("prescription")]
     public async Task<IActionResult> AddPrescription([FromBody] AddPrescriptionBody? body, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         if (body is null || string.IsNullOrWhiteSpace(body.PatientId) || body.Items is null || body.Items.Count == 0)
         {
             return BadRequest(new { error = "patientId e items (al menos uno) son requeridos." });
         }
+
+        // Quien prescribe: el médico de la sesión; sin médico vinculado, el que diga el cuerpo.
+        var prescriptor = (await MedicoDeLaSesionAsync(cancellationToken))?.Id ?? (body.DoctorId ?? string.Empty).Trim();
 
         try
         {
             var prescription = await _prescriptions.AddAsync(
                 new AddPrescriptionRequest(
                     PatientId: body.PatientId.Trim(),
-                    DoctorId: (body.DoctorId ?? string.Empty).Trim(),
+                    DoctorId: prescriptor,
                     Items: body.Items.Select(i => new EhrPrescriptionItem(
                         MedicationName: i.ResolveDrug(),
                         Dosage: i.ResolveDose(),
@@ -287,31 +412,28 @@ public sealed class EhrController : ControllerBase
     // ── OLA 7 · Portal paciente + clínico (doc 21 §2.5) ─────────────────
 
     // 8. Portal paciente — home
-    // GET /api/ehr/portal/home?patient= → { nextAppointment, pendingTasks, unreadMessages, activeMeds }
+    // GET /api/ehr/portal/home → { patient, cards, nextAppointment, … } del paciente de la sesión
+    //
+    // `?patient=` se declara y NO se lee (#197): la app vieja lo sigue mandando y un parámetro de
+    // consulta que no se declara tampoco falla, pero así queda escrito que se ignora a propósito.
+    // El paciente es el de la sesión; con el de otro en la URL, se devuelve el propio.
     [HttpGet("portal/home")]
     public async Task<IActionResult> PortalHome([FromQuery] string? patient, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(patient))
-        {
-            return BadRequest(new { error = "El parámetro patient es requerido." });
-        }
+        var (denegado, found) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+        var delPaciente = found!.Id;
 
-        var found = await _patients.GetAsync(patient, cancellationToken);
-        if (found is null)
-        {
-            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
-        }
-
-        var appointments = await CollectPatientAppointmentsAsync(patient, cancellationToken);
+        var appointments = await CollectPatientAppointmentsAsync(delPaciente, cancellationToken);
         var now = DateTime.UtcNow;
         var next = appointments
             .Where(a => a.StartUtc >= now && !string.Equals(a.Status, "cancelled", StringComparison.Ordinal))
             .OrderBy(a => a.StartUtc)
             .FirstOrDefault();
 
-        var results = await _results.GetForPatientAsync(patient, cancellationToken);
-        var inbox = await _messaging.GetInboxAsync(patient, cancellationToken);
-        var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
+        var results = await _results.GetForPatientAsync(delPaciente, cancellationToken);
+        var inbox = await _messaging.GetInboxAsync(delPaciente, cancellationToken);
+        var statement = await _billing.GetForPatientAsync(delPaciente, cancellationToken);
 
         // Las conversaciones CLÍNICAS del paciente. No es un contador de «sin leer» y no
         // se puede convertir en uno: ver la nota de PortalHomeResponse.UnreadMessages.
@@ -404,46 +526,47 @@ public sealed class EhrController : ControllerBase
     }
 
     // 9. Resultados de laboratorio
-    // GET /api/ehr/results?patient= → { results:[...] }
+    // GET /api/ehr/results → { results:[...] } del paciente de la sesión (`?patient=` se ignora, #197)
     [HttpGet("results")]
     public async Task<IActionResult> Results([FromQuery] string? patient, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(patient))
-        {
-            return BadRequest(new { error = "El parámetro patient es requerido." });
-        }
-        var results = await _results.GetForPatientAsync(patient, cancellationToken);
+        var (denegado, paciente) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        var results = await _results.GetForPatientAsync(paciente!.Id, cancellationToken);
         return Ok(new LabResultsResponse(results.Select(ToLabResultDto).ToList()));
     }
 
     // 10. Medicamentos activos
-    // GET /api/ehr/medications?patient= → { medications:[...] }
+    // GET /api/ehr/medications → { medications:[...] } del paciente de la sesión (`?patient=` se ignora, #197)
     [HttpGet("medications")]
     public async Task<IActionResult> Medications([FromQuery] string? patient, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(patient))
-        {
-            return BadRequest(new { error = "El parámetro patient es requerido." });
-        }
-        var meds = await _medications.GetActiveForPatientAsync(patient, cancellationToken);
+        var (denegado, paciente) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        var meds = await _medications.GetActiveForPatientAsync(paciente!.Id, cancellationToken);
         return Ok(new MedicationsResponse(meds.Select(ToMedicationDto).ToList()));
     }
 
     // 11. Solicitar refill
-    // POST /api/ehr/refill { patient, medId, note? } → { refill }
+    // POST /api/ehr/refill { medicationId, note? } → { refill }, para el paciente de la sesión.
+    // `patientId`/`patient` del cuerpo se ignoran (#197): pedir el resurtido de otro era recetarle.
     [HttpPost("refill")]
     public async Task<IActionResult> Refill([FromBody] RefillBody? body, CancellationToken cancellationToken)
     {
-        var refillPatient = body?.ResolvePatient() ?? string.Empty;
+        var (denegado, paciente) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
         var refillMedication = body?.ResolveMedication() ?? string.Empty;
-        if (string.IsNullOrEmpty(refillPatient) || string.IsNullOrEmpty(refillMedication))
+        if (string.IsNullOrEmpty(refillMedication))
         {
-            return BadRequest(new { error = "patientId (patient) y medicationId (medId) son requeridos." });
+            return BadRequest(new { error = "medicationId (medId) es requerido." });
         }
         try
         {
             var refill = await _medications.RequestRefillAsync(
-                new RefillRequest(refillPatient, refillMedication, body!.Note),
+                new RefillRequest(paciente!.Id, refillMedication, body!.Note),
                 cancellationToken);
             // La UI lee `status` top-level (requested|approved|denied); el seam usa
             // 'pending' para una solicitud recién creada → 'requested'.
@@ -455,16 +578,37 @@ public sealed class EhrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Quién lee o escribe en la mensajería clínica, según la sesión (#197): el médico vinculado si
+    /// el miembro es clínico —y sin médico vinculado, su correo, que no está en ningún hilo—; su
+    /// paciente si no. 401 anónimo; 404 un miembro que no es clínico ni tiene historia.
+    /// </summary>
+    /// <remarks>
+    /// Los hilos se cruzan por el id del participante (<c>pat-…</c>, <c>doc-…</c>), así que un clínico
+    /// sin médico vinculado lee una bandeja vacía: es lo honesto. Lo que no puede pasar es que el
+    /// navegador diga quién es — antes, <c>?user=</c> de otro era leer sus conversaciones.
+    /// </remarks>
+    private async Task<(IActionResult? Denegado, string Quien)> QuienEscribeAsync(CancellationToken ct)
+    {
+        if (EsClinico)
+        {
+            var medico = await MedicoDeLaSesionAsync(ct);
+            return (null, medico?.Id ?? _gate.CurrentMemberEmail!.Trim());
+        }
+
+        var (denegado, paciente) = await PacienteDeLaSesionAsync(ct);
+        return denegado is not null ? (denegado, string.Empty) : (null, paciente!.Id);
+    }
+
     // 12. Mensajes (paciente ↔ equipo, contexto clinical)
-    // GET /api/ehr/messages?user= → { threads:[...] }
+    // GET /api/ehr/messages → { threads:[...] } de quien está en la sesión (`?user=` se ignora, #197)
     [HttpGet("messages")]
     public async Task<IActionResult> Messages([FromQuery] string? user, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(user))
-        {
-            return BadRequest(new { error = "El parámetro user es requerido." });
-        }
-        var inbox = await _messaging.GetInboxAsync(user, cancellationToken);
+        var (denegado, quien) = await QuienEscribeAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        var inbox = await _messaging.GetInboxAsync(quien, cancellationToken);
         var clinical = inbox.Where(t => IsClinicalContext(t.ContextRef)).ToList();
 
         // La UI espera hilos COMPLETOS (con mensajes) — el inbox solo trae resúmenes,
@@ -474,20 +618,25 @@ public sealed class EhrController : ControllerBase
         foreach (var summary in clinical)
         {
             var full = await _messaging.GetThreadAsync(summary.ThreadId, cancellationToken);
-            threads.Add(full is null ? ToThreadDtoFromSummary(summary, user) : ToThreadDto(full, user));
+            threads.Add(full is null ? ToThreadDtoFromSummary(summary, quien) : ToThreadDto(full, quien));
         }
         return Ok(new MessagesResponse(threads));
     }
 
     // 13. Enviar mensaje (paciente → equipo, contexto clinical)
-    // POST /api/ehr/message { from, to, body, threadId? } → { thread }
+    // POST /api/ehr/message { to, body, threadId? } → { thread }
+    //
+    // Quien escribe sale de la sesión (#197); `user`/`from` del cuerpo se ignoran —escribir con el
+    // nombre de otro era hablarle a su médico por él—. `to` sigue viniendo del cuerpo.
     [HttpPost("message")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageBody? body, CancellationToken cancellationToken)
     {
-        var sender = body?.ResolveFrom() ?? string.Empty;
-        if (string.IsNullOrEmpty(sender) || string.IsNullOrWhiteSpace(body!.Body))
+        var (denegado, sender) = await QuienEscribeAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.Body))
         {
-            return BadRequest(new { error = "user (from) y body son requeridos." });
+            return BadRequest(new { error = "body es requerido." });
         }
 
         try
@@ -518,14 +667,20 @@ public sealed class EhrController : ControllerBase
 
     // 14. In Basket del proveedor (cola tipada)
     // GET /api/ehr/inbasket?provider=&type= → { items:[...] }
+    //
+    // La bandeja es la del médico de la sesión (#197); `provider` sólo cuenta para un clínico sin
+    // médico vinculado —enfermería o admin mirando la de un médico—, que ya pasó el rol.
     [HttpGet("inbasket")]
     public async Task<IActionResult> InBasket([FromQuery] string? provider, [FromQuery] string? type, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(provider))
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
+        var deQuien = (await MedicoDeLaSesionAsync(cancellationToken))?.Id ?? provider?.Trim();
+        if (string.IsNullOrWhiteSpace(deQuien))
         {
             return BadRequest(new { error = "El parámetro provider es requerido." });
         }
-        var items = await _inBasket.GetForProviderAsync(provider, type, cancellationToken);
+        var items = await _inBasket.GetForProviderAsync(deQuien, type, cancellationToken);
         return Ok(new InBasketResponse(items.Select(ToInBasketDto).ToList()));
     }
 
@@ -534,6 +689,8 @@ public sealed class EhrController : ControllerBase
     [HttpPost("order")]
     public async Task<IActionResult> PlaceOrder([FromBody] PlaceOrderBody? body, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         var orderPatient = body?.ResolvePatient() ?? string.Empty;
         var orderType = body?.ResolveType() ?? string.Empty;
         if (string.IsNullOrEmpty(orderPatient)
@@ -543,12 +700,13 @@ public sealed class EhrController : ControllerBase
             return BadRequest(new { error = "patientId (patient), kind (type) y detail son requeridos." });
         }
 
-        // El prescriptor no viaja desde la UI. En vez de inventarlo, se resuelve al médico
-        // tratante del padrón; si el paciente no tiene, se dice, porque una orden clínica sin
-        // quien la firma no es una orden.
-        var orderProvider = string.IsNullOrWhiteSpace(body.Provider)
-            ? ((await _patients.GetAsync(orderPatient, cancellationToken))?.PrimaryDoctorId ?? string.Empty)
-            : body.Provider.Trim();
+        // Quien firma la orden: el médico de la sesión (#197). Sin médico vinculado, el que diga el
+        // cuerpo; y si tampoco, no se inventa: se resuelve al médico tratante del padrón, y si el
+        // paciente no tiene, se dice, porque una orden clínica sin quien la firma no es una orden.
+        var orderProvider = (await MedicoDeLaSesionAsync(cancellationToken))?.Id
+            ?? (string.IsNullOrWhiteSpace(body.Provider)
+                ? ((await _patients.GetAsync(orderPatient, cancellationToken))?.PrimaryDoctorId ?? string.Empty)
+                : body.Provider.Trim());
         if (string.IsNullOrWhiteSpace(orderProvider))
         {
             return BadRequest(new { error = "provider es requerido: el paciente no tiene médico tratante registrado." });
@@ -568,18 +726,18 @@ public sealed class EhrController : ControllerBase
     }
 
     // 16. Facturación del paciente
-    // GET /api/ehr/billing?patient= → { statement, balance, currency, plan }
+    // GET /api/ehr/billing → { statement } del paciente de la sesión (`?patient=` se ignora, #197)
     [HttpGet("billing")]
     public async Task<IActionResult> Billing([FromQuery] string? patient, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(patient))
-        {
-            return BadRequest(new { error = "El parámetro patient es requerido." });
-        }
-        var statement = await _billing.GetForPatientAsync(patient, cancellationToken);
+        var (denegado, paciente) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        var statement = await _billing.GetForPatientAsync(paciente!.Id, cancellationToken);
         if (statement is null)
         {
-            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
+            // Sin estado de cuenta NO se devuelve un saldo 0: eso diría «no debe nada».
+            return NotFound(new { error = "Tu historia clínica no tiene estado de cuenta." });
         }
         return Ok(ToBillingDto(statement));
     }
@@ -592,9 +750,15 @@ public sealed class EhrController : ControllerBase
     // cruz, y encima distinta en cada arranque del proceso porque el hash de string está
     // aleatorizado. El día que la agenda registre la llegada (un `CheckedInAtUtc` en
     // `ClinicalAppointment`), la clave vuelve con el dato detrás.
+    //
+    // Es superficie CLÍNICA (#197), medido: no es la agenda del paciente sino el tablero del día de
+    // la clínica, con nombre y cita de TODOS los pacientes, y la app lo llama sólo desde el portal
+    // clínico (`schedule` en la navegación del médico).
     [HttpGet("schedule")]
     public async Task<IActionResult> Schedule([FromQuery] string? date, CancellationToken cancellationToken)
     {
+        if (ExigirClinico() is { } denegado) { return denegado; }
+
         var day = ParseDateOrToday(date);
         var appts = await _scheduling.GetByDateAsync(day, doctorId: null, cancellationToken);
         var now = DateTime.UtcNow;
@@ -616,20 +780,15 @@ public sealed class EhrController : ControllerBase
     }
 
     // 18. Resumen de salud del paciente (Mi salud): condiciones/alergias/vacunas/preventivo
-    // GET /api/ehr/health?patient= → { conditions, allergies, immunizations, maintenance }
+    // GET /api/ehr/health → { conditions, allergies, immunizations, maintenance } del paciente de
+    // la sesión (`?patient=` se ignora, #197)
     [HttpGet("health")]
     public async Task<IActionResult> Health([FromQuery] string? patient, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(patient))
-        {
-            return BadRequest(new { error = "El parámetro patient es requerido." });
-        }
-        var person = await _patients.GetAsync(patient, cancellationToken);
-        if (person is null)
-        {
-            return NotFound(new { error = $"Paciente '{patient}' no encontrado." });
-        }
-        var history = await _records.GetHistoryAsync(patient, cancellationToken);
+        var (denegado, person) = await PacienteDeLaSesionAsync(cancellationToken);
+        if (denegado is not null) { return denegado; }
+
+        var history = await _records.GetHistoryAsync(person!.Id, cancellationToken);
 
         // Condiciones y alergias son datos REALES del registro clínico.
         //
@@ -994,8 +1153,12 @@ public sealed class EhrController : ControllerBase
     /// <c>System.Text.Json</c> y la petición salía <b>400 siempre</b>. No se veía porque el
     /// cliente de la UI envuelve el fallo y devuelve la cita optimista que ya tenía en
     /// pantalla: el paciente leía «cita agendada» y no había ninguna.
+    /// <para><b><see cref="PatientId"/> es opcional desde #197</b>: sólo lo lee un clínico que agenda
+    /// a nombre de un paciente. El paciente se agenda a sí mismo —el de su sesión— y lo que mande ahí
+    /// se ignora; obligatorio, la validación de <c>[ApiController]</c> le contestaría 400 a la app
+    /// el día que deje de mandarlo.</para>
     /// </remarks>
-    public sealed record BookAppointmentBody(string PatientId, string DoctorId, JsonElement? Slot)
+    public sealed record BookAppointmentBody(string? PatientId, string DoctorId, JsonElement? Slot)
     {
         /// <summary>El inicio del slot, venga como instante o como <c>{date,time}</c>.</summary>
         public DateTime? ResolveSlotUtc() => ReadSlot(Slot);
@@ -1206,6 +1369,11 @@ public sealed class EhrController : ControllerBase
     /// y el endpoint contestaba 400 <b>siempre</b>; el paciente veía «Solicitada» porque el
     /// cliente marca optimista antes de llamar.
     /// </summary>
+    /// <remarks>
+    /// <b><see cref="Patient"/> y <see cref="PatientId"/> se declaran y NO se leen (#197)</b>: el
+    /// resurtido es del paciente de la sesión. Se conservan, nulables, para que la app que todavía
+    /// los manda no reciba un 400 de la validación automática.
+    /// </remarks>
     public sealed record RefillBody(
         string? Patient = null,
         string? MedId = null,
@@ -1213,24 +1381,24 @@ public sealed class EhrController : ControllerBase
         string? PatientId = null,
         string? MedicationId = null)
     {
-        public string ResolvePatient() => FirstNonBlank(PatientId, Patient);
         public string ResolveMedication() => FirstNonBlank(MedicationId, MedId);
     }
 
     /// <summary>
-    /// Enviar un mensaje al equipo de salud. <c>user</c> es quien escribe según la UI;
-    /// <c>from</c> se conserva. Sin <c>user</c>, el remitente llegaba nulo y el endpoint
-    /// contestaba 400 siempre.
+    /// Enviar un mensaje al equipo de salud: a quién (<see cref="To"/>) o en qué hilo
+    /// (<see cref="ThreadId"/>), y qué.
     /// </summary>
+    /// <remarks>
+    /// <b><see cref="User"/> y <see cref="From"/> se declaran y NO se leen (#197)</b>: quien escribe
+    /// sale de la sesión. Antes eran el remitente, y mandar el de otro era escribirle a su médico por
+    /// él. Se conservan, nulables, porque la app todavía los manda.
+    /// </remarks>
     public sealed record SendMessageBody(
         string? From = null,
         string? To = null,
         string? Body = null,
         string? ThreadId = null,
-        string? User = null)
-    {
-        public string ResolveFrom() => FirstNonBlank(User, From);
-    }
+        string? User = null);
 
     /// <summary>
     /// Colocar una orden clínica. <c>patientId</c> y <c>kind</c> son las claves de la UI;

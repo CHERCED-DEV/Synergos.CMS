@@ -1085,8 +1085,9 @@ public sealed class ContratoSynHostTests
 
         // Red de seguridad: un resolver que no pide NADA es uno que no se está observando (o un
         // NSubstitute que dejó de registrar llamadas), y todos sus selectores saldrían «no viaja».
-        // Salvo que el record no reciba nada del editor (ehr: su API es de negocio y su paciente es
-        // de la sesión, #196/#197); entonces no pedir nada es lo correcto.
+        // Salvo que el record no reciba nada del editor (ehr: sólo viaja su API, que es de negocio;
+        // el paciente lo resuelve el servidor desde la sesión, #196/#197); entonces no pedir nada
+        // es lo correcto.
         var delEditor = record.GetProperties().Any(p =>
             p.GetCustomAttribute<CampoSynHostAttribute>()?.Origen is OrigenDelCampo.Contenido or OrigenDelCampo.Decision);
         Assert.True(leidas.Count > 0 || !delEditor, $"El resolver de {record.Name} no le pidió ninguna propiedad al bloque de muestra.");

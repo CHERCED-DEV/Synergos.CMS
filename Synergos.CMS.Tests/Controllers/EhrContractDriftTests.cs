@@ -42,11 +42,33 @@ public sealed class EhrContractDriftTests
     private readonly IClinicalBillingService _billing = Substitute.For<IClinicalBillingService>();
     private readonly IEhrInBasketService _inBasket = Substitute.For<IEhrInBasketService>();
     private readonly IMessagingService _messaging = Substitute.For<IMessagingService>();
+    private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
 
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
         _results, _medications, _orders, _billing, _inBasket, _messaging,
-        new EsCoPriceFormatter(new CartSettings()));
+        new EsCoPriceFormatter(new CartSettings()), _gate);
+
+    /// <summary>
+    /// La sesión de partida: personal clínico sin médico vinculado (#197), que es quien escribe
+    /// notas, recetas y órdenes. Los cuerpos del portal piden la del paciente con
+    /// <see cref="SesionDePaciente"/>.
+    /// </summary>
+    public EhrContractDriftTests()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberEmail.Returns("medica@clinica.co");
+        _gate.HasAnyRole(EhrController.RolesClinicos).Returns(true);
+        _doctors.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<MedicalDoctor>());
+    }
+
+    /// <summary>Un paciente en la sesión: sin rol clínico y con la historia <paramref name="id"/>.</summary>
+    private void SesionDePaciente(string id)
+    {
+        _gate.CurrentMemberEmail.Returns("jorge@correo.co");
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        _patients.FindByEmailAsync("jorge@correo.co", Arg.Any<CancellationToken>()).Returns(Paciente(id, null));
+    }
 
     private static T Bind<T>(string uiJson) => JsonSerializer.Deserialize<T>(uiJson, Web)!;
 
@@ -167,6 +189,10 @@ public sealed class EhrContractDriftTests
     [Fact]
     public async Task Refill_ClavesDeLaUi_NoContesta400()
     {
+        // El `patientId` que la UI todavía manda se ignora (#197): el paciente es el de la sesión,
+        // que acá es el mismo, para que el test siga mirando lo que miraba — que el cuerpo de la
+        // UI enlace y no conteste 400.
+        SesionDePaciente("pat-jorge-medina");
         var body = Bind<EhrController.RefillBody>("""
         { "medicationId": "med-losartan", "patientId": "pat-jorge-medina" }
         """);
@@ -189,11 +215,17 @@ public sealed class EhrContractDriftTests
 
     // ══════════ ESCRITURA · el mensaje al equipo de salud ══════════
 
+    /// <summary>
+    /// El cuerpo literal de la UI —con su <c>user</c>— sigue enlazando, pero el remitente es el de
+    /// la SESIÓN (#197). Hasta entonces <c>user</c> era el remitente, y mandar el de otro era
+    /// escribirle a su médico por él; el fixture lleva el de otro para que la diferencia se vea.
+    /// </summary>
     [Fact]
-    public async Task Message_User_EsElRemitente()
+    public async Task Message_ElRemitente_EsLaSesion_YNoElUserDelCuerpo()
     {
+        SesionDePaciente("pat-jorge-medina");
         var body = Bind<EhrController.SendMessageBody>("""
-        { "threadId": "th-1", "body": "¿Puedo tomar el losartán en la noche?", "user": "pat-jorge-medina" }
+        { "threadId": "th-1", "body": "¿Puedo tomar el losartán en la noche?", "user": "pat-otra-persona" }
         """);
         _messaging.ReplyAsync("th-1", "pat-jorge-medina", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new MessageThread(
