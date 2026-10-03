@@ -2,7 +2,9 @@
     elementCorpSocialShare renderer (Ola 21). SSR-native atomic.
     Botonera de compartir en RRSS. Usa URL + title de la página actual
     (via UmbracoContext). enabledPlatforms filtra qué plataformas mostrar.
-    Keys soportados: facebook, twitter, linkedin, whatsapp, email.
+    Keys soportados: facebook, twitter, linkedin, whatsapp, telegram, reddit, pinterest y email:
+    los que ofrece DTSelectSharePlatform (#192, caso 20; telegram, reddit y pinterest se ofrecían
+    y no se pintaban).
 *@
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
@@ -38,6 +40,9 @@
         "twitter"  => $"https://twitter.com/intent/tweet?url={encUrl}&text={encTitle}",
         "linkedin" => $"https://www.linkedin.com/sharing/share-offsite/?url={encUrl}",
         "whatsapp" => $"https://wa.me/?text={encTitle}%20{encUrl}",
+        "telegram" => $"https://t.me/share/url?url={encUrl}&text={encTitle}",
+        "reddit"   => $"https://www.reddit.com/submit?url={encUrl}&title={encTitle}",
+        "pinterest" => $"https://www.pinterest.com/pin/create/button/?url={encUrl}&description={encTitle}",
         "email"    => $"mailto:?subject={encTitle}&body={encUrl}",
         _ => null
     };
