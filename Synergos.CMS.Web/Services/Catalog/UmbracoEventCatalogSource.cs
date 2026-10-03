@@ -50,26 +50,47 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
     private const string Currency = "COP";
 
     /// <summary>
-    /// Colombia no tiene horario de verano, así que el desfase es constante y se puede fijar.
-    /// <c>Umbraco.DateTime</c> guarda un <see cref="DateTime"/> sin zona (Kind Unspecified) y
-    /// el editor teclea hora local — sin anclarlo aquí, .NET lo leería como hora del SERVIDOR
-    /// y la agenda se correría cuando el host no esté en Bogotá.
+    /// La hora que tecleó el editor, anclada en la zona del sitio.
     /// </summary>
-    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+    /// <remarks>
+    /// <para><c>Umbraco.DateTime</c> guarda un <see cref="DateTime"/> sin zona (Kind Unspecified) y el
+    /// editor teclea hora local: sin anclarla, .NET la leería como hora del SERVIDOR y la agenda se
+    /// correría cuando el host no esté en el sitio.</para>
+    ///
+    /// <para><b>Se anclaba con un UTC−5 fijo</b>, correcto para Colombia —que no tiene horario de
+    /// verano— y equivocado para cualquier otro sitio aunque su configuración dijera otra zona. Hoy
+    /// es la zona de <c>Synergos:Listados:ZonaHoraria</c>, la misma que ya dice el día de los
+    /// listados, y el desfase sale de la zona Y de la fecha. Una hora que el cambio de hora se salta
+    /// toma el desfase estándar en vez de lanzar: una ficha mal escrita no tumba la agenda.</para>
+    /// </remarks>
+    internal static DateTimeOffset InicioEnLaZona(DateTime delEditor, TimeZoneInfo zona)
+    {
+        var local = DateTime.SpecifyKind(delEditor, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, zona.GetUtcOffset(local));
+    }
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _settings;
+    private readonly IOptionsMonitor<ListadosSettings> _listados;
     private readonly ILogger<UmbracoEventCatalogSource> _logger;
 
     public UmbracoEventCatalogSource(
         IUmbracoContextAccessor umbracoContextAccessor,
         IOptionsMonitor<CatalogSettings> settings,
+        IOptionsMonitor<ListadosSettings> listados,
         ILogger<UmbracoEventCatalogSource> logger)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
         _settings = settings;
+        _listados = listados;
         _logger = logger;
     }
+
+    /// <summary>
+    /// La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>), en la que el editor teclea la hora.
+    /// Se valida al arrancar; el respaldo a UTC es el de <c>DataGridResolutor</c> y no se alcanza.
+    /// </summary>
+    internal TimeZoneInfo Zona => _listados.CurrentValue.Zona() ?? TimeZoneInfo.Utc;
 
     /// <param name="scope">
     /// Se IGNORA, igual que en la fuente de Tienda: el scope de este catálogo no es del
@@ -230,7 +251,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             Category: node.Value<string>("eventCategory")?.Trim() ?? string.Empty,
             City: node.Value<string>("eventCity")?.Trim() ?? string.Empty,
             Venue: node.Value<string>("eventVenue")?.Trim() ?? string.Empty,
-            StartUtc: new DateTimeOffset(DateTime.SpecifyKind(start, DateTimeKind.Unspecified), ColombiaOffset),
+            StartUtc: InicioEnLaZona(start, Zona),
             // El lector de MediaPicker3 vive en MediaPickerReader y es el ÚNICO: el picker
             // está configurado single, así que pedirlo como colección devuelve null sin
             // lanzar — el bug que dejó la tienda entera sin fotos.
