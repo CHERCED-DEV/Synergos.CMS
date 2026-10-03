@@ -708,7 +708,6 @@
       ],
       "claves": [
         "Cookie.AcceptAll",
-        "Cookie.Accepted",
         "Cookie.AlwaysOn",
         "Cookie.Analytics.Description",
         "Cookie.Analytics.Label",
@@ -719,7 +718,6 @@
         "Cookie.MoreInfo",
         "Cookie.Necessary.Description",
         "Cookie.Necessary.Label",
-        "Cookie.NecessaryOnly",
         "Cookie.Options",
         "Cookie.RejectAll",
         "Cookie.SavePreferences",
@@ -781,11 +779,8 @@
         "Countdown"
       ],
       "claves": [
-        "Countdown.Aria.Timer",
         "Countdown.Days",
-        "Countdown.Expired",
         "Countdown.Hours",
-        "Countdown.Label",
         "Countdown.Milestone.Day",
         "Countdown.Milestone.Hour",
         "Countdown.Milestone.Minute",
@@ -818,11 +813,8 @@
         "Countdown"
       ],
       "claves": [
-        "Countdown.Aria.Timer",
         "Countdown.Days",
-        "Countdown.Expired",
         "Countdown.Hours",
-        "Countdown.Label",
         "Countdown.Milestone.Day",
         "Countdown.Milestone.Hour",
         "Countdown.Milestone.Minute",
@@ -3028,15 +3020,10 @@
         "Media.Unmute",
         "Media.Volume",
         "Video.Aria",
-        "Video.Captions",
         "Video.Empty",
         "Video.ExitFullscreen",
         "Video.Fullscreen",
-        "Video.Mute",
-        "Video.Pause",
-        "Video.Play",
-        "Video.Player",
-        "Video.Unmute"
+        "Video.Player"
       ],
       "campos": [
         {

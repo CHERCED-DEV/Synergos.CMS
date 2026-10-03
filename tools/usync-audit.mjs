@@ -51,6 +51,7 @@
  *      ADR 0136 §4 («clave referenciada que no existe: error») aplicada a
  *      Razor con línea base (piloto #186). Reescribir la lista:
  *      `node tools/usync-audit.mjs --actualizar-claves-razor`.
+ *  13. Cada clave del diccionario cuelga de una raíz que existe (#193).
  *   8. Mojibake hygiene: detecta byte sequences típicas de UTF-8 mal
  *      decodificado como Latin-1 y re-encodeado (PowerShell 5.1 trap).
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
@@ -434,10 +435,11 @@ async function audit() {
     //
     // `GetDictionaryValue("X", "texto")` con X inexistente pinta «texto»: la
     // página se ve bien en es-CO, y en otra cultura sale en español igual. La
-    // vista PARECE cableada al diccionario y no lo está. Hoy son 81 (91
-    // llamadas, 23 vistas), así que no se exige cero: se exige que no crezca y
-    // que la lista no mienta —una clave que ya existe o que nadie pide sale de
-    // ella—. Se compara SIN mayúsculas, como resuelve Umbraco.
+    // vista PARECE cableada al diccionario y no lo está. Eran 81 (91 llamadas,
+    // 23 vistas); #193 creó las que faltaban o reapuntó a la que ya existía, y
+    // la línea base quedó VACÍA: una clave ausente nueva rompe. La lista se
+    // vigila igual en los dos sentidos. Se compara SIN mayúsculas, como
+    // resuelve Umbraco.
     const definidasSinMayus = new Set([...aliasDefinidos].map((a) => a.toLowerCase()));
     const pedidas = new Map(); // minúsculas → primera forma vista
     for (const file of vistas) {
@@ -474,6 +476,28 @@ async function audit() {
             if (!enFaltan.has(k.toLowerCase())) {
                 err('claves-razor', `"${k}" está en la línea base y ya no falta (existe en uSync, o ninguna vista la pide): reescribí la línea base con --actualizar-claves-razor.`);
             }
+        }
+    }
+
+    // ─── 13. Cada clave cuelga de una raíz que existe (#193) ────────
+    //
+    // Una hoja dice su padre en <Info><Parent>; si ese padre no está en
+    // uSync/v9/Dictionary/, el import no la cuelga donde el repo dice. #193
+    // creó cuatro raíces (Account, Banner, Flow, Platform) junto con sus hojas.
+    const raicesDelDiccionario = new Set();
+    const hojasDelDiccionario = [];
+    for (const file of dictionary) {
+        const text = await fs.readFile(file, 'utf-8');
+        const alias = text.match(/<Dictionary[^>]*\sAlias="([^"]+)"/)?.[1];
+        if (!alias) continue;
+        const padre = text.match(/<Parent>([^<]+)<\/Parent>/)?.[1];
+        if (padre) hojasDelDiccionario.push([alias, padre, file]);
+        else raicesDelDiccionario.add(alias);
+    }
+    for (const [alias, padre, file] of hojasDelDiccionario) {
+        if (!raicesDelDiccionario.has(padre)) {
+            err('dictionary-padre',
+                `${path.relative(ROOT, file)}: "${alias}" cuelga de "${padre}" y esa raíz no está en uSync/v9/Dictionary/. Creá la raíz (Level="0", sin traducciones) o corregí el padre.`);
         }
     }
 

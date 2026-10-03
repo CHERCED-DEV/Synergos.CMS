@@ -32,7 +32,7 @@
 
     @if (posts.Count == 0)
     {
-        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValueOrDefault("blog.empty", "Aún no hay artículos.")</p>
+        <p class="syn-post-category__empty">@Umbraco.GetDictionaryValueOrDefault("Blog.NoPosts", "No hay publicaciones disponibles.")</p>
     }
     else
     {

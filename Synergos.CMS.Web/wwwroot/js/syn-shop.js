@@ -42,7 +42,8 @@
     // Mantener el aria-label del botón en sync con la cantidad.
     var buttons = document.querySelectorAll("[data-cart-button]");
     for (var j = 0; j < buttons.length; j++) {
-      buttons[j].setAttribute("aria-label", "Carrito (" + count + ")");
+      var label = buttons[j].getAttribute("data-cart-label") || "Carrito de compras";
+      buttons[j].setAttribute("aria-label", label + " (" + count + ")");
     }
   }
 

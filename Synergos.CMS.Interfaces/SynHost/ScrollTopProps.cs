@@ -16,8 +16,8 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para>El umbral sale de un TextBox y se lee como ENTERO («400»): lo que no lo es («400px»,
 /// «1.000») no viaja y se anota, y el elemento aplica el suyo.</para>
 ///
-/// <para><b>Sección <c>ScrollTop</c></b> (ADR 0136): el nombre por defecto. <c>Footer.BackToTop</c>
-/// dice lo mismo, pero es copia del pie de página: declararla acoplaría este botón a ella.</para>
+/// <para><b>Sección <c>ScrollTop</c></b> (ADR 0136): el nombre por defecto. El pie tenía una copia
+/// (<c>Footer.BackToTop</c>), sin lector, y se retiró (#193); declararla habría acoplado el botón al pie.</para>
 /// </remarks>
 [ElementoSynHost("scroll-top", TipoDeColocable.Pieza, Diccionario = ["ScrollTop"])]
 public sealed record ScrollTopProps(

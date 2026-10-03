@@ -8,7 +8,7 @@
 
     Accesibilidad:
     - skip-link al <main> al comienzo
-    - <nav aria-label="Main navigation">
+    - <nav> con nombre accesible; los textos del chrome salen del diccionario (#193)
     - <html lang> con la cultura activa
 *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<dynamic>
@@ -44,6 +44,8 @@
     var isShop = siteRoot?.Children
         .Any(c => c.ContentType.Alias == "productCategoryPage") ?? false;
     var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
+    var cartLabel = Umbraco.GetDictionaryValueOrDefault("Shop.Cart.Title", "Carrito de compras");
+    var logoLabel = Umbraco.GetDictionaryValueOrDefault("Header.Aria.Logo", "Ir a la página de inicio");
     // El botón enlaza la página que el EDITOR compuso con el resumen del carrito, no una ruta
     // escrita acá: `/tienda/carrito` no existió nunca y daba 404 desde cada página de la Tienda,
     // Booking y Propiedades (#187). Sin esa página, el contador se muestra y no se enlaza.
@@ -156,7 +158,7 @@
                 <div class="syn-site-header__inner">
                     @if (siteRoot != null)
                     {
-                        <a class="syn-site-header__brand" href="@platformRootUrl" aria-label="Volver a la plataforma SynergosLabs">
+                        <a class="syn-site-header__brand" href="@platformRootUrl" aria-label="@logoLabel">
                             <img class="syn-site-header__logo" src="@logoUrl" alt="" width="34" height="34" loading="eager" />
                             <span class="syn-site-header__brand-name">@siteName</span>
                         </a>
@@ -172,13 +174,13 @@
                     {
                         @* P2-6: el toggle es el control real — operable por teclado/lector
                            (sin aria-hidden), con nombre y aria-controls al nav que abre. *@
-                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-controls="syn-site-nav" aria-label="Menú de navegación" />
+                        <input type="checkbox" id="syn-nav-toggle" class="syn-nav-toggle" aria-controls="syn-site-nav" aria-label="@Umbraco.GetDictionaryValueOrDefault("Common.Aria.ToggleNav", "Alternar navegación")" />
                         <label for="syn-nav-toggle" class="syn-nav-burger" aria-hidden="true">
                             <span class="syn-nav-burger__bar"></span>
                             <span class="syn-nav-burger__bar"></span>
                             <span class="syn-nav-burger__bar"></span>
                         </label>
-                        <nav id="syn-site-nav" class="syn-site-nav" aria-label="Navegación principal">
+                        <nav id="syn-site-nav" class="syn-site-nav" aria-label="@Umbraco.GetDictionaryValueOrDefault("Nav.MainNavLabel", "Navegación principal")">
                             <ul class="syn-site-nav__list">
                                 @foreach (var item in navItems)
                                 {
@@ -207,14 +209,14 @@
                             + "<path d=\"M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6\"></path></svg>");
                         if (cartPageUrl is not null)
                         {
-                            <a class="syn-cart-button" href="@cartPageUrl" data-cart-button aria-label="Carrito (@cartCount)">
+                            <a class="syn-cart-button" href="@cartPageUrl" data-cart-button data-cart-label="@cartLabel" aria-label="@cartLabel (@cartCount)">
                                 @cartIcon
                                 <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
                             </a>
                         }
                         else
                         {
-                            <span class="syn-cart-button" role="img" data-cart-button aria-label="Carrito (@cartCount)">
+                            <span class="syn-cart-button" role="img" data-cart-button data-cart-label="@cartLabel" aria-label="@cartLabel (@cartCount)">
                                 @cartIcon
                                 <span class="syn-cart-badge@(cartCount == 0 ? " syn-cart-badge--empty" : "")" data-cart-count aria-hidden="true">@cartCount</span>
                             </span>
@@ -234,7 +236,7 @@
         </main>
         @if (showAside)
         {
-            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValueOrDefault("common.aria.sidebar", "Sidebar")">
+            <aside class="syn-site-aside" aria-label="@Umbraco.GetDictionaryValueOrDefault("Common.Aria.Sidebar", "Contenido complementario")">
                 @await Html.GetBlockGridHtmlAsync(customAsideBlocks!)
             </aside>
         }
@@ -268,14 +270,14 @@
                     {
                         <div class="syn-site-footer__top">
                             <div class="syn-site-footer__brand">
-                                <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                                <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — @logoLabel">
                                     <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
                                     <span class="syn-site-footer__brand-name">@siteName</span>
                                 </a>
                                 <p class="syn-site-footer__tagline">Un código, un schema, infinitos productos.</p>
                             </div>
-                            <nav class="syn-site-footer__nav" aria-label="Footer navigation">
-                                <p class="syn-site-footer__nav-title">Plataforma</p>
+                            <nav class="syn-site-footer__nav" aria-label="@Umbraco.GetDictionaryValueOrDefault("Nav.FooterNavLabel", "Navegación del pie de página")">
+                                <p class="syn-site-footer__nav-title">@Umbraco.GetDictionaryValueOrDefault("Footer.NavigationTitle", "Navegación")</p>
                                 <ul class="syn-site-footer__nav-list">
                                     @foreach (var item in footerNav)
                                     {
@@ -290,14 +292,14 @@
                     else
                     {
                         <div class="syn-site-footer__brand syn-site-footer__brand--solo">
-                            <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — volver a la plataforma">
+                            <a class="syn-site-footer__brand-link" href="@platformRootUrl" aria-label="@siteName — @logoLabel">
                                 <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
                                 <span class="syn-site-footer__brand-name">@siteName</span>
                             </a>
                         </div>
                     }
                     <div class="syn-site-footer__legal">
-                        <p class="syn-site-footer__copyright">&copy; @yearNow @siteName. Todos los derechos reservados.</p>
+                        <p class="syn-site-footer__copyright">&copy; @yearNow @siteName. @Umbraco.GetDictionaryValueOrDefault("Footer.AllRightsReserved", "Todos los derechos reservados.")</p>
                         <p class="syn-site-footer__legal-note">Hecho con SynergosLabs.</p>
                     </div>
                     @if (globalFooterNote is not null)

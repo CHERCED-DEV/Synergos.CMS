@@ -17,7 +17,7 @@
 }
 <aside class="syn-global-alert syn-global-alert--@variant syn-global-alert--@tone@(Model.Dismissible ? " syn-global-alert--dismissible" : "")"
        role="region"
-       aria-label="@Umbraco.GetDictionaryValueOrDefault("alert.aria.label", "Aviso del sitio")">
+       aria-label="@Umbraco.GetDictionaryValueOrDefault("Alert.Aria.Label", "Aviso del sitio")">
     <div class="syn-global-alert__inner">
         @if (!string.IsNullOrWhiteSpace(Model.Icon))
         {
@@ -34,7 +34,7 @@
         {
             <button type="button"
                     class="syn-global-alert__close"
-                    aria-label="@Umbraco.GetDictionaryValueOrDefault("alert.aria.dismiss", "Cerrar aviso")">&times;</button>
+                    aria-label="@Umbraco.GetDictionaryValueOrDefault("Alert.Dismiss", "Cerrar aviso")">&times;</button>
         }
     </div>
 </aside>

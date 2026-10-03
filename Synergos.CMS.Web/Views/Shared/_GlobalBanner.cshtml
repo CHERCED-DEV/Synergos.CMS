@@ -14,7 +14,7 @@
 }
 <aside class="syn-global-banner syn-global-banner--@placement@(hasImage ? " syn-global-banner--has-image" : "")"
        role="region"
-       aria-label="@Umbraco.GetDictionaryValueOrDefault("banner.aria.label", "Banner promocional")"
+       aria-label="@Umbraco.GetDictionaryValueOrDefault("Banner.Aria.Label", "Banner promocional")"
        @(hasImage ? Html.Raw($"style=\"background-image:url('{Model.ImageUrl}')\"") : null)>
     <div class="syn-global-banner__inner">
         <p class="syn-global-banner__message">@Model.Message</p>
