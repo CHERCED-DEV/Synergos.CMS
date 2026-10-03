@@ -1,7 +1,8 @@
 @*
     SynHost renderer — <synergos-seat-map>.
 
-    El bloque solo CONFIGURA el mapa (qué cabina, cuántos asientos, en qué moneda).
+    El bloque solo CONFIGURA el mapa (qué cabina, cuántos asientos, cómo se ve). La
+    moneda viaja con los precios del proveedor: el editor no la escribe (CMS#196).
     El inventario de butacas lo resuelve ISeatMapProvider en el SERVIDOR: así las
     credenciales del proveedor no salen al navegador y el componente recibe la carga
     ya resuelta, que es como el bundle publicado la espera.
@@ -42,7 +43,6 @@
     // precios sin que nadie lo pidiera.
     var props = SeatMapProjection.BuildProps(
         layout,
-        Model.Value<string>("currency"),
         maxSelectable > 0 ? maxSelectable : null,
         Model.Value<string>("density"),
         Model.Value<bool>("hidePrices"),

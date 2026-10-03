@@ -141,14 +141,9 @@ public static class SeatMapProjection
 
     /// <summary>
     /// The full prop bag handed to <c>SynHostEmitRequest.Props</c>: the projected
-    /// <c>seatmap</c> (when there is one), plus the two editor-authored knobs.
+    /// <c>seatmap</c> (when there is one), plus what the editor decides about how it looks.
     /// </summary>
     /// <param name="layout">What the provider resolved, or <c>null</c> when it knew nothing.</param>
-    /// <param name="currencyOverride">
-    /// The <c>currency</c> the editor typed. Wins over the layout's own currency — the editor
-    /// is deciding what the visitor is quoted in. Blank falls back to the layout, and a layout
-    /// without one leaves the key out so the bundle applies its own default.
-    /// </param>
     /// <param name="maxSelectable">
     /// How many seats one passenger may pick. <c>null</c> or below 1 leaves the key out.
     /// </param>
@@ -163,7 +158,6 @@ public static class SeatMapProjection
     /// <param name="hideLegend">Igual, para la leyenda.</param>
     public static IReadOnlyDictionary<string, object?> BuildProps(
         SeatMapLayout? layout,
-        string? currencyOverride,
         int? maxSelectable,
         string? density = null,
         bool hidePrices = false,
@@ -177,9 +171,11 @@ public static class SeatMapProjection
             props["seatmap"] = payload;
         }
 
-        var currency = !string.IsNullOrWhiteSpace(currencyOverride)
-            ? currencyOverride.Trim().ToUpperInvariant()
-            : layout?.Currency?.Trim().ToUpperInvariant();
+        // La moneda es la de los precios, y los precios los publica el proveedor: la del mapa y
+        // ninguna otra. El editor la podía sobrescribir y el bundle pintaba los MISMOS importes
+        // con otro símbolo (50.000 COP como US$ 50.000). Sin moneda, la clave no va y el
+        // componente pinta el número solo (CMS#196).
+        var currency = layout?.Currency?.Trim().ToUpperInvariant();
         if (!string.IsNullOrWhiteSpace(currency))
         {
             props["currency"] = currency;

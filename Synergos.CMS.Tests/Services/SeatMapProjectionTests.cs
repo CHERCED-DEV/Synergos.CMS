@@ -515,7 +515,7 @@ public sealed class SeatMapProjectionTests
     [Fact]
     public void Sin_mapa_el_prop_bag_no_lleva_la_clave_seatmap()
     {
-        var props = SeatMapProjection.BuildProps(null, currencyOverride: null, maxSelectable: null);
+        var props = SeatMapProjection.BuildProps(null, maxSelectable: null);
 
         Assert.False(props.ContainsKey("seatmap"));
         Assert.False(props.ContainsKey("currency"));
@@ -526,21 +526,23 @@ public sealed class SeatMapProjectionTests
     // ── Los knobs del editor ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Protege la precedencia de la moneda: lo que el editor escribió gana sobre la del mapa,
-    /// y si no escribió nada se usa la del proveedor. Si no hay ninguna, la clave se omite y el
-    /// bundle aplica COP — emitir vacío rompería <c>Intl.NumberFormat</c>.
+    /// La moneda es la de los precios, y los precios los publica el proveedor: viaja la del
+    /// mapa y ninguna otra (CMS#196). Antes el editor la podía sobrescribir, y el componente
+    /// pintaba los MISMOS importes con otro símbolo. Sin moneda en el mapa la clave no va, y el
+    /// componente pinta el número solo en vez de inventar una.
     /// </summary>
     [Fact]
-    public void La_moneda_del_editor_gana_sobre_la_del_mapa_y_el_blanco_no_borra_nada()
+    public void La_moneda_es_la_del_mapa_que_publica_el_proveedor()
     {
         var layout = Layout(3, FilaTresTres("12"));
+        Assert.Equal("COP", SeatMapProjection.BuildProps(layout, null)["currency"] as string);
 
-        Assert.Equal("USD", SeatMapProjection.BuildProps(layout, " usd ", null)["currency"] as string);
-        Assert.Equal("COP", SeatMapProjection.BuildProps(layout, "   ", null)["currency"] as string);
-        Assert.Equal("COP", SeatMapProjection.BuildProps(layout, null, null)["currency"] as string);
+        var enDolares = new SeatMapLayout("r", "n", " usd ", new[] { 3 }, new[] { FilaTresTres("12") });
+        Assert.Equal("USD", SeatMapProjection.BuildProps(enDolares, null)["currency"] as string);
 
         var sinMoneda = new SeatMapLayout("r", "n", "  ", new[] { 3 }, new[] { FilaTresTres("12") });
-        Assert.False(SeatMapProjection.BuildProps(sinMoneda, null, null).ContainsKey("currency"));
+        Assert.False(SeatMapProjection.BuildProps(sinMoneda, null).ContainsKey("currency"));
+        Assert.False(SeatMapProjection.BuildProps(null, null).ContainsKey("currency"));
     }
 
     /// <summary>
@@ -552,10 +554,10 @@ public sealed class SeatMapProjectionTests
     {
         var layout = Layout(3, FilaTresTres("12"));
 
-        Assert.Equal(3, Assert.IsType<int>(SeatMapProjection.BuildProps(layout, null, 3)["maxSelectable"]));
-        Assert.False(SeatMapProjection.BuildProps(layout, null, 0).ContainsKey("maxSelectable"));
-        Assert.False(SeatMapProjection.BuildProps(layout, null, -2).ContainsKey("maxSelectable"));
-        Assert.False(SeatMapProjection.BuildProps(layout, null, null).ContainsKey("maxSelectable"));
+        Assert.Equal(3, Assert.IsType<int>(SeatMapProjection.BuildProps(layout, 3)["maxSelectable"]));
+        Assert.False(SeatMapProjection.BuildProps(layout, 0).ContainsKey("maxSelectable"));
+        Assert.False(SeatMapProjection.BuildProps(layout, -2).ContainsKey("maxSelectable"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null).ContainsKey("maxSelectable"));
     }
 
     // ── Apariencia ───────────────────────────────────────────────────────────
@@ -568,7 +570,7 @@ public sealed class SeatMapProjectionTests
     [Fact]
     public void Un_bloque_sin_apariencia_elegida_no_emite_ninguna_de_las_tres_claves()
     {
-        var props = SeatMapProjection.BuildProps(Layout(3, FilaTresTres("12")), null, null);
+        var props = SeatMapProjection.BuildProps(Layout(3, FilaTresTres("12")), null);
 
         Assert.False(props.ContainsKey("density"));
         Assert.False(props.ContainsKey("showPrices"));
@@ -585,11 +587,11 @@ public sealed class SeatMapProjectionTests
     {
         var layout = Layout(3, FilaTresTres("12"));
 
-        Assert.Equal("compact", SeatMapProjection.BuildProps(layout, null, null, " COMPACT ")["density"]);
-        Assert.Equal("comfortable", SeatMapProjection.BuildProps(layout, null, null, "comfortable")["density"]);
-        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "espaciosisima").ContainsKey("density"));
-        Assert.False(SeatMapProjection.BuildProps(layout, null, null, "   ").ContainsKey("density"));
-        Assert.False(SeatMapProjection.BuildProps(layout, null, null, null).ContainsKey("density"));
+        Assert.Equal("compact", SeatMapProjection.BuildProps(layout, null, " COMPACT ")["density"]);
+        Assert.Equal("comfortable", SeatMapProjection.BuildProps(layout, null, "comfortable")["density"]);
+        Assert.False(SeatMapProjection.BuildProps(layout, null, "espaciosisima").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, "   ").ContainsKey("density"));
+        Assert.False(SeatMapProjection.BuildProps(layout, null, null).ContainsKey("density"));
     }
 
     /// <summary>
@@ -607,11 +609,11 @@ public sealed class SeatMapProjectionTests
     {
         var layout = Layout(3, FilaTresTres("12"));
 
-        var intacto = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: false, hideLegend: false);
+        var intacto = SeatMapProjection.BuildProps(layout, null, null, hidePrices: false, hideLegend: false);
         Assert.False(intacto.ContainsKey("showPrices"));
         Assert.False(intacto.ContainsKey("showLegend"));
 
-        var ocultos = SeatMapProjection.BuildProps(layout, null, null, null, hidePrices: true, hideLegend: true);
+        var ocultos = SeatMapProjection.BuildProps(layout, null, null, hidePrices: true, hideLegend: true);
         Assert.Equal(false, ocultos["showPrices"]);
         Assert.Equal(false, ocultos["showLegend"]);
     }
@@ -624,7 +626,7 @@ public sealed class SeatMapProjectionTests
     [Fact]
     public void La_apariencia_viaja_aunque_el_proveedor_no_haya_resuelto_el_mapa()
     {
-        var props = SeatMapProjection.BuildProps(null, null, null, "compact", hideLegend: true);
+        var props = SeatMapProjection.BuildProps(null, null, "compact", hideLegend: true);
 
         Assert.False(props.ContainsKey("seatmap"));
         Assert.Equal("compact", props["density"]);
