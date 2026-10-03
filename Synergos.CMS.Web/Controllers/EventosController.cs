@@ -132,7 +132,8 @@ public sealed class EventosController : ControllerBase
                 status = result.Status,
                 ticketId = result.TicketId,
                 attendee = result.AttendeeName,
-                at = DateTimeOffset.UtcNow,
+                // El reloj del controlador, no el del sistema: el mismo de la ficha y de la venta.
+                at = _reloj.GetUtcNow(),
             });
             await _realtime.PublishAsync(channel, "checkin", payload, cancellationToken);
         }

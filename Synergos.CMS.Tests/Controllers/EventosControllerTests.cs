@@ -237,6 +237,40 @@ public sealed class EventosControllerTests
         Assert.Equal("El evento 'X' ya comenzó: ya no se venden entradas.", Error(resultado));
     }
 
+    // ── El aviso en vivo del check-in lleva la hora del reloj del controlador ──────
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    /// <summary>
+    /// El <c>at</c> del aviso en vivo sale del reloj inyectado, el mismo de la ficha y de la venta.
+    /// </summary>
+    /// <remarks>
+    /// Leía <c>DateTimeOffset.UtcNow</c>: el único reloj del controlador que no se podía fijar, así
+    /// que la hora de entrada que ve la consola de la puerta no tenía test posible.
+    /// </remarks>
+    [Fact]
+    public async Task CheckIn_ElAvisoEnVivo_LlevaLaHoraDelRelojInyectado()
+    {
+        Organizer();
+        var ahora = new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero);
+        _management.CheckInAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new EventCheckInResult("valid", "evt-1", "tkt-1", "Ana"));
+        string? aviso = null;
+        _realtime.PublishAsync(Arg.Any<string>(), "checkin", Arg.Do<string>(p => aviso = p), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = new EventosController(
+            _catalog, _ticketing, _management, _priceFormatter, _gate, _realtime,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<EventosController>.Instance, new RelojFijo(ahora));
+
+        await sut.CheckIn(new EventosController.CheckInRequest("SYN-TKT-x.abc"), default);
+
+        using var cuerpo = System.Text.Json.JsonDocument.Parse(aviso!);
+        Assert.Equal(ahora, cuerpo.RootElement.GetProperty("at").GetDateTimeOffset());
+    }
+
     // ── CONTROL: el catálogo y la compra siguen siendo PÚBLICOS ────────────────────
 
     [Fact] // El catálogo es la vitrina: gatearlo mataría el negocio, no lo protegería
