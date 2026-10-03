@@ -708,7 +708,8 @@ public sealed class GovController : ControllerBase
 
     // La tasa viaja en las unidades MENORES de su moneda (COP: centavos), con la tabla con la que
     // la UI la divide para pintarla (#196, G-13). Antes salía el monto en pesos con el nombre
-    // feeMinor, y una tasa de 189.000 se pintaba $ 1.890. La bandeja no trae la moneda del
+    // feeMinor, y la UI sólo lo pintaba bien porque el Intl de Chromium da 0 decimales a COP. La
+    // bandeja no trae la moneda del
     // expediente (sólo dice si hay tasa): sin moneda, los dos decimales de casi todas.
     private static long ToFeeMinor(decimal fee, string? currency) => UnidadesMenores.Desde(Math.Max(0m, fee), currency);
 

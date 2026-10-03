@@ -6,13 +6,14 @@
     "",
     "POR QUÉ EXISTE. Cada borde decidía la unidad por su cuenta: el copago de salud mandaba centavos y",
     "la tasa de un trámite y la facturación de salud mandaban pesos con el nombre `feeMinor` y",
-    "`balanceMinor`. La UI divide por los decimales de la moneda, y una tasa de 189.000 se pintaba",
-    "$ 1.890: la pantalla cobraba cien veces menos de lo que se cobra.",
+    "`balanceMinor`. Medido en el sitio real: salud dividía por 100 y pintaba un saldo de 123.500",
+    "como $ 1.235; gobierno se salvaba por casualidad, porque el Intl de Chromium da 0 decimales a COP.",
     "",
-    "LA REGLA. menores = importe × 10^decimales(moneda), redondeado al par; decimales según CLDR (la",
-    "tabla de Intl en el navegador): 2 para casi todas, 0 para CLP, JPY, IQD…, 3 para KWD, BHD…; sin",
-    "moneda, 2. Las expectativas se derivaron a mano; IQD está porque CLDR (0) e ISO-4217 (3) no",
-    "coinciden, y lo que importa es que los dos lados digan lo mismo."
+    "LA REGLA. menores = importe × 10^decimales(moneda), redondeado al par; decimales según ISO-4217,",
+    "con la tabla ESCRITA en los dos lados: 2 para casi todas, 0 para CLP, JPY…, 3 para KWD, IQD…; sin",
+    "moneda, 2. No se lee de Intl: los motores no coinciden (el Chromium del navegador dice que COP",
+    "tiene 0 decimales y el Node de los tests, 2). Las expectativas se derivaron a mano; IQD está",
+    "porque ISO (3) y el CLDR de Intl (0) no coinciden."
   ],
   "vectores": [
     { "nombre": "la tasa de un pasaporte en pesos", "moneda": "COP", "importe": 189000, "menores": 18900000 },
@@ -24,7 +25,8 @@
     { "nombre": "yenes no tienen decimales", "moneda": "JPY", "importe": 5000, "menores": 5000 },
     { "nombre": "pesos chilenos tampoco", "moneda": "CLP", "importe": 5000, "menores": 5000 },
     { "nombre": "dinares de Kuwait tienen tres", "moneda": "KWD", "importe": 1.234, "menores": 1234 },
-    { "nombre": "dinares iraquíes: CLDR dice cero aunque ISO diga tres", "moneda": "IQD", "importe": 1500, "menores": 1500 },
+    { "nombre": "dinares iraquíes: ISO dice tres aunque el CLDR de Intl diga cero", "moneda": "IQD", "importe": 1500, "menores": 1500000 },
+    { "nombre": "pesos: dos decimales aunque el Intl del navegador diga cero", "moneda": "cop", "importe": 0.5, "menores": 50 },
     { "nombre": "sin moneda, dos decimales", "moneda": "", "importe": 10.5, "menores": 1050 }
   ]
 }
