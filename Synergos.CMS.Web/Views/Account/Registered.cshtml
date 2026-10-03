@@ -23,10 +23,10 @@
             <p class="syn-account__intro">
                 @if (!string.IsNullOrWhiteSpace(email))
                 {
-                    @Html.Raw(string.Format(
+                    @Synergos.CMS.Web.Services.Diccionario.FraseConDato.Resaltado(
                         Umbraco.GetDictionaryValueOrDefault("Account.Registered.IntroWithEmail",
-                            "Te enviamos un email a <strong>{0}</strong> con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam)."),
-                        System.Net.WebUtility.HtmlEncode(email)))
+                            "Te enviamos un email a {0} con un link para activar tu cuenta. Revisa tu bandeja de entrada (y la carpeta de spam)."),
+                        email)
                 }
                 else
                 {

@@ -45,7 +45,8 @@
         .Any(c => c.ContentType.Alias == "productCategoryPage") ?? false;
     var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
     var cartLabel = Umbraco.GetDictionaryValueOrDefault("Shop.Cart.Title", "Carrito de compras");
-    var logoLabel = Umbraco.GetDictionaryValueOrDefault("Header.Aria.Logo", "Ir a la página de inicio");
+    // El logo lleva al launcher de la plataforma, no al inicio del sitio: su nombre lo dice.
+    var logoLabel = Umbraco.GetDictionaryValueOrDefault("Header.Aria.BackToPlatform", "Volver a la plataforma");
     // El botón enlaza la página que el EDITOR compuso con el resumen del carrito, no una ruta
     // escrita acá: `/tienda/carrito` no existió nunca y daba 404 desde cada página de la Tienda,
     // Booking y Propiedades (#187). Sin esa página, el contador se muestra y no se enlaza.
