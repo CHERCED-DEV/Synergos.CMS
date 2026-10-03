@@ -2950,8 +2950,10 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   `Api.Inventory` cuenta existencias sin ventana, así que la aplica el CMS con su catálogo antes
   de salir a la red. **Por qué los tests no lo veían**: compraban con el reloj REAL, y en julio el
   festival era futuro. Un test de compra sin reloj fijo prueba la fecha en que se corre — y el día
-  que la regla existe se pone rojo solo. Con el catálogo del CMS (`eventPage`) la ventana todavía
-  NO se aplica —el schema no tiene la fecha, solo el texto—; el inicio del evento, sí.
+  que la regla existe se pone rojo solo. **Y la ventana la autora el editor** como dos DÍAS
+  («Venta desde» / «Venta hasta» en `elementEventTier`, date picker sin hora) que
+  `EventContentRules.BuildTiers` convierte en instantes en la zona del sitio; la ficha la emite
+  legible por máquina (`saleOpensAt`, `saleClosesAt`, `onSale`) con la MISMA regla del checkout.
 
 ## 6. Prohibiciones explícitas
 

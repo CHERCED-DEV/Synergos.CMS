@@ -77,6 +77,88 @@ public sealed class EventosContractShapeTests
         Tiers: new[] { new EventTier("gen", "General", 180_000m, "COP", 100, 40, 6) },
         SeatMap: null);
 
+    // ── La ventana de venta de cada localidad (#195) ──────────────────────────────
+    //
+    // La tarjeta pintaba la ventana como TEXTO («Hasta el 14 de agosto») y el checkout la
+    // ignoraba. Ahora el checkout la aplica, y la ficha la emite legible por máquina para que la
+    // tarjeta diga «Venta cerrada» o «Aún no está a la venta» sin parsear el texto.
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    private static readonly TimeSpan Bogota = TimeSpan.FromHours(-5);
+
+    private EventosController ConReloj(DateTimeOffset ahora) => new(
+        _catalog, _ticketing, _management, _priceFormatter, _gate, _realtime,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<EventosController>.Instance,
+        new RelojFijo(ahora));
+
+    /// <summary>Un evento del 20 de agosto con una localidad sin ventana y otra del 1 al 14.</summary>
+    private void FichaConVentana() => _catalog.GetEventAsync("EVT-1", Arg.Any<CancellationToken>()).Returns(Detail() with
+    {
+        Summary = Summary() with { StartUtc = new DateTimeOffset(2026, 8, 20, 20, 0, 0, Bogota) },
+        Tiers = new[]
+        {
+            new EventTier("gen", "General", 180_000m, "COP", 100, 40, 6),
+            new EventTier("vip", "VIP", 420_000m, "COP", 50, 10, 4, SaleWindow: "Hasta el 14 de agosto",
+                SaleOpensUtc: new DateTimeOffset(2026, 8, 1, 0, 0, 0, Bogota),
+                SaleClosesUtc: new DateTimeOffset(2026, 8, 15, 0, 0, 0, Bogota)),
+        },
+    });
+
+    private static JsonElement Localidad(JsonElement ficha, string id)
+        => ficha.GetProperty("tiers").EnumerateArray().Single(t => t.GetProperty("id").GetString() == id);
+
+    [Fact] // con ventana: los dos instantes en ISO 8601 con su desfase.
+    public async Task Event_LaVentana_SaleComoInstantesConSuDesfase()
+    {
+        FichaConVentana();
+
+        var vip = Localidad(Json(await ConReloj(new DateTimeOffset(2026, 8, 5, 12, 0, 0, Bogota)).Event("EVT-1", default)), "vip");
+
+        Assert.Equal("2026-08-01T00:00:00-05:00", vip.GetProperty("saleOpensAt").GetString());
+        Assert.Equal("2026-08-15T00:00:00-05:00", vip.GetProperty("saleClosesAt").GetString());
+        Assert.True(vip.GetProperty("onSale").GetBoolean());
+    }
+
+    [Fact] // sin ventana: las claves NO salen —ni como null— y se vende mientras el evento no empiece.
+    public async Task Event_SinVentana_NoEmiteLasClaves_YEstaALaVenta()
+    {
+        FichaConVentana();
+
+        var gen = Localidad(Json(await ConReloj(new DateTimeOffset(2026, 8, 16, 12, 0, 0, Bogota)).Event("EVT-1", default)), "gen");
+
+        Assert.False(gen.TryGetProperty("saleOpensAt", out _));
+        Assert.False(gen.TryGetProperty("saleClosesAt", out _));
+        Assert.True(gen.GetProperty("onSale").GetBoolean());
+    }
+
+    [Theory] // `onSale` es la regla del checkout, con el reloj del servidor.
+    [InlineData(7, 31, 23, false)]  // una hora antes de abrir (23:00 del 31 en Bogotá)
+    [InlineData(8, 14, 23, true)]   // la última hora del día de cierre, en Bogotá (04:00Z del 15)
+    [InlineData(8, 15, 0, false)]   // cerrada: empezó el 15 en Bogotá
+    public async Task Event_OnSale_LoDiceElRelojDelServidor(int mes, int dia, int hora, bool esperado)
+    {
+        FichaConVentana();
+
+        var vip = Localidad(Json(await ConReloj(new DateTimeOffset(2026, mes, dia, hora, 0, 0, Bogota)).Event("EVT-1", default)), "vip");
+
+        Assert.Equal(esperado, vip.GetProperty("onSale").GetBoolean());
+    }
+
+    [Fact] // un evento que ya empezó no tiene NADA a la venta, aunque la localidad no tenga ventana.
+    public async Task Event_YaEmpezado_NingunaLocalidadEstaALaVenta()
+    {
+        FichaConVentana();
+
+        var ficha = Json(await ConReloj(new DateTimeOffset(2026, 8, 20, 20, 0, 0, Bogota)).Event("EVT-1", default));
+
+        Assert.All(ficha.GetProperty("tiers").EnumerateArray(), t => Assert.False(t.GetProperty("onSale").GetBoolean()));
+        Assert.Equal("past", ficha.GetProperty("event").GetProperty("status").GetString());
+    }
+
     // ── Catálogo ──────────────────────────────────────────────────────────────────
 
     [Fact] // happy: la tarjeta lee `venueName`, y el borde solo emitía `venue`

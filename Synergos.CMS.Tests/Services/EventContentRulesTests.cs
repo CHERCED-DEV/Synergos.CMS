@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
 
@@ -23,6 +24,9 @@ public sealed class EventContentRulesTests
     private const string Cop = "COP";
     private const string Slug = "festival-estereo";
 
+    /// <summary>La zona del sitio por defecto: es la que dice qué día es «hasta el 14».</summary>
+    private static readonly TimeZoneInfo Bogota = new ListadosSettings().Zona()!;
+
     private static EventTierContent Tier(
         string? code = "general",
         string? name = "Entrada general",
@@ -38,7 +42,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Sin_localidades_no_hay_nada_que_vender_y_tampoco_hay_error()
     {
-        var result = EventContentRules.BuildTiers(Slug, null, Cop);
+        var result = EventContentRules.BuildTiers(Slug, null, Cop, Bogota);
 
         Assert.Empty(result.Value);
         Assert.Empty(result.Issues);
@@ -59,7 +63,7 @@ public sealed class EventContentRulesTests
             SaleWindow: "Hasta el 12 de julio",
             Featured: true);
 
-        var tier = Assert.Single(EventContentRules.BuildTiers(Slug, new[] { draft }, Cop).Value);
+        var tier = Assert.Single(EventContentRules.BuildTiers(Slug, new[] { draft }, Cop, Bogota).Value);
 
         // El código se normaliza porque es lo que el checkout compara.
         Assert.Equal("vip", tier.Code);
@@ -85,7 +89,7 @@ public sealed class EventContentRulesTests
                 Tier(code: "vip", name: "VIP", price: 380_000),
                 Tier(code: "VIP", name: "VIP duplicada", price: 100_000),
             },
-            Cop);
+            Cop, Bogota);
 
         var tier = Assert.Single(result.Value);
         Assert.Equal(380_000, tier.Price);
@@ -97,7 +101,7 @@ public sealed class EventContentRulesTests
     [InlineData(-5)]
     public void Una_localidad_sin_aforo_no_se_pone_a_la_venta(int capacity)
     {
-        var result = EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: capacity) }, Cop);
+        var result = EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: capacity) }, Cop, Bogota);
 
         Assert.Empty(result.Value);
         Assert.Contains(result.Issues, i => i.Level == EventContentIssueLevel.Warning);
@@ -106,7 +110,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Un_precio_negativo_se_descarta_en_vez_de_pagarle_al_comprador()
     {
-        var result = EventContentRules.BuildTiers(Slug, new[] { Tier(price: -1) }, Cop);
+        var result = EventContentRules.BuildTiers(Slug, new[] { Tier(price: -1) }, Cop, Bogota);
 
         Assert.Empty(result.Value);
         Assert.Contains(result.Issues, i => i.Level == EventContentIssueLevel.Error);
@@ -118,7 +122,7 @@ public sealed class EventContentRulesTests
         var result = EventContentRules.BuildTiers(
             Slug,
             new[] { Tier(code: "   "), Tier(code: "vip", name: null) },
-            Cop);
+            Cop, Bogota);
 
         Assert.Empty(result.Value);
         Assert.Equal(2, result.Issues.Count);
@@ -129,7 +133,7 @@ public sealed class EventContentRulesTests
     {
         // Ofrecer "hasta 10" sobre una localidad de 4 es prometer seis entradas que no existen.
         var tier = Assert.Single(
-            EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: 4, maxPerOrder: 10) }, Cop).Value);
+            EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: 4, maxPerOrder: 10) }, Cop, Bogota).Value);
 
         Assert.Equal(4, tier.MaxPerOrder);
     }
@@ -138,7 +142,7 @@ public sealed class EventContentRulesTests
     public void Sin_tope_declarado_se_aplica_el_de_la_casa()
     {
         var tier = Assert.Single(
-            EventContentRules.BuildTiers(Slug, new[] { Tier(maxPerOrder: 0) }, Cop).Value);
+            EventContentRules.BuildTiers(Slug, new[] { Tier(maxPerOrder: 0) }, Cop, Bogota).Value);
 
         Assert.Equal(EventContentRules.DefaultMaxPerOrder, tier.MaxPerOrder);
     }
@@ -154,7 +158,7 @@ public sealed class EventContentRulesTests
                 Tier(code: "vip", featured: true),
                 Tier(code: "palco", featured: true),
             },
-            Cop);
+            Cop, Bogota);
 
         Assert.Equal("general", Assert.Single(result.Value, t => t.Featured).Code);
         Assert.Contains(result.Issues, i => i.Level == EventContentIssueLevel.Warning);
@@ -165,10 +169,70 @@ public sealed class EventContentRulesTests
     {
         // El contenido declara CUÁNTO hay, no cuánto queda: lo vendido lo sabe el ledger de
         // reservas, que esta capa no ve. Es una limitación conocida, no un descuido.
-        var tier = Assert.Single(EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: 500) }, Cop).Value);
+        var tier = Assert.Single(EventContentRules.BuildTiers(Slug, new[] { Tier(capacity: 500) }, Cop, Bogota).Value);
 
         Assert.Equal(500, tier.Capacity);
         Assert.Equal(500, tier.Remaining);
+    }
+
+    // ── La ventana de venta (#195) ───────────────────────────────────────────
+    //
+    // El editor elige dos DÍAS; el checkout compara INSTANTES. La conversión es la regla: abre al
+    // empezar el primer día y cierra al empezar el día siguiente al último, en la zona del sitio.
+
+    private static EventTierContent ConVentana(DateTime? desde, DateTime? hasta)
+        => Tier(code: "vip") with { SaleOpens = desde, SaleCloses = hasta };
+
+    [Fact] // «hasta el 14» vende todo el 14 EN BOGOTÁ: cierra a las 00:00 del 15 de allá (05:00Z).
+    public void La_ventana_abre_al_empezar_el_dia_y_cierra_al_empezar_el_siguiente_en_la_zona_del_sitio()
+    {
+        var tier = Assert.Single(EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(2026, 8, 1), new DateTime(2026, 8, 14)) }, Cop, Bogota).Value);
+
+        Assert.Equal(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.FromHours(-5)), tier.SaleOpensUtc);
+        Assert.Equal(new DateTimeOffset(2026, 8, 15, 5, 0, 0, TimeSpan.Zero), tier.SaleClosesUtc);
+    }
+
+    [Fact] // la hora que el date picker arrastre no cuenta: el editor eligió un día.
+    public void La_hora_del_dia_elegido_no_mueve_la_ventana()
+    {
+        var tier = Assert.Single(EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(2026, 8, 1, 18, 30, 0), new DateTime(2026, 8, 14, 18, 30, 0)) }, Cop, Bogota).Value);
+
+        Assert.Equal(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.FromHours(-5)), tier.SaleOpensUtc);
+        Assert.Equal(new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.FromHours(-5)), tier.SaleClosesUtc);
+    }
+
+    [Fact] // vacío: sin límite por ese lado, y no un año 1 que cerraría la venta para siempre.
+    public void Sin_fechas_la_localidad_no_tiene_ventana()
+    {
+        var tier = Assert.Single(EventContentRules.BuildTiers(Slug, new[] { ConVentana(null, null) }, Cop, Bogota).Value);
+
+        Assert.Null(tier.SaleOpensUtc);
+        Assert.Null(tier.SaleClosesUtc);
+    }
+
+    [Fact] // un mismo día de apertura y cierre se vende ese día entero.
+    public void Abrir_y_cerrar_el_mismo_dia_vende_ese_dia()
+    {
+        var result = EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(2026, 8, 14), new DateTime(2026, 8, 14)) }, Cop, Bogota);
+
+        var tier = Assert.Single(result.Value);
+        Assert.Equal(TimeSpan.FromDays(1), tier.SaleClosesUtc - tier.SaleOpensUtc);
+        Assert.Empty(result.Issues);
+    }
+
+    [Fact] // al revés no se vende nunca: se omite con un error que nombra los dos campos.
+    public void Una_ventana_al_reves_omite_la_localidad_con_error()
+    {
+        var result = EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(2026, 8, 14), new DateTime(2026, 8, 1)), Tier(code: "general") }, Cop, Bogota);
+
+        Assert.Equal("general", Assert.Single(result.Value).Code);
+        var error = Assert.Single(result.Issues);
+        Assert.Equal(EventContentIssueLevel.Error, error.Level);
+        Assert.Contains("Venta desde", error.Message, StringComparison.Ordinal);
     }
 
     // ── Mapa de asientos ─────────────────────────────────────────────────────
@@ -194,7 +258,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Los_asientos_se_GENERAN_de_filas_por_butacas()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop, Bogota).Value;
 
         var map = EventContentRules.BuildSeatMap(
             Slug, new[] { Zone(rows: new[] { "A", "B" }, seatsPerRow: 3) }, tiers, Cop, "Teatro Metropolitano").Value;
@@ -213,7 +277,7 @@ public sealed class EventContentRulesTests
     public void Una_zona_que_apunta_a_una_localidad_inexistente_se_descarta()
     {
         // Vendería asientos que el checkout no sabe cobrar.
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "general") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "general") }, Cop, Bogota).Value;
 
         var result = EventContentRules.BuildSeatMap(
             Slug, new[] { Zone(tierCode: "vip") }, tiers, Cop, "Teatro");
@@ -225,7 +289,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Precio_0_en_la_zona_significa_cobrar_el_de_su_localidad()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop, Bogota).Value;
 
         var map = EventContentRules.BuildSeatMap(Slug, new[] { Zone(price: 0) }, tiers, Cop, "Teatro").Value;
 
@@ -235,7 +299,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Un_precio_propio_de_zona_gana_sobre_el_de_la_localidad()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop, Bogota).Value;
 
         var map = EventContentRules.BuildSeatMap(Slug, new[] { Zone(price: 450_000) }, tiers, Cop, "Teatro").Value;
 
@@ -245,7 +309,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Un_precio_negativo_de_zona_cae_al_de_su_localidad()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip", price: 380_000) }, Cop, Bogota).Value;
 
         var result = EventContentRules.BuildSeatMap(Slug, new[] { Zone(price: -1) }, tiers, Cop, "Teatro");
 
@@ -258,7 +322,7 @@ public sealed class EventContentRulesTests
     {
         // Recortarla dejaría media zona vendiendo asientos que no existen — y eso lo descubre
         // el asistente en la puerta, no el build.
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop, Bogota).Value;
 
         var result = EventContentRules.BuildSeatMap(
             Slug,
@@ -272,7 +336,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void El_techo_de_asientos_es_por_EVENTO_no_por_zona()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop, Bogota).Value;
 
         // Cada zona cabe sola; juntas no. La segunda es la que se cae.
         var half = EventContentRules.MaxSeatsPerEvent / 2 + 1;
@@ -292,7 +356,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void El_codigo_de_zona_repetido_conserva_la_primera()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop, Bogota).Value;
 
         var result = EventContentRules.BuildSeatMap(
             Slug,
@@ -306,7 +370,7 @@ public sealed class EventContentRulesTests
     [Fact]
     public void Una_zona_sin_filas_o_sin_butacas_se_omite()
     {
-        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop).Value;
+        var tiers = EventContentRules.BuildTiers(Slug, new[] { Tier(code: "vip") }, Cop, Bogota).Value;
 
         var result = EventContentRules.BuildSeatMap(
             Slug,

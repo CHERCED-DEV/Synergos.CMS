@@ -28,7 +28,10 @@ public sealed record EventTierContent(
     string? Description = null,
     IReadOnlyList<string>? Perks = null,
     string? SaleWindow = null,
-    bool Featured = false);
+    bool Featured = false,
+    // Los dos días de la ventana de venta, tal como los eligió el editor (sin hora ni zona).
+    DateTime? SaleOpens = null,
+    DateTime? SaleCloses = null);
 
 /// <summary>Lo que el editor escribió en una zona, sin interpretar.</summary>
 public sealed record EventZoneContent(
@@ -109,6 +112,10 @@ public static class EventContentRules
     /// 4 es prometer seis entradas que no existen.</item>
     /// <item>Solo UNA recomendada: si el editor marcó varias se respeta la primera, que es lo
     /// que dice la ayuda del campo.</item>
+    /// <item><b>La ventana de venta</b> (#195): «Venta desde» abre al EMPEZAR ese día y «Venta
+    /// hasta» cierra al empezar el día SIGUIENTE —el último día se vende entero—, los dos en la
+    /// zona del sitio. Una ventana al revés (cierra antes de abrir) no se puede vender nunca: la
+    /// localidad se omite con un error, igual que un código repetido.</item>
     /// </list>
     ///
     /// <para><b><see cref="EventTier.Remaining"/> sale igual al aforo, y es deliberado:</b> el
@@ -116,10 +123,13 @@ public static class EventContentRules
     /// del motor de ticketing, que esta capa no ve ni debe ver — un catálogo de contenido que
     /// intentara contar ventas quedaría desincronizado el primer día.</para>
     /// </remarks>
+    /// <param name="zonaDelSitio">En qué zona son los días de la ventana. Sin ella, «hasta el 14»
+    /// no dice cuándo termina el 14.</param>
     public static EventContentResult<IReadOnlyList<EventTier>> BuildTiers(
         string slug,
         IReadOnlyList<EventTierContent>? drafts,
-        string currency)
+        string currency,
+        TimeZoneInfo zonaDelSitio)
     {
         var issues = new List<EventContentIssue>();
         if (drafts is null || drafts.Count == 0)
@@ -163,6 +173,16 @@ public static class EventContentRules
                 continue;
             }
 
+            var abre = draft.SaleOpens is { } desde ? InicioDelDia(desde, zonaDelSitio) : (DateTimeOffset?)null;
+            var cierra = draft.SaleCloses is { } hasta ? InicioDelDia(hasta.AddDays(1), zonaDelSitio) : (DateTimeOffset?)null;
+            if (abre is not null && cierra is not null && cierra <= abre)
+            {
+                issues.Add(Err(
+                    $"Evento '{slug}': la localidad '{code}' deja de venderse ({draft.SaleCloses:yyyy-MM-dd}) antes de " +
+                    $"empezar a venderse ({draft.SaleOpens:yyyy-MM-dd}); se omite. Revisa «Venta desde» y «Venta hasta»."));
+                continue;
+            }
+
             var maxPerOrder = draft.MaxPerOrder > 0 ? draft.MaxPerOrder : DefaultMaxPerOrder;
             maxPerOrder = Math.Min(maxPerOrder, draft.Capacity);
 
@@ -180,7 +200,9 @@ public static class EventContentRules
                 Description: draft.Description?.Trim() ?? string.Empty,
                 Perks: CleanTextList(draft.Perks),
                 SaleWindow: draft.SaleWindow?.Trim() ?? string.Empty,
-                Featured: draft.Featured));
+                Featured: draft.Featured,
+                SaleOpensUtc: abre,
+                SaleClosesUtc: cierra));
         }
 
         var featuredCount = tiers.Count(t => t.Featured);
@@ -463,6 +485,40 @@ public static class EventContentRules
     /// </remarks>
     public static string BuildStatus(DateTimeOffset startUtc, DateTimeOffset now)
         => startUtc <= now ? "past" : "upcoming";
+
+    /// <summary>
+    /// La hora que tecleó el editor, anclada en la zona del sitio.
+    /// </summary>
+    /// <remarks>
+    /// <para><c>Umbraco.DateTime</c> guarda un <see cref="DateTime"/> sin zona (Kind Unspecified) y el
+    /// editor teclea hora local: sin anclarla, .NET la leería como hora del SERVIDOR y la agenda se
+    /// correría cuando el host no esté en el sitio.</para>
+    ///
+    /// <para><b>Se anclaba con un UTC−5 fijo</b>, correcto para Colombia —que no tiene horario de
+    /// verano— y equivocado para cualquier otro sitio aunque su configuración dijera otra zona. Hoy
+    /// es la zona de <c>Synergos:Listados:ZonaHoraria</c>, la misma que ya dice el día de los
+    /// listados, y el desfase sale de la zona Y de la fecha. Una hora que el cambio de hora se salta
+    /// toma el desfase estándar en vez de lanzar: una ficha mal escrita no tumba la agenda.</para>
+    ///
+    /// <para>Vive acá y no en la fuente de contenido porque la usan dos reglas: el inicio del evento
+    /// y los días de la ventana de venta (#195).</para>
+    /// </remarks>
+    public static DateTimeOffset InicioEnLaZona(DateTime delEditor, TimeZoneInfo zona)
+    {
+        ArgumentNullException.ThrowIfNull(zona);
+        var local = DateTime.SpecifyKind(delEditor, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, zona.GetUtcOffset(local));
+    }
+
+    /// <summary>
+    /// El instante en que EMPIEZA un día del calendario en la zona del sitio: la medianoche de allá.
+    /// </summary>
+    /// <remarks>
+    /// Un día del date picker llega a medianoche, pero se descarta la hora igual: lo que el editor
+    /// eligió es un día, no un instante.
+    /// </remarks>
+    public static DateTimeOffset InicioDelDia(DateTime dia, TimeZoneInfo zona)
+        => InicioEnLaZona(dia.Date, zona);
 
     /// <summary>
     /// Los chips del resumen (<c>event.badges</c>), derivados del modo de venta.

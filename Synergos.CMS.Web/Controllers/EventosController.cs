@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
 
@@ -39,6 +40,12 @@ public sealed class EventosController : ControllerBase
     private readonly IRealtimeNotifier _realtime;
     private readonly ILogger<EventosController> _logger;
 
+    /// <summary>
+    /// El reloj con que se dice si un evento ya pasó y si una localidad está a la venta: el MISMO
+    /// instante para la ficha y para el checkout, que lo vuelve a mirar con su propio reloj (#195).
+    /// </summary>
+    private readonly TimeProvider _reloj;
+
     public EventosController(
         IEventCatalogProvider catalog,
         IEventTicketingService ticketing,
@@ -46,7 +53,8 @@ public sealed class EventosController : ControllerBase
         IPriceFormatter priceFormatter,
         IMemberAccessGate gate,
         IRealtimeNotifier realtime,
-        ILogger<EventosController> logger)
+        ILogger<EventosController> logger,
+        TimeProvider? reloj = null)
     {
         _catalog = catalog;
         _ticketing = ticketing;
@@ -55,6 +63,7 @@ public sealed class EventosController : ControllerBase
         _gate = gate;
         _realtime = realtime;
         _logger = logger;
+        _reloj = reloj ?? TimeProvider.System;
     }
 
     // ── T9 — identidad server-trusted (molde de GovController/ShopCatalogController) ──
@@ -218,6 +227,10 @@ public sealed class EventosController : ControllerBase
             return NotFound(new { error = $"Evento '{id}' no encontrado." });
         }
 
+        // UN instante para todas las localidades de la ficha: si cada una mirara el reloj por su
+        // cuenta, en el borde de un cierre dos tarjetas podrían contradecirse.
+        var ahora = _reloj.GetUtcNow();
+
         return Ok(new EventDetailResponse(
             // Mismo `soldPercent` que en la lista: la ficha embebe el resumen, y si la
             // clave no saliera también aquí el aviso de aforo moriría en la ficha.
@@ -227,7 +240,7 @@ public sealed class EventosController : ControllerBase
             Sessions: (detail.Sessions ?? Array.Empty<EventSession>()).Select(ToSessionDto).ToList(),
             Artist: ToArtistDto(detail.Artist),
             Organizer: new EventOrganizerDto(detail.Organizer, string.Empty, string.Empty),
-            Tiers: detail.Tiers.Select(ToTierDto).ToList(),
+            Tiers: detail.Tiers.Select(t => ToTierDto(t, detail.Summary, ahora)).ToList(),
             SeatMap: ToSeatMapDto(detail.SeatMap),
             Venue: ToVenueDto(detail)));
     }
@@ -497,7 +510,7 @@ public sealed class EventosController : ControllerBase
             Slug: published?.Summary.Slug ?? string.Empty,
             Status: published is null
                 ? string.Empty
-                : EventContentRules.BuildStatus(published.Summary.StartUtc, DateTimeOffset.UtcNow)));
+                : EventContentRules.BuildStatus(published.Summary.StartUtc, _reloj.GetUtcNow())));
     }
 
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
@@ -527,7 +540,7 @@ public sealed class EventosController : ControllerBase
         Mode: s.Mode,
         Geo: s.Geo is null ? null : new EventGeoDto(s.Geo.Lat, s.Geo.Lng),
         Subtitle: EventContentRules.BuildSubtitle(s.Venue, s.City),
-        Status: EventContentRules.BuildStatus(s.StartUtc, DateTimeOffset.UtcNow),
+        Status: EventContentRules.BuildStatus(s.StartUtc, _reloj.GetUtcNow()),
         Badges: EventContentRules.BuildBadges(s.Mode),
         SoldPercent: soldPercent);
 
@@ -541,7 +554,7 @@ public sealed class EventosController : ControllerBase
     private static EventSessionDto ToSessionDto(EventSession s) =>
         new(s.Id, s.Time, s.Title, s.Speaker);
 
-    private EventTierDto ToTierDto(EventTier t) => new(
+    private EventTierDto ToTierDto(EventTier t, EventSummary evento, DateTimeOffset ahora) => new(
         Id: t.Code,   // la UI lee `tier.id` para el checkout (mismo valor que code)
         Code: t.Code,
         Name: t.Name,
@@ -559,7 +572,15 @@ public sealed class EventosController : ControllerBase
         Description: t.Description ?? string.Empty,
         Perks: t.Perks ?? Array.Empty<string>(),
         SaleWindow: t.SaleWindow ?? string.Empty,
-        Featured: t.Featured);
+        Featured: t.Featured,
+        // #195 — la ventana que CIERRA la venta, para que la tarjeta pinte «Venta cerrada» o «Aún
+        // no está a la venta» sin leer el texto. `onSale` es la MISMA regla que aplica el checkout
+        // (CalendarioDeVenta): si la ficha y el cobro la calcularan distinto, la tarjeta diría «a la
+        // venta» sobre lo que el checkout rechaza.
+        SaleOpensAt: t.SaleOpensUtc,
+        SaleClosesAt: t.SaleClosesUtc,
+        OnSale: CalendarioDeVenta.PorQueNoSeVende(evento, ahora) is null
+            && CalendarioDeVenta.PorQueNoSeVende(t, ahora) is null);
 
     private EventSeatMapDto? ToSeatMapDto(EventSeatMap? map)
     {
@@ -797,7 +818,17 @@ public sealed class EventosController : ControllerBase
         string Description,
         IReadOnlyList<string> Perks,
         string SaleWindow,
-        bool Featured);
+        bool Featured,
+        // #195 — la ventana de venta legible por máquina: instantes ISO 8601 con su desfase
+        // («2026-08-15T00:00:00-05:00»). La apertura incluye su instante; el CIERRE no —es el
+        // primer instante en que ya no se vende—. Sin ventana, la clave NO sale (no `null`): no hay
+        // nada que pintar, y un `null` invitaría a leerlo como «cerrada».
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? SaleOpensAt,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? SaleClosesAt,
+        // Si se vende AHORA, según el reloj del servidor: el evento no ha empezado y la localidad
+        // está dentro de su ventana. El aforo va aparte (`remaining`): una localidad agotada puede
+        // estar a la venta y sin cupo, que la tarjeta pinta distinto.
+        bool OnSale);
 
     public sealed record EventSeatDto(string Id, string Label, string Status);
 

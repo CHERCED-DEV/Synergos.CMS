@@ -49,26 +49,6 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
     /// </summary>
     private const string Currency = "COP";
 
-    /// <summary>
-    /// La hora que tecleó el editor, anclada en la zona del sitio.
-    /// </summary>
-    /// <remarks>
-    /// <para><c>Umbraco.DateTime</c> guarda un <see cref="DateTime"/> sin zona (Kind Unspecified) y el
-    /// editor teclea hora local: sin anclarla, .NET la leería como hora del SERVIDOR y la agenda se
-    /// correría cuando el host no esté en el sitio.</para>
-    ///
-    /// <para><b>Se anclaba con un UTC−5 fijo</b>, correcto para Colombia —que no tiene horario de
-    /// verano— y equivocado para cualquier otro sitio aunque su configuración dijera otra zona. Hoy
-    /// es la zona de <c>Synergos:Listados:ZonaHoraria</c>, la misma que ya dice el día de los
-    /// listados, y el desfase sale de la zona Y de la fecha. Una hora que el cambio de hora se salta
-    /// toma el desfase estándar en vez de lanzar: una ficha mal escrita no tumba la agenda.</para>
-    /// </remarks>
-    internal static DateTimeOffset InicioEnLaZona(DateTime delEditor, TimeZoneInfo zona)
-    {
-        var local = DateTime.SpecifyKind(delEditor, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, zona.GetUtcOffset(local));
-    }
-
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _settings;
     private readonly IOptionsMonitor<ListadosSettings> _listados;
@@ -251,7 +231,8 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             Category: node.Value<string>("eventCategory")?.Trim() ?? string.Empty,
             City: node.Value<string>("eventCity")?.Trim() ?? string.Empty,
             Venue: node.Value<string>("eventVenue")?.Trim() ?? string.Empty,
-            StartUtc: InicioEnLaZona(start, Zona),
+            // En la zona del sitio y no con un desfase fijo: ver EventContentRules.InicioEnLaZona.
+            StartUtc: EventContentRules.InicioEnLaZona(start, Zona),
             // El lector de MediaPicker3 vive en MediaPickerReader y es el ÚNICO: el picker
             // está configurado single, así que pedirlo como colección devuelve null sin
             // lanzar — el bug que dejó la tienda entera sin fotos.
@@ -401,7 +382,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
 
         var slug = summary.Slug;
 
-        var tiers = Report(EventContentRules.BuildTiers(slug, ReadTierDrafts(node), summary.Currency));
+        var tiers = Report(EventContentRules.BuildTiers(slug, ReadTierDrafts(node), summary.Currency, Zona));
 
         var venueName = node.Value<string>("eventVenueMapName")?.Trim();
         if (string.IsNullOrEmpty(venueName))
@@ -466,7 +447,11 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
                 Description: b.Value<string>("tierDescription"),
                 Perks: ReadTextList(b, "tierPerks"),
                 SaleWindow: b.Value<string>("tierSaleWindow"),
-                Featured: b.Value<bool>("tierFeatured")))
+                Featured: b.Value<bool>("tierFeatured"),
+                // La ventana que CIERRA la venta (#195): dos días del calendario, que las reglas
+                // convierten en instantes en la zona del sitio. Vacío llega como null, no como año 1.
+                SaleOpens: b.FechaDelEditor("tierSaleOpens"),
+                SaleCloses: b.FechaDelEditor("tierSaleCloses")))
             .ToList();
 
     private static IReadOnlyList<EventZoneContent> ReadZoneDrafts(IPublishedContent node)

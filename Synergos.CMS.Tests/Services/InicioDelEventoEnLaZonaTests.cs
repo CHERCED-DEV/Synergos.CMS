@@ -28,7 +28,7 @@ public sealed class InicioDelEventoEnLaZonaTests
     [Fact] // happy: las 14:00 que teclea el editor en Bogotá son las 19:00Z.
     public void En_Bogota_las_14_son_las_19_UTC()
     {
-        var inicio = UmbracoEventCatalogSource.InicioEnLaZona(new DateTime(2026, 8, 15, 14, 0, 0), Zona("America/Bogota"));
+        var inicio = EventContentRules.InicioEnLaZona(new DateTime(2026, 8, 15, 14, 0, 0), Zona("America/Bogota"));
 
         Assert.Equal(new DateTimeOffset(2026, 8, 15, 19, 0, 0, TimeSpan.Zero), inicio);
     }
@@ -38,7 +38,7 @@ public sealed class InicioDelEventoEnLaZonaTests
     [InlineData(12, 19)]
     public void En_Madrid_el_desfase_depende_de_la_fecha(int mes, int horaUtc)
     {
-        var inicio = UmbracoEventCatalogSource.InicioEnLaZona(new DateTime(2026, mes, 10, 20, 0, 0), Zona("Europe/Madrid"));
+        var inicio = EventContentRules.InicioEnLaZona(new DateTime(2026, mes, 10, 20, 0, 0), Zona("Europe/Madrid"));
 
         Assert.Equal(new DateTimeOffset(2026, mes, 10, horaUtc, 0, 0, TimeSpan.Zero), inicio);
     }
@@ -47,7 +47,7 @@ public sealed class InicioDelEventoEnLaZonaTests
     public void Una_hora_que_no_existe_no_lanza()
     {
         // 29-mar-2026, de 02:00 a 03:00 no existe en Madrid.
-        var inicio = UmbracoEventCatalogSource.InicioEnLaZona(new DateTime(2026, 3, 29, 2, 30, 0), Zona("Europe/Madrid"));
+        var inicio = EventContentRules.InicioEnLaZona(new DateTime(2026, 3, 29, 2, 30, 0), Zona("Europe/Madrid"));
 
         Assert.Equal(new DateTime(2026, 3, 29), inicio.UtcDateTime.Date);
     }
@@ -83,5 +83,40 @@ public sealed class InicioDelEventoEnLaZonaTests
 
         Assert.Contains("InicioEnLaZona(start, Zona)", fuente, StringComparison.Ordinal);
         Assert.DoesNotContain("TimeSpan.FromHours(", fuente, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Los dos días de la ventana de venta (#195): el schema los declara como fecha SIN hora y la
+    /// fuente los lee por el mismo alias.
+    /// </summary>
+    /// <remarks>
+    /// El alias se escribe dos veces —en el XML y en el C#— y ningún compilador cruza el eslabón: un
+    /// alias mal escrito en la fuente no lanza, devuelve null, y la localidad se vendería sin
+    /// ventana con la tarjeta diciendo lo contrario (<c>feedback_every_authored_field_needs_a_reader</c>).
+    /// </remarks>
+    [Theory]
+    [InlineData("tierSaleOpens")]
+    [InlineData("tierSaleCloses")]
+    public void La_ventana_que_autora_el_editor_es_la_que_lee_la_fuente(string alias)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Synergos.CMS.sln")))
+        {
+            dir = dir.Parent;
+        }
+        Assert.NotNull(dir);
+
+        var schema = System.Xml.Linq.XDocument.Load(Path.Combine(
+            dir!.FullName, "Synergos.CMS.Web", "uSync", "v9", "ContentTypes", "elementeventtier.config"));
+        var propiedad = Assert.Single(schema.Descendants("GenericProperty"), p => (string?)p.Element("Alias") == alias);
+        Assert.Equal("Umbraco.DateTime", (string?)propiedad.Element("Type"));
+        // El DataType «Date Picker» de serie: sólo día. Con hora, el editor elegiría un instante
+        // en una zona que no ve.
+        Assert.Equal("5046194e-4237-453c-a547-15db3a07c4e1", (string?)propiedad.Element("Definition"));
+        Assert.Equal("Nothing", (string?)propiedad.Element("Variations"));
+
+        var fuente = File.ReadAllText(Path.Combine(
+            dir.FullName, "Synergos.CMS.Web", "Services", "Catalog", "UmbracoEventCatalogSource.cs"));
+        Assert.Contains($"FechaDelEditor(\"{alias}\")", fuente, StringComparison.Ordinal);
     }
 }
