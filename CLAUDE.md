@@ -197,7 +197,7 @@ Synergos.CMS/
 │   │   └── umbraco/             cdn-contract.md (DESBLOQUEADO, HU #20 · ADR 0132)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (259 archivos)
-│       ├── DataTypes/           136 archivos (71 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
+│       ├── DataTypes/           137 archivos (72 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
 │       ├── Dictionary/          i18n es-CO + en-US (644 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
