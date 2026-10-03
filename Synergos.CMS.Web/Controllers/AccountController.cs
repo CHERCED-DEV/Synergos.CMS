@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Filters;
 using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -15,7 +16,14 @@ namespace Synergos.CMS.Web.Controllers;
 /// seam y hacen PRG (POST → Redirect → GET) preservando feedback via
 /// querystring.
 /// </summary>
+/// <remarks>
+/// <para><b>Se pinta en la cultura de su sitio</b> (<see cref="CulturaDelSitioAttribute"/>): sus
+/// textos salen del diccionario (#193) y, sin el filtro, una ruta MVC se queda con la cultura de
+/// ASP.NET (en-US): el login de un sitio es-CO decía «Sign in». Sus formularios sólo enlazan texto
+/// y booleanos, que no cambian con la cultura.</para>
+/// </remarks>
 [Route("account")]
+[CulturaDelSitio]
 public sealed class AccountController : Controller
 {
     private const string TwoFactorPendingCachePrefix = "syn:2fa-pending:";

@@ -51,6 +51,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// información que el redirect al login.</para>
 /// </remarks>
 [Route("admin")]
+[CulturaDelSitio]
 [AllowAnonymous]
 [RequireRoles(ModeratorRolesCsv)]
 [AutoValidateAntiforgeryToken]

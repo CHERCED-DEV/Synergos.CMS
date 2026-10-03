@@ -131,25 +131,23 @@ public sealed class CulturaDelSitioTests
 
     /// <summary>
     /// Las páginas que pintan los controladores MVC (no las rutea Umbraco) declaran la cultura de
-    /// su sitio, salvo las de la línea base —vigilada en los dos sentidos—.
+    /// su sitio. La línea base —vigilada en los dos sentidos— quedó vacía (#193).
     /// </summary>
     /// <remarks>
     /// <para>Se descubren por la FUENTE: un controlador de <c>Controllers/</c> que devuelve una vista
     /// (<c>View(…)</c> o <c>new ViewResult</c>). Los <c>RenderController</c> los rutea Umbraco y
     /// traen la cultura de su dominio; no entran.</para>
-    /// <para><b>La línea base es deuda medida, no exención</b>: las dos pintan
-    /// <c>&lt;html lang="@CurrentUICulture"&gt;</c> y salen <c>lang="en"</c> (medido en
-    /// <c>/account/login</c>). No llevan bridge, y sus formularios hacen POST: cambiarles la cultura
-    /// cambia cómo se leen los valores del formulario, así que va a ticket aparte y no de paso.</para>
+    /// <para><b>La línea base era deuda medida</b>: <c>AccountController</c> y <c>AdminController</c>
+    /// salían <c>lang="en"</c>. Se pagó en #193, cuando sus claves pasaron a existir en el
+    /// diccionario y el login de un sitio es-CO empezó a decir «Sign in» (medido en vivo). El miedo
+    /// que la tenía aparte —que la cultura cambie cómo se leen sus formularios— se midió: sus POST
+    /// sólo enlazan texto, booleanos y GUID, y los números y fechas de Admin llegan por query string,
+    /// que ASP.NET lee en cultura invariante. Sus vistas escriben fechas con formato explícito.</para>
     /// </remarks>
     [Fact]
     public void Las_paginas_de_los_controladores_MVC_se_pintan_en_la_cultura_de_su_sitio()
     {
-        var lineaBase = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["AccountController"] = "sus vistas salen con lang=\"en\" y tienen formularios POST",
-            ["AdminController"] = "consola interna; sus vistas salen con lang=\"en\"",
-        };
+        var lineaBase = new Dictionary<string, string>(StringComparer.Ordinal);
 
         var controladores = Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Controllers");
         var pintan = Directory.EnumerateFiles(controladores, "*.cs")
