@@ -6,8 +6,8 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary><c>elementSynVideoPlayer</c> → <see cref="VideoPlayerProps"/>.</summary>
 /// <remarks>
-/// El video y su póster viajan como URLs de medios. <c>chaptersJson</c> y <c>enableAnalytics</c>
-/// no se leen: el elemento no los implementa (ver el record).
+/// El video y su póster viajan como URLs de medios. El ElementType ya no ofrece
+/// <c>chaptersJson</c> ni <c>enableAnalytics</c> (#192, caso 17; ver el record).
 /// </remarks>
 public sealed class VideoPlayerResolutor : IResolutorSynHost<VideoPlayerProps>
 {

@@ -13,10 +13,9 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <c>description</c>, que viaja como <c>body</c>. <c>iconKey</c> lo documenta el ElementType y el
 /// elemento no lo pinta: no viaja.</para>
 ///
-/// <para><b><c>orientation</c> tampoco viaja</b>, y no por el nombre: el ElementType ofrece
-/// vertical/horizontal y el elemento acepta el atributo pero no lo usa —pinta siempre vertical—.
-/// Lo que el ElementType promete y el elemento no pinta no viaja (la regla de <c>linkUrl</c> en
-/// <c>carousel</c>). El título de la sección y el texto de «sin hitos» no los autora el editor:
+/// <para><b>El ElementType ya no ofrece <c>orientation</c></b> (#192, caso 1): ofrecía
+/// vertical/horizontal y el elemento pinta siempre vertical; lo horizontal es su propio elemento,
+/// <c>timeline-horizontal</c>. El título de la sección y el texto de «sin hitos» no los autora el editor:
 /// son atributos.</para>
 ///
 /// <para><b>Su microcopia sale del diccionario, sección <c>Timeline</c></b> (ADR 0136): el nombre de la

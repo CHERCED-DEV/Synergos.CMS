@@ -36,7 +36,9 @@ public sealed class CountdownDigitalResolutor : IResolutorSynHost<CountdownDigit
 
         return new ElementoResuelto<CountdownDigitalProps>(new CountdownDigitalProps(
             TargetDate: editor.FechaIso("endDateTime"),
-            ShowLabels: editor.Interruptor("showLabels"),
+            // Se autora en NEGATIVO (#192, caso 24): sin tocar, el elemento muestra los rótulos; sólo
+            // viaja el apagado.
+            ShowLabels: editor.Interruptor("hideLabels") ? false : null,
             Style: estilo is not null && NombreEnElElemento.TryGetValue(estilo, out var nombre) ? nombre : estilo?.ToLowerInvariant()));
     }
 }

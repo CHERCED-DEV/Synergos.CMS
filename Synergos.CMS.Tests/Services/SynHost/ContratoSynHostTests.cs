@@ -203,7 +203,6 @@ public sealed class ContratoSynHostTests
             ["timeline"] = new (string, object?)[]
             {
                 ("eventsJson", """[{"date":"2019-03-01","title":"Fundación","description":"Abrimos la primera sede en Medellín."},{"date":"2024","title":"Segunda sede","description":"Llegamos a Bogotá."}]"""),
-                ("orientation", "vertical"),
             },
             ["tour-guide"] = new (string, object?)[]
             {
@@ -314,7 +313,7 @@ public sealed class ContratoSynHostTests
             ["countdown-digital"] = new (string, object?)[]
             {
                 ("endDateTime", "2030-12-31T23:59:59-05:00"),
-                ("showLabels", true),
+                ("hideLabels", true),
                 ("style", "digits"),
             },
             ["avatar-group"] = new (string, object?)[]

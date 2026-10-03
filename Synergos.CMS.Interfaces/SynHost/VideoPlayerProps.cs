@@ -12,11 +12,9 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Los dos son URLs absolutas de medios</b> (MediaPicker3 <c>videoFile</c> y
 /// <c>posterImage</c>); sin medio, o con uno sin fichero, no viajan.</para>
 ///
-/// <para><b>Lo que el ElementType promete y el elemento no pinta no viaja.</b>
-/// <c>chaptersJson</c> (capítulos) y <c>enableAnalytics</c> (eventos play/25 %/…/complete) los
-/// declara el ElementType y el elemento no los implementa: los recibe como atributos «inertes»
-/// para que el host no falle, y no hace nada con ellos. Mandarlos sería afirmar una función que
-/// no existe. <c>title</c>, <c>autoplay</c>, <c>loop</c> y <c>muted</c> los acepta el elemento y
+/// <para><b>El ElementType ya no ofrece <c>chaptersJson</c> ni <c>enableAnalytics</c></b> (#192,
+/// caso 17): los declaraba y el elemento no los implementa —capítulos y eventos de analítica—; el
+/// editor los llenaba y no pasaba nada. La analítica tiene su seam (<c>IAnalyticsTracker</c>). <c>title</c>, <c>autoplay</c>, <c>loop</c> y <c>muted</c> los acepta el elemento y
 /// no los autora el ElementType: quedan como atributos.</para>
 ///
 /// <para><b>Secciones <c>Media</c> y <c>Video</c></b> (ADR 0136). <c>Media</c> es el transporte que

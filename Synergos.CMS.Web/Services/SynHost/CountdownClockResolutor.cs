@@ -5,8 +5,8 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary><c>elementSynCountdownClock</c> → <see cref="CountdownClockProps"/>.</summary>
 /// <remarks>
-/// La fecha viaja como <c>targetDate</c>, validada como ISO 8601. <c>labelFormat</c> no se lee:
-/// el elemento no implementa su plantilla (ver el record).
+/// La fecha viaja como <c>targetDate</c>, validada como ISO 8601. El ElementType ya no ofrece
+/// <c>labelFormat</c> (#192, caso 18; ver el record).
 /// </remarks>
 public sealed class CountdownClockResolutor : IResolutorSynHost<CountdownClockProps>
 {

@@ -868,10 +868,6 @@
             {
               "editor": "flip",
               "viaja": "flip"
-            },
-            {
-              "editor": "circular",
-              "viaja": "circular"
             }
           ]
         }
@@ -879,7 +875,7 @@
       "ejemplo": {
         "culture": "es-CO",
         "targetDate": "2030-12-31T23:59:59-05:00",
-        "showLabels": true,
+        "showLabels": false,
         "style": "plain"
       }
     },
@@ -2601,24 +2597,6 @@
           "tipo": "TimelineEntry[]",
           "opcional": true,
           "origen": "contenido"
-        }
-      ],
-      "selectores": [
-        {
-          "propiedad": "orientation",
-          "dataType": "DTSelectOrientation",
-          "multiple": false,
-          "campo": null,
-          "valores": [
-            {
-              "editor": "horizontal",
-              "viaja": null
-            },
-            {
-              "editor": "vertical",
-              "viaja": null
-            }
-          ]
         }
       ],
       "ejemplo": {

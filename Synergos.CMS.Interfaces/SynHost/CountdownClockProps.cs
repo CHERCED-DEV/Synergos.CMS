@@ -13,9 +13,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// ElementType la guarda en un TextBox): se valida y no se reescribe —una fecha sin zona la lee el
 /// navegador en la hora local del visitante—. Una que no es ISO no viaja y se anota.</para>
 ///
-/// <para><b><c>labelFormat</c> no viaja.</b> El ElementType lo describe como una plantilla con
-/// <c>{days}</c>, <c>{hours}</c>… que el elemento no implementa: el atributo homónimo lo usa como
-/// rótulo de «empezó», así que mandarlo pintaría «Quedan {days} días» literal al llegar a cero.
+/// <para><b>El ElementType ya no ofrece <c>labelFormat</c></b> (#192, caso 18). Lo describía como
+/// una plantilla con <c>{days}</c>, <c>{hours}</c>… que el elemento no implementa: el atributo
+/// homónimo es el rótulo de «empezó», así que mandarlo pintaría «Quedan {days} días» literal al
+/// llegar a cero.
 /// <c>startedLabel</c>, <c>invalidLabel</c> y <c>labels</c> los acepta el elemento y no los autora
 /// el ElementType: quedan como atributos.</para>
 ///
