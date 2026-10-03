@@ -36,6 +36,12 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
     private readonly IPatientRegistry _patients;
     private readonly Func<DateTime> _nowUtc;
 
+    /// <summary>
+    /// La zona del consultorio: en ella es «la fecha» de <see cref="GetByDateAsync"/> y de
+    /// <see cref="GetForPatientAsync"/> —lo que promete el seam— y la hora de las citas sembradas.
+    /// </summary>
+    private readonly TimeZoneInfo _zona;
+
     private readonly ConcurrentDictionary<string, ClinicalAppointment> _appointments = new(StringComparer.Ordinal);
 
     public StubClinicalSchedulingService(
@@ -51,19 +57,24 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
     /// Ctor configurable con time source inyectable y opción de sembrar citas demo
     /// (para determinismo en tests, ADR 0002).
     /// </summary>
+    /// <param name="zonaDelConsultorio">La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>): en
+    /// ella es «la fecha» de una cita. Sin ella, UTC —lo que hacía siempre—, que en Bogotá corre el
+    /// día a las siete de la noche.</param>
     public StubClinicalSchedulingService(
         IReservationService reservations,
         IPaymentProvider payments,
         IDoctorDirectory doctors,
         IPatientRegistry patients,
         Func<DateTime>? nowUtc,
-        bool seed)
+        bool seed,
+        TimeZoneInfo? zonaDelConsultorio = null)
     {
         _reservations = reservations ?? throw new ArgumentNullException(nameof(reservations));
         _payments = payments ?? throw new ArgumentNullException(nameof(payments));
         _doctors = doctors ?? throw new ArgumentNullException(nameof(doctors));
         _patients = patients ?? throw new ArgumentNullException(nameof(patients));
         _nowUtc = nowUtc ?? (() => DateTime.UtcNow);
+        _zona = zonaDelConsultorio ?? TimeZoneInfo.Utc;
 
         if (seed)
         {
@@ -175,7 +186,7 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
     public Task<IReadOnlyList<ClinicalAppointment>> GetByDateAsync(DateOnly date, string? doctorId = null, CancellationToken cancellationToken = default)
     {
         var matches = _appointments.Values
-            .Where(a => DateOnly.FromDateTime(a.StartUtc) == date)
+            .Where(a => DiaEnElConsultorio(a.StartUtc) == date)
             .Where(a => string.IsNullOrWhiteSpace(doctorId) || string.Equals(a.DoctorId, doctorId, StringComparison.Ordinal))
             .OrderBy(a => a.StartUtc)
             .ToList();
@@ -189,7 +200,7 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
             .Where(a => string.Equals(a.PatientId, patientId, StringComparison.Ordinal))
             .Where(a =>
             {
-                var dia = DateOnly.FromDateTime(a.StartUtc);
+                var dia = DiaEnElConsultorio(a.StartUtc);
                 return dia >= from && dia <= to;
             })
             .OrderBy(a => a.StartUtc)
@@ -197,17 +208,28 @@ public sealed class StubClinicalSchedulingService : IClinicalSchedulingService
         return Task.FromResult<IReadOnlyList<ClinicalAppointment>>(matches);
     }
 
+    /// <summary>
+    /// El día del consultorio en que cae un instante de la agenda. «La fecha» que promete el seam
+    /// es ésa, no la de UTC: medido, en Bogotá una cita a las 22:30 del 2 caía en el día 3.
+    /// </summary>
+    private DateOnly DiaEnElConsultorio(DateTime startUtc)
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(startUtc, DateTimeKind.Utc), _zona));
+
     // ── Semilla de citas demo (no pasa por el motor — son históricas/agendadas) ──
     private void SeedDemoAppointments()
     {
-        var today = DateTime.SpecifyKind(_nowUtc().Date, DateTimeKind.Utc);
+        // Las horas son las del CONSULTORIO —«las 9:00» de Jorge es la mañana en Bogotá—: se
+        // anclaban en UTC, y con la agenda pintada en la hora del sitio la cita salía a las 4:00.
+        var hoy = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_nowUtc(), DateTimeKind.Utc), _zona).Date;
+        DateTime A(int horas, int minutos = 0)
+            => TimeZoneInfo.ConvertTimeToUtc(hoy.AddHours(horas).AddMinutes(minutos), _zona);
         var seed = new[]
         {
-            CreateSeed("pat-jorge-medina", "Jorge Medina", "doc-carlos-mejia", "Dr. Carlos Mejía", "Cardiología", today.AddHours(9), 40, "checked-in"),
-            CreateSeed("pat-camila-restrepo", "Camila Restrepo", "doc-ana-rios", "Dra. Ana Ríos", "Medicina Interna", today.AddHours(10).AddMinutes(30), 30, "booked"),
-            CreateSeed("pat-valentina-cruz", "Valentina Cruz", "doc-ana-rios", "Dra. Ana Ríos", "Medicina Interna", today.AddHours(11).AddMinutes(30), 30, "booked"),
-            CreateSeed("pat-sara-gomez", "Sara Gómez", "doc-laura-vega", "Dra. Laura Vega", "Pediatría", today.AddHours(8).AddMinutes(20), 20, "done"),
-            CreateSeed("pat-andres-pardo", "Andrés Pardo", "doc-diego-soto", "Dr. Diego Soto", "Dermatología", today.AddHours(14), 30, "booked"),
+            CreateSeed("pat-jorge-medina", "Jorge Medina", "doc-carlos-mejia", "Dr. Carlos Mejía", "Cardiología", A(9), 40, "checked-in"),
+            CreateSeed("pat-camila-restrepo", "Camila Restrepo", "doc-ana-rios", "Dra. Ana Ríos", "Medicina Interna", A(10, 30), 30, "booked"),
+            CreateSeed("pat-valentina-cruz", "Valentina Cruz", "doc-ana-rios", "Dra. Ana Ríos", "Medicina Interna", A(11, 30), 30, "booked"),
+            CreateSeed("pat-sara-gomez", "Sara Gómez", "doc-laura-vega", "Dra. Laura Vega", "Pediatría", A(8, 20), 20, "done"),
+            CreateSeed("pat-andres-pardo", "Andrés Pardo", "doc-diego-soto", "Dr. Diego Soto", "Dermatología", A(14), 30, "booked"),
         };
         foreach (var a in seed)
         {

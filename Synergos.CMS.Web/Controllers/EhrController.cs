@@ -5,6 +5,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Filters;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -106,6 +107,9 @@ public sealed class EhrController : ControllerBase
     /// </summary>
     private readonly IOptions<ListadosSettings> _listados;
 
+    /// <summary>El reloj de «ahora» y de «hoy»: inyectado, para que el borde del día se pueda probar.</summary>
+    private readonly TimeProvider _reloj;
+
     public EhrController(
         IPatientRegistry patients,
         IDoctorDirectory doctors,
@@ -120,7 +124,8 @@ public sealed class EhrController : ControllerBase
         IMessagingService messaging,
         IPriceFormatter priceFormatter,
         IMemberAccessGate gate,
-        IOptions<ListadosSettings> listados)
+        IOptions<ListadosSettings> listados,
+        TimeProvider? reloj = null)
     {
         _patients = patients;
         _doctors = doctors;
@@ -136,6 +141,7 @@ public sealed class EhrController : ControllerBase
         _priceFormatter = priceFormatter;
         _gate = gate;
         _listados = listados;
+        _reloj = reloj ?? TimeProvider.System;
     }
 
     // ── Quién llama (#197) ─────────────────────────────────────────────
@@ -287,7 +293,7 @@ public sealed class EhrController : ControllerBase
         // agenda mirar, no la identidad de quien llama.
         if (ExigirClinico() is { } denegado) { return denegado; }
 
-        // Sin fecha → hoy (UTC), para que el dashboard caiga con el schedule del día.
+        // Sin fecha → hoy EN EL SITIO, para que el dashboard caiga con el schedule del día.
         var day = ParseDateOrToday(date);
         var appointments = await _scheduling.GetByDateAsync(day, doctorId, cancellationToken);
         return Ok(new AppointmentsResponse(appointments.Select(ToAppointmentDto).ToList()));
@@ -319,7 +325,7 @@ public sealed class EhrController : ControllerBase
         {
             return BadRequest(new { error = "patientId, doctorId y slot son requeridos." });
         }
-        if (body.ResolveSlotUtc() is not { } slot)
+        if (body.ResolveSlotUtc(ZonaDelSitio) is not { } slot)
         {
             return BadRequest(new { error = "slot (fecha/hora UTC, o { date, time }) es requerido y debe ser válido." });
         }
@@ -435,7 +441,7 @@ public sealed class EhrController : ControllerBase
         var delPaciente = found!.Id;
 
         var appointments = await CollectPatientAppointmentsAsync(delPaciente, cancellationToken);
-        var now = DateTime.UtcNow;
+        var now = AhoraUtc;
         var next = appointments
             .Where(a => a.StartUtc >= now && !string.Equals(a.Status, "cancelled", StringComparison.Ordinal))
             .OrderBy(a => a.StartUtc)
@@ -773,7 +779,7 @@ public sealed class EhrController : ControllerBase
 
         var day = ParseDateOrToday(date);
         var appts = await _scheduling.GetByDateAsync(day, doctorId: null, cancellationToken);
-        var now = DateTime.UtcNow;
+        var now = AhoraUtc;
         var slots = appts
             .OrderBy(a => a.StartUtc)
             .Select(a => new ScheduleSlotDto(
@@ -782,7 +788,7 @@ public sealed class EhrController : ControllerBase
                 PatientName: a.PatientName,
                 DoctorId: a.DoctorId,
                 DoctorName: a.DoctorName,
-                Time: a.StartUtc.ToString("HH:mm"),
+                Time: HoraDelSitio(a.StartUtc),
                 DurationMin: Math.Max(0, (int)(a.EndUtc - a.StartUtc).TotalMinutes),
                 Reason: string.IsNullOrWhiteSpace(a.Specialty) ? "Consulta" : a.Specialty,
                 Type: "in-person",
@@ -850,13 +856,38 @@ public sealed class EhrController : ControllerBase
 
     // ── Helpers ────────────────────────────────────────────────────────
 
+    // ── La hora del sitio ──────────────────────────────────────────────
+    //
+    // Los seams guardan UTC; lo que se MUESTRA —la fecha y la hora de una cita, el día de una nota,
+    // de una receta, de un resultado o de una línea de cobro— y lo que el paciente ELIGE —el
+    // `{date, time}` de una cita— son la hora local del sitio (`Synergos:Listados:ZonaHoraria`, la
+    // misma zona de los listados y de eventos). La FORMA del contrato no cambia: siguen saliendo
+    // «yyyy-MM-dd» y «HH:mm». Escribir UTC tal cual ponía la cita de las 9:00 de Bogotá a las
+    // 14:00, y «hoy» en UTC era mañana a partir de las siete de la noche.
+
     /// <summary>
-    /// Un instante de la agenda (UTC) en la zona del sitio. La zona se valida al arrancar, así que
-    /// el respaldo a UTC —el de <c>DataGridResolutor</c>— no se alcanza con la configuración puesta.
+    /// La zona del sitio. Se valida al arrancar, así que el respaldo a UTC —el de
+    /// <c>DataGridResolutor</c>— no se alcanza con la configuración puesta.
     /// </summary>
+    private TimeZoneInfo ZonaDelSitio => _listados.Value.Zona() ?? TimeZoneInfo.Utc;
+
+    /// <summary>«Ahora», en UTC, del reloj inyectado.</summary>
+    private DateTime AhoraUtc => _reloj.GetUtcNow().UtcDateTime;
+
+    /// <summary>«Hoy» en el sitio: el día que dice un reloj de pared en el consultorio.</summary>
+    private DateOnly HoyEnElSitio => DateOnly.FromDateTime(EnLaHoraDelSitio(AhoraUtc));
+
+    /// <summary>Un instante de la agenda (UTC) en la zona del sitio.</summary>
     private DateTime EnLaHoraDelSitio(DateTime utc)
-        => TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(utc, DateTimeKind.Utc), _listados.Value.Zona() ?? TimeZoneInfo.Utc);
+        => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), ZonaDelSitio);
+
+    /// <summary>El día de un instante UTC en el sitio, como lo lee la app: «yyyy-MM-dd».</summary>
+    private string FechaDelSitio(DateTime utc)
+        => EnLaHoraDelSitio(utc).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>La hora de un instante UTC en el sitio, como la lee la app: «HH:mm».</summary>
+    private string HoraDelSitio(DateTime utc)
+        => EnLaHoraDelSitio(utc).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
 
     // Estado de llegada determinista a partir de la hora de la cita vs. ahora.
     private static string DeriveScheduleState(DateTime startUtc, DateTime endUtc, DateTime now)
@@ -891,7 +922,7 @@ public sealed class EhrController : ControllerBase
     /// </remarks>
     private async Task<IReadOnlyList<ClinicalAppointment>> CollectPatientAppointmentsAsync(string patientId, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = HoyEnElSitio;
         var citas = await _scheduling.GetForPatientAsync(
             patientId, today.AddDays(-VentanaAtrasDias), today.AddDays(VentanaAdelanteDias), cancellationToken);
         // El seam promete orden ascendente; la «próxima cita» del home depende de él, así que
@@ -899,8 +930,8 @@ public sealed class EhrController : ControllerBase
         return citas.OrderBy(a => a.StartUtc).ToList();
     }
 
-    private static DateOnly ParseDateOrToday(string? date)
-        => DateOnly.TryParse(date, out var parsed) ? parsed : DateOnly.FromDateTime(DateTime.UtcNow);
+    private DateOnly ParseDateOrToday(string? date)
+        => DateOnly.TryParse(date, out var parsed) ? parsed : HoyEnElSitio;
 
     private static PatientDto ToPatientDto(EhrPatient p) => new(
         Id: p.Id, Name: p.FullName, Document: p.DocumentId, Sex: NormalizeSex(p.Gender),
@@ -936,9 +967,9 @@ public sealed class EhrController : ControllerBase
         BaselineVitals: h.BaselineVitals is null ? null : ToVitalsDto(h.BaselineVitals),
         LastVisitUtc: h.LastVisitUtc, TotalEncounters: h.TotalEncounters);
 
-    private static EncounterDto ToEncounterDto(ClinicalEncounter e) => new(
+    private EncounterDto ToEncounterDto(ClinicalEncounter e) => new(
         Id: e.Id, PatientId: e.PatientId, DoctorId: e.DoctorId, DoctorName: e.DoctorName,
-        Date: e.OccurredAtUtc.ToString("yyyy-MM-dd"), Reason: e.ReasonForVisit,
+        Date: FechaDelSitio(e.OccurredAtUtc), Reason: e.ReasonForVisit,
         Soap: new SoapDto(
             Subjective: e.Soap.Subjective,
             Objective: ToVitalsDto(e.Soap.Vitals),
@@ -959,17 +990,17 @@ public sealed class EhrController : ControllerBase
             : string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
     }
 
-    private static PrescriptionDto ToPrescriptionDto(EhrPrescription p) => new(
+    private PrescriptionDto ToPrescriptionDto(EhrPrescription p) => new(
         Id: p.Id, PatientId: p.PatientId, DoctorId: p.DoctorId, DoctorName: p.DoctorName,
-        Date: p.IssuedAtUtc.ToString("yyyy-MM-dd"),
+        Date: FechaDelSitio(p.IssuedAtUtc),
         Items: p.Items.Select(i => new PrescriptionItemDto(
             Drug: i.MedicationName, Dose: i.Dosage, Frequency: i.Frequency, DurationDays: i.DurationDays)).ToList(),
         Interactions: Array.Empty<string>());
 
-    private static AppointmentDto ToAppointmentDto(ClinicalAppointment a)
+    private AppointmentDto ToAppointmentDto(ClinicalAppointment a)
     {
-        var date = a.StartUtc.ToString("yyyy-MM-dd");
-        var time = a.StartUtc.ToString("HH:mm");
+        var date = FechaDelSitio(a.StartUtc);
+        var time = HoraDelSitio(a.StartUtc);
         return new AppointmentDto(
             Id: a.Id, PatientId: a.PatientId, PatientName: a.PatientName,
             DoctorId: a.DoctorId, DoctorName: a.DoctorName,
@@ -990,10 +1021,10 @@ public sealed class EhrController : ControllerBase
 
     // ── OLA 7 mappers ───────────────────────────────────────────────────
 
-    private static LabResultDto ToLabResultDto(EhrLabResult r) => new(
+    private LabResultDto ToLabResultDto(EhrLabResult r) => new(
         Id: r.Id, PatientId: r.PatientId, Panel: r.PanelName, Name: r.TestName,
         Value: r.Value, Unit: r.Unit, RefLow: r.ReferenceLow, RefHigh: r.ReferenceHigh,
-        Flag: r.Flag, Date: r.ResultedAtUtc.ToString("yyyy-MM-dd"), Released: true,
+        Flag: r.Flag, Date: FechaDelSitio(r.ResultedAtUtc), Released: true,
         Comment: r.Notes ?? string.Empty);
 
     private static MedicationDto ToMedicationDto(EhrMedication m) => new(
@@ -1082,7 +1113,7 @@ public sealed class EhrController : ControllerBase
         Unread: null,
         Messages: Array.Empty<ThreadMessageDto>());
 
-    private static BillingDto ToBillingDto(EhrBillingStatement s)
+    private BillingDto ToBillingDto(EhrBillingStatement s)
     {
         // amountMinor = responsabilidad del paciente por línea (lo que debe/pagó), en las unidades
         // MENORES de la moneda (#196, G-13). Decía «COP no tiene subdivisión menor» y mandaba
@@ -1090,7 +1121,7 @@ public sealed class EhrController : ControllerBase
         var lines = s.Statement
             .Select(l => new BillingLineDto(
                 Id: l.Id,
-                Date: l.ServiceDateUtc.ToString("yyyy-MM-dd"),
+                Date: FechaDelSitio(l.ServiceDateUtc),
                 Description: l.Description,
                 AmountMinor: UnidadesMenores.Desde(l.PatientResponsibility, s.Currency)))
             .ToList();
@@ -1120,10 +1151,21 @@ public sealed class EhrController : ControllerBase
     }
 
     /// <summary>
-    /// El inicio del slot, venga como instante ISO o como el objeto <c>{ date, time }</c> que
+    /// El inicio del slot en UTC, venga como instante ISO o como el objeto <c>{ date, time }</c> que
     /// este mismo borde devuelve en <see cref="AppointmentDto.Slot"/>.
     /// </summary>
-    private static DateTime? ReadSlot(JsonElement? slot)
+    /// <remarks>
+    /// <para><b>El <c>{ date, time }</c> es la hora del SITIO</b>: es el que el borde devuelve en la
+    /// hora local, y el que el paciente elige en un calendario de pared. Se leía como UTC, así que la
+    /// cita de las 9:00 que pedía alguien en Bogotá quedaba a las 4:00 de allá. Se ancla en
+    /// <paramref name="zonaDelSitio"/> con la misma pieza que la hora de un evento
+    /// (<see cref="EventContentRules.InicioEnLaZona"/>), que no lanza en una hora que el cambio de
+    /// hora se salta.</para>
+    ///
+    /// <para>El instante ISO se queda como estaba: trae su desfase («…Z») y no hay nada que
+    /// interpretar.</para>
+    /// </remarks>
+    private static DateTime? ReadSlot(JsonElement? slot, TimeZoneInfo zonaDelSitio)
     {
         if (slot is not { } value)
         {
@@ -1154,9 +1196,9 @@ public sealed class EhrController : ControllerBase
         return DateTime.TryParse(
             composed,
             System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
-            out var parsed)
-            ? parsed
+            System.Globalization.DateTimeStyles.None,
+            out var local)
+            ? EventContentRules.InicioEnLaZona(local, zonaDelSitio).UtcDateTime
             : null;
     }
 
@@ -1180,8 +1222,8 @@ public sealed class EhrController : ControllerBase
     /// </remarks>
     public sealed record BookAppointmentBody(string? PatientId, string DoctorId, JsonElement? Slot)
     {
-        /// <summary>El inicio del slot, venga como instante o como <c>{date,time}</c>.</summary>
-        public DateTime? ResolveSlotUtc() => ReadSlot(Slot);
+        /// <summary>El inicio del slot en UTC; un <c>{date,time}</c> es la hora de <paramref name="zonaDelSitio"/>.</summary>
+        public DateTime? ResolveSlotUtc(TimeZoneInfo zonaDelSitio) => ReadSlot(Slot, zonaDelSitio);
     }
 
     /// <summary>

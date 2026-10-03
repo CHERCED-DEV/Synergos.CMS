@@ -64,10 +64,13 @@ public sealed class EhrControllerTests
     /// <summary>La zona del sitio; la de partida es la del producto, America/Bogota.</summary>
     private ListadosSettings _listados = new();
 
+    /// <summary>El reloj del controlador: el del sistema, salvo en los tests del borde del día.</summary>
+    private TimeProvider _reloj = TimeProvider.System;
+
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
         _results, _medications, _orders, _billing, _inBasket, _messaging,
-        new EsCoPriceFormatter(new CartSettings()), _gate, Microsoft.Extensions.Options.Options.Create(_listados));
+        new EsCoPriceFormatter(new CartSettings()), _gate, Microsoft.Extensions.Options.Options.Create(_listados), _reloj);
 
     /// <summary>
     /// La sesión de partida (#197): un PACIENTE —un miembro sin rol clínico cuyo correo lleva a la
@@ -538,19 +541,131 @@ public sealed class EhrControllerTests
             Arg.Any<DateOnly>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact] // La ventana es la MISMA que barría el bucle: esto no estrecha ni ensancha nada.
+    [Fact] // La ventana es la MISMA que barría el bucle —−30/+60 días—, contada desde «hoy» EN EL SITIO.
     public async Task Chart_LaVentanaDeCitas_SigueSiendoLaDeAntes()
     {
         Clinico();
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
 
         PadronDevuelve(Paciente());
         CitasDelPacienteDevuelven();
-        var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoy = new DateOnly(2026, 10, 2);
 
         await BuildSut().Patient("pat-1", default);
 
         await _scheduling.Received(1).GetForPatientAsync(
             "pat-1", hoy.AddDays(-30), hoy.AddDays(60), Arg.Any<CancellationToken>());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // 1.quater · Las fechas y las horas, en la hora del SITIO
+    // ══════════════════════════════════════════════════════════════════════════════
+    //
+    // Los seams guardan UTC y el borde lo escribía tal cual: una cita de las 9:00 de Bogotá salía
+    // «14:00», «hoy» era mañana desde las siete de la noche, y el `{date, time}` que elegía el
+    // paciente se guardaba cinco horas antes. El reloj se fija cerca de la medianoche UTC
+    // —03:30Z del 3 de octubre, las 22:30 del 2 en Bogotá—, que es donde las dos lecturas dan un
+    // día distinto; lejos de ese borde, el defecto pasa en verde. La FORMA no cambia
+    // («yyyy-MM-dd» y «HH:mm»): sólo pasan a ser hora local.
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    private static readonly DateTimeOffset CercaDeMedianocheUtc = new(2026, 10, 3, 3, 30, 0, TimeSpan.Zero);
+
+    /// <summary>Una cita a las 03:30Z del 3: las 22:30 del 2 en Bogotá.</summary>
+    private static ClinicalAppointment CitaDeLaNoche() => Cita(startUtc: new DateTime(2026, 10, 3, 3, 30, 0, DateTimeKind.Utc));
+
+    [Fact] // el tablero sin fecha es el de HOY en el sitio: el 2, no el 3.
+    public async Task Schedule_SinFecha_Hoy_EsElDiaDelSitio()
+    {
+        Clinico();
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        AgendaDelDiaDevuelve();
+
+        await BuildSut().Schedule(null, default);
+
+        await _scheduling.Received(1).GetByDateAsync(new DateOnly(2026, 10, 2), null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // la hora del tablero es la del sitio: 22:30, no 03:30.
+    public async Task Schedule_LaHora_SaleEnLaDelSitio()
+    {
+        Clinico();
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        AgendaDelDiaDevuelve(CitaDeLaNoche());
+
+        var slot = Json(await BuildSut().Schedule("2026-10-02", default)).GetProperty("slots")[0];
+
+        Assert.Equal("22:30", slot.GetProperty("time").GetString());
+    }
+
+    [Fact] // la cita: fecha, hora y el `slot` que la app manda de vuelta, en la hora del sitio.
+    public async Task Appointments_LaCita_SaleConFechaYHoraDelSitio()
+    {
+        Clinico();
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        AgendaDelDiaDevuelve(CitaDeLaNoche());
+
+        var cita = Json(await BuildSut().Appointments(null, null, default)).GetProperty("appointments")[0];
+
+        Assert.Equal("2026-10-02", cita.GetProperty("date").GetString());
+        Assert.Equal("22:30", cita.GetProperty("time").GetString());
+        Assert.Equal("2026-10-02", cita.GetProperty("slot").GetProperty("date").GetString());
+        Assert.Equal("22:30", cita.GetProperty("slot").GetProperty("time").GetString());
+        await _scheduling.Received(1).GetByDateAsync(new DateOnly(2026, 10, 2), null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // lo que el paciente elige —el 2 a las 22:30— se guarda como 03:30Z del 3.
+    public async Task Appointment_LoQuePideElPaciente_EsLaHoraDelSitio()
+    {
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Cita(startUtc: ci.Arg<BookAppointmentRequest>().Slot));
+        var slot = JsonSerializer.SerializeToElement(new { date = "2026-10-02", time = "22:30" });
+
+        await BuildSut().BookAppointment(new EhrController.BookAppointmentBody(null, "doc-1", slot), default);
+
+        await _scheduling.Received(1).BookAsync(
+            Arg.Is<BookAppointmentRequest>(r => r.Slot == new DateTime(2026, 10, 3, 3, 30, 0, DateTimeKind.Utc)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // el día de una nota, de un resultado y de una línea de cobro: el del sitio.
+    public async Task Las_fechas_de_la_historia_salen_en_el_dia_del_sitio()
+    {
+        var noche = new DateTime(2026, 10, 3, 3, 30, 0, DateTimeKind.Utc);
+        _results.GetForPatientAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new EhrLabResult("lab-1", "pat-1", "Perfil", "Glucosa", "104", "mg/dL", 70, 100, "high", noche, null, null, null),
+        });
+        _billing.GetForPatientAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new EhrBillingStatement(
+            PatientId: "pat-1",
+            Statement: new[] { new EhrBillingLine("l-1", noche, "Consulta", 180_000m, 36_000m, "due") },
+            Balance: 36_000m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Sura", "M-1", "80%", 36_000m)));
+
+        var resultado = Json(await BuildSut().Results("pat-1", default)).GetProperty("results")[0];
+        var linea = Json(await BuildSut().Billing("pat-1", default)).GetProperty("statement").GetProperty("lines")[0];
+
+        Assert.Equal("2026-10-02", resultado.GetProperty("date").GetString());
+        Assert.Equal("2026-10-02", linea.GetProperty("date").GetString());
+
+        Clinico();
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven();
+        _records.GetEncountersAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new ClinicalEncounter("enc-1", "pat-1", "doc-1", "Dra. Ana Rojas", noche, "Control",
+                new SoapNote("s", string.Empty, "a", "p"), null, true),
+        });
+        _prescriptions.GetForPatientAsync("pat-1", Arg.Any<CancellationToken>()).Returns(Array.Empty<EhrPrescription>());
+
+        var nota = Json(await BuildSut().Patient("pat-1", default)).GetProperty("history")[0];
+
+        Assert.Equal("2026-10-02", nota.GetProperty("date").GetString());
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -1246,7 +1361,9 @@ public sealed class EhrControllerTests
         _results.GetForPatientAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new[]
         {
             new EhrLabResult("r-1", "pat-1", "Perfil lipídico", "Colesterol total", "232", "mg/dL",
-                0, 200, "high", new DateTime(2026, 3, 4), "o-1", "doc-1", "Repetir en ayunas."),
+                // Un INSTANTE, como los que guarda el seam: las 10:00 del 4 en Bogotá. Era la medianoche
+                // UTC del 4, que en la hora del sitio es la noche del 3.
+                0, 200, "high", new DateTime(2026, 3, 4, 15, 0, 0, DateTimeKind.Utc), "o-1", "doc-1", "Repetir en ayunas."),
         });
 
         var r = Json(await BuildSut().Results("pat-1", default)).GetProperty("results")[0];

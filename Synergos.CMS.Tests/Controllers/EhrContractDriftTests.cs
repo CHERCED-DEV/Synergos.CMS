@@ -73,6 +73,9 @@ public sealed class EhrContractDriftTests
 
     private static T Bind<T>(string uiJson) => JsonSerializer.Deserialize<T>(uiJson, Web)!;
 
+    /// <summary>La zona del sitio por defecto.</summary>
+    private static readonly TimeZoneInfo Bogota = new ListadosSettings().Zona()!;
+
     private static EhrPatient Paciente(string id, string? tratante) => new(
         Id: id, FullName: "Jorge Medina", DocumentId: "CC 1", Gender: "M",
         DateOfBirth: new DateOnly(1970, 1, 1), AgeYears: 56, Phone: "", Email: "",
@@ -294,7 +297,9 @@ public sealed class EhrContractDriftTests
         { "patientId": "p1", "doctorId": "d1", "slot": { "date": "2026-09-18", "time": "08:00" } }
         """);
 
-        Assert.Equal(new DateTime(2026, 9, 18, 8, 0, 0, DateTimeKind.Utc), body.ResolveSlotUtc()!.Value.ToUniversalTime());
+        // Y es la hora del SITIO: las 8:00 de Bogotá son las 13:00Z. Se leía como UTC y la cita quedaba
+        // a las 3:00 de allá.
+        Assert.Equal(new DateTime(2026, 9, 18, 13, 0, 0, DateTimeKind.Utc), body.ResolveSlotUtc(Bogota)!.Value.ToUniversalTime());
 
         BookAppointmentRequest? capturada = null;
         _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
@@ -319,7 +324,8 @@ public sealed class EhrContractDriftTests
         { "patientId": "p1", "doctorId": "d1", "slot": "2026-09-18T08:00:00Z" }
         """);
 
-        Assert.Equal(new DateTime(2026, 9, 18, 8, 0, 0, DateTimeKind.Utc), body.ResolveSlotUtc()!.Value.ToUniversalTime());
+        // Un instante con su desfase no se reinterpreta en ninguna zona.
+        Assert.Equal(new DateTime(2026, 9, 18, 8, 0, 0, DateTimeKind.Utc), body.ResolveSlotUtc(Bogota)!.Value.ToUniversalTime());
     }
 
     // ══════════ LECTURA · la historia clínica ══════════

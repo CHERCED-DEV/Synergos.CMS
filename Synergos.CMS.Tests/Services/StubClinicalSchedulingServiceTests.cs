@@ -188,6 +188,42 @@ public class StubClinicalSchedulingServiceTests
         Assert.Equal(copago.Currency, pagos.Ultima.Currency);
     }
 
+    // ── «La fecha» es la del consultorio (zona del sitio) ─────────────────────────────
+    //
+    // El seam promete la fecha del consultorio y el stub comparaba la de UTC: en Bogotá, una cita a
+    // las 22:30 del 2 caía en el día 3, y las citas sembradas «a las 9:00» eran las 4:00 de allá.
+    // El reloj va cerca de la medianoche UTC, donde las dos lecturas dan días distintos.
+
+    private static readonly TimeZoneInfo Bogota = new Synergos.CMS.Application.Configuration.ListadosSettings().Zona()!;
+
+    private static readonly DateTime CercaDeMedianocheUtc = new(2026, 10, 3, 3, 30, 0, DateTimeKind.Utc);
+
+    private static IClinicalSchedulingService EnBogota(bool seed)
+        => new StubClinicalSchedulingService(new StubReservationService(), new StubPaymentProvider(),
+            new StubDoctorDirectory(), new StubPatientRegistry(), () => CercaDeMedianocheUtc, seed, Bogota);
+
+    [Fact]
+    public async Task La_fecha_de_una_cita_es_la_del_consultorio_y_no_la_de_UTC()
+    {
+        var svc = EnBogota(seed: false);
+        await svc.BookAsync(new BookAppointmentRequest("pat-camila-restrepo", "doc-ana-rios", CercaDeMedianocheUtc));
+
+        Assert.Single(await svc.GetByDateAsync(new DateOnly(2026, 10, 2)));
+        Assert.Empty(await svc.GetByDateAsync(new DateOnly(2026, 10, 3)));
+        Assert.Single(await svc.GetForPatientAsync("pat-camila-restrepo", new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 2)));
+    }
+
+    [Fact]
+    public async Task Las_citas_sembradas_son_de_la_manana_del_consultorio()
+    {
+        var svc = EnBogota(seed: true);
+
+        var jorge = Assert.Single(await svc.GetByDateAsync(new DateOnly(2026, 10, 2), "doc-carlos-mejia"));
+
+        // Las 9:00 del 2 en Bogotá son las 14:00Z.
+        Assert.Equal(new DateTime(2026, 10, 2, 14, 0, 0, DateTimeKind.Utc), jorge.StartUtc);
+    }
+
     private sealed class PagosQueRecuerdan : IPaymentProvider, IDisposable
     {
         private readonly StubPaymentProvider _real = new();

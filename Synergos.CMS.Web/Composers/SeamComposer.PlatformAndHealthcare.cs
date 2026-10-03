@@ -192,7 +192,16 @@ public sealed partial class SeamComposer
         }
         else
         {
-            services.AddSingleton<IClinicalSchedulingService, StubClinicalSchedulingService>();
+            // Con el reloj y la zona del sitio: «la fecha» de una cita es la del consultorio, no la
+            // de UTC, y las citas sembradas son de la mañana de allá (Synergos:Listados).
+            services.AddSingleton<IClinicalSchedulingService>(sp => new StubClinicalSchedulingService(
+                sp.GetRequiredService<IReservationService>(),
+                sp.GetRequiredService<IPaymentProvider>(),
+                sp.GetRequiredService<IDoctorDirectory>(),
+                sp.GetRequiredService<IPatientRegistry>(),
+                () => sp.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime,
+                seed: true,
+                zonaDelConsultorio: sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ListadosSettings>>().Value.Zona()));
         }
 
         // OLA 7 Healthcare EHR-lite (doc 21 §2.5) — DOS portales de un mismo grafo
