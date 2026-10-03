@@ -98,7 +98,8 @@ public sealed class ContratoSynHostTests
             {
                 ("destinationLabel", "Hoteles SynergosLabs"),
             },
-            // La identidad no es del editor: el resolver pone el paciente de demo (#197).
+            // Nada del editor: la API es de negocio y el paciente lo resuelve el servidor desde la
+            // sesión (#197).
             ["ehr"] = Array.Empty<(string, object?)>(),
             ["gov"] = new (string, object?)[]
             {
@@ -169,6 +170,11 @@ public sealed class ContratoSynHostTests
             {
                 ("tagLabel", "Oferta"),
                 ("tagColor", "success"),
+            },
+            // El estilo es un selector (#192, caso 2): el gate de vocabulario cruza cada prevalor.
+            ["separator"] = new (string, object?)[]
+            {
+                ("style", "dashed"),
             },
             ["scroll-top"] = new (string, object?)[]
             {

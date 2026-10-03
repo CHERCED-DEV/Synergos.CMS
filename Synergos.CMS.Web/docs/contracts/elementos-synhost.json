@@ -2540,6 +2540,54 @@
       }
     },
     {
+      "nombre": "separator",
+      "tipo": "pieza",
+      "record": "SeparatorProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "style",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "style",
+          "dataType": "DTSelectSeparatorStyle",
+          "multiple": false,
+          "campo": "style",
+          "valores": [
+            {
+              "editor": "solid",
+              "viaja": "solid"
+            },
+            {
+              "editor": "dashed",
+              "viaja": "dashed"
+            },
+            {
+              "editor": "dotted",
+              "viaja": "dotted"
+            },
+            {
+              "editor": "double",
+              "viaja": "double"
+            },
+            {
+              "editor": "gradient",
+              "viaja": "gradient"
+            }
+          ]
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "style": "dashed"
+      }
+    },
+    {
       "nombre": "share-bar",
       "tipo": "pieza",
       "record": "ShareBarProps",
