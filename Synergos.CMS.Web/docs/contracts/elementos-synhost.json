@@ -502,7 +502,8 @@
           {
             "src": "/media/sala.jpg",
             "alt": "Sala con ventanal",
-            "label": "La sala"
+            "label": "La sala",
+            "linkUrl": "/propiedades/101"
           },
           {
             "src": "/media/cocina.jpg",
@@ -3265,6 +3266,11 @@
         },
         {
           "nombre": "label",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "linkUrl",
           "tipo": "string",
           "opcional": true
         }

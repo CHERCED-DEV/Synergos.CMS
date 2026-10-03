@@ -9,8 +9,9 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// </summary>
 /// <remarks>
 /// Las claves de cada diapositiva son las que documenta el ElementType (<c>imageUrl</c>,
-/// <c>alt</c>, <c>caption</c>) y salen con los nombres que el elemento lee (<c>src</c>,
-/// <c>alt</c>, <c>label</c>). Una diapositiva sin imagen no viaja y se anota.
+/// <c>alt</c>, <c>caption</c>, <c>linkUrl</c>) y salen con los nombres que el elemento lee
+/// (<c>src</c>, <c>alt</c>, <c>label</c>, <c>linkUrl</c>). Una diapositiva sin imagen no viaja y se
+/// anota.
 /// </remarks>
 public sealed class CarouselResolutor : IResolutorSynHost<CarouselProps>
 {
@@ -56,7 +57,8 @@ public sealed class CarouselResolutor : IResolutorSynHost<CarouselProps>
             diapositivas.Add(new CarouselSlide(
                 imagen,
                 LectorDelEditor.Cadena(entrada, "alt"),
-                LectorDelEditor.Cadena(entrada, "caption")));
+                LectorDelEditor.Cadena(entrada, "caption"),
+                LectorDelEditor.Cadena(entrada, "linkUrl")));
         }
 
         return diapositivas.Count > 0 ? diapositivas : null;

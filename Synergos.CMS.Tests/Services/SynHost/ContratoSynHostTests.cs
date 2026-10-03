@@ -62,7 +62,7 @@ public sealed class ContratoSynHostTests
         {
             ["carousel"] = new (string, object?)[]
             {
-                ("slidesJson", """[{"imageUrl":"/media/sala.jpg","alt":"Sala con ventanal","caption":"La sala"},{"imageUrl":"/media/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
+                ("slidesJson", """[{"imageUrl":"/media/sala.jpg","alt":"Sala con ventanal","caption":"La sala","linkUrl":"/propiedades/101"},{"imageUrl":"/media/cocina.jpg","alt":"Cocina integral","caption":"La cocina"}]"""),
                 ("autoplayInterval", "4000"),
             },
             ["dropdown"] = new (string, object?)[]

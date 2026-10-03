@@ -15,8 +15,9 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// elemento. La descripción del ElementType dice «Default 5000» y el elemento nunca arrancó solo:
 /// no se enciende por defecto (movimiento que el visitante no pidió; WCAG 2.2.2).</para>
 ///
-/// <para><c>linkUrl</c> lo promete la descripción del ElementType y el elemento no lo pinta: no
-/// viaja.</para>
+/// <para><b>Cada diapositiva enlaza</b> (#192, caso 4): <c>linkUrl</c>, que el editor ya autoraba en
+/// <c>slidesJson</c>, viaja con ese nombre, y el elemento hace de la imagen el enlace (UI
+/// <c>syn-carousel</c>). Antes lo prometía la descripción del ElementType y el record lo descartaba.</para>
 ///
 /// <para><b>Sección <c>Slider</c></b> (ADR 0136): los rótulos de los controles —que la pieza del
 /// DS pintaba en inglés, «Previous»/«Next», en un sitio en español— los traduce el elemento con
@@ -29,5 +30,5 @@ public sealed record CarouselProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? Autoplay,
     [property: CampoSynHost(OrigenDelCampo.Decision)] int? Interval);
 
-/// <summary>Una diapositiva: la imagen, su texto alternativo y su rótulo.</summary>
-public sealed record CarouselSlide(string Src, string? Alt = null, string? Label = null);
+/// <summary>Una diapositiva: la imagen, su texto alternativo, su rótulo y adónde enlaza.</summary>
+public sealed record CarouselSlide(string Src, string? Alt = null, string? Label = null, string? LinkUrl = null);

@@ -40,7 +40,8 @@ public sealed class CarouselResolutorTests
         Assert.Equal("/media/sala.jpg", slides[0].GetProperty("src").GetString());
         Assert.Equal("La sala", slides[0].GetProperty("label").GetString());
         Assert.False(slides[1].TryGetProperty("label", out _));
-        Assert.False(slides[1].TryGetProperty("linkUrl", out _));
+        Assert.Equal("/x", slides[1].GetProperty("linkUrl").GetString());
+        Assert.False(slides[0].TryGetProperty("linkUrl", out _));
         Assert.True(((JsonElement)cable["autoplay"]!).GetBoolean());
         Assert.Equal(4000, ((JsonElement)cable["interval"]!).GetInt32());
     }
@@ -73,5 +74,15 @@ public sealed class CarouselResolutorTests
         var elemento = ElementoFalso.Con(("slidesJson", Diapositivas));
 
         Assert.Equal(Resolutor().Resolver(elemento).Props.Slides, Resolutor().Resolver(elemento).Props.Slides);
+    }
+
+    // #192, caso 4: el elemento enlaza cada diapositiva y el record descartaba linkUrl.
+    [Fact]
+    public void El_enlace_de_una_diapositiva_viaja_y_la_que_no_lo_trae_no_enlaza()
+    {
+        var slides = Resolutor().Resolver(ElementoFalso.Con(
+            ("slidesJson", """[{"imageUrl":"/a.jpg","linkUrl":"/propiedades/101"},{"imageUrl":"/b.jpg","linkUrl":"  "}]"""))).Props.Slides!;
+
+        Assert.Equal(new string?[] { "/propiedades/101", null }, slides.Select(s => s.LinkUrl).ToArray());
     }
 }
