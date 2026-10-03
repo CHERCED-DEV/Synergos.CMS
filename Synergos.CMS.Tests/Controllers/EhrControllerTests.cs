@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -60,7 +62,8 @@ public sealed class EhrControllerTests
 
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
-        _results, _medications, _orders, _billing, _inBasket, _messaging);
+        _results, _medications, _orders, _billing, _inBasket, _messaging,
+        new EsCoPriceFormatter(new CartSettings()));
 
     private static JsonElement Json(IActionResult result)
     {
@@ -817,6 +820,46 @@ public sealed class EhrControllerTests
 
         Assert.DoesNotContain(body.GetProperty("cards").EnumerateArray(),
             c => c.GetProperty("kind").GetString() == "message");
+    }
+
+    /// <summary>
+    /// El importe de la tarjeta de saldo sale en es-CO —«$ 123.500»—, sea cual sea la cultura del
+    /// hilo que atiende la petición.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se formateaba con <c>{saldo:N0}</c>, o sea con la cultura del HILO: una API no pasa por
+    /// el ruteo de Umbraco y no tiene la del sitio, así que en vivo, en un sitio es-CO, salía
+    /// «123,500 COP» —el separador de miles en-US, que en Colombia se lee como decimal—.</para>
+    ///
+    /// <para><b>El hilo se fija en en-US a propósito</b>, que es lo que tenía el servidor medido. Con
+    /// la cultura de la máquina de quien corre los tests —es-CO en la del arquitecto— el defecto
+    /// daría «123.500 COP» y un test que solo buscara «123.500» pasaría en verde con él puesto.</para>
+    /// </remarks>
+    [Fact]
+    public async Task PortalHome_ElSaldo_SeEscribeEnEsCo_YNoEnLaCulturaDelHilo()
+    {
+        PadronDevuelve(Paciente());
+        CitasDelPacienteDevuelven();
+        _billing.GetForPatientAsync("pat-1", Arg.Any<CancellationToken>()).Returns(new EhrBillingStatement(
+            PatientId: "pat-1",
+            Statement: Array.Empty<EhrBillingLine>(),
+            Balance: 123_500m, Currency: "COP",
+            Plan: new EhrInsurancePlan("Sura Clásico", "M-1", "80%", 36_000m)));
+
+        var antes = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+        try
+        {
+            var body = Json(await BuildSut().PortalHome("pat-1", default));
+
+            var tarjeta = body.GetProperty("cards").EnumerateArray()
+                .Single(c => c.GetProperty("kind").GetString() == "balance");
+            Assert.Equal("Tienes un saldo de $ 123.500 por pagar.", tarjeta.GetProperty("detail").GetString());
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = antes;
+        }
     }
 
     [Fact] // filtro: el e-Check-In aparece dentro de 48 h y NO antes.

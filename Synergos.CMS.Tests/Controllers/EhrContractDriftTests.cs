@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -43,7 +45,8 @@ public sealed class EhrContractDriftTests
 
     private EhrController BuildSut() => new(
         _patients, _doctors, _records, _prescriptions, _scheduling,
-        _results, _medications, _orders, _billing, _inBasket, _messaging);
+        _results, _medications, _orders, _billing, _inBasket, _messaging,
+        new EsCoPriceFormatter(new CartSettings()));
 
     private static T Bind<T>(string uiJson) => JsonSerializer.Deserialize<T>(uiJson, Web)!;
 

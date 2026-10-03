@@ -67,6 +67,13 @@ public sealed class EhrController : ControllerBase
     private readonly IEhrInBasketService _inBasket;
     private readonly IMessagingService _messaging;
 
+    /// <summary>
+    /// Cómo se escribe un importe para el paciente: es-CO, el mismo que usan las demás APIs de
+    /// vertical. Una API no pasa por el ruteo de Umbraco y no tiene la cultura del sitio, así que
+    /// formatear con la del hilo escribía «123,500 COP» en un sitio colombiano.
+    /// </summary>
+    private readonly IPriceFormatter _priceFormatter;
+
     public EhrController(
         IPatientRegistry patients,
         IDoctorDirectory doctors,
@@ -78,7 +85,8 @@ public sealed class EhrController : ControllerBase
         IClinicalOrderService orders,
         IClinicalBillingService billing,
         IEhrInBasketService inBasket,
-        IMessagingService messaging)
+        IMessagingService messaging,
+        IPriceFormatter priceFormatter)
     {
         _patients = patients;
         _doctors = doctors;
@@ -91,6 +99,7 @@ public sealed class EhrController : ControllerBase
         _billing = billing;
         _inBasket = inBasket;
         _messaging = messaging;
+        _priceFormatter = priceFormatter;
     }
 
     // ── 1. Pacientes (lista buscable) ──────────────────────────────────
@@ -372,7 +381,8 @@ public sealed class EhrController : ControllerBase
             cards.Add(new HomeCardDto(
                 Id: "card-balance", Kind: "balance",
                 Title: "Saldo pendiente",
-                Detail: $"Tienes un saldo de {saldo:N0} {currency} por pagar.",
+                // Con IPriceFormatter y no con {saldo:N0}: ése tomaba la cultura del hilo.
+                Detail: $"Tienes un saldo de {_priceFormatter.Format(saldo, currency)} por pagar.",
                 Action: "billing", ActionLabel: "Pagar ahora", Tone: "warning"));
         }
 
