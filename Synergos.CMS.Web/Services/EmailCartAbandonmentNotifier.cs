@@ -23,6 +23,9 @@ public sealed class EmailCartAbandonmentNotifier : ICartAbandonmentNotifierChann
     private readonly IEmailService _emailService;
     private readonly IEmailTemplateRenderer _emailRenderer;
     private readonly IBrandingProvider _branding;
+
+    /// <summary>Cómo se escribe el subtotal: es-CO y con SU moneda, no con la cultura del hilo.</summary>
+    private readonly IPriceFormatter _priceFormatter;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
     private readonly ILogger<EmailCartAbandonmentNotifier> _logger;
 
@@ -30,12 +33,14 @@ public sealed class EmailCartAbandonmentNotifier : ICartAbandonmentNotifierChann
         IEmailService emailService,
         IEmailTemplateRenderer emailRenderer,
         IBrandingProvider branding,
+        IPriceFormatter priceFormatter,
         IOptionsMonitor<CartAbandonmentSettings> settings,
         ILogger<EmailCartAbandonmentNotifier> logger)
     {
         _emailService = emailService;
         _emailRenderer = emailRenderer;
         _branding = branding;
+        _priceFormatter = priceFormatter;
         _settings = settings;
         _logger = logger;
     }
@@ -53,6 +58,9 @@ public sealed class EmailCartAbandonmentNotifier : ICartAbandonmentNotifierChann
             var brand = _branding.GetCurrent();
             var siteName = string.IsNullOrWhiteSpace(brand.DisplayName) ? "Synergos" : brand.DisplayName;
             var minutesSinceActivity = (int)(DateTime.UtcNow - cart.LastActivityUtc).TotalMinutes;
+            // UNA vez, para el asunto y para el cuerpo: la plantilla no formatea —con
+            // `ToString("N2")` tomaba la cultura del hilo del scanner y escribía «123,500.00 COP»—.
+            var subtotal = _priceFormatter.Format(cart.Subtotal, cart.Currency);
 
             var bodyHtml = await _emailRenderer.RenderAsync(
                 viewName: "CartAbandonment",
@@ -63,12 +71,13 @@ public sealed class EmailCartAbandonmentNotifier : ICartAbandonmentNotifierChann
                     Currency: cart.Currency,
                     LastActivityUtc: cart.LastActivityUtc,
                     MinutesSinceActivity: minutesSinceActivity,
-                    SiteName: siteName),
+                    SiteName: siteName,
+                    SubtotalFormatted: subtotal),
                 cancellationToken);
 
             await _emailService.SendAsync(new EmailMessage(
                 To: settings.NotifyEmailAddress,
-                Subject: $"{siteName} · Carrito abandonado: {cart.Subtotal:N2} {cart.Currency}",
+                Subject: $"{siteName} · Carrito abandonado: {subtotal}",
                 BodyHtml: bodyHtml),
                 cancellationToken);
         }

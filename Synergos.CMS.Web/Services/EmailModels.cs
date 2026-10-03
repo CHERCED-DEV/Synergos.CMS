@@ -32,6 +32,8 @@ public sealed record CommentPendingModerationEmailModel(
     string ModerationQueueUrl,
     string SiteName);
 
+/// <summary>El aviso de carrito abandonado.</summary>
+/// <param name="SubtotalFormatted">El subtotal ya escrito, es-CO y con su moneda: la plantilla no formatea.</param>
 public sealed record CartAbandonmentEmailModel(
     string CartId,
     int ItemCount,
@@ -39,7 +41,8 @@ public sealed record CartAbandonmentEmailModel(
     string Currency,
     DateTime LastActivityUtc,
     int MinutesSinceActivity,
-    string SiteName);
+    string SiteName,
+    string SubtotalFormatted);
 
 // ── T4 (doc 25) — email transaccional data-driven ──────────────────
 // UN modelo para los 6 hechos (compra, viaje, entradas, matrícula, radicado, decisión):

@@ -16,17 +16,22 @@ public sealed class SlackCartAbandonmentNotifier : ICartAbandonmentNotifierChann
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
     private readonly IBrandingProvider _branding;
+
+    /// <summary>Cómo se escribe el subtotal: es-CO y con SU moneda, no con la cultura del hilo.</summary>
+    private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<SlackCartAbandonmentNotifier> _logger;
 
     public SlackCartAbandonmentNotifier(
         IHttpClientFactory httpClientFactory,
         IOptionsMonitor<CartAbandonmentSettings> settings,
         IBrandingProvider branding,
+        IPriceFormatter priceFormatter,
         ILogger<SlackCartAbandonmentNotifier> logger)
     {
         _httpClientFactory = httpClientFactory;
         _settings = settings;
         _branding = branding;
+        _priceFormatter = priceFormatter;
         _logger = logger;
     }
 
@@ -46,7 +51,7 @@ public sealed class SlackCartAbandonmentNotifier : ICartAbandonmentNotifierChann
 
         var payload = new
         {
-            text = $"[{siteName}] Carrito abandonado · {cart.Subtotal:N2} {cart.Currency}",
+            text = $"[{siteName}] Carrito abandonado · {_priceFormatter.Format(cart.Subtotal, cart.Currency)}",
             blocks = new object[]
             {
                 new
@@ -59,7 +64,7 @@ public sealed class SlackCartAbandonmentNotifier : ICartAbandonmentNotifierChann
                     type = "section",
                     fields = new object[]
                     {
-                        new { type = "mrkdwn", text = $"*Subtotal:*\n{cart.Subtotal:N2} {cart.Currency}" },
+                        new { type = "mrkdwn", text = $"*Subtotal:*\n{_priceFormatter.Format(cart.Subtotal, cart.Currency)}" },
                         new { type = "mrkdwn", text = $"*Items:*\n{cart.ItemCount}" },
                         new { type = "mrkdwn", text = $"*Inactivo:*\nhace {minutesSinceActivity} min" },
                         new { type = "mrkdwn", text = $"*Cart ID:*\n`{cart.CartId}`" },

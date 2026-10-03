@@ -17,17 +17,22 @@ public sealed class DiscordCartAbandonmentNotifier : ICartAbandonmentNotifierCha
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
     private readonly IBrandingProvider _branding;
+
+    /// <summary>Cómo se escribe el subtotal: es-CO y con SU moneda, no con la cultura del hilo.</summary>
+    private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<DiscordCartAbandonmentNotifier> _logger;
 
     public DiscordCartAbandonmentNotifier(
         IHttpClientFactory httpClientFactory,
         IOptionsMonitor<CartAbandonmentSettings> settings,
         IBrandingProvider branding,
+        IPriceFormatter priceFormatter,
         ILogger<DiscordCartAbandonmentNotifier> logger)
     {
         _httpClientFactory = httpClientFactory;
         _settings = settings;
         _branding = branding;
+        _priceFormatter = priceFormatter;
         _logger = logger;
     }
 
@@ -52,13 +57,13 @@ public sealed class DiscordCartAbandonmentNotifier : ICartAbandonmentNotifierCha
             {
                 new
                 {
-                    title = $"🛒 Carrito abandonado · {cart.Subtotal:N2} {cart.Currency}",
+                    title = $"🛒 Carrito abandonado · {_priceFormatter.Format(cart.Subtotal, cart.Currency)}",
                     description = $"Considera recovery email o retargeting.",
                     color = WarningAmberDecimal,
                     timestamp = cart.LastActivityUtc.ToString("O"),
                     fields = new object[]
                     {
-                        new { name = "Subtotal", value = $"{cart.Subtotal:N2} {cart.Currency}", inline = true },
+                        new { name = "Subtotal", value = _priceFormatter.Format(cart.Subtotal, cart.Currency), inline = true },
                         new { name = "Items", value = cart.ItemCount.ToString(), inline = true },
                         new { name = "Inactivo", value = $"{minutesSinceActivity} min", inline = true },
                         new { name = "Cart ID", value = $"`{cart.CartId}`", inline = false },

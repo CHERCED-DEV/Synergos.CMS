@@ -17,17 +17,22 @@ public sealed class TeamsCartAbandonmentNotifier : ICartAbandonmentNotifierChann
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptionsMonitor<CartAbandonmentSettings> _settings;
     private readonly IBrandingProvider _branding;
+
+    /// <summary>Cómo se escribe el subtotal: es-CO y con SU moneda, no con la cultura del hilo.</summary>
+    private readonly IPriceFormatter _priceFormatter;
     private readonly ILogger<TeamsCartAbandonmentNotifier> _logger;
 
     public TeamsCartAbandonmentNotifier(
         IHttpClientFactory httpClientFactory,
         IOptionsMonitor<CartAbandonmentSettings> settings,
         IBrandingProvider branding,
+        IPriceFormatter priceFormatter,
         ILogger<TeamsCartAbandonmentNotifier> logger)
     {
         _httpClientFactory = httpClientFactory;
         _settings = settings;
         _branding = branding;
+        _priceFormatter = priceFormatter;
         _logger = logger;
     }
 
@@ -65,7 +70,7 @@ public sealed class TeamsCartAbandonmentNotifier : ICartAbandonmentNotifierChann
                 new
                 {
                     type = "TextBlock",
-                    text = $"{cart.Subtotal:N2} {cart.Currency} · Inactivo hace {minutesSinceActivity} min",
+                    text = $"{_priceFormatter.Format(cart.Subtotal, cart.Currency)} · Inactivo hace {minutesSinceActivity} min",
                     isSubtle = true,
                     spacing = "None",
                     wrap = true,
@@ -82,7 +87,7 @@ public sealed class TeamsCartAbandonmentNotifier : ICartAbandonmentNotifierChann
                     type = "FactSet",
                     facts = new object[]
                     {
-                        new { title = "Subtotal", value = $"{cart.Subtotal:N2} {cart.Currency}" },
+                        new { title = "Subtotal", value = _priceFormatter.Format(cart.Subtotal, cart.Currency) },
                         new { title = "Items", value = cart.ItemCount.ToString() },
                         new { title = "Inactivo (min)", value = minutesSinceActivity.ToString() },
                         new { title = "Cart ID", value = cart.CartId },
