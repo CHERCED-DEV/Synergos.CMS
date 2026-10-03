@@ -330,6 +330,14 @@ export function derivarPlan(cab) {
       'doc 12 §5.3 — la implementación en proceso es el default');
   }
 
+  // S4 · ADR 0137 — la configuración de NEGOCIO de la funcionalidad, por sitio
+  // (`Synergos:Features:<V>`, `SeccionDeNegocio<TSitio,TNegocio>`). La lleva todo vertical, tenga o
+  // no forma transaccional: la base de su API como mínimo. El molde del doc 12 es anterior a la
+  // ADR y no la escribía; G-8 lo vio en rojo desde el piloto (#194) —«el plan PIERDE
+  // EventosFeatureSettings.cs»— y nadie lo corrió hasta la escala (#196).
+  paso('S4', `Synergos.CMS.Application/Configuration/${V}FeatureSettings.cs`,
+    'ADR 0137 — la configuración de negocio, por sitio');
+
   // S4–S6 los apaga `forma: ninguna` (doc 13 §5; el doc 12 §8 ya lo predice de Social).
   if (forma !== 'ninguna') {
     // S4 · doc 12 §5.4 — el POCO con los cuatro campos.
