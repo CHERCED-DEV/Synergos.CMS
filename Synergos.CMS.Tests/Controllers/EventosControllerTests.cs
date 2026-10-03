@@ -187,6 +187,56 @@ public sealed class EventosControllerTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    // ── El cuerpo de un rechazo lleva el MOTIVO, y nada más ────────────────────────
+    //
+    // El motor rechaza con `ArgumentException(mensaje, nameof(items))`, y .NET le pega al Message el
+    // nombre del parámetro: el comprador leía «Aforo insuficiente para el tier 'VIP' (quedan 2,
+    // solicitado 4). (Parameter 'items')». El nombre de un parámetro de C# no es para él.
+
+    private static string Error(IActionResult resultado)
+        => System.Text.Json.JsonSerializer.SerializeToElement(Assert.IsAssignableFrom<ObjectResult>(resultado).Value)
+            .GetProperty("error").GetString()!;
+
+    [Fact]
+    public async Task Checkout_ElRechazoDelMotor_LlevaSoloElMotivo()
+    {
+        _ticketing.CheckoutAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<EventCheckoutItem>>(),
+                Arg.Any<IReadOnlyList<EventAttendeeInfo>>(), Arg.Any<EventBuyerInfo?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<EventCheckoutResult>>(_ => throw new ArgumentException(
+                "Aforo insuficiente para el tier 'VIP' (quedan 2, solicitado 4).", "items"));
+
+        var resultado = await BuildSut().Checkout(new EventosController.CheckoutRequest(
+            "evt-1", new[] { new EventosController.CheckoutItemRequest("VIP", null, 4) }, null), default);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+        Assert.Equal("Aforo insuficiente para el tier 'VIP' (quedan 2, solicitado 4).", Error(resultado));
+    }
+
+    [Fact] // el mismo arreglo en el 404 de confirmar: es la misma pieza.
+    public async Task Confirm_LaOrdenQueNoExiste_LlevaSoloElMotivo()
+    {
+        _ticketing.ConfirmAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Task<EventConfirmationResult>>(_ => throw new ArgumentException("Orden no encontrada.", "orderRef"));
+
+        var resultado = await BuildSut().Confirm(new EventosController.ConfirmRequest("evord_x"), default);
+
+        Assert.IsType<NotFoundObjectResult>(resultado);
+        Assert.Equal("Orden no encontrada.", Error(resultado));
+    }
+
+    [Fact] // un rechazo sin nombre de parámetro sale igual que antes.
+    public async Task Checkout_UnRechazoSinParametro_SaleTalCual()
+    {
+        _ticketing.CheckoutAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<EventCheckoutItem>>(),
+                Arg.Any<IReadOnlyList<EventAttendeeInfo>>(), Arg.Any<EventBuyerInfo?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<EventCheckoutResult>>(_ => throw new ArgumentException("El evento 'X' ya comenzó: ya no se venden entradas."));
+
+        var resultado = await BuildSut().Checkout(new EventosController.CheckoutRequest(
+            "evt-1", new[] { new EventosController.CheckoutItemRequest("GEN", null, 1) }, null), default);
+
+        Assert.Equal("El evento 'X' ya comenzó: ya no se venden entradas.", Error(resultado));
+    }
+
     // ── CONTROL: el catálogo y la compra siguen siendo PÚBLICOS ────────────────────
 
     [Fact] // El catálogo es la vitrina: gatearlo mataría el negocio, no lo protegería
