@@ -173,8 +173,7 @@ public static class EventContentRules
                 continue;
             }
 
-            var abre = draft.SaleOpens is { } desde ? InicioDelDia(desde, zonaDelSitio) : (DateTimeOffset?)null;
-            var cierra = draft.SaleCloses is { } hasta ? InicioDelDia(hasta.AddDays(1), zonaDelSitio) : (DateTimeOffset?)null;
+            var (abre, cierra) = Ventana(slug, code, draft, zonaDelSitio, issues);
             if (abre is not null && cierra is not null && cierra <= abre)
             {
                 issues.Add(Err(
@@ -487,6 +486,60 @@ public static class EventContentRules
         => startUtc <= now ? "past" : "upcoming";
 
     /// <summary>
+    /// Los dos extremos de la ventana de venta, como instantes. <c>null</c> es «sin límite por ese
+    /// lado».
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Los extremos del date picker son centinelas de «sin límite»</b>: «Venta hasta»
+    /// 31-12-9999 es «no cierra», y «Venta desde» 01-01-0001, «abierta desde siempre». Se leen así,
+    /// con un aviso. El cierre se calcula como el inicio del día SIGUIENTE al último, y el
+    /// siguiente al 31-12-9999 no existe: la excepción no la capturaba nadie y tumbaba la
+    /// proyección de TODOS los eventos del sitio —el listado, cada ficha y el checkout—.</para>
+    ///
+    /// <para>Quitados los dos extremos, cualquier otro día cabe en cualquier zona (los desfases no
+    /// pasan de ±14 h), así que acá no queda ninguna fecha que pueda lanzar.</para>
+    /// </remarks>
+    private static (DateTimeOffset? Abre, DateTimeOffset? Cierra) Ventana(
+        string slug,
+        string code,
+        EventTierContent draft,
+        TimeZoneInfo zonaDelSitio,
+        List<EventContentIssue> issues)
+    {
+        DateTimeOffset? abre = null;
+        if (draft.SaleOpens is { } desde)
+        {
+            if (desde.Date == DateTime.MinValue.Date)
+            {
+                issues.Add(Warn(
+                    $"Evento '{slug}': la localidad '{code}' tiene «Venta desde» {desde:yyyy-MM-dd}; se lee como " +
+                    "venta sin fecha de apertura."));
+            }
+            else
+            {
+                abre = InicioDelDia(desde, zonaDelSitio);
+            }
+        }
+
+        DateTimeOffset? cierra = null;
+        if (draft.SaleCloses is { } hasta)
+        {
+            if (hasta.Date == DateTime.MaxValue.Date)
+            {
+                issues.Add(Warn(
+                    $"Evento '{slug}': la localidad '{code}' tiene «Venta hasta» {hasta:yyyy-MM-dd}; se lee como " +
+                    "venta sin fecha de cierre."));
+            }
+            else
+            {
+                cierra = InicioDelDia(hasta.Date.AddDays(1), zonaDelSitio);
+            }
+        }
+
+        return (abre, cierra);
+    }
+
+    /// <summary>
     /// La hora que tecleó el editor, anclada en la zona del sitio.
     /// </summary>
     /// <remarks>
@@ -502,12 +555,49 @@ public static class EventContentRules
     ///
     /// <para>Vive acá y no en la fuente de contenido porque la usan dos reglas: el inicio del evento
     /// y los días de la ventana de venta (#195).</para>
+    ///
+    /// <para>Lanza si la hora no cabe en un <see cref="DateTimeOffset"/> (ver
+    /// <see cref="TryInicioEnLaZona"/>): quien la recibe de un editor o de una petición usa la
+    /// versión <c>Try</c>.</para>
     /// </remarks>
     public static DateTimeOffset InicioEnLaZona(DateTime delEditor, TimeZoneInfo zona)
+        => TryInicioEnLaZona(delEditor, zona, out var inicio)
+            ? inicio
+            : throw new ArgumentOutOfRangeException(
+                nameof(delEditor), delEditor, "La hora, llevada a UTC, cae fuera del calendario de .NET.");
+
+    /// <summary>
+    /// <see cref="InicioEnLaZona"/> sin lanzar: <c>false</c> cuando la hora, llevada a UTC, cae
+    /// fuera del calendario de .NET.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Lo que no cabe existe:</b> las 23:00 del 31-12-9999 en Bogotá son las 04:00 del año
+    /// 10000 en UTC. Un date picker deja elegir ese día y una petición puede mandarlo, y en los dos
+    /// casos lanzar es un 500 —en la proyección, para todos los eventos del sitio—.</para>
+    ///
+    /// <para><b>Una hora que el cambio de hora REPITE</b> (el reloj se atrasa y esa hora pasa dos
+    /// veces) se lee como la PRIMERA vez, que es la que vive quien la tecleó: el desfase mayor de
+    /// los dos. <see cref="TimeZoneInfo.GetUtcOffset(DateTime)"/> devuelve el estándar —la segunda—
+    /// y corría una hora el inicio del evento o del día; en La Habana, la medianoche del
+    /// 1-nov-2026.</para>
+    /// </remarks>
+    public static bool TryInicioEnLaZona(DateTime delEditor, TimeZoneInfo zona, out DateTimeOffset inicio)
     {
         ArgumentNullException.ThrowIfNull(zona);
         var local = DateTime.SpecifyKind(delEditor, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, zona.GetUtcOffset(local));
+        var desfase = zona.IsAmbiguousTime(local)
+            ? zona.GetAmbiguousTimeOffsets(local).Max()
+            : zona.GetUtcOffset(local);
+
+        var ticksUtc = local.Ticks - desfase.Ticks;
+        if (ticksUtc < DateTime.MinValue.Ticks || ticksUtc > DateTime.MaxValue.Ticks)
+        {
+            inicio = default;
+            return false;
+        }
+
+        inicio = new DateTimeOffset(local, desfase);
+        return true;
     }
 
     /// <summary>

@@ -235,6 +235,58 @@ public sealed class EventContentRulesTests
         Assert.Contains("Venta desde", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact] // 31-12-9999 es «no cierra»: el día siguiente no existe y lanzar tumbaba TODOS los eventos.
+    public void Venta_hasta_el_ultimo_dia_del_calendario_es_venta_sin_cierre_con_aviso()
+    {
+        var result = EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(2026, 8, 1), new DateTime(9999, 12, 31)) }, Cop, Bogota);
+
+        var tier = Assert.Single(result.Value);
+        Assert.Equal(new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.FromHours(-5)), tier.SaleOpensUtc);
+        Assert.Null(tier.SaleClosesUtc);
+        var aviso = Assert.Single(result.Issues);
+        Assert.Equal(EventContentIssueLevel.Warning, aviso.Level);
+        Assert.Contains("Venta hasta", aviso.Message, StringComparison.Ordinal);
+    }
+
+    [Fact] // 01-01-0001 es «abierta desde siempre»: en una zona al este de UTC, su medianoche no cabe.
+    public void Venta_desde_el_primer_dia_del_calendario_es_venta_sin_apertura_con_aviso()
+    {
+        var tokio = new ListadosSettings { ZonaHoraria = "Asia/Tokyo" }.Zona()!;
+
+        var result = EventContentRules.BuildTiers(
+            Slug, new[] { ConVentana(new DateTime(1, 1, 1), new DateTime(2026, 8, 14)) }, Cop, tokio);
+
+        var tier = Assert.Single(result.Value);
+        Assert.Null(tier.SaleOpensUtc);
+        Assert.Equal(new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.FromHours(9)), tier.SaleClosesUtc);
+        var aviso = Assert.Single(result.Issues);
+        Assert.Equal(EventContentIssueLevel.Warning, aviso.Level);
+        Assert.Contains("Venta desde", aviso.Message, StringComparison.Ordinal);
+    }
+
+    [Fact] // una medianoche que se repite (La Habana atrasa el reloj a la 01:00) es la PRIMERA.
+    public void Una_medianoche_que_el_cambio_de_hora_repite_abre_y_cierra_la_primera_vez()
+    {
+        // El 1-nov-2026 La Habana vuelve de UTC−4 a UTC−5 a la 01:00: de 00:00 a 01:00 pasa dos
+        // veces. El día empieza la primera, a las 04:00Z; con el desfase estándar, una hora tarde.
+        var habana = new ListadosSettings { ZonaHoraria = "America/Havana" }.Zona()!;
+
+        var result = EventContentRules.BuildTiers(
+            Slug,
+            new[]
+            {
+                ConVentana(new DateTime(2026, 11, 1), null),
+                Tier(code: "general") with { SaleCloses = new DateTime(2026, 10, 31) },
+            },
+            Cop,
+            habana);
+
+        var primeraVez = new DateTimeOffset(2026, 11, 1, 4, 0, 0, TimeSpan.Zero);
+        Assert.Equal(primeraVez, result.Value.Single(t => t.Code == "vip").SaleOpensUtc);
+        Assert.Equal(primeraVez, result.Value.Single(t => t.Code == "general").SaleClosesUtc);
+    }
+
     // ── Mapa de asientos ─────────────────────────────────────────────────────
 
     private static EventZoneContent Zone(

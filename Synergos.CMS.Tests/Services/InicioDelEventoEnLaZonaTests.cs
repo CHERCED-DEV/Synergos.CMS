@@ -52,6 +52,28 @@ public sealed class InicioDelEventoEnLaZonaTests
         Assert.Equal(new DateTime(2026, 3, 29), inicio.UtcDateTime.Date);
     }
 
+    [Theory] // una hora que se repite (el reloj se atrasa) es la de la PRIMERA vez: el desfase mayor.
+    [InlineData(0, 4)]
+    [InlineData(30, 4)]
+    public void Una_hora_que_se_repite_es_la_primera_vez(int minuto, int horaUtc)
+    {
+        // 1-nov-2026: La Habana pasa de UTC−4 a UTC−5 a la 01:00, así que de 00:00 a 01:00 hay dos.
+        var inicio = EventContentRules.InicioEnLaZona(new DateTime(2026, 11, 1, 0, minuto, 0), Zona("America/Havana"));
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 1, horaUtc, minuto, 0, TimeSpan.Zero), inicio);
+    }
+
+    [Fact] // las 23:00 del 31-12-9999 en Bogotá son el año 10000 en UTC: no caben, y no se lanza.
+    public void Una_hora_que_en_UTC_no_cabe_no_lanza_y_dice_que_no()
+    {
+        var bogota = Zona("America/Bogota");
+
+        Assert.False(EventContentRules.TryInicioEnLaZona(new DateTime(9999, 12, 31, 23, 0, 0), bogota, out _));
+        Assert.False(EventContentRules.TryInicioEnLaZona(new DateTime(1, 1, 1), Zona("Asia/Tokyo"), out _));
+        Assert.True(EventContentRules.TryInicioEnLaZona(new DateTime(9999, 12, 31, 18, 0, 0), bogota, out var cabe));
+        Assert.Equal(new DateTimeOffset(9999, 12, 31, 23, 0, 0, TimeSpan.Zero), cabe);
+    }
+
     [Fact] // la zona es la de la configuración del sitio.
     public void La_fuente_lee_la_zona_de_la_configuracion()
     {
@@ -81,7 +103,7 @@ public sealed class InicioDelEventoEnLaZonaTests
                 dir!.FullName, "Synergos.CMS.Web", "Services", "Catalog", "UmbracoEventCatalogSource.cs"))
             .Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
-        Assert.Contains("InicioEnLaZona(start, Zona)", fuente, StringComparison.Ordinal);
+        Assert.Contains("TryInicioEnLaZona(start, Zona, out", fuente, StringComparison.Ordinal);
         Assert.DoesNotContain("TimeSpan.FromHours(", fuente, StringComparison.Ordinal);
     }
 

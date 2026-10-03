@@ -221,6 +221,17 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             return null;
         }
 
+        // En la zona del sitio y no con un desfase fijo: ver EventContentRules.InicioEnLaZona. Una
+        // hora que, llevada a UTC, no cabe en el calendario (las 23:00 del 31-12-9999 en Bogotá)
+        // lanzaba acá, y la excepción tumbaba la proyección de TODOS los eventos del sitio.
+        if (!EventContentRules.TryInicioEnLaZona(start, Zona, out var inicio))
+        {
+            _logger.LogWarning(
+                "UmbracoEventCatalogSource: eventPage slug='{Slug}' con eventStart {Start:yyyy-MM-dd HH:mm} fuera del " +
+                "calendario en la zona del sitio; se omite.", slug, start);
+            return null;
+        }
+
         return new EventSummary(
             // El slug ES el id, igual que el SKU lo es en Tienda: GetEventAsync ya casa por
             // cualquiera de los dos, así que emitirlos iguales no rompe nada y evita inventar
@@ -231,8 +242,7 @@ public sealed class UmbracoEventCatalogSource : ICatalogSource<EventSummary>, IC
             Category: node.Value<string>("eventCategory")?.Trim() ?? string.Empty,
             City: node.Value<string>("eventCity")?.Trim() ?? string.Empty,
             Venue: node.Value<string>("eventVenue")?.Trim() ?? string.Empty,
-            // En la zona del sitio y no con un desfase fijo: ver EventContentRules.InicioEnLaZona.
-            StartUtc: EventContentRules.InicioEnLaZona(start, Zona),
+            StartUtc: inicio,
             // El lector de MediaPicker3 vive en MediaPickerReader y es el ÚNICO: el picker
             // está configurado single, así que pedirlo como colección devuelve null sin
             // lanzar — el bug que dejó la tienda entera sin fotos.

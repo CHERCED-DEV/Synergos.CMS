@@ -633,6 +633,17 @@ public sealed class EhrControllerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact] // una franja que en UTC no cabe es un slot inválido: 400, no un 500.
+    public async Task Appointment_UnaFranjaFueraDelCalendario_EsUn400()
+    {
+        var slot = JsonSerializer.SerializeToElement(new { date = "9999-12-31", time = "23:00" });
+
+        var result = await BuildSut().BookAppointment(new EhrController.BookAppointmentBody(null, "doc-1", slot), default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _scheduling.DidNotReceive().BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact] // el día de una nota, de un resultado y de una línea de cobro: el del sitio.
     public async Task Las_fechas_de_la_historia_salen_en_el_dia_del_sitio()
     {

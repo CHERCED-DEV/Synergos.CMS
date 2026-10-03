@@ -1159,7 +1159,7 @@ public sealed class EhrController : ControllerBase
     /// hora local, y el que el paciente elige en un calendario de pared. Se leía como UTC, así que la
     /// cita de las 9:00 que pedía alguien en Bogotá quedaba a las 4:00 de allá. Se ancla en
     /// <paramref name="zonaDelSitio"/> con la misma pieza que la hora de un evento
-    /// (<see cref="EventContentRules.InicioEnLaZona"/>), que no lanza en una hora que el cambio de
+    /// (<see cref="EventContentRules.TryInicioEnLaZona"/>), que no lanza en una hora que el cambio de
     /// hora se salta.</para>
     ///
     /// <para>El instante ISO se queda como estaba: trae su desfase («…Z») y no hay nada que
@@ -1192,13 +1192,16 @@ public sealed class EhrController : ControllerBase
         }
 
         // Sin hora, el slot es el arranque del día; la agenda rechazará lo que no sea suyo.
+        // Una hora que en UTC no cabe (las 23:00 del 31-12-9999 en Bogotá) es un slot inválido —un
+        // 400—, no un 500.
         var composed = string.IsNullOrWhiteSpace(time) ? date : $"{date}T{time}";
         return DateTime.TryParse(
-            composed,
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None,
-            out var local)
-            ? EventContentRules.InicioEnLaZona(local, zonaDelSitio).UtcDateTime
+                composed,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var local)
+            && EventContentRules.TryInicioEnLaZona(local, zonaDelSitio, out var inicio)
+            ? inicio.UtcDateTime
             : null;
     }
 
