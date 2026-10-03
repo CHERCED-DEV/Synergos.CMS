@@ -258,7 +258,7 @@ public sealed class GovController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new ApplicationResponse(ToApplicationSummaryDto(result.Case)));
@@ -373,7 +373,7 @@ public sealed class GovController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
 
         return Ok(new DocumentResponse(ToDocumentDto(doc)));
@@ -481,11 +481,11 @@ public sealed class GovController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ex.Motivo() });
         }
 
         return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
@@ -550,11 +550,11 @@ public sealed class GovController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ex.Motivo() });
         }
 
         // Al funcionario SÍ se le devuelve el cuerpo: es quien lo escribió.
@@ -598,7 +598,7 @@ public sealed class GovController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (GovActNotAddresseeException)
         {
@@ -611,7 +611,7 @@ public sealed class GovController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ex.Motivo() });
         }
 
         return Ok(new ActNotificationResponse(ToActNotificationDto(opened, revealBody: true)));

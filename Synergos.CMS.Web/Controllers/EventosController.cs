@@ -109,30 +109,6 @@ public sealed class EventosController : ControllerBase
     }
 
     /// <summary>
-    /// El motivo de un rechazo del motor, tal como se le muestra a quien compra: el mensaje y nada más.
-    /// </summary>
-    /// <remarks>
-    /// <para>El motor rechaza con <c>ArgumentException(mensaje, nameof(items))</c>, y .NET le pega al
-    /// <see cref="Exception.Message"/> el nombre del parámetro: el cuerpo del 400 decía «Aforo
-    /// insuficiente para el tier 'VIP' (quedan 2, solicitado 4). (Parameter 'items')». El nombre de
-    /// un parámetro de C# no le sirve al comprador.</para>
-    ///
-    /// <para><b>Se quita acá y no en cada <c>throw</c></b>: el motor tiene una docena, el camino del
-    /// orquestador otros tantos, y el próximo que se escriba volvería a traer el sufijo. El sufijo se
-    /// arma con el MISMO runtime —no se escribe a mano—, así que vale aunque el runtime lo traduzca.</para>
-    /// </remarks>
-    private static string Motivo(ArgumentException ex)
-    {
-        if (string.IsNullOrEmpty(ex.ParamName))
-        {
-            return ex.Message;
-        }
-
-        var sufijo = new ArgumentException(string.Empty, ex.ParamName).Message;
-        return ex.Message.EndsWith(sufijo, StringComparison.Ordinal) ? ex.Message[..^sufijo.Length] : ex.Message;
-    }
-
-    /// <summary>
     /// Publica el check-in en el canal del evento (T7). Best-effort: la entrada YA quedó
     /// validada y persistida, así que un fallo del aviso no puede devolver un error sobre
     /// una operación que sí ocurrió (misma regla que ADR 0037/0106).
@@ -288,7 +264,7 @@ public sealed class EventosController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = Motivo(ex) });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new CheckoutResponse(
@@ -320,11 +296,11 @@ public sealed class EventosController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = Motivo(ex) });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var events = await ResolveEventsAsync(result.Tickets, cancellationToken);
@@ -355,7 +331,7 @@ public sealed class EventosController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = Motivo(ex) });
+            return NotFound(new { error = ex.Motivo() });
         }
 
         return Ok(new ManageResponse(
@@ -454,7 +430,7 @@ public sealed class EventosController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = Motivo(ex) });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var events = await ResolveEventsAsync(new[] { result.Ticket }, cancellationToken);
@@ -507,7 +483,7 @@ public sealed class EventosController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = Motivo(ex) });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         // El slug y el estado NO salen de EventCreateResult (solo trae el id), y la UI

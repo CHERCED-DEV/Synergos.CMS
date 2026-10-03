@@ -87,7 +87,7 @@ public sealed class BookingController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -188,7 +188,7 @@ public sealed class BookingController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(MapReservation(reservation));

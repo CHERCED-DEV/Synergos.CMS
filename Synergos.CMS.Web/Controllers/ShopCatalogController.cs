@@ -536,7 +536,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new CheckoutResponse(
@@ -582,12 +582,12 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
             // Pago no capturable / hold de stock vencido — el cliente reintenta.
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new ConfirmResponse(
@@ -822,7 +822,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -875,12 +875,12 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
             // Transición ilegal o reembolso no procesable.
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -921,7 +921,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -961,11 +961,11 @@ public sealed class ShopCatalogController : ControllerBase
         }
         catch (ArgumentException ex) when (string.Equals(ex.ParamName, "threadId", StringComparison.Ordinal))
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 

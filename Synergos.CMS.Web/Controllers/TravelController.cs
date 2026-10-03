@@ -100,7 +100,7 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         // Geo por oferta (mapa SH-8): cada room type pertenece a una estadía
@@ -168,7 +168,7 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var results = options.SelectMany(o => o.Fares.Select(f => new FlightOfferDto(
@@ -218,7 +218,7 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var results = offers.Select(c => new CarOfferDto(
@@ -292,7 +292,7 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new CheckoutResponse(
@@ -322,11 +322,11 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var items = result.Items.Select(i => new ConfirmItemDto(
@@ -383,7 +383,7 @@ public sealed class TravelController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
 
         return Ok(new CancelOrderResponse(

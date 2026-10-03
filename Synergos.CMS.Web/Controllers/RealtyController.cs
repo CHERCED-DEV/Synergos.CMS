@@ -284,11 +284,11 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ex.Motivo() });
         }
 
         var slot = await FindSlotAsync(listingId, slotId, cancellationToken);
@@ -493,7 +493,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new MortgageResponse(
@@ -539,7 +539,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new LeadResponse(result.LeadId));
@@ -589,7 +589,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(ToSavedSearchDto(saved));
@@ -614,7 +614,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
 
         return Ok(new SavedMatchesResponse(
@@ -720,7 +720,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
 
         return Ok(new AdvanceLeadResponse(result.LeadId, MapLeadStatus(result.Status), result.Status.ToString()));
@@ -748,7 +748,7 @@ public sealed class RealtyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new PublishListingResponse(

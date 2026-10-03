@@ -297,7 +297,7 @@ public sealed class AcademyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         // Rama gratis → { enrolled:true } (+ enrollmentId para desbloquear el aula).
@@ -393,12 +393,12 @@ public sealed class AcademyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
             // Pago no capturable — el cliente reintenta.
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new ConfirmEnrollResponse(
@@ -467,7 +467,7 @@ public sealed class AcademyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var certificate = progress.Percent >= 100
@@ -693,7 +693,7 @@ public sealed class AcademyController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new PublishCourseResponse(CourseId: published.Course.Id));

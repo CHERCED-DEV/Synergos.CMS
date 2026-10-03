@@ -169,7 +169,7 @@ public sealed class BlogsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var post = await ToPostDto(created, authorId, cancellationToken);
@@ -204,7 +204,7 @@ public sealed class BlogsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         return Ok(new ReactResponse(Reactions: ToReactionsDto(state)));
@@ -331,7 +331,7 @@ public sealed class BlogsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var post = await ToPostDto(created, authorId, cancellationToken);
@@ -448,7 +448,7 @@ public sealed class BlogsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
 
         var dto = await ToDmThreadDto(thread, from, cancellationToken);

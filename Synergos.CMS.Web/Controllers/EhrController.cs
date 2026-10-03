@@ -333,12 +333,12 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
         catch (InvalidOperationException ex)
         {
             // Slot ocupado / conflicto.
-            return Conflict(new { error = ex.Message });
+            return Conflict(new { error = ex.Motivo() });
         }
     }
 
@@ -378,7 +378,7 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -415,7 +415,7 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -586,7 +586,7 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -673,7 +673,7 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
@@ -733,7 +733,7 @@ public sealed class EhrController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = ex.Motivo() });
         }
     }
 
