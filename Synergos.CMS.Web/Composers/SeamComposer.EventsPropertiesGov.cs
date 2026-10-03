@@ -132,6 +132,8 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<IOptionsMonitor<EventosSettings>>(),
                 sp.GetRequiredService<EventTicketLedger>(),
+                // El calendario de venta (#195): el orquestador no lo conoce, lo aplica este lado.
+                sp.GetRequiredService<IEventCatalogProvider>(),
                 sp.GetRequiredService<ILogger<HttpEventTicketingService>>(),
                 sp.GetRequiredService<ITransactionalNotifier>(),
                 negocio: sp.GetRequiredService<INegocioDelSitio<NegocioDeEventos>>()));

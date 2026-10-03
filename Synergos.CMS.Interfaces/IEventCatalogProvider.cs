@@ -33,7 +33,25 @@ public sealed record EventSummary(
 /// <see cref="Featured"/> son la CARA EDITORIAL de la tarjeta de tier: qué incluye,
 /// sus inclusiones en viñetas, hasta cuándo se vende y cuál es el recomendado.
 /// Opcionales — sin ellos la tarjeta sigue funcionando (precio + aforo), solo sale pobre.
+/// <see cref="SaleOpensUtc"/> y <see cref="SaleClosesUtc"/> son la REGLA de esa ventana: lo
+/// que el checkout aplica (#195). <see cref="SaleWindow"/> es cómo se lee; éstos, cuándo vale.
 /// </summary>
+/// <remarks>
+/// <para><b>La ventana va en dos campos y no se deduce del texto</b> (#195). El texto lo escribe
+/// el editor «tal como quiere que se lea», en la cultura de la página, y puede no traer año
+/// («Hasta el 12 de julio»): leerlo como fecha sería adivinar, y un parseo que adivina en un
+/// cobro es la clase de defecto que este repo ya pagó (<c>«49.000»</c> leído como 49).</para>
+///
+/// <para><b>Son instantes, y el cierre es EXCLUSIVO.</b> «Hasta el 14 de agosto» significa que se
+/// vende todo el 14 <b>en la zona del sitio</b> (Colombia, UTC−5 todo el año): el cierre es el
+/// instante en que empieza el 15 allá, <c>2026-08-15T00:00−05:00</c> = <c>05:00Z</c>. Escribirlo
+/// como medianoche UTC cerraría la venta a las siete de la noche del 14 en Bogotá. La conversión
+/// de un día del calendario a ese instante la hace quien publica el catálogo, que es quien sabe
+/// de qué zona es el día; el motor solo compara instantes.</para>
+///
+/// <para>Null en cualquiera de los dos = sin límite por ese lado. Un evento que ya empezó no se
+/// vende nunca, tenga ventana o no: esa regla es del evento, no de la localidad.</para>
+/// </remarks>
 public sealed record EventTier(
     string Code,
     string Name,
@@ -49,10 +67,14 @@ public sealed record EventTier(
     IReadOnlyList<string>? Perks = null,
     // Cierre de la ventana de venta YA FORMATEADO en es-CO ("Hasta el 12 de julio").
     // Es un texto de presentación, no una fecha: quien conoce el calendario comercial
-    // del evento es quien publica el catálogo, no la UI.
+    // del evento es quien publica el catálogo, no la UI. La regla son los dos de abajo.
     string SaleWindow = "",
     // Marca el tier recomendado. Se espera UNO por evento.
-    bool Featured = false);
+    bool Featured = false,
+    // Desde cuándo se vende. Null = desde ya.
+    DateTimeOffset? SaleOpensUtc = null,
+    // Hasta cuándo se vende, EXCLUSIVO. Null = hasta que empiece el evento.
+    DateTimeOffset? SaleClosesUtc = null);
 
 /// <summary>
 /// Un asiento individual del mapa de zona. <see cref="Status"/>: free | hold |

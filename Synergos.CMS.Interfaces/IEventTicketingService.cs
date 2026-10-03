@@ -101,7 +101,9 @@ public interface IEventTicketingService
     /// <see cref="IReservationService.HoldItemAsync"/>), resuelve el precio REAL
     /// desde el catálogo (anti-tampering) y abre UNA sesión de pago por el total.
     /// Lanza <see cref="ArgumentException"/> si la solicitud es inválida (evento
-    /// inexistente, sin ítems/asistentes, tier inexistente, aforo insuficiente).
+    /// inexistente, sin ítems/asistentes, tier inexistente, aforo insuficiente) o si no se
+    /// puede vender ahora: el evento ya empezó o la localidad está fuera de su ventana de
+    /// venta (#195). Ningún rechazo deja cupo apartado ni sesión de pago abierta.
     /// </summary>
     /// <param name="buyer">
     /// Quien compra, si no es el primer asistente. Null conserva el supuesto de siempre.

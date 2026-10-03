@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **3967 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **3981 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 2816 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 2830 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 684 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 467 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -171,7 +171,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3967**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **3981**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -2936,6 +2936,23 @@ de **proceso** —cómo se mide y cómo se trabaja—, y por eso valen igual en 
   obvio va al resolver (`cluster` → `wrap` en `badge-group`) y la descripción que contradice al
   elemento se corrige (`scrollThreshold` decía «Default 400» y el elemento usa 320).
 
+- `feedback_a_rule_painted_as_text_is_applied_by_nobody` — **una regla que la ficha pinta como
+  TEXTO no la aplica nadie: se lee, no se cumple** (#195). La ventana de venta de una localidad
+  era un TextBox del editor («Hasta el 14 de agosto de 2026») y el checkout miraba aforo y máximo
+  por orden: el festival del 15 de agosto se vendía en octubre con la ficha diciendo «El evento ya
+  comenzó». La regla va en campos con TIPO —`SaleOpensUtc`/`SaleClosesUtc` de `EventTier`,
+  instantes, cierre exclusivo— que aplican los DOS motores de compra por una sola pieza
+  (`CalendarioDeVenta`), y el texto se cruza contra ellos con un test. **El texto no se parsea**:
+  lo escribe el editor «tal como quiere que se lea», en su cultura y a veces sin año. **El día va
+  en la zona del sitio**: «hasta el 14» cierra cuando empieza el 15 en Bogotá (05:00Z); a
+  medianoche UTC cerraría a las siete de la noche del día que la tarjeta todavía promete. **Y el
+  camino del orquestador no la puede aplicar allá**: `Api.Pricing` fija precios sin vigencia y
+  `Api.Inventory` cuenta existencias sin ventana, así que la aplica el CMS con su catálogo antes
+  de salir a la red. **Por qué los tests no lo veían**: compraban con el reloj REAL, y en julio el
+  festival era futuro. Un test de compra sin reloj fijo prueba la fecha en que se corre — y el día
+  que la regla existe se pone rojo solo. Con el catálogo del CMS (`eventPage`) la ventana todavía
+  NO se aplica —el schema no tiene la fecha, solo el texto—; el inicio del evento, sí.
+
 ## 6. Prohibiciones explícitas
 
 - **No copiar-pegar del legado**. `_archive/fails/Synergos.CMS.epicfail*`
@@ -2995,11 +3012,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (3967 tests) — la solución integradora las lanza juntas:
+# Las tres suites (3981 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2816
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2830
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 684
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 467
 
@@ -3473,7 +3490,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (137 endpoints, 243 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3967 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 3981 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

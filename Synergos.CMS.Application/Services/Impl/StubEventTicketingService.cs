@@ -166,6 +166,13 @@ public sealed class StubEventTicketingService : IEventTicketingService
         var detail = await _catalog.GetEventAsync(eventId, cancellationToken)
             ?? throw new ArgumentException($"Evento '{eventId}' no encontrado.", nameof(eventId));
 
+        // Un evento que ya empezó no se vende, y una localidad fuera de su ventana tampoco (#195).
+        // Se miraba solo que la localidad existiera y tuviera cupo: el Festival del 15 de agosto
+        // se seguía vendiendo en octubre. UN instante para toda la compra, y antes de apartar
+        // nada: un rechazo no deja cupo retenido ni sesión de pago abierta.
+        var ahora = _now();
+        CalendarioDeVenta.Exigir(detail.Summary, ahora);
+
         // 1) Resolver precio/aforo REAL por línea desde el catálogo + expandir a
         //    unidades de ticket (una por asiento en reserved, qty en general).
         var plannedUnits = new List<PlannedUnit>();
@@ -182,6 +189,8 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 string.Equals(t.Code, item.Tier, StringComparison.OrdinalIgnoreCase))
                 ?? throw new ArgumentException(
                     $"Tier '{item.Tier}' no existe para el evento '{detail.Summary.Id}'.", nameof(items));
+
+            CalendarioDeVenta.Exigir(tier, ahora);
 
             currency ??= tier.Currency;
 

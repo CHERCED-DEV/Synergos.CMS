@@ -24,6 +24,24 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
 {
     private const string Currency = "COP";
 
+    /// <summary>
+    /// Colombia, la zona del sitio: UTC−5 todo el año, sin horario de verano (el mismo desfase que
+    /// fija <c>UmbracoEventCatalogSource</c>).
+    /// </summary>
+    private static readonly TimeSpan Colombia = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// El cierre de una ventana «hasta el <paramref name="dia"/>»: el instante en que ese día
+    /// TERMINA en Colombia, exclusivo (#195).
+    /// </summary>
+    /// <remarks>
+    /// <b>No es medianoche UTC del día siguiente</b>: eso cerraría la venta a las siete de la
+    /// noche del día que la tarjeta todavía promete. Es la medianoche de Bogotá, cinco horas más
+    /// tarde en UTC.
+    /// </remarks>
+    private static DateTimeOffset AlTerminarElDia(int anio, int mes, int dia)
+        => new DateTimeOffset(anio, mes, dia, 0, 0, 0, Colombia).AddDays(1);
+
     // Catálogo sembrado (4 eventos, mezcla general/reserved) + eventos publicados
     // por organizadores en runtime (PublishEventAsync). ConcurrentDictionary
     // keyed por id → el estado (eventos creados en la demo) vive en el proceso,
@@ -161,7 +179,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Más de 20 puestos de comida y bebida en el predio",
                         "Puntos de agua potable gratuitos en todo el recinto",
                     },
-                    SaleWindow: "Hasta el 14 de agosto de 2026"),
+                    SaleWindow: "Hasta el 14 de agosto de 2026",
+                    SaleClosesUtc: AlTerminarElDia(2026, 8, 14)),
                 new EventTier(
                     "VIP", "VIP", 420_000m, Currency, Capacity: 800, Remaining: 95, MaxPerOrder: 4,
                     Description: "Zona vallada frente al Escenario Sur, con aforo reducido y servicios aparte.",
@@ -173,7 +192,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Casillero con carga para el celular",
                     },
                     SaleWindow: "Hasta el 10 de agosto de 2026",
-                    Featured: true),
+                    Featured: true,
+                    SaleClosesUtc: AlTerminarElDia(2026, 8, 10)),
                 new EventTier(
                     "EARLY", "Preventa", 140_000m, Currency, Capacity: 1000, Remaining: 0, MaxPerOrder: 6,
                     Description: "Tarifa de lanzamiento de diciembre, con las mismas condiciones que la entrada General.",
@@ -183,7 +203,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Cupo limitado a 1.000 boletas, sin reposición",
                         "Manilla enviada a domicilio la semana previa al festival",
                     },
-                    SaleWindow: "Cerró el 28 de febrero de 2026"),
+                    SaleWindow: "Cerró el 28 de febrero de 2026",
+                    SaleClosesUtc: AlTerminarElDia(2026, 2, 28)),
             },
             SeatMap: null,
             Artist: new EventArtist("Cordillera Eléctrica", "Headliner · fusión andina y electrónica en vivo", 328_000),
@@ -237,7 +258,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Copa de vino en el intermedio",
                     },
                     SaleWindow: "Hasta el 2 de octubre de 2026",
-                    Featured: true),
+                    Featured: true,
+                    SaleClosesUtc: AlTerminarElDia(2026, 10, 2)),
                 new EventTier(
                     "BALCON", "Balcón", 90_000m, Currency, Capacity: 12, Remaining: 12, MaxPerOrder: 6, ZoneId: "balcon",
                     Description: "Segundo nivel, con el escenario completo a la vista.",
@@ -248,7 +270,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Ascensor directo desde el vestíbulo, sin escaleras",
                         "Guardarropa sin costo durante la función",
                     },
-                    SaleWindow: "Hasta el 3 de octubre de 2026"),
+                    SaleWindow: "Hasta el 3 de octubre de 2026",
+                    SaleClosesUtc: AlTerminarElDia(2026, 10, 3)),
             },
             SeatMap: new EventSeatMap(
                 VenueName: "Teatro Metropolitano",
@@ -328,7 +351,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Almuerzo y estación de café incluidos",
                         "Directorio de asistentes para agendar reuniones",
                     },
-                    SaleWindow: "Hasta el 18 de septiembre de 2026"),
+                    SaleWindow: "Hasta el 18 de septiembre de 2026",
+                    SaleClosesUtc: AlTerminarElDia(2026, 9, 18)),
                 new EventTier(
                     "PRO", "Pro", 480_000m, Currency, Capacity: 300, Remaining: 58, MaxPerOrder: 5,
                     Description: "Todo lo del plan Estándar más los cuatro talleres prácticos de la tarde.",
@@ -340,7 +364,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Silla numerada en las primeras cinco filas",
                     },
                     SaleWindow: "Hasta el 12 de septiembre de 2026",
-                    Featured: true),
+                    Featured: true,
+                    SaleClosesUtc: AlTerminarElDia(2026, 9, 12)),
             },
             SeatMap: null,
             Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 41_200),
@@ -400,7 +425,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Acceso para silla de ruedas y dos puestos reservados",
                     },
                     SaleWindow: "Hasta el 13 de diciembre de 2026",
-                    Featured: true),
+                    Featured: true,
+                    SaleClosesUtc: AlTerminarElDia(2026, 12, 13)),
             },
             SeatMap: null,
             Artist: new EventArtist("Compañía Teatral La Ronda", "Compañía residente · teatro familiar y música en vivo", 8_730),

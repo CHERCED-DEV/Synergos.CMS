@@ -355,7 +355,7 @@ public sealed class NegocioDeEventosTests
 
     private static StubEventTicketingService Motor(IPaymentProvider pagos, INegocioDelSitio<NegocioDeEventos>? negocio)
         => new(new StubEventCatalogProvider(), new StubReservationService(), pagos,
-            null, null, null, null,
+            null, null, null, () => StubEventTicketingServiceTests.EnVenta,
             signer: new HmacTicketSigner("llave-de-tests-negocio"u8.ToArray()),
             negocio: negocio);
 

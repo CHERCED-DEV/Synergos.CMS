@@ -25,7 +25,7 @@ public class StubEventManagementServiceTests
         var ledger = new EventTicketLedger(signer: Signer);
         var ticketing = new StubEventTicketingService(
             catalog, new StubReservationService(), new StubPaymentProvider(),
-            null, null, null, null, signer: Signer, ledger: ledger);
+            null, null, null, () => StubEventTicketingServiceTests.EnVenta, signer: Signer, ledger: ledger);
         var mgmt = new StubEventManagementService(ledger, catalog);
         return (mgmt, ticketing);
     }

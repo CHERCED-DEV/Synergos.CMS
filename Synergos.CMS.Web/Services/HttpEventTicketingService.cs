@@ -61,17 +61,23 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     private readonly IHttpClientFactory _clients;
     private readonly IOptionsMonitor<EventosSettings> _settings;
     private readonly EventTicketLedger _ledger;
+    private readonly IEventCatalogProvider _catalogo;
     private readonly ITransactionalNotifier? _notifier;
     private readonly ILogger<HttpEventTicketingService> _log;
     private readonly Func<DateTimeOffset> _now;
     private readonly INegocioDelSitio<NegocioDeEventos>? _negocio;
 
+    /// <param name="catalogo">De dónde sale el calendario de venta (#195): cuándo empieza el evento
+    /// y la ventana de cada localidad, los mismos que pinta la ficha. Es obligatorio y no opcional
+    /// a propósito: ninguna capacidad del orquestador conoce ese calendario, así que sin él este
+    /// camino volvería a vender entradas de un evento que ya pasó.</param>
     /// <param name="negocio">De dónde sale la comisión de servicio que se manda al orquestador
     /// (ADR 0137): la misma que el carrito le muestra al comprador. Sin él no se cobra comisión.</param>
     public HttpEventTicketingService(
         IHttpClientFactory clients,
         IOptionsMonitor<EventosSettings> settings,
         EventTicketLedger ledger,
+        IEventCatalogProvider catalogo,
         ILogger<HttpEventTicketingService> log,
         ITransactionalNotifier? notifier = null,
         Func<DateTimeOffset>? now = null,
@@ -81,6 +87,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         _clients = clients;
         _settings = settings;
         _ledger = ledger;
+        _catalogo = catalogo ?? throw new ArgumentNullException(nameof(catalogo));
         _log = log;
         _notifier = notifier;
         _now = now ?? (() => DateTimeOffset.UtcNow);
@@ -102,6 +109,14 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         // Las líneas se normalizan ACÁ y en el mismo orden en que llegan, porque de ese orden
         // depende con qué asistente se empareja cada butaca cuando el orquestador responda.
         var lineas = items.Select(Normalizar).ToList();
+
+        // El calendario de venta se mira ACÁ y no en el orquestador (#195): ni Api.Pricing (precios
+        // sin vigencia) ni Api.Inventory (existencias sin ventana) saben cuándo empieza el evento
+        // ni hasta cuándo se vende una localidad, y el BFF solo recibe el id del evento. Quien lo
+        // sabe es el catálogo, que es también lo que pinta la ficha. Antes de salir a la red: un
+        // rechazo no aparta aforo ni autoriza un cobro.
+        await ExigirCalendarioAsync(eventId, lineas, cancellationToken).ConfigureAwait(false);
+
         var totalUnidades = lineas.Sum(l => l.Quantity);
         if (totalUnidades != attendees.Count)
         {
@@ -406,6 +421,34 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     }
 
     // ── Traducciones ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lanza si el evento ya empezó o alguna localidad pedida está fuera de su ventana de venta, con
+    /// la MISMA regla y los mismos motivos que el motor en proceso (<see cref="CalendarioDeVenta"/>).
+    /// </summary>
+    /// <remarks>
+    /// Un evento o una localidad que el catálogo no conoce se rechaza igual que allá: si la ficha
+    /// no lo muestra, no hay calendario contra el que vender, y dejar que el orquestador decida
+    /// sería venderlo sin saber si ya pasó.
+    /// </remarks>
+    private async Task ExigirCalendarioAsync(
+        string eventId, IReadOnlyList<EventCheckoutItem> lineas, CancellationToken ct)
+    {
+        var evento = await _catalogo.GetEventAsync(eventId, ct).ConfigureAwait(false)
+            ?? throw new ArgumentException($"Evento '{eventId}' no encontrado.", nameof(eventId));
+
+        var ahora = _now();
+        CalendarioDeVenta.Exigir(evento.Summary, ahora);
+
+        foreach (var linea in lineas)
+        {
+            var localidad = evento.Tiers.FirstOrDefault(t =>
+                    string.Equals(t.Code, linea.Tier, StringComparison.OrdinalIgnoreCase))
+                ?? throw new ArgumentException(
+                    $"Tier '{linea.Tier}' no existe para el evento '{evento.Summary.Id}'.", nameof(lineas));
+            CalendarioDeVenta.Exigir(localidad, ahora);
+        }
+    }
 
     /// <summary>Una línea, con la misma regla del motor en proceso: con butaca, una entrada.</summary>
     private static EventCheckoutItem Normalizar(EventCheckoutItem item)

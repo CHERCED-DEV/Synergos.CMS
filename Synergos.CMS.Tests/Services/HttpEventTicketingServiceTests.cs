@@ -119,14 +119,45 @@ public sealed class HttpEventTicketingServiceTests
         .Ok("GET /v1/ticket-purchases/tp-1", CompraCorriendo)
         .Ok("POST /v1/ticket-purchases/tp-1/confirm", CompraCompleta);
 
-    private static (HttpEventTicketingService Svc, EventTicketLedger Registro) Nuevo(OrquestadorFalso orq)
+    /// <summary>El instante de las compras de estos tests: un mes antes del evento.</summary>
+    internal static readonly DateTimeOffset Hoy = new(2026, 7, 1, 12, 0, 0, TimeSpan.FromHours(-5));
+
+    /// <summary>
+    /// El evento que se compra, tal como lo publica el catálogo: su inicio y la ventana de su
+    /// localidad son el calendario de venta que el CMS aplica antes de salir a la red (#195).
+    /// </summary>
+    internal static EventDetail EventoUno(
+        DateTimeOffset? empieza = null, DateTimeOffset? abre = null, DateTimeOffset? cierra = null)
+        => new(
+            new EventSummary("evt-1", "evt-1", "Noche de prueba", "Música", "Bogotá", "Teatro",
+                empieza ?? Hoy.AddDays(30), string.Empty, 120_000m, "COP", "general"),
+            string.Empty,
+            string.Empty,
+            new[]
+            {
+                new EventTier("GEN", "General", 120_000m, "COP", 100, 100, 10,
+                    SaleWindow: "Hasta la víspera", SaleOpensUtc: abre, SaleClosesUtc: cierra),
+            },
+            null);
+
+    internal static IEventCatalogProvider Cartelera(EventDetail? evento = null)
+    {
+        var catalogo = Substitute.For<IEventCatalogProvider>();
+        catalogo.GetEventAsync("evt-1", Arg.Any<CancellationToken>()).Returns(evento ?? EventoUno());
+        return catalogo;
+    }
+
+    private static (HttpEventTicketingService Svc, EventTicketLedger Registro) Nuevo(
+        OrquestadorFalso orq, EventDetail? evento = null)
     {
         var registro = new EventTicketLedger(signer: Firmante);
         return (new HttpEventTicketingService(
             new FabricaFalsa(orq),
             new Monitor<EventosSettings>(new EventosSettings { Mode = "Bff" }),
             registro,
-            NullLogger<HttpEventTicketingService>.Instance), registro);
+            Cartelera(evento),
+            NullLogger<HttpEventTicketingService>.Instance,
+            now: () => Hoy), registro);
     }
 
     private static readonly IReadOnlyList<EventCheckoutItem> DosGenerales =
@@ -157,7 +188,9 @@ public sealed class HttpEventTicketingServiceTests
             new FabricaFalsa(orq),
             new Monitor<EventosSettings>(new EventosSettings { Mode = "Bff" }),
             new EventTicketLedger(signer: Firmante),
+            Cartelera(),
             NullLogger<HttpEventTicketingService>.Instance,
+            now: () => Hoy,
             negocio: negocio);
 
         await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
@@ -343,6 +376,76 @@ public sealed class HttpEventTicketingServiceTests
         var (svc, _) = Nuevo(Feliz());
         await Assert.ThrowsAsync<ArgumentException>(
             () => svc.CheckoutAsync("evt-1", DosGenerales, new[] { Dos[0] }));
+    }
+
+    // ── El calendario de venta (#195) ───────────────────────────────────────
+    //
+    // Ninguna capacidad del orquestador lo conoce: Api.Pricing fija precios sin vigencia y
+    // Api.Inventory cuenta existencias sin ventana, y al BFF le llega solo el id del evento. Así
+    // que lo aplica este lado, con el catálogo, y ANTES de salir a la red: el orquestador falso
+    // contesta que sí a todo, de modo que si la regla no estuviera, la compra saldría bien.
+
+    [Fact]
+    public async Task Un_evento_que_ya_empezo_no_llega_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, registro) = Nuevo(orq, EventoUno(empieza: Hoy.AddHours(-1)));
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.CheckoutAsync("evt-1", DosGenerales, Dos));
+
+        Assert.Contains("ya comenzó", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(orq.Llamadas);
+        Assert.Empty(await registro.TicketsOfAsync("ana@ejemplo.co"));
+    }
+
+    [Fact]
+    public async Task Una_localidad_con_la_venta_cerrada_no_llega_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq, EventoUno(cierra: Hoy));
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.CheckoutAsync("evt-1", DosGenerales, Dos));
+
+        Assert.Equal("La venta de la localidad 'General' ya cerró (Hasta la víspera).", ex.Message);
+        Assert.Empty(orq.Llamadas);
+    }
+
+    [Fact]
+    public async Task Una_localidad_que_todavia_no_abre_no_llega_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq, EventoUno(abre: Hoy.AddTicks(1)));
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.CheckoutAsync("evt-1", DosGenerales, Dos));
+
+        Assert.Contains("todavía no abre", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(orq.Llamadas);
+    }
+
+    [Fact] // happy: dentro de la ventana —abre justo ahora y cierra en un tick— sí se compra.
+    public async Task Dentro_de_la_ventana_la_compra_llega_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq, EventoUno(abre: Hoy, cierra: Hoy.AddTicks(1)));
+
+        var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+
+        Assert.Equal("tp-1", compra.OrderRef);
+        Assert.Equal(1, orq.Veces("POST", "/v1/ticket-purchases"));
+    }
+
+    [Fact] // sin calendario contra el que vender, no se vende: igual que el motor en proceso.
+    public async Task Un_evento_que_el_catalogo_no_conoce_no_llega_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => svc.CheckoutAsync("evt-que-no-existe", DosGenerales, Dos));
+        Assert.Empty(orq.Llamadas);
     }
 
     // ── Confirmar ───────────────────────────────────────────────────────────

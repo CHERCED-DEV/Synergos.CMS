@@ -20,9 +20,21 @@ public class StubEventTicketingServiceTests
     private static readonly ITicketSigner Signer =
         new HmacTicketSigner(System.Text.Encoding.UTF8.GetBytes("llave-de-tests-t9"));
 
+    /// <summary>
+    /// Un instante en que todo el catálogo sembrado está a la venta: antes de cada evento y de cada
+    /// cierre, salvo la preventa del festival, que cerró en febrero.
+    /// </summary>
+    /// <remarks>
+    /// <b>El reloj va fijo desde #195.</b> Estos tests compraban con el reloj real, y desde que el
+    /// motor mira el calendario de venta el festival del 15 de agosto ya no se vende: un test que
+    /// depende de la fecha en que se corre pasa hoy y falla mañana sin que nadie toque nada.
+    /// </remarks>
+    internal static readonly DateTimeOffset EnVenta = new(2026, 7, 1, 12, 0, 0, TimeSpan.FromHours(-5));
+
     private static StubEventTicketingService Make(
         IReservationService? reservations = null,
-        IPaymentProvider? payments = null)
+        IPaymentProvider? payments = null,
+        DateTimeOffset? ahora = null)
         => new StubEventTicketingService(
             new StubEventCatalogProvider(),
             reservations ?? new StubReservationService(),
@@ -30,7 +42,7 @@ public class StubEventTicketingServiceTests
             null,
             null,
             null,
-            null,
+            () => ahora ?? EnVenta,
             signer: Signer);
 
     /// <summary>
@@ -183,10 +195,13 @@ public class StubEventTicketingServiceTests
             Make().CheckoutAsync("evt-festival-estereo",
                 new[] { new EventCheckoutItem("NO-EXISTE", null, 1) }, new[] { Attendee() }));
 
-        // EARLY tiene Remaining=0 → aforo insuficiente
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            Make().CheckoutAsync("evt-festival-estereo",
+        // EARLY tiene Remaining=0 → aforo insuficiente. En febrero, con su venta todavía abierta:
+        // en julio la rechazaría la ventana antes que el aforo, y el test dejaría de mirar el aforo.
+        var aforo = await Assert.ThrowsAsync<ArgumentException>(() =>
+            Make(ahora: new DateTimeOffset(2026, 2, 15, 12, 0, 0, TimeSpan.FromHours(-5))).CheckoutAsync(
+                "evt-festival-estereo",
                 new[] { new EventCheckoutItem("EARLY", null, 1) }, new[] { Attendee() }));
+        Assert.StartsWith("Aforo insuficiente", aforo.Message, StringComparison.Ordinal);
     }
 
     [Fact] // filter: asistentes deben igualar tickets
@@ -315,7 +330,7 @@ public class StubEventTicketingServiceTests
         var tracking = new StubOrderTrackingService(StubEventTicketingService.EventPipeline, null);
         var svc = new StubEventTicketingService(
             new StubEventCatalogProvider(), new StubReservationService(), new StubPaymentProvider(),
-            tracking, null, null);
+            tracking, null, () => EnVenta);
 
         var checkout = await svc.CheckoutAsync("evt-festival-estereo",
             new[] { new EventCheckoutItem("GEN", null, 1) }, new[] { Attendee("1") });
@@ -342,7 +357,7 @@ public class StubEventTicketingServiceTests
             new StubEventCatalogProvider(),
             new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
             new StubPaymentProvider(store),
-            null, null, store, null, signer: Signer);
+            null, null, store, () => EnVenta, signer: Signer);
         var checkout = await beforeRestart.CheckoutAsync(
             "evt-festival-estereo",
             new[] { new EventCheckoutItem("GEN", null, 2) },
@@ -353,7 +368,7 @@ public class StubEventTicketingServiceTests
             new StubEventCatalogProvider(),
             new StubReservationService(StubReservationService.DefaultHoldWindow, null, store),
             new StubPaymentProvider(store),
-            null, null, store, null, signer: Signer);
+            null, null, store, () => EnVenta, signer: Signer);
 
         var confirmation = await afterRestart.ConfirmAsync(checkout.OrderRef);
         Assert.Equal("Confirmed", confirmation.Status);
