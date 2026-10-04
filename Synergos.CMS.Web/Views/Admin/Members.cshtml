@@ -110,7 +110,7 @@
                                     @(m.LastLoginUtc.HasValue ? m.LastLoginUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "—")
                                 </td>
                                 <td class="syn-admin__col-num">
-                                    @m.CreatedUtc.ToString("yyyy-MM-dd")
+                                    @m.CreatedUtc.ToString("yyyy-MM-dd") UTC
                                 </td>
                                 <td>
                                     @if (m.IsLockedOut)
