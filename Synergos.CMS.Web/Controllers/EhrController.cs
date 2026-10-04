@@ -1162,8 +1162,11 @@ public sealed class EhrController : ControllerBase
     /// (<see cref="EventContentRules.TryInicioEnLaZona"/>), que no lanza en una hora que el cambio de
     /// hora se salta.</para>
     ///
-    /// <para>El instante ISO se queda como estaba: trae su desfase («…Z») y no hay nada que
-    /// interpretar.</para>
+    /// <para><b>El instante ISO, igual:</b> sin desfase («2026-10-02T22:30») es la hora del sitio,
+    /// la misma lectura que <c>{ date, time }</c>; con desfase o «Z», se respeta. Sin desfase se leía
+    /// como UTC —la cita de las 22:30 quedaba a las 17:30 de Bogotá—, y con un desfase distinto de
+    /// «Z» <c>TryGetDateTime</c> lo pasaba a la hora del SERVIDOR con <c>Kind = Local</c>, que el
+    /// resto de la agenda leía como UTC.</para>
     /// </remarks>
     private static DateTime? ReadSlot(JsonElement? slot, TimeZoneInfo zonaDelSitio)
     {
@@ -1173,7 +1176,19 @@ public sealed class EhrController : ControllerBase
         }
         if (value.ValueKind == JsonValueKind.String)
         {
-            return value.TryGetDateTime(out var instant) ? instant : null;
+            if (!value.TryGetDateTime(out var leido))
+            {
+                return null;
+            }
+
+            if (leido.Kind == DateTimeKind.Unspecified)
+            {
+                return EventContentRules.TryInicioEnLaZona(leido, zonaDelSitio, out var enElSitio)
+                    ? enElSitio.UtcDateTime
+                    : null;
+            }
+
+            return value.TryGetDateTimeOffset(out var conDesfase) ? conDesfase.UtcDateTime : null;
         }
         if (value.ValueKind != JsonValueKind.Object)
         {

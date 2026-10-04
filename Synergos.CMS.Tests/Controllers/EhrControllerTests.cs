@@ -633,6 +633,29 @@ public sealed class EhrControllerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory] // el slot ISO: sin desfase es la hora del SITIO, como { date, time }; con desfase o «Z», ése.
+    [InlineData("2026-10-02T22:30")]
+    [InlineData("2026-10-02T22:30:00")]
+    [InlineData("2026-10-02T22:30:00-05:00")]
+    [InlineData("2026-10-03T03:30:00Z")]
+    [InlineData("2026-10-03T08:30:00+05:00")]
+    public async Task Appointment_ElSlotIso_SinDesfaseEsLaHoraDelSitio_YConDesfaseSeRespeta(string iso)
+    {
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
+        _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
+            .Returns(ci => Cita(startUtc: ci.Arg<BookAppointmentRequest>().Slot));
+
+        await BuildSut().BookAppointment(
+            new EhrController.BookAppointmentBody(null, "doc-1", JsonSerializer.SerializeToElement(iso)), default);
+
+        // Las cinco son el mismo instante: las 22:30 del 2 en Bogotá. Sin desfase se leía como UTC
+        // —las 17:30 de allá—, y con un desfase distinto de «Z» salía en la hora del SERVIDOR.
+        await _scheduling.Received(1).BookAsync(
+            Arg.Is<BookAppointmentRequest>(r =>
+                r.Slot == new DateTime(2026, 10, 3, 3, 30, 0, DateTimeKind.Utc) && r.Slot.Kind == DateTimeKind.Utc),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact] // una franja que en UTC no cabe es un slot inválido: 400, no un 500.
     public async Task Appointment_UnaFranjaFueraDelCalendario_EsUn400()
     {
