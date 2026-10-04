@@ -1041,7 +1041,13 @@
       "nombre": "eventos",
       "tipo": "funcionalidad",
       "record": "EventosProps",
-      "diccionario": [],
+      "diccionario": [
+        "Events.Sale"
+      ],
+      "claves": [
+        "Events.Sale.Closed",
+        "Events.Sale.NotYet"
+      ],
       "campos": [
         {
           "nombre": "heading",

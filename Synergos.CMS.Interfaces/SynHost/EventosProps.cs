@@ -15,8 +15,12 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Lo que NO viaja, y por qué.</b> La moneda es un dato del precio: la manda el catálogo
 /// con cada importe. <c>scope</c> es el prefijo de las rutas por hash del elemento, de runtime. Las
 /// dos estaban en la lista heredada del informe 16 §7.3 y el piloto las midió fuera.</para>
+///
+/// <para><b>Su microcopia sale del diccionario, sección <c>Events.Sale</c></b> (ADR 0136, #195): lo
+/// que dice una localidad fuera de su ventana de venta —«Aún no está a la venta», «Venta cerrada»—,
+/// que el CMS decide con <c>saleOpensAt</c>/<c>saleClosesAt</c>/<c>onSale</c>.</para>
 /// </remarks>
-[ElementoSynHost("eventos", TipoDeColocable.Funcionalidad)]
+[ElementoSynHost("eventos", TipoDeColocable.Funcionalidad, Diccionario = ["Events.Sale"])]
 public sealed record EventosProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
