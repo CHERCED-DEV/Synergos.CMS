@@ -28,8 +28,8 @@ namespace Synergos.CMS.Web.Controllers;
 /// <item><see cref="ILeadCaptureService"/> — captura de lead (contactar agente).</item>
 /// </list>
 /// El precio se formatea es-CO vía <see cref="IPriceFormatter"/>. Contrato (lo
-/// programa el agente UI): <c>GET listings · GET listing/{id} · POST visit ·
-/// POST mortgage · POST lead</c>.
+/// programa el agente UI): <c>GET listings · GET listing/{id} · GET listing/{id}/slots ·
+/// POST visit · POST mortgage · POST lead</c>.
 /// </remarks>
 [ApiController]
 [Route("api/realty")]
@@ -256,6 +256,29 @@ public sealed class RealtyController : ControllerBase
                 detail.Location.Lat, detail.Location.Lng,
                 detail.Location.Address, detail.Location.Neighborhood, detail.Location.City),
             Agent: new AgentDto(detail.AgentName, detail.AgentPhone)));
+    }
+
+    // ── 2b. Franjas de visita del inmueble ──────────────────────────────
+    // GET /api/realty/listing/{id}/slots → { slots:[{date,time}] }
+    //
+    // Las que de verdad acepta POST visit: la MISMA lista (IVisitSchedulingService.GetSlotsAsync,
+    // que sale de VisitAgenda) y la MISMA proyección a la hora del sitio (FranjaEnElSitio) con
+    // que el POST casa el { date, time } que le mandan. La UI se inventaba la agenda —7 días a las
+    // 9, 11, 14 y 16— y todo lo que no fueran los 3 días a las 9 y a las 11 salía 400.
+    // Sin las ya apartadas: la agenda lo sabe (Available) y ofrecerlas sería ofrecer un 409.
+    [HttpGet("listing/{id}/slots")]
+    public async Task<IActionResult> VisitSlots(string id, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return BadRequest(new { error = "El id del listado es requerido." });
+        }
+
+        var franjas = await _visits.GetSlotsAsync(id.Trim(), cancellationToken);
+        return Ok(new VisitSlotsResponse(franjas
+            .Where(f => f.Available)
+            .Select(f => FranjaEnElSitio(f.StartUtc))
+            .ToList()));
     }
 
     // ── 3. Agendar visita (reusa el motor, SIN pago) ────────────────────
@@ -1137,6 +1160,9 @@ public sealed class RealtyController : ControllerBase
         AgentDto Agent);
 
     public sealed record VisitSlotDto(string Date, string Time);
+
+    /// <summary>Las franjas libres de un inmueble, en la hora del sitio (<c>GET listing/{id}/slots</c>).</summary>
+    public sealed record VisitSlotsResponse(IReadOnlyList<VisitSlotDto> Slots);
 
     /// <summary>
     /// Contrato UI (<c>Visit</c>): <c>id | listingId | listingTitle | slot{date,time} | mode |

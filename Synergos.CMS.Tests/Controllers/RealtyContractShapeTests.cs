@@ -52,8 +52,10 @@ public sealed class RealtyContractShapeTests
 
     // La zona del sitio, como la cablea el composer: la agenda y las fechas que lee la pantalla
     // son las de Bogotá (Synergos:Listados:ZonaHoraria), no las de UTC.
-    private RealtyController BuildSut() => new(
-        _catalog, _visits, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger,
+    private RealtyController BuildSut() => BuildSut(_visits);
+
+    private RealtyController BuildSut(IVisitSchedulingService visitas) => new(
+        _catalog, visitas, _mortgage, _leads, _collections, _savedSearches, _priceFormatter, _gate, _visitLedger,
         Options.Create(new ListadosSettings()));
 
     private static JsonElement Json(IActionResult result)
@@ -194,6 +196,78 @@ public sealed class RealtyContractShapeTests
         Assert.Equal(VisitModes.InPerson, visita.GetProperty("mode").GetString());
         Assert.Equal("2026-07-10", visita.GetProperty("slot").GetProperty("date").GetString());
         Assert.Equal("09:00", visita.GetProperty("slot").GetProperty("time").GetString());
+    }
+
+    // ── Las franjas de visita: GET listing/{id}/slots ─────────────────────────────
+    //
+    // La UI se inventaba la agenda (7 días a las 9, 11, 14 y 16) y el POST sólo acepta la de
+    // VisitAgenda (3 días a las 9 y a las 11, hora del sitio): todo lo demás salía 400.
+
+    private static VisitContact Contacto(int i) => new($"Visitante {i}", $"visitante{i}@correo.co", "3001234567");
+
+    [Fact] // empty: sin franjas, la lista vacía —y la clave—, no un 404 ni un null
+    public async Task Slots_SinFranjas_DevuelveLaListaVacia()
+    {
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>()).Returns(Array.Empty<Synergos.CMS.Interfaces.VisitSlot>());
+
+        var body = Json(await BuildSut().VisitSlots("L-1", default));
+
+        Assert.Equal(0, body.GetProperty("slots").GetArrayLength());
+    }
+
+    [Fact] // happy: las libres, en la hora del sitio y con las claves que lee la pantalla
+    public async Task Slots_SonLasLibres_EnLaHoraDelSitio()
+    {
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new Synergos.CMS.Interfaces.VisitSlot("L-1-a", new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero)),
+            new Synergos.CMS.Interfaces.VisitSlot("L-1-b", new DateTimeOffset(2026, 10, 3, 16, 0, 0, TimeSpan.Zero), Available: false),
+            new Synergos.CMS.Interfaces.VisitSlot("L-1-c", new DateTimeOffset(2026, 10, 4, 16, 0, 0, TimeSpan.Zero)),
+        });
+
+        var slots = Json(await BuildSut().VisitSlots("L-1", default)).GetProperty("slots");
+
+        Assert.Equal(
+            new[] { ("2026-10-03", "09:00"), ("2026-10-04", "11:00") },
+            slots.EnumerateArray().Select(s => (s.GetProperty("date").GetString()!, s.GetProperty("time").GetString()!)));
+    }
+
+    /// <summary>
+    /// La relación con el POST, con el motor DE VERDAD y el reloj fijo: toda franja que ofrece el
+    /// GET la acepta POST visit, y después ya no se ofrece.
+    /// </summary>
+    /// <remarks>
+    /// Las 22:30 del 2 de octubre en Bogotá: la agenda empieza el 3 a las 9 de allá. Es justo la
+    /// hora a la que una agenda en UTC, o escrita en UTC, se corre de día.
+    /// </remarks>
+    [Fact]
+    public async Task Slots_TodaFranjaQueOfrece_LaAceptaElPost_YDespuesYaNoLaOfrece()
+    {
+        var visitas = new StubVisitSchedulingService(
+            new StubReservationService(),
+            () => new DateTimeOffset(2026, 10, 3, 3, 30, 0, TimeSpan.Zero),
+            null, null, null,
+            new ListadosSettings().Zona());
+        var sut = BuildSut(visitas);
+
+        var ofrecidas = Json(await sut.VisitSlots("L-1", default)).GetProperty("slots").EnumerateArray()
+            .Select(s => (Date: s.GetProperty("date").GetString()!, Time: s.GetProperty("time").GetString()!))
+            .ToList();
+
+        Assert.Equal(6, ofrecidas.Count);
+        Assert.Equal(("2026-10-03", "09:00"), ofrecidas[0]);
+        for (var i = 0; i < ofrecidas.Count; i++)
+        {
+            var request = new RealtyController.VisitRequest(
+                "L-1",
+                JsonSerializer.SerializeToElement(new { date = ofrecidas[i].Date, time = ofrecidas[i].Time }),
+                new RealtyController.ContactRequest(Contacto(i).Name, Contacto(i).Email, Contacto(i).Phone));
+
+            var slot = Json(await sut.Visit(request, default)).GetProperty("visit").GetProperty("slot");
+            Assert.Equal(ofrecidas[i], (slot.GetProperty("date").GetString()!, slot.GetProperty("time").GetString()!));
+        }
+
+        Assert.Equal(0, Json(await sut.VisitSlots("L-1", default)).GetProperty("slots").GetArrayLength());
     }
 
     [Fact] // filter: la franja se lee y se escribe en la hora del sitio, no en la de UTC
