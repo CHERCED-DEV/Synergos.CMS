@@ -17,9 +17,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <c>grid</c> no tiene equivalente y cae a <c>wrap</c> (quitarlo o enseñárselo al elemento es una
 /// decisión de producto, #181).</para>
 ///
-/// <para><c>iconKey</c> lo promete la descripción del ElementType y el elemento no pinta iconos en
-/// las insignias: no viaja. <c>count</c>, <c>href</c> y la selección los sabe pintar el elemento
-/// pero el ElementType no los autora: quedan como atributo.</para>
+/// <para><b><c>icon</c> viaja desde el #192 (caso 3)</b>: un nombre del set de iconos del sitio, el
+/// mismo del desplegable de <c>icon-label</c> (<c>DTSelectIcono</c>, que el gate del UI cruza con
+/// <c>NOMBRES_DE_ICONO</c>). Un nombre que no está en el set no viaja y se anota. El editor lo
+/// escribía como <c>iconKey</c>, que se sigue leyendo. <c>count</c>, <c>href</c> y la selección los
+/// sabe pintar el elemento pero el ElementType no los autora: quedan como atributo.</para>
 ///
 /// <para><b>Su microcopia sale del diccionario, sección <c>BadgeGroup</c></b> (ADR 0136): el nombre del
 /// grupo cuando no tiene rótulo y el grupo vacío.</para>
@@ -29,5 +31,5 @@ public sealed record BadgeGroupProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<BadgeGroupItem>? Badges,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Layout);
 
-/// <summary>Una insignia del grupo: su texto y su tono.</summary>
-public sealed record BadgeGroupItem(string Label, string? Tone = null);
+/// <summary>Una insignia del grupo: su texto, su tono y, si tiene, su icono (un nombre del set).</summary>
+public sealed record BadgeGroupItem(string Label, string? Tone = null, string? Icon = null);

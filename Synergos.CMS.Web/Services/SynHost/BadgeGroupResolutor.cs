@@ -10,7 +10,9 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// <remarks>
 /// Acepta lo que documenta el ElementType (<c>color</c>) y el nombre que el elemento lee
 /// (<c>tone</c>), y sale con el del elemento, en minúsculas. Una insignia sin texto no viaja y se
-/// anota.
+/// anota. El icono (<c>icon</c>, o el <c>iconKey</c> que el editor escribía antes) viaja sólo si
+/// está en el set del sitio (<see cref="IconosDelSistema"/>); si no, se anota y la insignia sale
+/// sin él (#192, caso 3).
 /// </remarks>
 public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
 {
@@ -28,11 +30,13 @@ public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
 
     private readonly IPublishedValueFallback _fallback;
     private readonly ILogger<BadgeGroupResolutor> _log;
+    private readonly IconosDelSistema _iconos;
 
-    public BadgeGroupResolutor(IPublishedValueFallback fallback, ILogger<BadgeGroupResolutor> log)
+    public BadgeGroupResolutor(IPublishedValueFallback fallback, ILogger<BadgeGroupResolutor> log, IconosDelSistema iconos)
     {
         _fallback = fallback;
         _log = log;
+        _iconos = iconos;
     }
 
     public ElementoResuelto<BadgeGroupProps> Resolver(IPublishedElement elemento)
@@ -44,13 +48,15 @@ public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
             Layout: disposicion is not null && NombreEnElElemento.TryGetValue(disposicion, out var nombre) ? nombre : disposicion?.ToLowerInvariant()));
     }
 
-    private static IReadOnlyList<BadgeGroupItem>? Insignias(LectorDelEditor editor, string? json)
+    private IReadOnlyList<BadgeGroupItem>? Insignias(LectorDelEditor editor, string? json)
     {
         var lista = editor.ListaJson("badgesJson", json);
         if (lista is null)
         {
             return null;
         }
+
+        var set = _iconos.Nombres();
 
         var insignias = new List<BadgeGroupItem>();
         foreach (var entrada in lista)
@@ -64,9 +70,26 @@ public sealed class BadgeGroupResolutor : IResolutorSynHost<BadgeGroupProps>
 
             insignias.Add(new BadgeGroupItem(
                 texto,
-                (LectorDelEditor.Cadena(entrada, "color") ?? LectorDelEditor.Cadena(entrada, "tone"))?.ToLowerInvariant()));
+                (LectorDelEditor.Cadena(entrada, "color") ?? LectorDelEditor.Cadena(entrada, "tone"))?.ToLowerInvariant(),
+                Icono(editor, set, LectorDelEditor.Cadena(entrada, "icon") ?? LectorDelEditor.Cadena(entrada, "iconKey"))));
         }
 
         return insignias.Count > 0 ? insignias : null;
+    }
+
+    /// <summary>
+    /// El icono en minúsculas si está en el set; fuera de él no viaja y se anota. Sin set conocido
+    /// viaja como está: el elemento lo filtra con el suyo.
+    /// </summary>
+    private static string? Icono(LectorDelEditor editor, IReadOnlySet<string>? set, string? escrito)
+    {
+        var nombre = escrito?.ToLowerInvariant();
+        if (nombre is null || set is null || set.Contains(nombre))
+        {
+            return nombre;
+        }
+
+        editor.NoEsValido("badgesJson", escrito!, "un icono del set del sitio");
+        return null;
     }
 }

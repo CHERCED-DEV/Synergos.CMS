@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Synergos.CMS.Web.Services.SynHost;
 
@@ -40,6 +41,9 @@ public static class ResolutoresSynHost
         {
             services.AddSingleton(servicio, implementacion);
         }
+
+        // Lo que un resolver consulta y no es un resolver: el set de iconos del sitio (#192).
+        services.TryAddSingleton<IconosDelSistema>();
 
         return services;
     }

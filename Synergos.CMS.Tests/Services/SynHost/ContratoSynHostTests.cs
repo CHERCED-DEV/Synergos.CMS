@@ -228,7 +228,7 @@ public sealed class ContratoSynHostTests
             },
             ["badge-group"] = new (string, object?)[]
             {
-                ("badgesJson", """[{"label":"Envío gratis","color":"success","iconKey":"truck"},{"label":"Nuevo","color":"brand","iconKey":"sparkles"}]"""),
+                ("badgesJson", """[{"label":"Envío gratis","color":"success","icon":"truck"},{"label":"Nuevo","color":"brand"}]"""),
                 ("layout", "stack"),
             },
             ["breadcrumb"] = new (string, object?)[]
@@ -882,9 +882,28 @@ public sealed class ContratoSynHostTests
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
+            .AddSingleton(IconosDeUSync())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
+
+    /// <summary>
+    /// La caché de configuraciones de Umbraco con el set de iconos de uSync: los prevalores del
+    /// desplegable de <c>icon-label</c>, que es <c>DTSelectIcono</c> (#192). Un icono de muestra que
+    /// no esté en él no viajaría, y el ejemplo lo diría.
+    /// </summary>
+    private static Umbraco.Cms.Core.Cache.IDataTypeConfigurationCache IconosDeUSync()
+    {
+        var set = SelectoresDeUSync.De(RepoRoot(), "elementSynIconLabel").Single(s => s.Propiedad == "iconKey");
+        var configuracion = new Umbraco.Cms.Core.PropertyEditors.ValueListConfiguration();
+        configuracion.Items.AddRange(set.Prevalores.Select((v, i) =>
+            new Umbraco.Cms.Core.PropertyEditors.ValueListConfiguration.ValueListItem { Id = i + 1, Value = v }));
+
+        var cache = Substitute.For<Umbraco.Cms.Core.Cache.IDataTypeConfigurationCache>();
+        cache.GetConfigurationAs<Umbraco.Cms.Core.PropertyEditors.ValueListConfiguration>(IconosDelSistema.DataType)
+            .Returns(configuracion);
+        return cache;
+    }
 
     /// <summary>
     /// Las fuentes de los listados (#196, tanda D), todas con la MISMA fila de muestra, que lleva

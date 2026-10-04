@@ -356,7 +356,8 @@
         "badges": [
           {
             "label": "Envío gratis",
-            "tone": "success"
+            "tone": "success",
+            "icon": "truck"
           },
           {
             "label": "Nuevo",
@@ -3191,6 +3192,11 @@
         },
         {
           "nombre": "tone",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "icon",
           "tipo": "string",
           "opcional": true
         }
