@@ -82,19 +82,19 @@ internal static class AcademyDemoSeed
             {
                 new SeedModule("mod-ca-1", "Fundamentos", 1, new[]
                 {
-                    new SeedLesson("les-ca-1-1", "¿Por qué arquitectura limpia?", 1, 9, "https://videos.synergos.co/ca/intro", true,
+                    new SeedLesson("les-ca-1-1", "¿Por qué arquitectura limpia?", 1, 9, null, true,
                         "La arquitectura limpia no es dogma: es disciplina para que el dominio no dependa de detalles. Vemos el grafo de dependencias unidireccional y por qué importa.",
                         Array.Empty<CourseResource>()),
-                    new SeedLesson("les-ca-1-2", "El grafo de dependencias", 2, 14, "https://videos.synergos.co/ca/deps", false,
+                    new SeedLesson("les-ca-1-2", "El grafo de dependencias", 2, 14, null, false,
                         "Interfaces ← Application ← Web. Cómo leer un grafo de dependencias y detectar fugas de capa antes de que se vuelvan deuda técnica.",
                         new[] { new CourseResource("Diagrama de capas (PDF)", "/media/academy/resources/ca-layers.pdf", "pdf") }),
                 }),
                 new SeedModule("mod-ca-2", "Seams y pruebas", 2, new[]
                 {
-                    new SeedLesson("les-ca-2-1", "Stub-first: define el seam", 1, 18, "https://videos.synergos.co/ca/stub-first", false,
+                    new SeedLesson("les-ca-2-1", "Stub-first: define el seam", 1, 18, null, false,
                         "El patrón stub-first: defines el seam, escribes el stub determinista y el equipo construye encima desde el día 1. Cero bloqueos.",
                         new[] { new CourseResource("Plantilla de seam (zip)", "/media/academy/resources/ca-seam-template.zip", "zip") }),
-                    new SeedLesson("les-ca-2-2", "Los 4 casos canónicos de prueba", 2, 16, "https://videos.synergos.co/ca/tests", false,
+                    new SeedLesson("les-ca-2-2", "Los 4 casos canónicos de prueba", 2, 16, null, false,
                         "Empty, happy, filter, idempotent: la matriz mínima de pruebas que todo seam debería cubrir. Ejemplos en xUnit.",
                         Array.Empty<CourseResource>()),
                 }),
@@ -122,16 +122,16 @@ internal static class AcademyDemoSeed
             {
                 new SeedModule("mod-ds-1", "Tokens y fundamentos", 1, new[]
                 {
-                    new SeedLesson("les-ds-1-1", "Tokens semánticos vs literales", 1, 11, "https://videos.synergos.co/ds/tokens", true,
+                    new SeedLesson("les-ds-1-1", "Tokens semánticos vs literales", 1, 11, null, true,
                         "Un token literal (#4f6ef7) te ata a un color; uno semántico (brand-500) te deja cambiar el brand entero en un archivo. Por qué la indirección paga.",
                         Array.Empty<CourseResource>()),
-                    new SeedLesson("les-ds-1-2", "La grilla de 8 puntos", 2, 13, "https://videos.synergos.co/ds/grid", false,
+                    new SeedLesson("les-ds-1-2", "La grilla de 8 puntos", 2, 13, null, false,
                         "La grilla de 8pt no es dogma, es disciplina. El ritmo vertical consistente separa un UI 'ok' de uno que se siente premium.",
                         new[] { new CourseResource("Cheat-sheet de espaciados", "/media/academy/resources/ds-spacing.pdf", "pdf") }),
                 }),
                 new SeedModule("mod-ds-2", "Componiendo el sistema", 2, new[]
                 {
-                    new SeedLesson("les-ds-2-1", "Átomos, moléculas, organismos", 1, 17, "https://videos.synergos.co/ds/atomic", false,
+                    new SeedLesson("les-ds-2-1", "Átomos, moléculas, organismos", 1, 17, null, false,
                         "Atomic design en la práctica: del botón (átomo) a la card (molécula) al header (organismo). Cómo trazar la frontera de cada nivel.",
                         Array.Empty<CourseResource>()),
                 }),
@@ -159,19 +159,19 @@ internal static class AcademyDemoSeed
             {
                 new SeedModule("mod-ml-1", "Datos antes que modelos", 1, new[]
                 {
-                    new SeedLesson("les-ml-1-1", "El 80% es limpiar datos", 1, 15, "https://videos.synergos.co/ml/data", true,
+                    new SeedLesson("les-ml-1-1", "El 80% es limpiar datos", 1, 15, null, true,
                         "Antes del primer modelo: valores faltantes, fugas de datos y el sesgo de supervivencia. Por qué tus dashboards mienten cuando promedian sin percentiles.",
                         new[] { new CourseResource("Dataset de ejemplo (csv)", "/media/academy/resources/ml-dataset.csv", "csv") }),
-                    new SeedLesson("les-ml-1-2", "Feature engineering", 2, 20, "https://videos.synergos.co/ml/features", false,
+                    new SeedLesson("les-ml-1-2", "Feature engineering", 2, 20, null, false,
                         "Las features ganan a los modelos. Técnicas de encoding, escalado y creación de variables que de verdad aportan señal.",
                         Array.Empty<CourseResource>()),
                 }),
                 new SeedModule("mod-ml-2", "Entrenar y desplegar", 2, new[]
                 {
-                    new SeedLesson("les-ml-2-1", "Evaluación honesta", 1, 18, "https://videos.synergos.co/ml/eval", false,
+                    new SeedLesson("les-ml-2-1", "Evaluación honesta", 1, 18, null, false,
                         "Métricas que no mienten: precisión/recall por clase, matriz de confusión y por qué un solo número nunca cuenta toda la historia.",
                         Array.Empty<CourseResource>()),
-                    new SeedLesson("les-ml-2-2", "De notebook a producción", 2, 22, "https://videos.synergos.co/ml/deploy", false,
+                    new SeedLesson("les-ml-2-2", "De notebook a producción", 2, 22, null, false,
                         "Empaquetar el modelo, exponerlo tras un seam y monitorear la deriva. El notebook es el principio, no el fin.",
                         new[] { new CourseResource("Checklist de despliegue", "/media/academy/resources/ml-deploy-checklist.pdf", "pdf") }),
                 }),
@@ -199,16 +199,16 @@ internal static class AcademyDemoSeed
             {
                 new SeedModule("mod-git-1", "Primeros pasos", 1, new[]
                 {
-                    new SeedLesson("les-git-1-1", "Qué es el control de versiones", 1, 8, "https://videos.synergos.co/git/intro", true,
+                    new SeedLesson("les-git-1-1", "Qué es el control de versiones", 1, 8, null, true,
                         "Por qué Git cambió cómo trabajamos. El modelo mental de snapshots, no de diffs.",
                         Array.Empty<CourseResource>()),
-                    new SeedLesson("les-git-1-2", "Tu primer commit", 2, 10, "https://videos.synergos.co/git/commit", true,
+                    new SeedLesson("les-git-1-2", "Tu primer commit", 2, 10, null, true,
                         "add, commit, status: el ciclo básico. Qué hace que un mensaje de commit sea bueno y por qué los commits atómicos te salvan.",
                         Array.Empty<CourseResource>()),
                 }),
                 new SeedModule("mod-git-2", "Ramas", 2, new[]
                 {
-                    new SeedLesson("les-git-2-1", "Crear y fusionar ramas", 1, 12, "https://videos.synergos.co/git/branches", false,
+                    new SeedLesson("les-git-2-1", "Crear y fusionar ramas", 1, 12, null, false,
                         "branch, checkout, merge: el flujo de trabajo con ramas. Cuándo ramificar y cómo mantener la historia legible.",
                         Array.Empty<CourseResource>()),
                 }),
