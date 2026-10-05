@@ -1,14 +1,17 @@
-﻿@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+﻿@*
+    SynHost renderer — <synergos-timeline-horizontal>. Agenda por columnas (horas × carriles).
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (TimelineHorizontalProps) —parsea
+    en el servidor el JSON de ítems— y la vista resuelve y emite. Antes armaba un diccionario a
+    mano y mandaba el texto eventsJson, con date por ítem; el elemento lee items y exige time y
+    title: en /eventos/ la agenda pintaba vacía (D1).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.TimelineHorizontalProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-// El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
-#nullable enable
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["eventsJson"] = Model.Value<string>("eventsJson"),
-        ["snapEnabled"] = Model.Value<bool>("snapEnabled"),
-    };
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("timeline-horizontal", props, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, Model.Value<string>("configOverride"), System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

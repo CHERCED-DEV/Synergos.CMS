@@ -210,6 +210,11 @@ public sealed class ContratoSynHostTests
             {
                 ("eventsJson", """[{"date":"2019-03-01","title":"Fundación","description":"Abrimos la primera sede en Medellín."},{"date":"2024","title":"Segunda sede","description":"Llegamos a Bogotá."}]"""),
             },
+            ["timeline-horizontal"] = new (string, object?)[]
+            {
+                ("eventsJson", """[{"time":"09:00","title":"Apertura","track":"Sala A","description":"Bienvenida y agenda del día."},{"date":"10:30","title":"Panel de cierre"}]"""),
+                ("snapEnabled", true),
+            },
             ["tour-guide"] = new (string, object?)[]
             {
                 ("stepsJson", """[{"selector":".site-header","title":"Bienvenido","content":"Este es el menú principal.","placement":"bottom"},{"selector":"#buscar","title":"Buscá","content":"Encontrá cualquier cosa desde acá."}]"""),

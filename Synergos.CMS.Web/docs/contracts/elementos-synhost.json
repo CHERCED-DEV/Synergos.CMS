@@ -2904,6 +2904,42 @@
       }
     },
     {
+      "nombre": "timeline-horizontal",
+      "tipo": "pieza",
+      "record": "TimelineHorizontalProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "items",
+          "tipo": "TimelineHorizontalItem[]",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "snapEnabled",
+          "tipo": "boolean",
+          "opcional": false,
+          "origen": "decision"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "items": [
+          {
+            "time": "09:00",
+            "title": "Apertura",
+            "track": "Sala A",
+            "description": "Bienvenida y agenda del día."
+          },
+          {
+            "time": "10:30",
+            "title": "Panel de cierre"
+          }
+        ],
+        "snapEnabled": true
+      }
+    },
+    {
       "nombre": "tour-guide",
       "tipo": "pieza",
       "record": "TourGuideProps",
@@ -3558,6 +3594,31 @@
         },
         {
           "nombre": "body",
+          "tipo": "string",
+          "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "TimelineHorizontalItem",
+      "campos": [
+        {
+          "nombre": "time",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "title",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "track",
+          "tipo": "string",
+          "opcional": true
+        },
+        {
+          "nombre": "description",
           "tipo": "string",
           "opcional": true
         }
