@@ -1063,17 +1063,20 @@ public sealed class EhrControllerTests
             new DateOnly(2026, 9, 20), "doc-7", Arg.Any<CancellationToken>());
     }
 
-    [Fact] // vacío: una fecha ilegible cae a HOY, no vacía el tablero ni revienta.
+    [Fact] // vacío: una fecha ilegible cae a HOY —el del sitio—, no vacía el tablero ni revienta.
     public async Task Appointments_FechaIlegible_CaeAHoy()
     {
+        // Con el reloj fijo: esperaba el día UTC, y desde da9a9b20 «hoy» es el del sitio, así que
+        // este test salía rojo cada noche de 19:00 a 24:00 en Bogotá.
         Clinico();
+        _reloj = new RelojFijo(CercaDeMedianocheUtc);
 
         AgendaDelDiaDevuelve();
 
         await BuildSut().Appointments("no-es-una-fecha", null, default);
 
         await _scheduling.Received(1).GetByDateAsync(
-            DateOnly.FromDateTime(DateTime.UtcNow), null, Arg.Any<CancellationToken>());
+            new DateOnly(2026, 10, 2), null, Arg.Any<CancellationToken>());
     }
 
     [Fact] // filtro: el tablero del día ordena por hora, que es como se lee de arriba abajo.
