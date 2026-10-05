@@ -2237,7 +2237,14 @@
       "nombre": "realty",
       "tipo": "funcionalidad",
       "record": "RealtyProps",
-      "diccionario": [],
+      "diccionario": [
+        "Realty.Visit"
+      ],
+      "claves": [
+        "Realty.Visit.SlotsEmpty",
+        "Realty.Visit.SlotsFailed",
+        "Realty.Visit.SlotsLoading"
+      ],
       "campos": [
         {
           "nombre": "heading",

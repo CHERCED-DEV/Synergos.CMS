@@ -198,7 +198,7 @@ Synergos.CMS/
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (259 archivos)
 │       ├── DataTypes/           140 archivos (72 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
-│       ├── Dictionary/          i18n es-CO + en-US (706 keys)
+│       ├── Dictionary/          i18n es-CO + en-US (709 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
 │       ├── MemberTypes/         member

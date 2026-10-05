@@ -15,7 +15,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <c>operation</c>, <c>layout</c>) sólo entraban por ese JSON: quedan como valores del componente
 /// hasta que un editor necesite elegirlos, y entonces entran como selector.</para>
 /// </remarks>
-[ElementoSynHost("realty", TipoDeColocable.Funcionalidad)]
+[ElementoSynHost("realty", TipoDeColocable.Funcionalidad, Diccionario = ["Realty.Visit"])]
 public sealed record RealtyProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
