@@ -103,7 +103,7 @@ public sealed class BackendSegregationTests
         Assert.True(
             encontrado is not null,
             $"no se encontró el proyecto `{nombre}`. Si lo renombraste o lo moviste, este gate "
-            + "—y los otros cinco de esta clase— estarían pasando en VERDE sin mirar nada, que es "
+            + "—y los otros siete de esta clase— estarían pasando en VERDE sin mirar nada, que es "
             + "peor que un rojo: son los dientes que sostienen la frontera entre las capas "
             + "compartidas y el dominio. Arreglá el nombre acá, en el mismo commit.");
         return encontrado!;
@@ -352,18 +352,64 @@ public sealed class BackendSegregationTests
         // Bff.Tienda llamando a Bff.Salud en proceso sería la capa media acoplándose consigo
         // misma: el día que Salud se despliegue aparte, Tienda deja de compilar. Si un flujo
         // necesita de verdad a otro dominio, se habla por HTTP como con todo lo demás.
+        //
+        // Se admiten DOS por nombre, y ninguna más (ADR 0140): Bff.Core, la máquina de sagas, y
+        // Bff.Pasos, los pasos sobre capacidades que interpreta un flujo declarado. Ninguna de
+        // las dos es un orquestador —no tienen Program.cs— y cada una tiene su propia regla de
+        // admisión más abajo. Admitir «cualquier Bff.* sin Program.cs» habría sido más corto y
+        // dejaba entrar la tercera capa compartida sin que nadie la decidiera.
         var offenders = Named("Synergos.Bff.")
             .Where(p => p.Name != "Synergos.Bff.Core")
             .Select(p => (p.Name, Bad: p.ProjectRefs
                 .Where(r => r.StartsWith("Synergos.Bff.", StringComparison.Ordinal)
-                         && r != "Synergos.Bff.Core").ToList()))
+                         && r != "Synergos.Bff.Core" && r != "Synergos.Bff.Pasos").ToList()))
             .Where(x => x.Bad.Count > 0)
             .Select(x => $"{x.Name} → {string.Join(", ", x.Bad)}")
             .ToList();
 
         Assert.True(offenders.Count == 0,
-            "Un orquestador no puede referenciar otro orquestador: lo común va en Synergos.Bff.Core. " +
+            "Un orquestador no puede referenciar otro orquestador: lo común va en Synergos.Bff.Core, " +
+            "y los pasos sobre capacidades en Synergos.Bff.Pasos. " +
             $"Encontrado: {string.Join(" | ", offenders)}.");
+    }
+
+    // ── La frontera Bff.Pasos ⊥ negocio (ADR 0140) ──────────────────────────
+    // Los pasos que un flujo declarado ejecuta sobre una capacidad: cotizar, apartar, autorizar.
+    // No caben en Bff.Core —un paso de cobro se llama como lo que hace, y ahí Payment no entra—
+    // ni en un orquestador, que no puede prestárselos a otro. Es la tercera capa compartida del
+    // árbol, y nace con la regla escrita en vez de con una excepción.
+
+    [Fact]
+    public void Bff_Pasos_solo_puede_referenciar_Core_Shared_y_Bff_Core()
+    {
+        // Una Synergos.Api.* acá metería una capacidad en proceso dentro de los cuatro
+        // orquestadores a la vez —el acople deja de ser HTTP sin que ningún csproj de orquestador
+        // cambie—, y un Bff.* concreto convertiría la capa compartida en el vertical de uno.
+        var pasos = Exigir("Synergos.Bff.Pasos");
+
+        var permitidas = new[] { "Synergos.Core", "Synergos.Shared", "Synergos.Bff.Core" };
+        var extra = pasos.ProjectRefs.Where(r => !permitidas.Contains(r, StringComparer.Ordinal)).ToList();
+
+        Assert.True(extra.Count == 0,
+            "Synergos.Bff.Pasos solo puede referenciar Synergos.Core, Synergos.Shared y Synergos.Bff.Core. " +
+            $"Encontrado además: {string.Join(", ", extra)}.");
+    }
+
+    [Fact]
+    public void Ningun_tipo_de_Bff_Pasos_menciona_un_sustantivo_del_negocio()
+    {
+        // La lista es la de las CAPACIDADES y no la de Bff.Core, a propósito: un paso habla el
+        // vocabulario de la capacidad sobre la que actúa —un pago, un apartado, una reserva—, y
+        // eso es legítimo acá como lo es en Api.Payments. Lo que no puede es saber de qué negocio
+        // es la reserva: un tipo llamado Patient o Trip dice que el paso dejó de servirle al
+        // siguiente orquestador.
+        var pasos = Exigir("Synergos.Bff.Pasos");
+
+        var leaks = NounLeaks(pasos.Path, BusinessNouns);
+
+        Assert.True(leaks.Count == 0,
+            "Synergos.Bff.Pasos no puede nombrar un negocio concreto — eso va en su Synergos.Bff.*. " +
+            $"Encontrado:{Environment.NewLine}{string.Join(Environment.NewLine, leaks)}");
     }
 
     // ── La frontera capacidad ⊥ dominio ─────────────────────────────────────

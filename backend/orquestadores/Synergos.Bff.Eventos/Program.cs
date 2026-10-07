@@ -1,4 +1,5 @@
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Eventos.Clients;
 using Synergos.Bff.Eventos.Domain;
 using Synergos.Bff.Eventos.Endpoints;
@@ -52,6 +53,13 @@ builder.AddSagaMachinery<TicketingSaga, EventosCompensationExecutor>(
 
 builder.Services.AddSingleton<EventosCapabilities>();
 builder.Services.AddSingleton<TicketingFlow>();
+
+// La compra se DECLARA en flujos/eventos.compra.json y se valida AL ARRANCAR (ADR 0140): un tipo
+// de paso que nadie registró, una lectura sin escritura previa o una reserva sin quien la consuma
+// tumban el proceso aquí, no en la primera compra. Se valida contra el MISMO registro de pasos que
+// arma TicketingFlow — de una sola fábrica, para que las dos listas no puedan desviarse.
+builder.Services.AddSingleton<IRegistroDePasos>(sp => EventosPasos.Registro(sp.GetRequiredService<EventosCapabilities>()));
+builder.Services.AddFlows(EventosFlujos.Compra);
 
 var app = builder.Build();
 

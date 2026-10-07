@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Los pasos sobre capacidades que un flujo DECLARADO ejecuta (ADR 0140): cotizar,
+         apartar, consumir, autorizar, capturar. Biblioteca, sin Program.cs: no es un
+         servicio y nada la despliega sola.
+
+         No cabe en Synergos.Bff.Core: un paso de cobro se llama como lo que hace, y
+         `Ningun_tipo_de_Bff_Core_menciona_un_sustantivo_del_dominio` prohíbe allí Payment,
+         Order o Booking. Tampoco en un orquestador: `Un_orquestador_concreto_no_referencia_a_otro`
+         impide que un segundo la tome prestada. Por eso es una capa con su propia regla.
+
+         REGLA DE ADMISIÓN, verificada por gate (BackendSegregationTests): referencia
+         Synergos.Core, Synergos.Shared y Synergos.Bff.Core y nada más; puede nombrar el
+         vocabulario de las capacidades (un pago, un apartado) y NO el negocio (un paciente,
+         un vuelo). Lo que nombra el negocio va en su Bff.*. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\nucleo\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+  </ItemGroup>
+
+</Project>

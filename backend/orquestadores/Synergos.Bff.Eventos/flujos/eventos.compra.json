@@ -1,0 +1,72 @@
+{
+  "clave": "eventos.compra",
+  "entrada": ["eventId", "comprador", "lineas", "comisionPct"],
+  "fases": {
+    "abrir": [
+      "revisar-lineas",
+      "revisar-comision",
+      "sujetos-precio",
+      "cotizar",
+      "total",
+      { "para_cada": "lineas", "como": "linea", "pasos": ["sujeto-pozo", "hallar", "apartar"] },
+      "autorizar"
+    ],
+    "cerrar": [
+      "capturar",
+      { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["consumir"] }
+    ]
+  },
+  "pasos": {
+    "revisar-lineas": { "tipo": "eventos.revisar-lineas", "lee": ["lineas"] },
+    "revisar-comision": { "tipo": "eventos.revisar-comision", "lee": ["comisionPct"] },
+    "sujetos-precio": { "tipo": "eventos.sujetos-precio", "lee": ["eventId", "lineas"], "escribe": ["sujetosPrecio"] },
+    "cotizar": { "tipo": "pricing.cotizar", "lee": ["sujetosPrecio"], "escribe": ["cotizacion"] },
+    "total": { "tipo": "eventos.total", "lee": ["cotizacion", "comisionPct"], "escribe": ["total"] },
+    "sujeto-pozo": { "tipo": "eventos.sujeto-pozo", "lee": ["eventId", "linea"], "escribe": ["linea.pozoSujeto"] },
+    "hallar": {
+      "tipo": "inventory.hallar",
+      "lee": ["linea.pozoSujeto"],
+      "escribe": ["linea.itemId"],
+      "motivo": "esa localidad no tiene aforo declarado"
+    },
+    "apartar": {
+      "tipo": "inventory.apartar",
+      "lee": ["linea.itemId", "linea.cantidad"],
+      "escribe": ["linea.holdId"],
+      "llave_base": "hold",
+      "motivo": "no se pudo apartar el aforo",
+      "reserva": {
+        "consumado_por": "consumir",
+        "antes": "ReleaseSeatHold",
+        "despues": "RestockSeats",
+        "motivo": "compra no confirmada"
+      }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["comprador", "total"],
+      "escribe": ["paymentId"],
+      "llave": "authorize",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "VoidPayment",
+        "despues": "RefundPayment",
+        "motivo": "compra no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["paymentId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "consumir": {
+      "tipo": "inventory.consumir",
+      "lee": ["hold.holdId"],
+      "cierra_reserva": "apartar",
+      "motivo": "no se pudo consumir el aforo apartado"
+    }
+  }
+}

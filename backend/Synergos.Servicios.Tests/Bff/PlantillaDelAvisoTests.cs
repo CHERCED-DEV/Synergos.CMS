@@ -151,9 +151,15 @@ public sealed class PlantillaDelAvisoTests
 
         // Red de seguridad: tantas secciones de aviso como orquestadores en el disco. Si el
         // descubrimiento se rompe, esto no puede quedar vigilando cero orquestadores.
+        //
+        // Un orquestador es el Bff.* que tiene PUNTO DE ENTRADA, el mismo criterio de
+        // `ContainerBuildTests` y de `service-matrix.mjs`. Excluía `Bff.Core` por nombre, y la
+        // segunda biblioteca (`Bff.Pasos`, ADR 0140) lo puso rojo contando un orquestador sin
+        // aviso que no es un orquestador: una lista de excepciones crece con cada biblioteca, una
+        // propiedad del disco se mantiene sola.
         var orquestadores = Proyectos.Todos("Synergos.Bff.")
+            .Where(d => File.Exists(Path.Combine(d, "Program.cs")))
             .Select(d => Path.GetFileName(d))
-            .Where(n => !string.Equals(n, "Synergos.Bff.Core", StringComparison.Ordinal))
             .ToList();
         Assert.True(secciones.Count == orquestadores.Count && secciones.Count > 0,
             $"compose.prod.yml configura el aviso en {secciones.Count} sección(es) "

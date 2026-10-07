@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Tienda", "back
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Viajes", "backend\orquestadores\Synergos.Bff.Viajes\Synergos.Bff.Viajes.csproj", "{CF766062-622A-44D3-827C-741BEC80A6B8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Pasos", "backend\orquestadores\Synergos.Bff.Pasos\Synergos.Bff.Pasos.csproj", "{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -117,6 +119,18 @@ Global
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x64.Build.0 = Release|Any CPU
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x86.ActiveCfg = Release|Any CPU
 		{CF766062-622A-44D3-827C-741BEC80A6B8}.Release|x86.Build.0 = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|x64.Build.0 = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Debug|x86.Build.0 = Debug|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|x64.ActiveCfg = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|x64.Build.0 = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|x86.ActiveCfg = Release|Any CPU
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -131,5 +145,6 @@ Global
 		{AC68D67A-1053-492A-A4F0-068208A6DDF3} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{F6DDD778-9B4A-4CB3-8CE3-CA987681776A} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{CF766062-622A-44D3-827C-741BEC80A6B8} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
+		{49DD29C4-88B8-4E15-AF7B-CA49E0A84C45} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 	EndGlobalSection
 EndGlobal

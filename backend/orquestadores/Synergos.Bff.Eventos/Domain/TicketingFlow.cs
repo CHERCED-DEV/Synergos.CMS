@@ -1,7 +1,7 @@
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Eventos.Clients;
 using Synergos.Core;
-using Compensation = Synergos.Bff.Core.Compensation;
 
 namespace Synergos.Bff.Eventos.Domain;
 
@@ -14,27 +14,34 @@ namespace Synergos.Bff.Eventos.Domain;
 public sealed record TicketLine(string Tier, string? Seat, int Quantity);
 
 /// <summary>
-/// El flujo de comprar entradas — <b>el ORDEN, que es lo del dominio</b>.
+/// Comprar entradas — <b>la puerta del flujo <c>eventos.compra</c></b>, que ya no está escrito acá.
 /// </summary>
 /// <remarks>
 /// <para><b>Tres capacidades y ninguna sabe que existe un evento.</b> Pricing sabe de precios,
 /// Inventory de pozos contables y Payments de plata. Que el aforo se aparta ANTES de cobrar, que
 /// la butaca se consume DESPUÉS de capturar, y que si algo falla a la mitad hay que devolver
-/// las dos cosas — eso no lo sabe ninguna, y es lo que vive acá.</para>
+/// las dos cosas — eso no lo sabe ninguna. Desde la ADR 0140 lo dice
+/// <c>flujos/eventos.compra.json</c> y lo ejecuta <see cref="FlowRunner{TSaga}"/>; esta clase
+/// conserva su forma porque es la que llaman los endpoints y los tests de la compra.</para>
 ///
 /// <para><b>Las dos fases, otra vez.</b> Comprar aparta y <i>autoriza</i>; confirmar
 /// <i>captura</i> y consume. El caso más común de fallo —el comprador se arrepiente, la tarjeta
-/// rechaza, el apartado se vence— no cuesta una devolución. Que el tercer dominio llegue a la
-/// misma forma que los dos anteriores es lo que hace compartible la máquina de sagas.</para>
+/// rechaza, el apartado se vence— no cuesta una devolución.</para>
+///
+/// <para><b>Y el orden dentro de confirmar</b> sigue la regla que enseñó una corrida real en
+/// Tienda: <i>lo que cierra una puerta va lo más tarde posible</i>. Se captura primero —el fallo
+/// que deja plata cobrada sin butaca se deshace solo; el que deja butaca entregada sin cobrar exige
+/// perseguir a una persona— y se consume después. Ese orden es ahora el de la fase
+/// <c>cerrar</c> de la definición.</para>
 ///
 /// <para><b>Lo que este dominio NO comparte con la tienda:</b> no hay pedido ni despacho. Una
 /// entrada no se envía. El artefacto —el e-ticket con su QR— lo emite el CMS después de que esto
 /// conteste que sí, porque el firmante vive allá y un QR no es cupo ni es plata.</para>
 ///
-/// <para><b>Y el orden dentro de confirmar</b> sigue la regla que enseñó una corrida real en
-/// Tienda: <i>lo que cierra una puerta va lo más tarde posible</i>. Acá se captura primero
-/// —el fallo que deja plata cobrada sin butaca se deshace solo; el que deja butaca entregada sin
-/// cobrar exige perseguir a una persona— y se consume después.</para>
+/// <para><b>Lo que se queda acá, y por qué:</b> la llave (<c>Abrir</c>, del motor, antes de tocar
+/// nada) y las guardas de confirmar, que contestan con los códigos de ESTE dominio
+/// (<c>eventos.purchase_not_found</c>, <c>eventos.not_confirmable</c>). El intérprete no los
+/// conoce, y no tiene por qué.</para>
 /// </remarks>
 public sealed class TicketingFlow
 {
@@ -50,19 +57,22 @@ public sealed class TicketingFlow
     /// <summary>Cuántas entradas admite una línea de cupo general.</summary>
     public const int MaxPorLinea = 10;
 
-    private readonly EventosCapabilities _caps;
     private readonly SagaEngine<TicketingSaga> _sagas;
-    private readonly TimeProvider _clock;
-    private readonly ILogger<TicketingFlow> _log;
+    private readonly FlowRunner<TicketingSaga> _flujo;
 
+    /// <remarks>
+    /// <b>La firma es la de siempre y arma el intérprete por dentro</b>: los tests de la compra la
+    /// construyen a mano, sin contenedor, y tienen que seguir pasando sin tocarlos. Si la definición
+    /// no valida contra estos pasos, construirla lanza — igual que el arranque con
+    /// <c>ValidateOnStart</c>.
+    /// </remarks>
     public TicketingFlow(
         EventosCapabilities caps, SagaEngine<TicketingSaga> sagas,
         TimeProvider clock, ILogger<TicketingFlow> log)
     {
-        _caps = caps;
         _sagas = sagas;
-        _clock = clock;
-        _log = log;
+        _flujo = new FlowRunner<TicketingSaga>(
+            sagas, EventosPasos.Registro(caps), EventosFlujos.Compra, new EventosFlowBinding(), clock, log);
     }
 
     /// <summary>Aparta el aforo y autoriza el cobro, sin comisión de servicio.</summary>
@@ -87,76 +97,9 @@ public sealed class TicketingFlow
         // orquestadores y el defecto #41 también (encerraba al comprador para siempre).
         var slot = _sagas.Abrir(sagaId);
         if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
-        sagaId = slot.Id;
 
-        var motivo = Revisar(lineas) ?? ComisionDeServicio.Revisar(comisionPorcentaje);
-        if (motivo is not null) return Result.Rejected<TicketingSaga>(motivo);
-
-        // 1. Cuánto cuesta, contra la capacidad. Va antes de apartar porque un precio que no se
-        //    puede cotizar aborta la compra sin haber tocado el aforo de nadie.
-        //
-        //    Se cotiza por LOCALIDAD, sin la butaca: dos butacas de la misma localidad valen lo
-        //    mismo, y meter el asiento obligaría a cargar un precio por butaca.
-        var aCotizar = lineas
-            .GroupBy(l => l.Tier, StringComparer.Ordinal)
-            .Select(g => (Subject: AforoSubject.PriceOf(eventId, g.Key), Quantity: g.Sum(l => l.Quantity)))
-            .ToList();
-
-        var quote = await _caps.QuoteAsync(aCotizar, ct);
-        if (!quote.IsOk) return Result.Rejected<TicketingSaga>(quote.Rejection!);
-
-        // La comisión va sobre el SUBTOTAL de las entradas, que es sobre lo que la calcula el
-        // carrito; sin ella, quien compraba veía un total y se le autorizaba otro (#194).
-        var total = Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency)
-            + ComisionDeServicio.Sobre(
-                Money.Of(quote.Value.Subtotal.Amount, quote.Value.Subtotal.Currency), comisionPorcentaje);
-
-        var saga = new TicketingSaga(sagaId, buyer, eventId, SagaStatus.Running,
-            Array.Empty<SeatHold>(), null, total,
-            Array.Empty<Compensation>(), null, _clock.GetUtcNow());
-
-        // 2. Apartar aforo, UNA LÍNEA A LA VEZ. Cada apartado se anota como compensable en el
-        //    mismo momento en que existe: si el proceso se cae en la línea cuatro, las tres
-        //    primeras ya tienen quién las suelte (feedback_compensation_is_data).
-        foreach (var linea in lineas)
-        {
-            var subject = AforoSubject.For(eventId, linea.Tier, linea.Seat);
-
-            var item = await _caps.FindAforoAsync(subject, ct);
-            if (!item.IsOk) return await AbortarAsync(saga, item.Rejection!, "esa localidad no tiene aforo declarado", ct);
-
-            // La llave lleva el ítem y no el índice de la línea: si el comprador reordena las
-            // butacas entre dos intentos, una llave por posición apartaría dos veces.
-            var hold = await _caps.HoldAforoAsync(item.Value.Id, linea.Quantity,
-                Ref.Create("eventos.compra", sagaId), saga.KeyFor($"hold:{item.Value.Id}"), ct);
-            if (!hold.IsOk) return await AbortarAsync(saga, hold.Rejection!, "no se pudo apartar el aforo", ct);
-
-            saga = saga with
-            {
-                Holds = saga.Holds
-                    .Append(new SeatHold(hold.Value.Id, item.Value.Id, linea.Quantity, linea.Tier, linea.Seat))
-                    .ToList(),
-                Compensations = saga.Compensations
-                    .Append(Compensation.For(EventosCompensations.ReleaseSeatHold, hold.Value.Id, "compra no confirmada"))
-                    .ToList(),
-            };
-            _sagas.Put(saga);
-        }
-
-        // 3. Autorizar: reserva cupo en el medio de pago SIN mover plata.
-        var pago = await _caps.AuthorizeAsync(Ref.Create("eventos.compra", sagaId), buyer, total,
-            saga.KeyFor("authorize"), ct);
-        if (!pago.IsOk) return await AbortarAsync(saga, pago.Rejection!, "el cobro no se pudo autorizar", ct);
-
-        saga = saga with
-        {
-            PaymentId = pago.Value.Id,
-            Compensations = saga.Compensations
-                .Append(Compensation.For(EventosCompensations.VoidPayment, pago.Value.Id, "compra no confirmada"))
-                .ToList(),
-        };
-        _sagas.Put(saga);
-        return Result.Ok(saga);
+        return await _flujo.EjecutarFaseAsync(
+            "abrir", slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje), ct);
     }
 
     /// <summary>Captura el cobro y consume el aforo. A partir de acá hay plata movida.</summary>
@@ -173,67 +116,10 @@ public sealed class TicketingFlow
             return Rejection.Conflict("eventos.not_confirmable", $"La compra está {saga.Status}.");
         }
 
-        // 1. Capturar. A partir de acá hay plata movida, y todo fallo cuesta una devolución.
-        if (saga.PaymentId is { } paymentId)
-        {
-            var capturado = await _caps.CaptureAsync(paymentId, saga.KeyFor("capture"), ct);
-            if (!capturado.IsOk) return await AbortarAsync(saga, capturado.Rejection!, "el cobro no se pudo capturar", ct);
-
-            // La compensación del pago CAMBIA DE CARÁCTER: de «liberar autorización» a
-            // «devolver». Liberar una autorización ya capturada Api.Payments lo rechaza, así que
-            // sin este cambio la compensación fallaría siempre y quedaría colgada para siempre
-            // por una razón que no tiene nada que ver con el mundo real
-            // (feedback_compensation_changes_character).
-            saga = saga with
-            {
-                Compensations = saga.Compensations
-                    .Select(c => c.Kind == EventosCompensations.VoidPayment && c.IsPending
-                        ? c with { Kind = EventosCompensations.RefundPayment }
-                        : c)
-                    .ToList(),
-            };
-            _sagas.Put(saga);
-        }
-
-        // 2. Consumir el aforo, UNO POR APARTADO. Cada consumo reescribe su propia compensación
-        //    en el acto: soltar un apartado ya consumido lo rechaza Api.Inventory —«devolver
-        //    existencias es un ajuste, no una liberación»—, así que a partir de acá deshacer
-        //    significa devolver unidades al pozo.
-        //
-        //    Reescribirla DENTRO del bucle y no al final importa: si el consumo falla en la
-        //    tercera butaca, las dos primeras ya están consumidas y su compensación tiene que ser
-        //    la buena.
-        foreach (var hold in saga.Holds)
-        {
-            var consumido = await _caps.ConsumeAforoAsync(hold.HoldId, ct);
-            if (!consumido.IsOk) return await AbortarAsync(saga, consumido.Rejection!, "no se pudo consumir el aforo apartado", ct);
-
-            saga = saga with
-            {
-                Compensations = saga.Compensations
-                    .Select(c => c.Kind == EventosCompensations.ReleaseSeatHold && c.TargetId == hold.HoldId && c.IsPending
-                        ? c with { Kind = EventosCompensations.RestockSeats, TargetId = hold.ItemId }
-                        : c)
-                    .ToList(),
-            };
-            _sagas.Put(saga);
-        }
-
-        // Salió: ya no hay nada que deshacer. Las compensaciones se marcan como hechas para que
-        // el barrido no las intente.
-        //
-        // NO se emite el e-ticket acá, y no es un olvido: el QR lo firma el CMS, que es donde
-        // vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más allá
-        // de sus sagas, y entonces sería una capacidad mal cortada.
-        var ahora = _clock.GetUtcNow();
-        saga = saga with
-        {
-            Status = SagaStatus.Completed,
-            LastError = null,
-            Compensations = saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList(),
-        };
-        _sagas.Put(saga);
-        return Result.Ok(saga);
+        // NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
+        // donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
+        // allá de sus sagas, y entonces sería una capacidad mal cortada.
+        return await _flujo.EjecutarFaseAsync("cerrar", sagaId, new FlowContext(), ct);
     }
 
     /// <summary>Cancela una compra todavía sin confirmar.</summary>
@@ -252,7 +138,8 @@ public sealed class TicketingFlow
     public IReadOnlyList<TicketingSaga> PendingCompensations() => _sagas.PendingCompensations();
 
     /// <summary>Lo que una compra de entradas tiene que cumplir.</summary>
-    private static Rejection? Revisar(IReadOnlyList<TicketLine> lineas)
+    /// <remarks>Lo ejecuta el paso <c>eventos.revisar-lineas</c>, antes de que exista la saga.</remarks>
+    internal static Rejection? Revisar(IReadOnlyList<TicketLine> lineas)
     {
         if (lineas.Count == 0)
         {
@@ -296,23 +183,5 @@ public sealed class TicketingFlow
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Anota el fallo, deshace lo que ya se hizo, y devuelve el rechazo original.
-    /// </summary>
-    /// <remarks>
-    /// <b>Se devuelve el rechazo de la capacidad y no uno propio</b>: quien llamó necesita saber
-    /// si fue <c>inventory.out_of_stock</c> —ofrecer otra localidad— o <c>payments.payment_declined</c>
-    /// —pedir otro medio de pago—, y aplanarlos a «no se pudo comprar» deja al comprador sin nada
-    /// que hacer.
-    /// </remarks>
-    private async Task<Result<TicketingSaga>> AbortarAsync(
-        TicketingSaga saga, Rejection motivo, string razon, CancellationToken ct)
-    {
-        _log.LogWarning("La compra {Saga} se deshace ({Razon}): {Error}", saga.Id, razon, motivo);
-        _sagas.Put(saga with { LastError = motivo.ToString() });
-        await _sagas.CompensateAsync(saga.Id, razon, ct);
-        return Result.Rejected<TicketingSaga>(motivo);
     }
 }

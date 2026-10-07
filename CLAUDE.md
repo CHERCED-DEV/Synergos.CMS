@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **4130 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **4156 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2973 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 689 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 468 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Servicios.Tests` | 713 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
+   | `Synergos.Arquitectura.Tests` | 470 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -172,7 +172,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4130**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4156**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -211,7 +211,7 @@ Synergos.CMS/
 │   ├── Controllers/ Services/   el borde y los seams del árbol del CMS
 │   └── Dto/ Filters/ Proxies/   …y su fontanería
 ├── Synergos.CMS.Benchmarks/     BenchmarkDotNet (WebhookSigner + BridgeContextSerializer)
-├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (17) + molde (12)
+├── Synergos.Arquitectura.Tests/ LOS GATES: segregación (19) + molde (12)
 │   └── Architecture/            + capas (8) + imagen de contenedor (7)
 │                                + compose (14) + despliegue (18, ADR 0133)
 │                                + molde del vertical (13, doc 12)
@@ -260,6 +260,11 @@ Synergos.CMS/
     │   │                        es CRONOLOGÍA que este repo no puede
     │   │                        comprobar: los cinco proyectos aparecen en
     │   │                        el mismo merge (`c747948f`).
+    │   ├── Synergos.Bff.Pasos/  los pasos sobre capacidades que interpreta un
+    │   │                        flujo DECLARADO (ADR 0140, piloto en Eventos):
+    │   │                        puede nombrar un pago o un apartado, no un
+    │   │                        negocio. Biblioteca; gate propio en
+    │   │                        `BackendSegregationTests`.
     │   └── Synergos.Bff.*/      Salud, Tienda, Eventos y Viajes construidos;
     │                            faltan Realty, Gob, Academy, Social.
     └── Synergos.Servicios.Tests/  xUnit — las veinte capacidades y los cuatro
@@ -2982,8 +2987,8 @@ carpeta anidada con ese nombre).
 |---|---:|---|
 | `Synergos.Web.sln` | 5 | el producto web y sus tests. **No arrastra el backend.** |
 | `Synergos.Apis.sln` | 22 | `Core` + `Shared` + las veinte capacidades |
-| `Synergos.Bff.sln` | 7 | `Core` + `Shared` + `Bff.Core` + los cuatro orquestadores |
-| `Synergos.CMS.sln` | 34 | **la integradora** — lo lanza todo junto, y es la que corre CI |
+| `Synergos.Bff.sln` | 8 | `Core` + `Shared` + `Bff.Core` + `Bff.Pasos` + los cuatro orquestadores |
+| `Synergos.CMS.sln` | 35 | **la integradora** — lo lanza todo junto, y es la que corre CI |
 
 **La integradora conserva el nombre `Synergos.CMS.sln` a propósito**: es el que nombran el
 workflow de CI, los gates que suben buscando la raíz del repo y esta guía. Renombrarla habría
@@ -3015,13 +3020,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (4130 tests) — la solución integradora las lanza juntas:
+# Las tres suites (4156 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2973
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 689
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 468
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 713
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 470
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -3494,7 +3499,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (138 endpoints, 244 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4130 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4156 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
