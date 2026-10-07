@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Core;
 
 namespace Synergos.Shared;
@@ -73,7 +74,7 @@ public static class IdempotencyHeader
     /// <param name="codePrefix">Prefijo de códigos de la capacidad — <c>booking</c>, <c>audit</c>.</param>
     /// <param name="key">La llave leída, si la hay.</param>
     /// <param name="missing">El rechazo ya formado, si falta.</param>
-    public static bool TryRead(HttpRequest http, string codePrefix, out IdempotencyKey key, out IResult? missing)
+    public static bool TryRead(HttpRequest http, string codePrefix, out IdempotencyKey key, out ProblemHttpResult? missing)
     {
         var raw = http.Headers[Name].ToString();
         if (string.IsNullOrWhiteSpace(raw) || raw.Length > IdempotencyKey.MaxLength)
