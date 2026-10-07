@@ -131,7 +131,8 @@
     `Synergos:Features:<X>`, por sitio y validada al arrancar, y la leen lo que se muestra y lo que se
     cobra; se escala a las funcionalidades (#196). **Propuestos**, y describen el rumbo, no lo que ya
     está: coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables
-    frente a 0113 (0139).
+    frente a 0113 (0139); y el flujo de negocio declarado en el orquestador, con el contrato
+    HTTP publicado y el CMS como puerta (0140, piloto en Eventos #201).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
@@ -192,7 +193,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 138 ADRs (0001-0139, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 139 ADRs (0001-0140, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (DESBLOQUEADO, HU #20 · ADR 0132)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
