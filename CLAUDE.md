@@ -135,8 +135,9 @@
     HTTP publicado y el CMS como puerta (0140, piloto en Eventos #201). Del piloto están hechas la
     F1 —la compra de Eventos es un dato que interpreta `Bff.Core`— y la F2 —el contrato HTTP de
     `Bff.Eventos` y sus tres capacidades se GENERA del código a `docs/contracts/openapi/` y lo
-    vigilan deriva, suelo, sondas contra el host y un gate de compatibilidad consumidor →
-    capacidad—; faltan la puerta (F3) y el front (F4).
+    vigilan deriva, suelo, la respuesta por su tipo, sondas contra el host y un gate de
+    compatibilidad consumidor → capacidad; el UI genera de él sus tipos con `--check`—; faltan la
+    puerta (F3) y el front (F4).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por

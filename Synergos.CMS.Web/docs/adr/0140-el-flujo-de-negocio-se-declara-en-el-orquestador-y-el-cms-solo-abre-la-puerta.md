@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), ver «Avance del piloto» (de la F2, el lado CMS; el generador de tipos del UI la cierra en el repo hermano)
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; ver «Avance del piloto». Faltan la puerta (F3) y el front (F4)
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -333,7 +333,7 @@ Commits CMS `61ebbeeb` (F1) y el de endurecimiento que lo sigue.
 - **No se construyó la imagen** de `Bff.Eventos` en local: `Dockerfile.service` ya copia
   `Bff.Pasos`, y la prueba es el build de la matriz en CI.
 
-## Avance del piloto — F2 hecha, lado CMS (2026-10-07)
+## Avance del piloto — F2 hecha (2026-10-07)
 
 **El contrato HTTP de `Bff.Eventos`, `Api.Pricing`, `Api.Inventory` y `Api.Payments` se publica,
 sale del código y se vigila.** Cuatro documentos OpenAPI 3.1 en
@@ -341,8 +341,12 @@ sale del código y se vigila.** Cuatro documentos OpenAPI 3.1 en
 crean), `operationId`, `Idempotency-Key` donde se lee, 401 y `Rechazo`. Commits CMS `78d976c0`
 (.NET 10), `1da318ac` (runtimes), `2a80940b` (Shared tipado), `6092ba7c` (generación y deriva),
 `ade4debc` (el contrato dice la verdad), `acff3786` (peticiones honestas), `3cbc76f3`
-(compatibilidad consumidor → capacidad) y el de esta sección. Plan y mediciones previas:
-`_informes/73-adr-0140-f2-plan.json`.
+(compatibilidad consumidor → capacidad) y los de esta sección. Del lado UI, `36fc58d` (la lógica
+del generador de tipos, probada sin el hermano) y `ac932af` (el tipo de `Bff.Eventos`, su CLI con
+`--check` dentro de `contracts:validate` y el paso G-14 de `design-gates-ui.yml`). El arnés
+(`synergos-bff-author`) arranca la capacidad desde `net10.0`: Fabrica `a821892`, re-fijado en CMS
+`7a846ce2` y en UI `24a05ae`. Plan y mediciones previas: `_informes/73-adr-0140-f2-plan.json`;
+hallazgos de la verificación: `_informes/74-adr-0140-f2-hallazgos.json`.
 
 **Cómo se verificó**
 - Cada paso con build en 0 avisos (el primero también en Release) y las tres suites en verde. El
@@ -367,17 +371,21 @@ crean), `operationId`, `Idempotency-Key` donde se lee, 401 y `Rechazo`. Commits 
    sin `MapOpenApi`. Producción no lleva el paquete ni la ruta (`ContratoHttpPublicadoTests`).
 3. **La respuesta se declara con el TIPO DE RETORNO** (`TypedResults`), no con `.Produces<T>()`:
    medido, un `.Produces` que miente deja 4194 de 4195 tests en verde; con tipos, no compila.
-   `Synergos.Shared` tipa `ToProblem`, `ToHttp`, `ToCreated` y `IdempotencyHeader.TryRead`.
+   `Synergos.Shared` tipa `ToProblem`, `ToHttp`, `ToCreated` y `IdempotencyHeader.TryRead`. (El
+   atributo `[ProducesResponseType]` se le escapaba al gate; lo cierra el endurecimiento.)
 4. **Un esquema `Rechazo`** (ProblemDetails + `code` + `transient`, `title` como enum de
    `RejectionKind`) en las operaciones cuyo tipo de retorno incluye `ProblemHttpResult`; los seis
    estados de `StatusCodeFor`; el 401 sin cuerpo en todas. Los códigos no se enumeran.
 5. **`Idempotency-Key` sale de un metadato** (`.ConLlaveDeIdempotencia(siempre)`), y una sonda
-   contra el host comprueba que lo declarado es lo exigido.
+   contra el host comprueba que lo declarado es lo exigido. (Con el endurecimiento, el metadato
+   lleva también el largo que el endpoint acepta, y la cabecera del token de identidad sale de su
+   propio metadato.)
 6. **En una petición, todo anulable lleva `= null`**: el esquema publica la forma del cable; lo
    que el negocio exige lo publican los rechazos con código.
 7. **Tres capas de gate, porque la deriva sola no basta**: la deriva (`ContratoOpenApiTests`), el
    suelo que regenerar no arregla (`SueloDelContratoTests`) y las sondas contra el host
-   (`SondasDelContratoTests`).
+   (`SondasDelContratoTests`). El endurecimiento suma una cuarta en el host,
+   `RespuestaPorElTipoDeRetornoTests`.
 8. **Los orquestadores no generan clientes .NET en la F2**: un gate de compatibilidad
    consumidor → capacidad (`ContratoConsumidorEventosTests`, sobre `SubconjuntoOpenApi`) cruza lo
    que `EventosCapabilities` manda y lee con el JSON comiteado. Se reabre cuando los puertos de
@@ -413,17 +421,78 @@ rojos después de regenerar el documento)
   de 4195); sin el `Target` del analizador (`T:Program` repetida).
 - Suelo †: `(IResult)` en `GetPrice`; sin `WithName`; sin el transformer de números; un record de
   petición sin `= null`; dos `MoneyDto` en un documento.
-- Sondas †: sin la llave declarada en `HoldStock`; declarada en `/void`, que no la lee; `code`
-  renombrado en `ToProblem`; un 401 con cuerpo; `Rechazo` sin publicar en los GET.
+- Sondas †: sin la llave declarada en `HoldStock`; declarada en `/void`, que no la lee (los dos con
+  la llave requerida: la opcional no la cruzaba nadie hasta el endurecimiento); `code` renombrado en
+  `ToProblem`; un 401 con cuerpo; `Rechazo` sin publicar en los GET.
 - Compatibilidad: `forKind→forType` en la capacidad † y en el consumidor, `Available` renombrado
   en la capacidad † y en el consumidor, de int a string, la ruta `holds→hold`, `currency→moneda`,
   `CaptureAsync` sin llave, `amount` sin `currency`, un método sin recorrido. **El oráculo de la F1
   queda 44/44 en verde en ocho de los diez**: es el hueco que este gate cierra.
 
+**El endurecimiento, tras la verificación adversarial** (dos revisores y un escéptico que intentó
+refutar cada hallazgo: 9 confirmados y 10 descartados). Cada arreglo con su test y su mutante fiel
+—aplicado por líneas, visto en el diff, rojo y restaurado—, el oráculo de la F1 sin tocar y en
+verde (44/44, y `TicketingSagaPersistidaTests` 2/2), y las tres suites en verde tras cada uno
+(4223 → 4246 tests):
+- **El gate «ningún `.Produces`» no veía el atributo** (CMS `de0db480`). Pedía un punto delante:
+  `[ProducesResponseType<PriceResponse>(200)]` sobre un `GetPrice` que devolvía `(IResult)` con otra
+  forma dejaba el documento idéntico byte a byte y todo en verde. El de la fuente busca ahora el
+  nombre, y `RespuestaPorElTipoDeRetornoTests` lo mira en el host: tipo de retorno concreto, ningún
+  atributo de respuesta de MVC, y toda respuesta de los metadatos explicada por el tipo.
+- **La llave publicada para `BuyTickets` era falsa** (CMS `cfd99ee9`). Se publicaba y se aceptaba
+  hasta 128, pero la llave es el id de la saga y de ella cuelgan las de cada paso: con 91 o más,
+  `{saga}|hold:{item}` no cabía y la compra moría en un 500. `LlaveDeSaga` (en `Bff.Core`) hace la
+  cuenta con lo que la saga deriva —128 − `#100` − `|` − el paso más largo, `restock:` y un id de
+  32— = 83; el metadato lleva el largo y `TryRead` lo lee de ahí, así que lo publicado y lo aceptado
+  no pueden ser dos números. Los cuatro orquestadores abren su saga con `.ConLlaveDeSaga()`. Una
+  sonda cruza `maxLength` contra el host, y `LlaveDeSagaTests` recorre la saga más larga posible
+  con ids del largo de los de verdad: la llave más larga que sale mide 128. No se acortó la
+  derivación con un hash: las llaves de paso ya viajaron a las capacidades en sagas vivas. El
+  documento de `Bff.Eventos` cambia en una línea (`maxLength` 128 → 83); el tipo del UI no lleva el
+  largo, y su `--check` sigue al día.
+- **El gate de compatibilidad ignoraba `format`** (CMS `52b59bce`): una fecha que pasaba a texto
+  libre sólo perdía su `date-time` y quedaba en verde. Lo que se lee pide su `format` y lo que se
+  manda se lee con él.
+- **La llave opcional no la cruzaba nadie** (CMS `a5cca79d`): con `{}` el ajuste de existencias
+  contesta `adjust_required` antes de mirarla. Una tabla pequeña de la sonda da el cuerpo que la
+  activa (`AdjustStock` → `{"delta":1}`), y quitar o inventar `.ConLlaveDeIdempotencia(siempre:
+  false)` sale en rojo después de regenerar.
+- **`AuthorizePayment` lee `X-Synergos-Identity` y el contrato lo callaba** (CMS `0143b467`): se
+  publica como cabecera opcional desde `.ConTokenDeIdentidad()`, y una sonda la cruza (un token que
+  no lo es contesta `identity.*`). Cambia sólo el documento de Payments, que el UI no lee. Lo de
+  publicar `assertion` como enum **no** se hizo: sería falso (sin token sólo vale `CmsSession`, y
+  `Enum.TryParse` admite la forma numérica).
+- **«2 de las 22»** (CMS `5e76a5c9`): la matriz construye 24 imágenes desde antes de la F2. Se
+  corrigió en todos los sitios que contaban imágenes, y un gate cuadra la cifra de la prosa contra
+  la matriz.
+- **El arnés arrancaba la capacidad desde `bin/Debug/net8.0`**: lo arregló el orquestador en Fabrica
+  `a821892` (re-fijado arriba).
+- **El índice y esta ADR daban por pendiente el lado UI**: esta sección y la fila del índice.
+
+**Lo que se descartó, y por qué** (el detalle, en el informe 74)
+- El gate consumidor → capacidad no ve un campo de negocio que se deja de mandar, y el CMS consume
+  `Bff.Eventos` sin cruce con el contrato: heredado e idéntico antes de la F2; el esquema publica la
+  forma del cable (decisión 6) y el consumidor CMS lo reemplaza la puerta (F3).
+- El `Location` de los 201 (rutas sin GET, id sin escapar) y el 401 que `CapabilityHttp` trata como
+  transitorio: heredados byte a byte (#136); la F2 no cambió cuerpos ni cabeceras.
+- El mapa de operaciones del UI sin rutas, query ni código de éxito, y el tipo del navegador con
+  lo que pone la puerta y las operaciones de operación: decisiones del plan, que deja a la F3 cómo
+  viajan las entradas y qué se expone.
+- G-14 compara contra la rama por defecto del CMS, y el CLI acepta argumentos mal escritos:
+  heredados (G-12 y G-13 caen igual; el parseo es el del helper compartido desde #57).
+- El enum anulable del generador: ASP.NET 10 no emite esas formas (medido).
+- La deuda de la regla 24 «con fecha» sin fecha: la fecha es el hito F4 del piloto (#201).
+- Y dos correcciones a hallazgos confirmados: la saga con la llave larga no quedaba para el barrido
+  (la excepción saltaba antes de guardarla), y la `JsonException` que `CapabilityHttp` deja escapar
+  en el camino 2xx es heredada (#136) y no se tocó.
+
 **Lo que queda, dicho**
-- **Lado UI de la F2**: el generador de tipos con `--check` (sólo `Synergos.Bff.*`) y su paso de
-  CI van en el repo hermano, después de empujar esta rama. Hasta la F4 nadie importa esos tipos (la
-  regla 24 del UI queda abierta con fecha).
+- **G-14 en CI, rojo hasta que la rama llegue a master**: el UI hace checkout de la rama por defecto
+  del CMS, y ahí no existe `docs/contracts/openapi/`.
+- **La deriva previa de `cms:sync:check` en el UI** (`elements-syn.contract.ts` contra el uSync del
+  CMS) deja `contracts:validate` en rojo en su último paso. Es de antes de la F2 (medido sobre
+  `17874d1`) y va en un ticket aparte.
+- **La regla 24 del UI, abierta hasta la F4**: nadie importa todavía el tipo generado.
 - **F3, la puerta**: decide las claves de operación; tiene que **separar** lo que pone la puerta
   (`buyerKind`, `buyerId`, `serviceFeePercent`) de lo que manda el navegador —el documento de
   `Bff.Eventos` los publica hoy como entrada— y no exponer `retry` ni `compensations`.
@@ -431,7 +500,11 @@ rojos después de regenerar el documento)
   que rompe `tsc`, y el typecheck de `vitals/core` en `npm test`.
 - **Fuera del piloto**: las otras 20 capacidades y 3 orquestadores; el catálogo de códigos por
   pieza (cuando el UI los traduzca, ADR 0136); la obligatoriedad de negocio en el esquema; `status`
-  como enum.
+  como enum. Y del endurecimiento: la cabecera de identidad la leen también `Audit`, `Cart`,
+  `Consent`, `Messaging` y `Workflow`, que se declara cuando publiquen contrato;
+  `.ExcludeFromDescription()` no tiene gate (hoy sólo lo usa el webhook de Payments); el gate de
+  compatibilidad no marca una cabecera que el consumidor manda y la operación no declara; y
+  `CapabilityHttp` sigue dejando escapar una `JsonException` en el camino 2xx.
 - **Riesgos abiertos**: un parche del runtime 10 en CI puede mover el documento sin tocar código (el
   rojo imprime la versión; se fija el parche si pasa); Linux sin medir; los gates de
   `Arquitectura.Tests` ejecutan código del CMS sobre el runtime 10 (al CMS en su runtime lo prueba
