@@ -19,7 +19,8 @@
     sobre el 8 de producción. Al CMS en su runtime lo sigue probando Synergos.CMS.Tests, que
     se queda en net8.0; y un gate que ARRANQUE el host del CMS no puede vivir aquí.
     Multi-target (net8.0;net10.0 en el núcleo) se midió y se descartó: el publish de la
-    imagen falla con NETSDK1129.
+    imagen falla con NETSDK1129. Que los TFM y las imágenes sigan así lo vigila
+    RuntimesDeLosDosArbolesTests.
   -->
 
   <PropertyGroup>

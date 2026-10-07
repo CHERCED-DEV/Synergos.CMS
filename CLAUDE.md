@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **4184 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **4188 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 2973 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 740 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 471 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 475 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -53,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **58 de los 80 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **59 de los 81 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -172,7 +172,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4184**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4188**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -1539,7 +1539,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **58 de los 80 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **59 de los 81 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -3022,6 +3022,11 @@ no sobre el 8 de producción; al CMS en su runtime lo sigue probando `Synergos.C
 que ARRANQUE el host del CMS no puede vivir en Arquitectura. Por eso `dotnet test Synergos.CMS.sln`
 necesita los runtimes de ASP.NET Core 8 **y** 10 (el CI instala los dos SDK), y cada imagen sigue
 a su árbol: `Dockerfile.service` en `aspnet:10.0`, el `Dockerfile` del CMS en `aspnet:8.0`.
+Lo vigila `RuntimesDeLosDosArbolesTests`, que sólo lee el disco: un único TFM bajo `backend/`, el
+árbol del CMS en net8.0, y el `FROM … AS runtime` de cada Dockerfile igual al TFM de su árbol. El
+compilador ve una capacidad devuelta a net8.0 (NU1201: referencia el núcleo); lo que NO ve es la
+imagen —`aspnet:8.0` con ensamblados net10.0 se construye igual y no arranca— ni `Synergos.Core`,
+que no referencia nada, vuelto a net8.0: la integradora compila en cero avisos (medido).
 
 ```bash
 # TODO el árbol compila en CERO avisos, y desde el #134 un aviso ES un error
@@ -3032,13 +3037,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (4184 tests) — la solución integradora las lanza juntas:
+# Las tres suites (4188 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 2973
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 740
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 471
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 475
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -3511,7 +3516,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (138 endpoints, 244 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4184 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4188 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
