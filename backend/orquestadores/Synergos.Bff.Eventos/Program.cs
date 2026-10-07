@@ -57,9 +57,10 @@ builder.Services.AddSingleton<TicketingFlow>();
 // La compra se DECLARA en flujos/eventos.compra.json y se valida AL ARRANCAR (ADR 0140): un tipo
 // de paso que nadie registró, una lectura sin escritura previa o una reserva sin quien la consuma
 // tumban el proceso aquí, no en la primera compra. Se valida contra el MISMO registro de pasos que
-// arma TicketingFlow — de una sola fábrica, para que las dos listas no puedan desviarse.
+// arma TicketingFlow — de una sola fábrica, para que las dos listas no puedan desviarse — y contra
+// lo que su código da por hecho: lo que la saga reconstruye y guarda, y las fases que invoca.
 builder.Services.AddSingleton<IRegistroDePasos>(sp => EventosPasos.Registro(sp.GetRequiredService<EventosCapabilities>()));
-builder.Services.AddFlows(EventosFlujos.Compra);
+builder.Services.AddFlow(EventosFlujos.Compra, new EventosFlowBinding(), TicketingFlow.Fases);
 
 var app = builder.Build();
 

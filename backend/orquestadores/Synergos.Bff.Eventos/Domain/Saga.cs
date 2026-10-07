@@ -77,10 +77,11 @@ public sealed record SeatHold(string HoldId, string ItemId, int Quantity, string
 /// <para><b>Y lo que sí comparte:</b> el número de compensaciones no es fijo. Una compra de
 /// cuatro butacas lleva cuatro apartados más el cobro.</para>
 ///
-/// <para><b>Las dos ranuras del flujo declarado van EXPLÍCITAS, y no es estilo</b> (ADR 0140). El
-/// intérprete lee los apartados y el cobro por <see cref="IHoldLedger"/> e <see cref="IChargeLedger"/>;
-/// como implementación explícita, <c>System.Text.Json</c> no las ve y el fichero de cada compra
-/// sigue siendo byte a byte el de antes (<c>TicketingSagaPersistidaTests</c>). Una propiedad pública
+/// <para><b>La ranura del flujo declarado va EXPLÍCITA, y no es estilo</b> (ADR 0140). El
+/// intérprete lee lo que reservó cada paso —los apartados de <c>apartar</c>, el cobro de
+/// <c>autorizar</c>— por <see cref="IHoldLedger"/>, sobre los campos de siempre; como
+/// implementación explícita, <c>System.Text.Json</c> no la ve y el fichero de cada compra sigue
+/// siendo byte a byte el de antes (<c>TicketingSagaPersistidaTests</c>). Una propiedad pública
 /// saldría en él, como ya salen <c>isPending</c> e <c>isStuck</c> de cada compensación.</para>
 /// </remarks>
 public sealed record TicketingSaga(
@@ -95,7 +96,7 @@ public sealed record TicketingSaga(
     string? LastError,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
-    int AlertsSent = 0) : ISaga<TicketingSaga>, IHoldLedger, IChargeLedger
+    int AlertsSent = 0) : ISaga<TicketingSaga>, IHoldLedger
 {
     public TicketingSaga WithStatus(SagaStatus status) => this with { Status = status };
 
@@ -105,10 +106,14 @@ public sealed record TicketingSaga(
     public TicketingSaga WithAlert(DateTimeOffset? alertedAtUtc, int alertsSent)
         => this with { AlertedAtUtc = alertedAtUtc, AlertsSent = alertsSent };
 
-    // Consumido, un apartado se devuelve ajustando su POZO: el apartado ya no existe.
-    IReadOnlyList<HoldLeg> IHoldLedger.Legs => Holds.Select(h => new HoldLeg(h.HoldId, h.ItemId)).ToList();
-
-    string? IChargeLedger.ChargeRef => PaymentId;
+    // Consumido, un apartado se devuelve ajustando su POZO: el apartado ya no existe. El cobro se
+    // devuelve sobre sí mismo.
+    IReadOnlyList<HoldLeg> IHoldLedger.Legs(string paso) => paso switch
+    {
+        EventosFlowBinding.Apartar => Holds.Select(h => new HoldLeg(h.HoldId, h.ItemId)).ToList(),
+        EventosFlowBinding.Autorizar => PaymentId is { } cobro ? new[] { new HoldLeg(cobro, cobro) } : Array.Empty<HoldLeg>(),
+        _ => throw new InvalidOperationException($"Una compra de entradas no guarda reservas de «{paso}»."),
+    };
 }
 
 /// <summary>

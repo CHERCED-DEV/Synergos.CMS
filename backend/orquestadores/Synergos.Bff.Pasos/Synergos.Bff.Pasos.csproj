@@ -13,10 +13,10 @@
          Order o Booking. Tampoco en un orquestador: `Un_orquestador_concreto_no_referencia_a_otro`
          impide que un segundo la tome prestada. Por eso es una capa con su propia regla.
 
-         REGLA DE ADMISIÓN, verificada por gate (BackendSegregationTests): referencia
-         Synergos.Core, Synergos.Shared y Synergos.Bff.Core y nada más; puede nombrar el
-         vocabulario de las capacidades (un pago, un apartado) y NO el negocio (un paciente,
-         un vuelo). Lo que nombra el negocio va en su Bff.*. -->
+         REGLA DE ADMISIÓN, verificada por gate (BackendSegregationTests): puede referenciar
+         Synergos.Core, Synergos.Shared y Synergos.Bff.Core y nada más (hoy le bastan Core y
+         Bff.Core); puede nombrar el vocabulario de las capacidades (un pago, un apartado) y NO
+         el negocio (un paciente, un vuelo). Lo que nombra el negocio va en su Bff.*. -->
   </PropertyGroup>
 
   <ItemGroup>

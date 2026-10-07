@@ -382,9 +382,10 @@ public sealed class BackendSegregationTests
     [Fact]
     public void Bff_Pasos_solo_puede_referenciar_Core_Shared_y_Bff_Core()
     {
-        // Una Synergos.Api.* acá metería una capacidad en proceso dentro de los cuatro
-        // orquestadores a la vez —el acople deja de ser HTTP sin que ningún csproj de orquestador
-        // cambie—, y un Bff.* concreto convertiría la capa compartida en el vertical de uno.
+        // Una Synergos.Api.* acá metería una capacidad en proceso dentro de cada orquestador que
+        // la referencia, todos a la vez —el acople deja de ser HTTP sin que ningún csproj de
+        // orquestador cambie—, y un Bff.* concreto convertiría la capa compartida en el vertical
+        // de uno.
         var pasos = Exigir("Synergos.Bff.Pasos");
 
         var permitidas = new[] { "Synergos.Core", "Synergos.Shared", "Synergos.Bff.Core" };

@@ -69,6 +69,7 @@ internal sealed class PasoRevisarLineas : IPaso
     public string Tipo => "eventos.revisar-lineas";
     public int Lecturas => 1;
     public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -85,6 +86,7 @@ internal sealed class PasoRevisarComision : IPaso
     public string Tipo => "eventos.revisar-comision";
     public int Lecturas => 1;
     public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
         => Task.FromResult(ComisionDeServicio.Revisar(entrada.Lee<decimal>(0)) is { } motivo
@@ -104,6 +106,7 @@ internal sealed class PasoSujetosDePrecio : IPaso
     public string Tipo => "eventos.sujetos-precio";
     public int Lecturas => 2;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -126,6 +129,7 @@ internal sealed class PasoTotal : IPaso
     public string Tipo => "eventos.total";
     public int Lecturas => 2;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -141,6 +145,7 @@ internal sealed class PasoSujetoDePozo : IPaso
     public string Tipo => "eventos.sujeto-pozo";
     public int Lecturas => 2;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {

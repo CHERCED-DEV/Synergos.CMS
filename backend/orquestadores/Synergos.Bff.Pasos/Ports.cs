@@ -4,8 +4,9 @@ namespace Synergos.Bff.Pasos;
 
 // ── Los puertos: lo que un paso necesita de una capacidad, y nada más ───────
 // Un paso no habla HTTP: pide por su puerto y el orquestador lo cumple con su cliente. Así el
-// mismo paso de autorizar sirve a los cuatro orquestadores sin conocer la URL, la llave ni el
-// DTO de ninguno — y el orquestador sigue siendo el único que sabe con qué capacidad habla.
+// mismo paso de autorizar le puede servir a cualquier orquestador —hoy lo usa sólo Eventos, el
+// piloto de la ADR 0140— sin conocer la URL, la llave ni el DTO de ninguno, y el orquestador sigue
+// siendo el único que sabe con qué capacidad habla.
 //
 // Cada puerto trae SOLO lo que hoy ejecuta un flujo declarado. Lo que deshace (soltar, reponer,
 // anular, devolver) sigue en el `*CompensationExecutor` de cada orquestador: un método de puerto

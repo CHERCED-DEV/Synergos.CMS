@@ -9,9 +9,9 @@ namespace Synergos.Bff.Eventos.Domain;
 /// </summary>
 /// <remarks>
 /// <para><b>Es el único sitio que conoce los NOMBRES del contexto</b> —los de
-/// <c>flujos/eventos.compra.json</c>— y la forma de la saga a la vez. Si un nombre cambia en la
-/// definición sin cambiar acá, el contexto rechaza con el nombre que falta; no hay un default que
-/// lo tape.</para>
+/// <c>flujos/eventos.compra.json</c>— y la forma de la saga a la vez. Y los DECLARA
+/// (<see cref="Reconstruye"/>, <see cref="CamposDeItem"/>, <see cref="Reservas"/>): si un nombre
+/// cambia en la definición sin cambiar acá, o al revés, el orquestador no arranca.</para>
 ///
 /// <para><b>Los campos que se guardan son los de siempre</b>: el apartado con su localidad y su
 /// butaca —que la capacidad no conoce y el CMS sí lee—, el cobro, el total y el error. Nada del
@@ -31,6 +31,30 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
     internal const string Localidad = "tier";
     internal const string Butaca = "seat";
     internal const string Cantidad = "cantidad";
+
+    // Los pasos de la definición que reservan, que es por lo que la saga guarda lo reservado.
+    internal const string Apartar = "apartar";
+    internal const string Autorizar = "autorizar";
+
+    /// <summary>Lo que <see cref="Entrada"/> pone: la compra que pide el comprador.</summary>
+    public IReadOnlyCollection<string> PoneAlAbrir { get; } = new[] { EventId, Comprador, Lineas, Comision };
+
+    /// <summary>Lo que <see cref="Leer"/> pone. Los apartados no van: el bloque los recorre desde la saga.</summary>
+    public IReadOnlyCollection<string> Reconstruye { get; } = new[] { EventId, Comprador, Total, Cobro };
+
+    public IReadOnlyDictionary<string, IReadOnlyCollection<string>> CamposDeItem { get; } =
+        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal)
+        {
+            [Lineas] = new[] { Localidad, Butaca, Cantidad },
+        };
+
+    /// <summary>El aforo de cada línea va a <c>Holds</c>; el cobro, a <c>PaymentId</c>.</summary>
+    public IReadOnlyDictionary<string, FormaDeReserva> Reservas { get; } =
+        new Dictionary<string, FormaDeReserva>(StringComparer.Ordinal)
+        {
+            [Apartar] = FormaDeReserva.PorItem,
+            [Autorizar] = FormaDeReserva.Unica,
+        };
 
     /// <summary>La entrada de la fase que abre la compra.</summary>
     public static FlowContext Entrada(string eventId, Ref comprador, IReadOnlyList<TicketLine> lineas, decimal comision)
@@ -75,23 +99,25 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
             .Set(Cobro, saga.PaymentId);
     }
 
-    public TicketingSaga ConApartado(TicketingSaga saga, HoldLeg apartado, FlowContext item)
+    public TicketingSaga ConReserva(TicketingSaga saga, string paso, HoldLeg reservado, FlowContext? item)
     {
         ArgumentNullException.ThrowIfNull(saga);
-        ArgumentNullException.ThrowIfNull(apartado);
-        var linea = Linea(item);
-        return saga with
+        ArgumentNullException.ThrowIfNull(reservado);
+        switch (paso)
         {
-            Holds = saga.Holds
-                .Append(new SeatHold(apartado.HoldId, apartado.CloseTargetId, linea.Quantity, linea.Tier, linea.Seat))
-                .ToList(),
-        };
-    }
-
-    public TicketingSaga ConCargo(TicketingSaga saga, string cargo)
-    {
-        ArgumentNullException.ThrowIfNull(saga);
-        return saga with { PaymentId = cargo };
+            case Apartar:
+                var linea = Linea(item ?? throw new InvalidOperationException($"«{Apartar}» reserva por línea y llegó sin línea."));
+                return saga with
+                {
+                    Holds = saga.Holds
+                        .Append(new SeatHold(reservado.HoldId, reservado.CloseTargetId, linea.Quantity, linea.Tier, linea.Seat))
+                        .ToList(),
+                };
+            case Autorizar:
+                return saga with { PaymentId = reservado.HoldId };
+            default:
+                throw new InvalidOperationException($"La compra de entradas no guarda reservas de «{paso}».");
+        }
     }
 
     public TicketingSaga ConError(TicketingSaga saga, string? falla)

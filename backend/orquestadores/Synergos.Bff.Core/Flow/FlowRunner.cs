@@ -24,7 +24,14 @@ namespace Synergos.Bff.Core.Flow;
 ///   proceso se cae en la línea cuatro, las tres primeras ya tienen quién las suelte.</item>
 ///   <item>Cerrar una reserva le cambia el carácter a su compensación (<c>antes</c> →
 ///   <c>despues</c>) en el acto, también dentro del bloque: si el consumo falla en la tercera
-///   butaca, las dos primeras ya tienen la compensación buena.</item>
+///   butaca, las dos primeras ya tienen la compensación buena. Si el cierre produjo su propio
+///   objetivo (<see cref="SalidaDePaso.Cierra"/>), la de después es sobre ése.</item>
+///   <item>Cada reserva se guarda y se lee por el nombre del paso que la hizo: un flujo puede
+///   llevar varias únicas —la hora y el cobro— y varias por ítem, y cada una se cierra y se
+///   deshace por su lado.</item>
+///   <item>Sólo se continúa una saga <c>Running</c>. Las guardas con los códigos de cada dominio
+///   son de la fachada; ésta es la red para la fachada que se las olvide, porque continuar una
+///   saga ya completada volvería a consumir lo consumido.</item>
 ///   <item>Un paso que falla después de nacer la saga la deshace con su motivo y devuelve el
 ///   rechazo ORIGINAL de la capacidad.</item>
 ///   <item>Al terminar la última fase, la saga queda <c>Completed</c> y lo que estaba armado,
@@ -33,6 +40,9 @@ namespace Synergos.Bff.Core.Flow;
 /// </remarks>
 public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 {
+    /// <summary>El código con el que se rechaza continuar una saga que ya no está en curso.</summary>
+    public const string NoEnCurso = "flow.not_running";
+
     private readonly SagaEngine<TSaga> _motor;
     private readonly IRegistroDePasos _pasos;
     private readonly FlujoDef _flujo;
@@ -40,13 +50,23 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     private readonly TimeProvider _reloj;
     private readonly ILogger _log;
 
+    /// <param name="motor">La máquina de sagas del dominio.</param>
+    /// <param name="pasos">Los pasos registrados.</param>
+    /// <param name="flujo">La definición.</param>
+    /// <param name="binding">Cómo la guarda la saga del dominio.</param>
+    /// <param name="fases">Las fases que la fachada invoca, en orden: las mismas que declara al
+    /// registrar el flujo. Tienen que ser las de la definición, así que una que no declaró no
+    /// existe.</param>
+    /// <param name="reloj">El reloj.</param>
+    /// <param name="log">El log de la fachada.</param>
     /// <exception cref="InvalidOperationException">Si la definición no pasa <see cref="FlowValidator"/>
-    /// contra estos pasos y esta saga: un intérprete no se construye sobre un flujo roto.</exception>
+    /// contra estos pasos, este binding y estas fases: un intérprete no se construye sobre un flujo
+    /// roto.</exception>
     public FlowRunner(
         SagaEngine<TSaga> motor, IRegistroDePasos pasos, FlujoDef flujo,
-        IFlowBinding<TSaga> binding, TimeProvider reloj, ILogger log)
+        IFlowBinding<TSaga> binding, IReadOnlyList<string> fases, TimeProvider reloj, ILogger log)
     {
-        var errores = FlowValidator.Validar(flujo, pasos, typeof(TSaga));
+        var errores = FlowValidator.Validar(flujo, pasos, ContratoDelFlujo.De(binding, fases));
         if (errores.Count > 0)
         {
             throw new InvalidOperationException(string.Join(Environment.NewLine, errores));
@@ -90,10 +110,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// <param name="fase">El nombre de la fase.</param>
     /// <param name="sagaId">La saga. Quien llama ya resolvió su llave con <see cref="SagaEngine{TSaga}.Abrir"/>.</param>
     /// <param name="entrada">Lo que pone el llamador. En una fase que continúa se suma a lo que
-    /// <see cref="IFlowBinding{TSaga}.Leer"/> reconstruye de la saga, y gana.</param>
+    /// <see cref="IFlowBinding{TSaga}.Leer"/> reconstruye de la saga, y gana; pero el validador no
+    /// cuenta con ella, así que ningún paso de esa fase puede depender de lo que traiga.</param>
     /// <param name="ct">Cancelación.</param>
-    /// <exception cref="InvalidOperationException">Si una fase que continúa no encuentra la saga:
-    /// eso lo tiene que haber resuelto quien llama, con sus propios códigos de rechazo.</exception>
+    /// <returns>La saga como quedó, o el rechazo ORIGINAL del paso que falló; <see cref="NoEnCurso"/>
+    /// si una fase que continúa encuentra la saga en otro estado que <c>Running</c>.</returns>
+    /// <exception cref="InvalidOperationException">Si la fase no existe, o si una fase que continúa
+    /// no encuentra la saga: eso lo tiene que haber resuelto quien llama, con sus propios códigos de
+    /// rechazo.</exception>
     public async Task<Result<TSaga>> EjecutarFaseAsync(
         string fase, string sagaId, FlowContext entrada, CancellationToken ct)
     {
@@ -108,7 +132,13 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         var saga = abre ? null : _motor.Find(sagaId)
             ?? throw new InvalidOperationException($"La fase «{fase}» continúa la saga {sagaId} y no existe.");
 
-        var ctx = saga is null ? entrada : _binding.Leer(saga).CopiarDe(entrada);
+        if (saga is not null && saga.Status != SagaStatus.Running)
+        {
+            return Result.Rejected<TSaga>(Rejection.Conflict(NoEnCurso,
+                $"La fase «{fase}» sólo continúa una saga en curso, y {sagaId} está {saga.Status}."));
+        }
+
+        var ctx = saga is null ? Abrir(entrada) : Reconstruir(saga).CopiarDe(entrada);
         var corrida = new Corrida(sagaId, Ref.Create(_flujo.Clave, sagaId), ctx, saga);
         var siembra = abre ? PrimerTramoQueReserva(definicion) : -1;
 
@@ -131,6 +161,36 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         return Result.Ok(Terminar(corrida, ultima: ReferenceEquals(definicion, _flujo.Fases[^1])));
     }
 
+    /// <summary>Lo que la fase que abre tiene al empezar: la entrada que puso la fachada.</summary>
+    /// <exception cref="InvalidOperationException">Si la fachada no pone todo lo que el binding declara
+    /// que pone al abrir: el validador aceptó la <c>entrada</c> contando con ello.</exception>
+    private FlowContext Abrir(FlowContext entrada)
+    {
+        var faltan = _binding.PoneAlAbrir.Where(n => !entrada.Has(n)).ToList();
+        if (faltan.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"La fachada de «{_flujo.Clave}» declara que pone {string.Join(", ", faltan)} al abrir y no lo pone.");
+        }
+        return entrada;
+    }
+
+    /// <summary>Lo que la fase que continúa tiene al empezar: lo que el binding reconstruye.</summary>
+    /// <exception cref="InvalidOperationException">Si no pone todo lo que declara: el validador
+    /// aceptó lecturas contando con ello, y es mejor fallar acá —antes de llamar a nadie— que en
+    /// el paso que lo lea, con la plata capturada.</exception>
+    private FlowContext Reconstruir(TSaga saga)
+    {
+        var ctx = _binding.Leer(saga);
+        var faltan = _binding.Reconstruye.Where(n => !ctx.Has(n)).ToList();
+        if (faltan.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"El binding de «{_flujo.Clave}» declara que reconstruye {string.Join(", ", faltan)} y no lo pone.");
+        }
+        return ctx;
+    }
+
     /// <summary>El índice del primer elemento que reserva, o el final de la fase si ninguno.</summary>
     private int PrimerTramoQueReserva(FaseDef fase)
     {
@@ -148,6 +208,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // hacía el flujo imperativo, y guardarla acá añadiría una escritura que nadie leía.
         corrida.Saga = _binding.Crear(corrida.SagaId, corrida.Ctx, _reloj.GetUtcNow());
         corrida.SinGuardar = true;
+
+        // Que la saga sepa leer cada reserva que el binding declara, AHORA: es el último momento en
+        // que no hay nada reservado. Si no sabe, lanzaría al cerrar esa reserva —después de
+        // capturar, con la compensación sin cambiar de carácter—. La ranura es del record del
+        // dominio y el arranque no tiene una saga que preguntarle; ésta es la primera.
+        foreach (var paso in _binding.Reservas.Keys) _ = Ledger(corrida).Legs(paso);
     }
 
     private async Task<Desenlace> BloqueAsync(ParaCadaDef bloque, Corrida corrida, CancellationToken ct)
@@ -167,6 +233,8 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         return Desenlace.Sigue;
     }
 
+    private static IHoldLedger Ledger(Corrida corrida) => (IHoldLedger)corrida.Saga!;
+
     private static IReadOnlyList<FlowContext> Items(ParaCadaDef bloque, Corrida corrida)
     {
         if (!bloque.Fuente.StartsWith(FlowValidator.Reservas, StringComparison.Ordinal))
@@ -174,7 +242,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             return corrida.Ctx.Get<IReadOnlyList<FlowContext>>(bloque.Fuente);
         }
 
-        return ((IHoldLedger)corrida.Saga!).Legs
+        return Ledger(corrida).Legs(bloque.Fuente[FlowValidator.Reservas.Length..])
             .Select(l => new FlowContext()
                 .Set(HoldLeg.CampoHold, l.HoldId)
                 .Set(HoldLeg.CampoCierre, l.CloseTargetId))
@@ -187,8 +255,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // Cerrar una reserva única que nunca se hizo no tiene nada que cerrar: es el
         // `if (saga.PaymentId is { } id)` de cada ConfirmAsync. Una compra que se cayó entre apartar
         // y autorizar quedó Running sin cobro, y confirmarla consume el aforo sin capturar nada.
-        if (definicion.CierraReserva is not null && item is null
-            && ((IChargeLedger)corrida.Saga!).ChargeRef is null)
+        if (definicion.CierraReserva is { } unica && item is null && Ledger(corrida).Legs(unica).Count == 0)
         {
             return Desenlace.Sigue;
         }
@@ -213,7 +280,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
 
         if (definicion.Reserva is { } reserva) Reservar(corrida, definicion, reserva, salida, item);
-        if (definicion.CierraReserva is { } cerrada) CerrarReserva(corrida, _flujo.Pasos[cerrada].Reserva!, item);
+        if (definicion.CierraReserva is { } cerrada)
+        {
+            CerrarReserva(corrida, cerrada, _flujo.Pasos[cerrada].Reserva!, item, salida.Cerrado);
+        }
 
         return new Desenlace(salida.Control, null, null);
     }
@@ -225,9 +295,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             ?? throw new InvalidOperationException(
                 $"El paso «{definicion.Id}» declara una reserva y «{definicion.Tipo}» no dijo qué reservó.");
 
-        var saga = item is null
-            ? _binding.ConCargo(corrida.Saga!, hecho.Id)
-            : _binding.ConApartado(corrida.Saga!, new HoldLeg(hecho.Id, hecho.CierreId ?? hecho.Id), item);
+        var saga = _binding.ConReserva(corrida.Saga!, definicion.Id, new HoldLeg(hecho.Id, hecho.CierreId ?? hecho.Id), item);
 
         Guardar(corrida, saga.WithCompensations(saga.Compensations
             .Append(Compensation.For(reserva.Antes, hecho.Id, reserva.Motivo ?? $"{_flujo.Clave} no se completó"))
@@ -238,22 +306,24 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// Le cambia el carácter a la compensación de lo que se acaba de consumir: <c>antes</c> → <c>despues</c>.
     /// </summary>
     /// <remarks>
-    /// Una reserva única cambia TODAS sus compensaciones pendientes del kind <c>antes</c>, sobre el
-    /// mismo objetivo: anular una autorización ya capturada no se puede, devolverla sí. Una por ítem
-    /// cambia sólo la de ESE apartado, y pasa a apuntar al pozo: el apartado consumido ya no existe.
-    /// Sin <c>despues</c>, consumir deja la compensación hecha.
+    /// Cambia la compensación pendiente del kind <c>antes</c> sobre ESA reserva —la única, o la del
+    /// ítem del bloque—, y no la de otra reserva que se deshaga igual: anular una autorización ya
+    /// capturada no se puede, devolverla sí. La de después apunta a lo que el cierre produjo, o al
+    /// objetivo anotado al reservar —el pozo, porque el apartado consumido ya no existe—. Sin
+    /// <c>despues</c>, consumir deja la compensación hecha.
     /// </remarks>
-    private void CerrarReserva(Corrida corrida, ReservaDef reserva, FlowContext? item)
+    private void CerrarReserva(Corrida corrida, string reservante, ReservaDef reserva, FlowContext? item, string? objetivo)
     {
         var saga = corrida.Saga!;
-        var holdId = item?.Get<string>(HoldLeg.CampoHold);
-        var cierre = item?.Get<string>(HoldLeg.CampoCierre);
+        var cerrada = item is not null
+            ? new HoldLeg(item.Get<string>(HoldLeg.CampoHold), item.Get<string>(HoldLeg.CampoCierre))
+            : Ledger(corrida).Legs(reservante).Single();
         DateTimeOffset? ahora = reserva.Despues is null ? _reloj.GetUtcNow() : null;
 
         Guardar(corrida, saga.WithCompensations(saga.Compensations
-            .Select(c => c.Kind == reserva.Antes && c.IsPending && (holdId is null || c.TargetId == holdId)
+            .Select(c => c.Kind == reserva.Antes && c.IsPending && c.TargetId == cerrada.HoldId
                 ? reserva.Despues is { } despues
-                    ? c with { Kind = despues, TargetId = cierre ?? c.TargetId }
+                    ? c with { Kind = despues, TargetId = objetivo ?? cerrada.CloseTargetId }
                     : c with { DoneAtUtc = ahora }
                 : c)
             .ToList()));
@@ -277,6 +347,11 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 
         // Salió: ya no hay nada que deshacer. Lo armado se marca hecho para que el barrido no lo
         // intente — armada no es pendiente, pero una saga completada tampoco tiene nada armado.
+        //
+        // Todo lo armado, sin excepciones, y eso deja fuera a propósito la confirmación PARCIAL de
+        // Viajes (#40): allí el apartado de un ítem no cumplido que no se pudo soltar sigue
+        // pendiente al completar, para que el barrido lo reintente. Expresarlo exige que el dominio
+        // marque qué compensaciones siguen vivas; queda diferido hasta portar ese flujo.
         var ahora = _reloj.GetUtcNow();
         Guardar(corrida, _binding.ConError(saga
             .WithStatus(SagaStatus.Completed)

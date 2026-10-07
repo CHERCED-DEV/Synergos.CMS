@@ -14,6 +14,7 @@ public sealed class PasoCotizacion(IPricingPort precios) : IPaso
     public string Tipo => "pricing.cotizar";
     public int Lecturas => 1;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -30,6 +31,7 @@ public sealed class PasoInventarioHallar(IInventoryPort existencias) : IPaso
     public string Tipo => "inventory.hallar";
     public int Lecturas => 1;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -51,6 +53,7 @@ public sealed class PasoInventarioApartar(IInventoryPort existencias) : IPaso
     public string Tipo => "inventory.apartar";
     public int Lecturas => 2;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.PorItem;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -71,6 +74,7 @@ public sealed class PasoInventarioConsumir(IInventoryPort existencias) : IPaso
     public string Tipo => "inventory.consumir";
     public int Lecturas => 1;
     public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -89,6 +93,7 @@ public sealed class PasoPagosAutorizar(IPaymentsPort pagos) : IPaso
     public string Tipo => "payments.autorizar";
     public int Lecturas => 2;
     public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Fija;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -109,6 +114,7 @@ public sealed class PasoPagosCapturar(IPaymentsPort pagos) : IPaso
     public string Tipo => "payments.capturar";
     public int Lecturas => 1;
     public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Fija;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {

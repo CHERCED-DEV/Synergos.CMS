@@ -71,7 +71,8 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// <param name="LlaveBase">La base de una llave POR ÍTEM: el paso le añade el ítem en C#
 /// (<c>{sagaId}|hold:{itemId}</c>). Es la alternativa a una plantilla en el dato.</param>
 /// <param name="Reserva">Si el paso reserva algo que después se consuma o se deshace.</param>
-/// <param name="CierraReserva">El paso cuya reserva éste consuma.</param>
+/// <param name="CierraReserva">El paso cuya reserva éste consuma. Tiene que ser el que esa reserva
+/// nombra en <c>consumado_por</c>: cada reserva tiene un solo cierre.</param>
 /// <param name="Motivo">Con qué motivo se deshace la saga si este paso falla.</param>
 public sealed record PasoDef(
     string Id,
@@ -103,9 +104,14 @@ public sealed record ReservaDef(string ConsumadoPor, string Antes, string? Despu
 
 /// <summary>Lee el JSON de un flujo con la forma exacta que el intérprete ejecuta.</summary>
 /// <remarks>
-/// <b>Estricto con los campos que no conoce.</b> Un campo que el intérprete no lee es una regla que
-/// nadie cumple: quien escribe <c>"al_fallar"</c> creería haber declarado algo, y la primera compra
-/// le enseñaría que no. Mejor que no arranque.
+/// <para><b>Estricto con los campos que no conoce.</b> Un campo que el intérprete no lee es una
+/// regla que nadie cumple: quien escribe <c>"al_fallar"</c> creería haber declarado algo, y la
+/// primera compra le enseñaría que no. Mejor que no arranque.</para>
+///
+/// <para><b>Y con los que se repiten</b>, por la misma razón. JSON los admite y
+/// <see cref="JsonDocument"/> también: en <c>pasos</c> ganaría el último sin aviso, y en
+/// <c>fases</c> entrarían los dos —un <c>cerrar</c> repetido por un merge, del que se ejecuta el
+/// primero y la saga nunca se completa—. Una de las dos definiciones se estaría ignorando.</para>
 /// </remarks>
 internal static class LectorDeFlujo
 {
@@ -124,6 +130,7 @@ internal static class LectorDeFlujo
         using (doc)
         {
             var raiz = doc.RootElement;
+            SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
             SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos");
 
@@ -203,6 +210,28 @@ internal static class LectorDeFlujo
             reserva,
             Opcional(nodo, "cierra_reserva", aqui),
             Opcional(nodo, "motivo", aqui));
+    }
+
+    /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>
+    private static void SinRepetidos(JsonElement nodo, string donde)
+    {
+        if (nodo.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in nodo.EnumerateArray()) SinRepetidos(e, donde);
+            return;
+        }
+        if (nodo.ValueKind != JsonValueKind.Object) return;
+
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var p in nodo.EnumerateObject())
+        {
+            if (!vistos.Add(p.Name))
+            {
+                throw new FormatException(
+                    $"{donde}: trae «{p.Name}» dos veces. JSON lo admite y una de las dos se ignoraría sin aviso.");
+            }
+            SinRepetidos(p.Value, $"{donde} › «{p.Name}»");
+        }
     }
 
     private static void Objeto(JsonElement nodo, string donde)

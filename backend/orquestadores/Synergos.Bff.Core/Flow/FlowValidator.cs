@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Synergos.Bff.Core.Flow;
@@ -14,38 +15,89 @@ namespace Synergos.Bff.Core.Flow;
 /// (<see cref="FlowDefinitionValidator"/>) y otra vez al construir el intérprete, que es lo que
 /// cubre a quien lo arma sin contenedor.</para>
 ///
-/// <para><b>Lo que NO comprueba, dicho:</b> los campos que un ítem de ENTRADA trae de origen
-/// (<c>linea.cantidad</c>) no están declarados en ningún sitio, así que se aceptan; sí se exige que
-/// un campo que algún paso del bloque escribe no se lea antes de escribirlo.</para>
+/// <para><b>Contra el CÓDIGO, no sólo contra sí misma.</b> Lo que una fase tiene al empezar, los
+/// campos de un ítem de la entrada, las reservas que la saga sabe guardar y las fases que la
+/// fachada invoca los pone el C# del orquestador, y el JSON sólo los nombra. Por eso se valida con
+/// el <see cref="ContratoDelFlujo"/>: sin él, una errata en un nombre que pone el código pasa el
+/// arranque.</para>
+///
+/// <para><b>Lo que NO comprueba, dicho:</b> los nombres que <see cref="IFlowBinding{TSaga}.Crear"/>
+/// lee del contexto al sembrar la saga. Si faltan, la saga no nace y la compra falla antes de
+/// reservar nada; no queda nada a medias.</para>
 /// </remarks>
 public static class FlowValidator
 {
-    /// <summary>La fuente de un bloque que repite sobre los apartados de un paso: <c>reservas:apartar</c>.</summary>
+    /// <summary>La fuente de un bloque que repite sobre las reservas de un paso: <c>reservas:apartar</c>.</summary>
     public const string Reservas = "reservas:";
 
     /// <summary>Los problemas de <paramref name="flujo"/>, vacío si no tiene ninguno.</summary>
     /// <param name="flujo">La definición.</param>
     /// <param name="registro">Los pasos que el orquestador tiene registrados.</param>
-    /// <param name="saga">Si se conoce, el tipo de saga: tiene que tener las ranuras que el flujo usa.</param>
-    public static IReadOnlyList<string> Validar(FlujoDef flujo, IRegistroDePasos registro, Type? saga = null)
+    /// <param name="contrato">Lo que el código del orquestador da por hecho de ella.</param>
+    public static IReadOnlyList<string> Validar(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato)
     {
         ArgumentNullException.ThrowIfNull(flujo);
         ArgumentNullException.ThrowIfNull(registro);
+        ArgumentNullException.ThrowIfNull(contrato);
 
         var errores = new List<string>();
-        if (flujo.Fases.Count == 0) errores.Add("no declara ninguna fase.");
 
+        RevisarFases(flujo, contrato, errores);
         RevisarTipos(flujo, registro, errores);
-        var donde = RevisarOrden(flujo, errores);
+        var donde = RevisarOrden(flujo, contrato, errores);
 
         foreach (var id in flujo.Pasos.Keys.Where(id => !donde.ContainsKey(id)).Order(StringComparer.Ordinal))
         {
             errores.Add($"declara el paso «{id}» y ninguna fase lo nombra: suele ser un nombre mal escrito en la fase.");
         }
 
-        RevisarReservas(flujo, donde, saga, errores);
+        RevisarReservas(flujo, donde, contrato, errores);
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
+    }
+
+    private static void RevisarFases(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
+    {
+        if (flujo.Fases.Count == 0) errores.Add("no declara ninguna fase.");
+
+        var vistas = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var fase in flujo.Fases)
+        {
+            if (string.IsNullOrWhiteSpace(fase.Nombre))
+            {
+                errores.Add("declara una fase sin nombre: nadie puede invocarla.");
+            }
+            else if (!vistas.Add(fase.Nombre))
+            {
+                errores.Add($"declara la fase «{fase.Nombre}» dos veces: sólo se ejecutaría la primera, y la saga no "
+                    + "llegaría nunca a la última.");
+            }
+
+            if (fase.Pasos.Count == 0)
+            {
+                errores.Add($"la fase «{fase.Nombre}» no tiene pasos: si es la última, completaría la saga sin cerrar nada.");
+            }
+        }
+
+        // En el MISMO orden: la primera abre la saga, y es la que la fachada invoca para abrir. Una
+        // fase que la fachada no invoca no se ejecuta nunca, y lo que se consumiera en ella quedaría
+        // armado; una que invoca y no existe lanza con el comprador esperando.
+        var definidas = flujo.Fases.Select(f => f.Nombre).ToList();
+        if (!definidas.SequenceEqual(contrato.Fases, StringComparer.Ordinal))
+        {
+            errores.Add($"declara las fases [{string.Join(", ", definidas)}] y la fachada invoca "
+                + $"[{string.Join(", ", contrato.Fases)}]: tienen que ser las mismas y en el mismo orden.");
+        }
+
+        // La entrada es lo único que la fase que abre tiene antes del primer paso, y la pone el
+        // código de la fachada: un nombre que el JSON declara y el código no pone lanzaría en el
+        // paso que lo lea —al autorizar, con el aforo ya apartado—. Inclusión y no igualdad: que la
+        // fachada ponga algo que este flujo no usa no rompe nada.
+        foreach (var nombre in flujo.Entrada.Where(n => !contrato.PoneAlAbrir.Contains(n)))
+        {
+            errores.Add($"declara la entrada «{nombre}» y la fachada no la pone al abrir "
+                + $"({nameof(ContratoDelFlujo.PoneAlAbrir)}: {string.Join(", ", contrato.PoneAlAbrir)}).");
+        }
     }
 
     private static void RevisarTipos(FlujoDef flujo, IRegistroDePasos registro, List<string> errores)
@@ -66,6 +118,19 @@ public static class FlowValidator
                 {
                     errores.Add($"el paso «{paso.Id}» declara {paso.Escribe.Count} escritura(s) y «{paso.Tipo}» produce {tipo.Escrituras}.");
                 }
+
+                var llave = tipo.Llave switch
+                {
+                    LlaveRequerida.Ninguna when paso.Llave is not null || paso.LlaveBase is not null
+                        => $"el paso «{paso.Id}» declara una llave y «{paso.Tipo}» no usa ninguna: quien la lea creerá "
+                           + "que ese paso no se duplica.",
+                    LlaveRequerida.Fija when paso.Llave is null
+                        => $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que llama con «llave», y no la declara.",
+                    LlaveRequerida.PorItem when paso.LlaveBase is null
+                        => $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que llama con «llave_base» y el ítem, y no la declara.",
+                    _ => null,
+                };
+                if (llave is not null) errores.Add(llave);
             }
 
             if (paso.Llave is not null && paso.LlaveBase is not null)
@@ -75,21 +140,32 @@ public static class FlowValidator
         }
     }
 
-    /// <summary>Recorre las fases en orden: cada lectura tiene que tener quién la escriba antes.</summary>
+    /// <summary>
+    /// Recorre las fases en orden: cada lectura tiene que tener quién la escriba antes EN SU FASE.
+    /// </summary>
+    /// <remarks>
+    /// El contexto es transitorio: lo que escribió <c>abrir</c> no llega a <c>cerrar</c>. La que
+    /// abre empieza con la entrada; cada una que continúa, con lo que el binding reconstruye de la
+    /// saga guardada y nada más. Con un solo conjunto para todas las fases, un paso de <c>cerrar</c>
+    /// que leyera la cotización pasaba el arranque y lanzaba después de capturar.
+    /// </remarks>
     /// <returns>Dónde aparece cada paso: en qué fase y, si se repite, en qué bloque.</returns>
-    private static Dictionary<string, (int Fase, ParaCadaDef? Bloque)> RevisarOrden(FlujoDef flujo, List<string> errores)
+    private static Dictionary<string, (int Fase, ParaCadaDef? Bloque)> RevisarOrden(
+        FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
     {
         var donde = new Dictionary<string, (int Fase, ParaCadaDef? Bloque)>(StringComparer.Ordinal);
-        var escritos = new HashSet<string>(flujo.Entrada, StringComparer.Ordinal);
 
         for (var f = 0; f < flujo.Fases.Count; f++)
         {
             var fase = flujo.Fases[f];
+            var alEmpezar = f == 0 ? flujo.Entrada : contrato.Reconstruye;
+            var escritos = new HashSet<string>(alEmpezar, StringComparer.Ordinal);
+
             foreach (var elemento in fase.Pasos)
             {
                 if (elemento.ParaCada is { } bloque)
                 {
-                    RevisarBloque(flujo, f, bloque, escritos, donde, errores);
+                    RevisarBloque(flujo, contrato, f, alEmpezar, bloque, escritos, donde, errores);
                     continue;
                 }
 
@@ -98,7 +174,7 @@ public static class FlowValidator
 
                 foreach (var nombre in paso.Lee.Where(n => !escritos.Contains(n)))
                 {
-                    errores.Add($"«{paso.Id}» lee «{nombre}» y nadie lo escribe antes (ni es una entrada).");
+                    errores.Add(NadieLoEscribe(paso, nombre, f, fase));
                 }
                 foreach (var nombre in paso.Escribe)
                 {
@@ -117,14 +193,19 @@ public static class FlowValidator
         return donde;
     }
 
+    private static string NadieLoEscribe(PasoDef paso, string nombre, int f, FaseDef fase)
+        => f == 0
+            ? $"«{paso.Id}» lee «{nombre}» y nadie lo escribe antes (ni es una entrada)."
+            : $"«{paso.Id}» lee «{nombre}» y nadie lo escribe antes en la fase «{fase.Nombre}» (ni lo reconstruye "
+              + "la saga al continuarla: lo que escribió una fase anterior no se guarda).";
+
     private static void RevisarBloque(
-        FlujoDef flujo, int f, ParaCadaDef bloque, HashSet<string> escritos,
-        Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
+        FlujoDef flujo, ContratoDelFlujo contrato, int f, IReadOnlyCollection<string> alEmpezar, ParaCadaDef bloque,
+        HashSet<string> escritos, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
     {
-        // Los campos que el ítem trae de origen. De los apartados de un paso se saben —son los de
-        // HoldLeg—; los de una entrada no se declaran, y por eso se aceptan los que nadie escribe.
+        // Los campos que el ítem trae de origen: los de una reserva son los de HoldLeg, y los de una
+        // lista de la entrada los declara el código que la arma. Nada se acepta sin declarar.
         var deOrigen = new HashSet<string>(StringComparer.Ordinal);
-        var opaco = false;
 
         if (bloque.Fuente.StartsWith(Reservas, StringComparison.Ordinal))
         {
@@ -138,14 +219,20 @@ public static class FlowValidator
             deOrigen.Add(HoldLeg.CampoHold);
             deOrigen.Add(HoldLeg.CampoCierre);
         }
-        else if (flujo.Entrada.Contains(bloque.Fuente, StringComparer.Ordinal))
+        else if (!alEmpezar.Contains(bloque.Fuente, StringComparer.Ordinal))
         {
-            opaco = true;
+            errores.Add(f == 0
+                ? $"un bloque repite sobre «{bloque.Fuente}», que no es una entrada ni «{Reservas}<paso>»."
+                : $"un bloque repite sobre «{bloque.Fuente}», que la saga no reconstruye al continuarla ni es «{Reservas}<paso>».");
+        }
+        else if (contrato.CamposDeItem.TryGetValue(bloque.Fuente, out var campos))
+        {
+            deOrigen.UnionWith(campos);
         }
         else
         {
-            errores.Add($"un bloque repite sobre «{bloque.Fuente}», que no es una entrada ni «{Reservas}<paso>».");
-            opaco = true;
+            errores.Add($"un bloque repite sobre «{bloque.Fuente}» y el código no declara qué campos trae cada ítem "
+                + $"({nameof(ContratoDelFlujo.CamposDeItem)}).");
         }
 
         if (escritos.Contains(bloque.Como))
@@ -153,20 +240,10 @@ public static class FlowValidator
             errores.Add($"el bloque sobre «{bloque.Fuente}» llama al ítem «{bloque.Como}», que ya es un nombre del contexto.");
         }
 
-        var pasos = bloque.Pasos
-            .Select(id => Declarado(flujo, $"para_cada {bloque.Fuente}", id, errores))
-            .OfType<PasoDef>()
-            .ToList();
-
-        var losEscribe = pasos
-            .SelectMany(p => p.Escribe)
-            .Select(n => Ambito.Campo(n, bloque.Como))
-            .OfType<string>()
-            .ToHashSet(StringComparer.Ordinal);
         var yaEscritos = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var paso in pasos)
+        foreach (var id in bloque.Pasos)
         {
+            if (Declarado(flujo, $"para_cada {bloque.Fuente}", id, errores) is not { } paso) continue;
             Ubicar(paso.Id, f, bloque, donde, errores);
 
             foreach (var nombre in paso.Lee)
@@ -175,20 +252,14 @@ public static class FlowValidator
 
                 if (Ambito.Campo(nombre, bloque.Como) is { } campo)
                 {
-                    var disponible = yaEscritos.Contains(campo)
-                                     || deOrigen.Contains(campo)
-                                     || (opaco && !losEscribe.Contains(campo));
-                    if (!disponible)
+                    if (!yaEscritos.Contains(campo) && !deOrigen.Contains(campo))
                     {
-                        errores.Add($"«{paso.Id}» lee «{nombre}» y en ese punto del bloque nadie lo escribió.");
+                        errores.Add($"«{paso.Id}» lee «{nombre}» y en ese punto del bloque nadie lo escribió (ni lo trae el ítem).");
                     }
                     continue;
                 }
 
-                if (!escritos.Contains(nombre))
-                {
-                    errores.Add($"«{paso.Id}» lee «{nombre}» y nadie lo escribe antes (ni es una entrada).");
-                }
+                if (!escritos.Contains(nombre)) errores.Add(NadieLoEscribe(paso, nombre, f, flujo.Fases[f]));
             }
 
             foreach (var nombre in paso.Escribe)
@@ -204,10 +275,10 @@ public static class FlowValidator
     }
 
     private static void RevisarReservas(
-        FlujoDef flujo, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, Type? saga, List<string> errores)
+        FlujoDef flujo, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, ContratoDelFlujo contrato,
+        List<string> errores)
     {
-        var porItem = 0;
-        var unicas = 0;
+        var algunaReserva = false;
 
         foreach (var paso in flujo.Pasos.Values)
         {
@@ -223,8 +294,20 @@ public static class FlowValidator
                 }
 
                 if (!donde.TryGetValue(paso.Id, out var u)) continue;
-                if (u.Bloque is null) unicas++;
-                else porItem++;
+                algunaReserva = true;
+
+                // Lo reservado se guarda en la saga por el nombre del paso: si la saga no sabe
+                // guardarlo, la capacidad ya reservó y nadie lo anota para deshacerlo.
+                var forma = u.Bloque is null ? FormaDeReserva.Unica : FormaDeReserva.PorItem;
+                if (!contrato.Reservas.TryGetValue(paso.Id, out var guardada))
+                {
+                    errores.Add($"«{paso.Id}» reserva y la saga no sabe guardar lo que reserva: el binding no lo "
+                        + $"declara en {nameof(ContratoDelFlujo.Reservas)}.");
+                }
+                else if (guardada != forma)
+                {
+                    errores.Add($"«{paso.Id}» reserva {Forma(forma)} y el binding la guarda {Forma(guardada)}.");
+                }
 
                 if (!flujo.Pasos.TryGetValue(reserva.ConsumadoPor, out var consumidor))
                 {
@@ -256,31 +339,32 @@ public static class FlowValidator
                 }
             }
 
-            if (paso.CierraReserva is { } cerrada
-                && (!flujo.Pasos.TryGetValue(cerrada, out var reservante) || reservante.Reserva is null))
+            if (paso.CierraReserva is { } cerrada)
             {
-                errores.Add($"«{paso.Id}» cierra la reserva de «{cerrada}», que no reserva nada.");
+                // El cierre es UNO, y es el que la reserva nombra: sólo a ése se le comprueban la fase
+                // posterior y el bloque. Un segundo paso con «cierra_reserva» se saltaría las dos y
+                // podría capturar en la misma llamada que autoriza.
+                if (!flujo.Pasos.TryGetValue(cerrada, out var reservante) || reservante.Reserva is null)
+                {
+                    errores.Add($"«{paso.Id}» cierra la reserva de «{cerrada}», que no reserva nada.");
+                }
+                else if (!string.Equals(reservante.Reserva.ConsumadoPor, paso.Id, StringComparison.Ordinal))
+                {
+                    errores.Add($"«{paso.Id}» cierra la reserva de «{cerrada}», y esa reserva se consuma con "
+                        + $"«{reservante.Reserva.ConsumadoPor}»: cada reserva tiene un solo cierre.");
+                }
             }
         }
 
-        // Una ranura de cada, y es un límite de F1 dicho en voz alta: Tienda tiene dos reservas
-        // únicas (el pedido y el cobro) y portarla obliga a decidir cómo se nombran.
-        if (porItem > 1 || unicas > 1)
+        if (algunaReserva && !typeof(IHoldLedger).IsAssignableFrom(contrato.Saga))
         {
-            errores.Add($"declara {porItem} reserva(s) por ítem y {unicas} única(s), y el intérprete lleva "
-                + $"una ranura de cada ({nameof(IHoldLedger)}, {nameof(IChargeLedger)}).");
-        }
-
-        if (saga is null) return;
-        if (porItem > 0 && !typeof(IHoldLedger).IsAssignableFrom(saga))
-        {
-            errores.Add($"reserva por ítem y {saga.Name} no implementa {nameof(IHoldLedger)}.");
-        }
-        if (unicas > 0 && !typeof(IChargeLedger).IsAssignableFrom(saga))
-        {
-            errores.Add($"tiene una reserva única y {saga.Name} no implementa {nameof(IChargeLedger)}.");
+            errores.Add($"reserva y {contrato.Saga.Name} no implementa {nameof(IHoldLedger)}: el intérprete no tendría "
+                + "de dónde leer lo reservado para cerrarlo.");
         }
     }
+
+    private static string Forma(FormaDeReserva forma)
+        => forma == FormaDeReserva.Unica ? "una vez por saga" : "una vez por ítem";
 
     private static PasoDef? Declarado(FlujoDef flujo, string donde, string id, List<string> errores)
     {
@@ -300,18 +384,22 @@ public static class FlowValidator
     }
 }
 
+/// <summary>Un flujo que el orquestador declara, con lo que su código da por hecho de él.</summary>
+public sealed record FlujoRegistrado(FlujoDef Flujo, ContratoDelFlujo Contrato);
+
 /// <summary>Los flujos que un orquestador declara, como opciones que se validan al arrancar.</summary>
 public sealed class FlowCatalog
 {
-    private readonly Dictionary<string, FlujoDef> _flujos = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FlujoRegistrado> _flujos = new(StringComparer.Ordinal);
 
-    public IReadOnlyCollection<FlujoDef> Flujos => _flujos.Values;
+    public IReadOnlyCollection<FlujoRegistrado> Flujos => _flujos.Values;
 
     /// <summary>Añade (o reemplaza, por clave) un flujo.</summary>
-    public FlowCatalog Registrar(FlujoDef flujo)
+    public FlowCatalog Registrar(FlujoDef flujo, ContratoDelFlujo contrato)
     {
         ArgumentNullException.ThrowIfNull(flujo);
-        _flujos[flujo.Clave] = flujo;
+        ArgumentNullException.ThrowIfNull(contrato);
+        _flujos[flujo.Clave] = new FlujoRegistrado(flujo, contrato);
         return this;
     }
 }
@@ -340,26 +428,33 @@ public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
             return ValidateOptionsResult.Fail("El catálogo de flujos está vacío: el orquestador no declaró ninguno.");
         }
 
-        var errores = options.Flujos.SelectMany(f => FlowValidator.Validar(f, _registro)).ToList();
+        var errores = options.Flujos.SelectMany(f => FlowValidator.Validar(f.Flujo, _registro, f.Contrato)).ToList();
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);
     }
 }
 
-/// <summary>El registro de los flujos de un orquestador, en una llamada.</summary>
+/// <summary>El registro de los flujos de un orquestador, uno por llamada.</summary>
 public static class FlowRegistration
 {
     /// <summary>
-    /// Registra <paramref name="flujos"/> y su validación AL ARRANCAR. El orquestador registra
-    /// además su <see cref="IRegistroDePasos"/>, que es contra lo que se validan.
+    /// Registra <paramref name="flujo"/> y su validación AL ARRANCAR, contra lo que su código da por
+    /// hecho. El orquestador registra además su <see cref="IRegistroDePasos"/>, que es contra lo que
+    /// se validan los tipos de paso.
     /// </summary>
-    public static IServiceCollection AddFlows(this IServiceCollection services, params FlujoDef[] flujos)
+    /// <param name="services">El contenedor.</param>
+    /// <param name="flujo">La definición.</param>
+    /// <param name="binding">Cómo la guarda su saga: lo que reconstruye, los campos de sus ítems y
+    /// las reservas que sabe guardar.</param>
+    /// <param name="fases">Las fases que la fachada invoca, en orden: las mismas con las que arma su
+    /// <see cref="FlowRunner{TSaga}"/>.</param>
+    public static IServiceCollection AddFlow<TSaga>(
+        this IServiceCollection services, FlujoDef flujo, IFlowBinding<TSaga> binding, IReadOnlyList<string> fases)
+        where TSaga : class, ISaga<TSaga>
     {
-        services.AddSingleton<IValidateOptions<FlowCatalog>, FlowDefinitionValidator>();
+        var contrato = ContratoDelFlujo.De(binding, fases);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<FlowCatalog>, FlowDefinitionValidator>());
         services.AddOptions<FlowCatalog>()
-            .Configure(catalogo =>
-            {
-                foreach (var flujo in flujos) catalogo.Registrar(flujo);
-            })
+            .Configure(catalogo => catalogo.Registrar(flujo, contrato))
             .ValidateOnStart();
         return services;
     }

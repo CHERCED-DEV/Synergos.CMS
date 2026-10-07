@@ -11,7 +11,8 @@ namespace Synergos.Bff.Eventos.Clients;
 /// la compra pasa por acá; el DESHACER sigue yendo directo a <see cref="EventosCapabilities"/> desde
 /// <c>EventosCompensationExecutor</c>, porque los tests de la compra lo construyen así y porque
 /// mover las dos mitades a la vez es cambiar lo que se está midiendo. Son dos costuras hacia la
-/// misma capacidad hasta que los demás orquestadores se porten (ADR 0140, F2+).</para>
+/// misma capacidad hasta que deshacer pase a los pasos (ADR 0140, decisión 2), que no es parte del
+/// piloto F1-F4.</para>
 ///
 /// <para><b>Mismas llamadas, mismo orden, mismos cuerpos</b>: cada método es exactamente lo que
 /// <c>TicketingFlow</c> llamaba, y el dinero se arma con <see cref="Money.Of"/> igual que allá.</para>

@@ -32,6 +32,9 @@ public sealed class FlowValidatorTests
 
     private static readonly IRegistroDePasos Registro = EventosPasos.Registro(new EventosCapabilities(new SinRed()));
 
+    /// <summary>Lo que el código de Eventos da por hecho de su definición: el mismo que valida el arranque.</summary>
+    private static readonly ContratoDelFlujo Contrato = ContratoDelFlujo.De(new EventosFlowBinding(), TicketingFlow.Fases);
+
     private static string Original()
         => File.ReadAllText(Proyectos.Dir("Synergos.Bff.Eventos", "flujos", "eventos.compra.json"));
 
@@ -43,8 +46,8 @@ public sealed class FlowValidatorTests
         return original.Replace(antes, despues, StringComparison.Ordinal);
     }
 
-    private static IReadOnlyList<string> Errores(string json)
-        => FlowValidator.Validar(FlujoDef.Leer(json), Registro, typeof(TicketingSaga));
+    private static IReadOnlyList<string> Errores(string json, ContratoDelFlujo? contrato = null)
+        => FlowValidator.Validar(FlujoDef.Leer(json), Registro, contrato ?? Contrato);
 
     [Fact]
     public void La_definicion_de_eventos_compra_valida_contra_sus_pasos_y_su_saga()
@@ -52,7 +55,7 @@ public sealed class FlowValidatorTests
         // El control de todos los de abajo: sin él, un validador que rechazara TODO los pondría
         // en verde a la vez.
         Assert.Empty(Errores(Original()));
-        Assert.Empty(FlowValidator.Validar(EventosFlujos.Compra, Registro, typeof(TicketingSaga)));
+        Assert.Empty(FlowValidator.Validar(EventosFlujos.Compra, Registro, Contrato));
     }
 
     [Fact]
@@ -72,6 +75,43 @@ public sealed class FlowValidatorTests
     }
 
     [Fact]
+    public void Cerrar_no_lee_lo_que_solo_escribio_abrir_ni_una_entrada_de_abrir()
+    {
+        // El contexto de «abrir» no se guarda: «cerrar» empieza con lo que la saga reconstruye y
+        // nada más. Con un solo conjunto para todas las fases, esto arrancaba y lanzaba DESPUÉS
+        // de capturar, con la plata cobrada y la saga sin error.
+        var escrito = Errores(Mutar("\"lee\": [\"paymentId\"]", "\"lee\": [\"cotizacion\"]"));
+        var entrada = Errores(Mutar("\"lee\": [\"paymentId\"]", "\"lee\": [\"comisionPct\"]"));
+
+        Assert.Contains(escrito, e => e.Contains("«capturar» lee «cotizacion» y nadie lo escribe antes en la fase «cerrar»", StringComparison.Ordinal));
+        Assert.Contains(entrada, e => e.Contains("«capturar» lee «comisionPct» y nadie lo escribe antes en la fase «cerrar»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void La_entrada_tiene_que_ponerla_la_fachada_al_abrir()
+    {
+        // Renombrar «comprador» en el código —o en el JSON— arrancaba y lanzaba al autorizar, con
+        // el aforo apartado. La fachada declara lo que pone; la entrada del JSON tiene que estar ahí.
+        var sinComprador = Contrato with { PoneAlAbrir = Contrato.PoneAlAbrir.Where(n => n != "comprador").ToList() };
+
+        var errores = FlowValidator.Validar(EventosFlujos.Compra, Registro, sinComprador);
+
+        Assert.Contains(errores, e => e.Contains("declara la entrada «comprador»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_que_cerrar_lee_tiene_que_reconstruirlo_el_binding()
+    {
+        // La otra mitad: es el binding quien dice qué hay al continuar. Sin «paymentId» entre lo
+        // que reconstruye, capturar no tendría qué capturar.
+        var sinCobro = Contrato with { Reconstruye = Contrato.Reconstruye.Where(n => n != "paymentId").ToList() };
+
+        var errores = Errores(Original(), sinCobro);
+
+        Assert.Contains(errores, e => e.Contains("«capturar» lee «paymentId»", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Un_campo_del_item_que_se_lee_antes_de_escribirse_no_pasa()
     {
         // Apartar antes de hallar el pozo: apartar leería un itemId que todavía no existe.
@@ -80,6 +120,130 @@ public sealed class FlowValidatorTests
             "\"pasos\": [\"sujeto-pozo\", \"apartar\", \"hallar\"]"));
 
         Assert.Contains(errores, e => e.Contains("«apartar» lee «linea.itemId»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Un_campo_de_la_linea_mal_escrito_no_pasa()
+    {
+        // Los campos que una línea trae de origen los declara el binding: una errata en el JSON
+        // —o una constante renombrada en el C#— ya no arranca para dar 500 en cada compra.
+        var errores = Errores(Mutar("\"linea.cantidad\"", "\"linea.cantida\""));
+
+        Assert.Contains(errores, e => e.Contains("«apartar» lee «linea.cantida» y en ese punto del bloque nadie lo escribió", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Un_bloque_sobre_una_lista_cuyos_campos_nadie_declara_no_pasa()
+    {
+        var sinCampos = Contrato with { CamposDeItem = new Dictionary<string, IReadOnlyCollection<string>>() };
+
+        var errores = Errores(Original(), sinCampos);
+
+        Assert.Contains(errores, e => e.Contains("repite sobre «lineas» y el código no declara qué campos trae cada ítem", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Una_lectura_del_contexto_DENTRO_de_un_bloque_sin_escritura_previa_no_pasa()
+    {
+        var errores = Errores(Mutar("\"lee\": [\"eventId\", \"linea\"]", "\"lee\": [\"eventoId\", \"linea\"]"));
+
+        Assert.Contains(errores, e => e.Contains("«sujeto-pozo» lee «eventoId» y nadie lo escribe antes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Una_fase_que_nombra_un_paso_no_declarado_no_pasa()
+    {
+        // Sin esto arranca y la primera compra lanza buscando el paso. Una errata de un paso que
+        // SÍ existe la caza además «declara el paso X y ninguna fase lo nombra»; el fantasma
+        // añadido, sólo esto.
+        var errores = Errores(Mutar("\"autorizar\"\n    ],", "\"autorizar\",\n      \"fantasma\"\n    ],"));
+
+        Assert.Contains(errores, e => e.Contains("«abrir» nombra el paso «fantasma», que no está declarado", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Un_segundo_cierre_de_la_misma_reserva_no_pasa_aunque_capture_en_abrir()
+    {
+        // Las comprobaciones de fase posterior y de bloque se le hacen al cierre que la reserva
+        // nombra. Un segundo paso con «cierra_reserva» se las saltaba, y capturaba en la misma
+        // llamada que autoriza.
+        var errores = Errores(Mutar(
+            "\"autorizar\"\n    ],",
+            "\"autorizar\",\n      \"capturar-ya\"\n    ],").Replace(
+            "\"capturar\": {",
+            "\"capturar-ya\": { \"tipo\": \"payments.capturar\", \"lee\": [\"paymentId\"], \"llave\": \"capture\", \"cierra_reserva\": \"autorizar\" },\n    \"capturar\": {",
+            StringComparison.Ordinal));
+
+        Assert.Contains(errores, e => e.Contains("«capturar-ya» cierra la reserva de «autorizar», y esa reserva se consuma con «capturar»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void La_llave_que_declara_un_paso_se_cruza_con_la_que_su_tipo_usa()
+    {
+        // Autorizar sin «llave» lanzaba con el aforo ya apartado; consumir con una llave que no
+        // usa le hace creer a quien lee que no se duplica.
+        var sinLlave = Errores(Mutar("\"llave\": \"authorize\"", "\"llave_base\": \"authorize\""));
+        var sobra = Errores(Mutar("\"lee\": [\"hold.holdId\"],", "\"lee\": [\"hold.holdId\"], \"llave\": \"consume\","));
+        var porItem = Errores(Mutar("\"llave_base\": \"hold\"", "\"llave\": \"hold\""));
+
+        Assert.Contains(sinLlave, e => e.Contains("«autorizar» es de tipo «payments.autorizar», que llama con «llave», y no la declara", StringComparison.Ordinal));
+        Assert.Contains(sobra, e => e.Contains("«consumir» declara una llave y «inventory.consumir» no usa ninguna", StringComparison.Ordinal));
+        Assert.Contains(porItem, e => e.Contains("«apartar» es de tipo «inventory.apartar», que llama con «llave_base»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Las_fases_son_las_que_la_fachada_invoca_en_su_orden()
+    {
+        // Renombrar «cerrar» arrancaba y cada confirmación lanzaba; reordenarlas haría abrir la
+        // saga con la fase que captura.
+        var renombrada = Errores(Mutar("\"cerrar\": [", "\"confirmar\": ["));
+
+        Assert.Contains(renombrada, e => e.Contains("declara las fases [abrir, confirmar] y la fachada invoca [abrir, cerrar]", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Una_fase_repetida_sin_nombre_o_vacia_no_pasa()
+    {
+        // Construida en C#, que el lector ya rechaza el JSON con la clave repetida: lo que se
+        // comprueba es que el validador no dependa de quién armó la definición.
+        var f = EventosFlujos.Compra;
+        var repetida = f with { Fases = new[] { f.Fases[0], f.Fases[1], f.Fases[1] } };
+        var sinNombre = f with { Fases = new[] { f.Fases[0], f.Fases[1] with { Nombre = " " } } };
+        var vacia = f with { Fases = new[] { f.Fases[0], f.Fases[1] with { Pasos = Array.Empty<PasoRef>() } } };
+
+        Assert.Contains(FlowValidator.Validar(repetida, Registro, Contrato), e => e.Contains("declara la fase «cerrar» dos veces", StringComparison.Ordinal));
+        Assert.Contains(FlowValidator.Validar(sinNombre, Registro, Contrato), e => e.Contains("declara una fase sin nombre", StringComparison.Ordinal));
+        Assert.Contains(FlowValidator.Validar(vacia, Registro, Contrato), e => e.Contains("la fase «cerrar» no tiene pasos", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("\"fases\": {", "\"fases\": {\n    \"cerrar\": [\"capturar\"],", "«cerrar»")]
+    [InlineData("\"tipo\": \"payments.capturar\",", "\"tipo\": \"payments.capturar\", \"tipo\": \"payments.capturar\",", "«tipo»")]
+    [InlineData("\"pasos\": {", "\"pasos\": {\n    \"capturar\": { \"tipo\": \"payments.capturar\" },", "«capturar»")]
+    public void Una_propiedad_repetida_en_cualquier_objeto_no_se_lee(string antes, string despues, string repetida)
+    {
+        // JSON lo admite: en «pasos» ganaba el último sin aviso, y en «fases» entraban los dos.
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(Mutar(antes, despues)));
+
+        Assert.Contains($"trae {repetida} dos veces", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Una_reserva_que_la_saga_no_sabe_guardar_no_pasa()
+    {
+        // Se guarda por el nombre del paso: si el binding no lo conoce, la capacidad reserva y
+        // nadie lo anota para deshacerlo. Y la forma tiene que ser la misma.
+        var sinAutorizar = Contrato with
+        {
+            Reservas = Contrato.Reservas.Where(r => r.Key != "autorizar").ToDictionary(r => r.Key, r => r.Value),
+        };
+        var otraForma = Contrato with
+        {
+            Reservas = Contrato.Reservas.ToDictionary(r => r.Key, r => r.Key == "apartar" ? FormaDeReserva.Unica : r.Value),
+        };
+
+        Assert.Contains(Errores(Original(), sinAutorizar), e => e.Contains("«autorizar» reserva y la saga no sabe guardar lo que reserva", StringComparison.Ordinal));
+        Assert.Contains(Errores(Original(), otraForma), e => e.Contains("«apartar» reserva una vez por ítem y el binding la guarda una vez por saga", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -112,12 +276,11 @@ public sealed class FlowValidatorTests
     }
 
     [Fact]
-    public void Una_saga_sin_las_ranuras_que_el_flujo_usa_no_pasa()
+    public void Una_saga_sin_la_ranura_que_el_flujo_usa_no_pasa()
     {
-        var errores = FlowValidator.Validar(EventosFlujos.Compra, Registro, typeof(object));
+        var errores = FlowValidator.Validar(EventosFlujos.Compra, Registro, Contrato with { Saga = typeof(object) });
 
         Assert.Contains(errores, e => e.Contains(nameof(IHoldLedger), StringComparison.Ordinal));
-        Assert.Contains(errores, e => e.Contains(nameof(IChargeLedger), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -164,7 +327,7 @@ public sealed class FlowValidatorTests
             b.ConfigureTestServices(s =>
             {
                 s.AddSingleton<IValidateOptions<FlowCatalog>>(testigo);
-                if (reemplazo is not null) s.PostConfigure<FlowCatalog>(c => c.Registrar(reemplazo));
+                if (reemplazo is not null) s.PostConfigure<FlowCatalog>(c => c.Registrar(reemplazo, Contrato));
             });
         });
 

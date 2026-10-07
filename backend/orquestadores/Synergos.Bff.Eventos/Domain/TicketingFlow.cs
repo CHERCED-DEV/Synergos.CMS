@@ -57,14 +57,28 @@ public sealed class TicketingFlow
     /// <summary>Cuántas entradas admite una línea de cupo general.</summary>
     public const int MaxPorLinea = 10;
 
+    private const string Abrir = "abrir";
+    private const string Cerrar = "cerrar";
+
+    /// <summary>
+    /// Las fases de <c>eventos.compra</c> que esta fachada invoca, en orden: comprar abre y
+    /// confirmar cierra.
+    /// </summary>
+    /// <remarks>
+    /// Se declaran al registrar el flujo (<c>Program.cs</c>) y al armar el intérprete, y las dos
+    /// cosas validan contra la definición: renombrar una fase en el JSON, repetirla o reordenarla
+    /// no arranca, en vez de lanzar en la primera confirmación.
+    /// </remarks>
+    public static IReadOnlyList<string> Fases { get; } = new[] { Abrir, Cerrar };
+
     private readonly SagaEngine<TicketingSaga> _sagas;
     private readonly FlowRunner<TicketingSaga> _flujo;
 
     /// <remarks>
     /// <b>La firma es la de siempre y arma el intérprete por dentro</b>: los tests de la compra la
     /// construyen a mano, sin contenedor, y tienen que seguir pasando sin tocarlos. Si la definición
-    /// no valida contra estos pasos, construirla lanza — igual que el arranque con
-    /// <c>ValidateOnStart</c>.
+    /// no valida contra estos pasos, este binding y estas fases, construirla lanza — igual que el
+    /// arranque con <c>ValidateOnStart</c>, que valida lo mismo.
     /// </remarks>
     public TicketingFlow(
         EventosCapabilities caps, SagaEngine<TicketingSaga> sagas,
@@ -72,7 +86,7 @@ public sealed class TicketingFlow
     {
         _sagas = sagas;
         _flujo = new FlowRunner<TicketingSaga>(
-            sagas, EventosPasos.Registro(caps), EventosFlujos.Compra, new EventosFlowBinding(), clock, log);
+            sagas, EventosPasos.Registro(caps), EventosFlujos.Compra, new EventosFlowBinding(), Fases, clock, log);
     }
 
     /// <summary>Aparta el aforo y autoriza el cobro, sin comisión de servicio.</summary>
@@ -99,7 +113,7 @@ public sealed class TicketingFlow
         if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
 
         return await _flujo.EjecutarFaseAsync(
-            "abrir", slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje), ct);
+            Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje), ct);
     }
 
     /// <summary>Captura el cobro y consume el aforo. A partir de acá hay plata movida.</summary>
@@ -119,7 +133,7 @@ public sealed class TicketingFlow
         // NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
         // donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
         // allá de sus sagas, y entonces sería una capacidad mal cortada.
-        return await _flujo.EjecutarFaseAsync("cerrar", sagaId, new FlowContext(), ct);
+        return await _flujo.EjecutarFaseAsync(Cerrar, sagaId, new FlowContext(), ct);
     }
 
     /// <summary>Cancela una compra todavía sin confirmar.</summary>

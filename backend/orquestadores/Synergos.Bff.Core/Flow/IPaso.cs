@@ -7,13 +7,14 @@ namespace Synergos.Bff.Core.Flow;
 /// </summary>
 /// <remarks>
 /// <para><b>Dos familias y el mismo contrato.</b> Los pasos sobre capacidades —cotizar, apartar,
-/// autorizar— viven en <c>Synergos.Bff.Pasos</c> y sirven a todos los orquestadores; los del dominio
-/// —revisar las líneas de una compra, sumarle la comisión— viven en su orquestador. El intérprete no
-/// distingue: busca por tipo y llama.</para>
+/// autorizar— viven en <c>Synergos.Bff.Pasos</c>, para cualquier orquestador que declare su flujo
+/// (hoy, Eventos); los del dominio —revisar las líneas de una compra, sumarle la comisión— viven en
+/// su orquestador. El intérprete no distingue: busca por tipo y llama.</para>
 ///
-/// <para><b>Declara cuántos nombres lee y cuántos escribe</b> para que el validador lo cruce con la
-/// definición al ARRANCAR. Un paso que lee dos valores declarado con uno no falla al leer el JSON:
-/// falla en la primera compra, con un índice fuera de rango.</para>
+/// <para><b>Declara cuántos nombres lee, cuántos escribe y qué llave usa</b> para que el validador
+/// lo cruce con la definición al ARRANCAR. Un paso que lee dos valores declarado con uno no falla
+/// al leer el JSON: falla en la primera compra, con un índice fuera de rango. Y uno que necesita
+/// llave y no la tiene lanza con el aforo ya apartado.</para>
 ///
 /// <para><b>No lanza por un no de la capacidad.</b> Lo devuelve como
 /// <see cref="SalidaDePaso.Rechaza"/>, con el rechazo original: quien llamó necesita saber si fue
@@ -30,7 +31,28 @@ public interface IPaso
     /// <summary>Cuántos valores produce, en orden: los <c>escribe</c> de la definición.</summary>
     int Escrituras { get; }
 
+    /// <summary>Qué llave de idempotencia pide: ninguna, la de <c>llave</c> o la de <c>llave_base</c>.</summary>
+    LlaveRequerida Llave { get; }
+
     Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct);
+}
+
+/// <summary>Qué llave de idempotencia necesita un tipo de paso, para cruzarla con su definición.</summary>
+/// <remarks>
+/// En los dos sentidos: un paso que la pide y no la tiene lanza en mitad de la compra, y una llave
+/// declarada que el paso no usa es una regla que nadie cumple — quien la escribió cree que ese
+/// paso no se duplica.
+/// </remarks>
+public enum LlaveRequerida
+{
+    /// <summary>No llama con llave: lee, calcula, o la capacidad no la pide.</summary>
+    Ninguna,
+
+    /// <summary>La de <c>llave</c>: <c>{sagaId}|{llave}</c>.</summary>
+    Fija,
+
+    /// <summary>La de <c>llave_base</c> más lo que el paso pone: <c>{sagaId}|{llave_base}:{ítem}</c>.</summary>
+    PorItem,
 }
 
 /// <summary>Cómo sigue la fase después de un paso.</summary>
@@ -112,12 +134,14 @@ public sealed class EntradaDePaso
 /// </remarks>
 public sealed class SalidaDePaso
 {
-    private SalidaDePaso(PasoResultado control, IReadOnlyList<object?> valores, Rejection? rechazo, Reservado? reservado)
+    private SalidaDePaso(
+        PasoResultado control, IReadOnlyList<object?> valores, Rejection? rechazo, Reservado? reservado, string? cerrado)
     {
         Control = control;
         Valores = valores;
         Rechazo = rechazo;
         Reservado = reservado;
+        Cerrado = cerrado;
     }
 
     public PasoResultado Control { get; }
@@ -131,14 +155,31 @@ public sealed class SalidaDePaso
     /// <summary>Lo que el paso reservó, si su definición declara una reserva.</summary>
     public Reservado? Reservado { get; }
 
-    public static SalidaDePaso Sigue(params object?[] valores) => new(PasoResultado.Continuar, valores, null, null);
+    /// <summary>
+    /// Sobre qué se deshace lo que este paso acaba de cerrar, si lo produjo él: <c>null</c> si sigue
+    /// siendo el <see cref="Synergos.Bff.Core.Flow.Reservado.CierreId"/> anotado al reservar.
+    /// </summary>
+    public string? Cerrado { get; }
+
+    public static SalidaDePaso Sigue(params object?[] valores) => new(PasoResultado.Continuar, valores, null, null, null);
 
     public static SalidaDePaso Reserva(Reservado reservado, params object?[] valores)
-        => new(PasoResultado.Continuar, valores, null, reservado);
+        => new(PasoResultado.Continuar, valores, null, reservado, null);
 
-    public static SalidaDePaso SaltaFase(params object?[] valores) => new(PasoResultado.SaltarFase, valores, null, null);
+    /// <summary>
+    /// Cerró una reserva y el cierre produjo su propio objetivo: confirmar un apartado devuelve una
+    /// reserva nueva, y cancelarla es sobre ESA, no sobre el apartado que ya no existe.
+    /// </summary>
+    public static SalidaDePaso Cierra(string objetivo, params object?[] valores)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(objetivo);
+        return new(PasoResultado.Continuar, valores, null, null, objetivo);
+    }
 
-    public static SalidaDePaso Rechaza(Rejection rechazo) => new(PasoResultado.Abortar, Array.Empty<object?>(), rechazo, null);
+    public static SalidaDePaso SaltaFase(params object?[] valores) => new(PasoResultado.SaltarFase, valores, null, null, null);
+
+    public static SalidaDePaso Rechaza(Rejection rechazo)
+        => new(PasoResultado.Abortar, Array.Empty<object?>(), rechazo, null, null);
 }
 
 /// <summary>Dónde busca el intérprete el paso que una definición nombra.</summary>

@@ -70,9 +70,23 @@ public sealed class PropagacionDeIdentidadTests
     /// <summary>La cabecera que el CMS presenta y que un orquestador NO reenvía.</summary>
     private const string CabeceraDeIdentidad = "X-Synergos-Identity";
 
-    /// <summary>Los cuatro orquestadores construidos, más el motor que comparten.</summary>
+    /// <summary>
+    /// Los cuatro orquestadores construidos, más las dos capas que corren DENTRO de ellos: el motor
+    /// de sagas y los pasos sobre capacidades de un flujo declarado (ADR 0140).
+    /// </summary>
+    /// <remarks>
+    /// <c>Bff.Pasos</c> no es un orquestador y no tiene <c>Program.cs</c>, pero su código se ejecuta
+    /// en el proceso de cada orquestador que la referencia —hoy Eventos— y la ADR le asigna los
+    /// clientes de las capacidades: un paso que reenviara la cabecera la reenviaría desde todos
+    /// ellos a la vez, sin que ningún fichero de orquestador cambiara. La lista se cuadra contra el
+    /// disco en
+    /// <see cref="La_lista_barrida_es_la_de_todos_los_Bff_del_disco"/>.
+    /// </remarks>
     private static readonly string[] Orquestadores =
-        { "Synergos.Bff.Core", "Synergos.Bff.Tienda", "Synergos.Bff.Salud", "Synergos.Bff.Eventos", "Synergos.Bff.Viajes" };
+    {
+        "Synergos.Bff.Core", "Synergos.Bff.Pasos", "Synergos.Bff.Tienda", "Synergos.Bff.Salud",
+        "Synergos.Bff.Eventos", "Synergos.Bff.Viajes",
+    };
 
     private static string RepoRoot()
     {
@@ -168,6 +182,27 @@ public sealed class PropagacionDeIdentidadTests
             + "Lo que corresponde es DERIVAR a la persona del registro de una capacidad que ya "
             + "la verificó, como hace Bff.Tienda con el dueño de la canasta. "
             + "Ver el <remarks> de esta clase.");
+    }
+
+    /// <summary>Lo que se barre es TODO <c>Synergos.Bff.*</c> del disco, ni uno más ni uno menos.</summary>
+    /// <remarks>
+    /// Una capa nueva que corre dentro de los orquestadores —como <c>Bff.Pasos</c>, que nació sin
+    /// entrar en esta lista— quedaría fuera del primer diente sin que nada se pusiera rojo. Que la
+    /// lista siga escrita a mano y cuadrada aquí, en vez de derivada, es a propósito: el que añade
+    /// un proyecto tiene que pasar por este fichero y leer por qué.
+    /// </remarks>
+    [Fact]
+    public void La_lista_barrida_es_la_de_todos_los_Bff_del_disco()
+    {
+        var enDisco = Proyectos.Nombres("Synergos.Bff.");
+
+        Assert.True(enDisco.Count >= 6, $"Se descubrieron {enDisco.Count} proyectos Synergos.Bff.*: el descubrimiento dejó de ver.");
+        Assert.True(
+            Orquestadores.Order(StringComparer.Ordinal).SequenceEqual(enDisco, StringComparer.Ordinal),
+            $"Los Synergos.Bff.* que este gate barre no son los del disco.\n"
+            + $"  barridos: {string.Join(", ", Orquestadores.Order(StringComparer.Ordinal))}\n"
+            + $"  en disco: {string.Join(", ", enDisco)}\n\n"
+            + "Todo lo que corre dentro de un orquestador puede reenviar la cabecera: súmalo a la lista.");
     }
 
     // ── Diente 2: cómo se revierte en silencio ──────────────────────────────
