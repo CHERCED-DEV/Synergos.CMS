@@ -21,10 +21,31 @@ namespace Synergos.CMS.Tests.Contratos;
 /// juzga lo que vuelve. Funciona porque la llave se resuelve antes que cualquier regla (CLAUDE.md
 /// §0.B.16): un endpoint que la exige contesta <c>*.idempotency_key_required</c> antes de mirar el
 /// cuerpo o el id.</para>
+///
+/// <para><b>Salvo la llave OPCIONAL</b>, que sólo se lee en un caso del cuerpo: con <c>{}</c> el
+/// ajuste de existencias contesta <c>inventory.adjust_required</c> antes de mirarla, y «declarada
+/// opcional» y «sin declarar» daban lo mismo (medido: quitarle el metadato dejaba todo en verde).
+/// Para esas, <see cref="CuerpoQueLeeLaLlave"/> dice con qué cuerpo se llega a leerla.</para>
 /// </remarks>
 public sealed class SondasDelContratoTests
 {
     public static TheoryData<string> Piezas() => ContratoOpenApiTests.Piezas();
+
+    /// <summary>
+    /// El cuerpo mínimo con que una operación llega a leer <c>Idempotency-Key</c> cuando no la lee
+    /// siempre: el caso que la exige. Sólo las que lo necesitan.
+    /// </summary>
+    /// <remarks>
+    /// Es una tabla escrita a mano a propósito, y pequeña: el documento no puede decir QUÉ caso del
+    /// cuerpo activa la llave (OpenAPI no tiene cómo), así que lo dice la sonda, y lo comprueba contra
+    /// el host en los dos sentidos. Una fila cuyo cuerpo no la activa es rojo, y una operación que el
+    /// documento declara opcional sin fila aquí también.
+    /// </remarks>
+    private static readonly Dictionary<string, string> CuerpoQueLeeLaLlave = new(StringComparer.Ordinal)
+    {
+        // El ajuste RELATIVO la exige y el absoluto no: repetir «hay 47» no cambia nada (#30).
+        ["AdjustStock"] = """{"delta":1}""",
+    };
 
     private sealed record Respuesta(OperacionPublicada Op, HttpStatusCode Status, string? Tipo, string Cuerpo);
 
@@ -44,16 +65,20 @@ public sealed class SondasDelContratoTests
     }
 
     /// <summary>
-    /// Manda UNA operación: <c>sonda</c> en cada parámetro de ruta, <c>{}</c> de cuerpo si lo lleva y,
-    /// si se da, la <paramref name="llave"/> en <c>Idempotency-Key</c>.
+    /// Manda UNA operación: <c>sonda</c> en cada parámetro de ruta, <paramref name="cuerpo"/> (o
+    /// <c>{}</c>) si lleva cuerpo y, si se da, la <paramref name="llave"/> en <c>Idempotency-Key</c>.
     /// </summary>
-    private static async Task<Respuesta> Enviar(HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave)
+    private static async Task<Respuesta> Enviar(
+        HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave, string? cuerpo = null)
     {
         var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
         using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
         if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
         if (llave is not null) req.Headers.Add(IdempotencyHeader.Name, llave);
-        if (op.Op["requestBody"] is not null) req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+        if (op.Op["requestBody"] is not null || cuerpo is not null)
+        {
+            req.Content = new StringContent(cuerpo ?? "{}", Encoding.UTF8, "application/json");
+        }
 
         using var r = await host.Cliente.SendAsync(req);
         return new Respuesta(op, r.StatusCode, r.Content.Headers.ContentType?.MediaType, await r.Content.ReadAsStringAsync());
@@ -75,26 +100,53 @@ public sealed class SondasDelContratoTests
     /// sentidos.
     /// </summary>
     /// <remarks>
-    /// Declarada como requerida ⇔ sin ella contesta <c>400 *.idempotency_key_required</c>. Una
-    /// declarada opcional (el ajuste de existencias: sólo el relativo la exige) no puede exigirla con
-    /// un cuerpo vacío. Quitar el metadato de un endpoint que la lee, o ponérselo a uno que no la lee,
-    /// sigue en rojo después de regenerar.
+    /// <para>Con <c>{}</c>: declarada como requerida ⇔ sin ella contesta
+    /// <c>400 *.idempotency_key_required</c>.</para>
+    ///
+    /// <para>Con el cuerpo de <see cref="CuerpoQueLeeLaLlave"/>, la opcional: ese cuerpo sin la llave
+    /// tiene que pedirla, y el documento tiene que declararla. Así quitar
+    /// <c>.ConLlaveDeIdempotencia(siempre: false)</c> de un endpoint que la lee sigue en rojo después
+    /// de regenerar, y ponérsela a uno que no la lee también: sin fila en la tabla no hay caso que la
+    /// active, y con una fila inventada el endpoint no la pide.</para>
     /// </remarks>
     [Theory]
     [MemberData(nameof(Piezas))]
     public async Task La_llave_que_el_documento_declara_es_la_que_el_endpoint_exige(string ensamblado)
     {
+        var doc = ContratoOpenApi.Comiteado(ensamblado);
+        using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
         var malas = new List<string>();
 
-        foreach (var r in await Sondear(ensamblado, conLlaveCompartida: true))
+        foreach (var op in ContratoOpenApi.Operaciones(doc))
         {
-            var declarada = (bool?)LlaveDeclarada(r.Op)?["required"] == true;
-            var exigida = PideLaLlave(r);
+            var llave = LlaveDeclarada(op);
+            var requerida = (bool?)llave?["required"] == true;
 
-            if (declarada != exigida)
+            var vacia = await Enviar(host, op, conLlaveCompartida: true, llave: null);
+            if (requerida != PideLaLlave(vacia))
             {
-                malas.Add($"  {r.Op}: el documento dice que {(declarada ? "la EXIGE" : "no la exige")} y sin ella " +
-                          $"contesta {(int)r.Status} {Codigo(r.Cuerpo) ?? "(sin code)"}.");
+                malas.Add($"  {op}: el documento dice que {(requerida ? "la EXIGE" : "no la exige")} y sin ella " +
+                          $"contesta {(int)vacia.Status} {Codigo(vacia.Cuerpo) ?? "(sin code)"}.");
+            }
+
+            if ((string?)op.Op["operationId"] is { } nombre && CuerpoQueLeeLaLlave.TryGetValue(nombre, out var cuerpo))
+            {
+                var activada = await Enviar(host, op, conLlaveCompartida: true, llave: null, cuerpo);
+                if (!PideLaLlave(activada))
+                {
+                    malas.Add($"  {op}: con {cuerpo} y sin la llave contesta {(int)activada.Status} " +
+                              $"{Codigo(activada.Cuerpo) ?? "(sin code)"}: ese cuerpo no la activa, o el endpoint no la lee.");
+                }
+                else if (llave is null)
+                {
+                    malas.Add($"  {op}: con {cuerpo} la exige y el documento no la declara " +
+                              "(falta .ConLlaveDeIdempotencia(siempre: false)).");
+                }
+            }
+            else if (llave is not null && !requerida)
+            {
+                malas.Add($"  {op}: el documento la declara opcional y no hay cuerpo que la active en " +
+                          $"{nameof(CuerpoQueLeeLaLlave)}: o el endpoint no la lee (y sobra la declaración), o falta su fila.");
             }
         }
 
@@ -117,9 +169,9 @@ public sealed class SondasDelContratoTests
     /// del número contra el host. Que con ese largo la saga entera derive sus llaves sin pasarse lo
     /// comprueba <c>LlaveDeSagaTests</c>, con identificadores del largo de los de verdad.</para>
     ///
-    /// <para>La llave «justa» no tiene que dar éxito —el cuerpo es <c>{}</c> y el id es
-    /// <c>sonda</c>—: tiene que no rechazarse por la llave y no romper (ningún 5xx). Sólo se miran
-    /// las operaciones que la exigen siempre: una opcional no la lee con un cuerpo vacío.</para>
+    /// <para>La llave «justa» no tiene que dar éxito —el id es <c>sonda</c>—: tiene que no
+    /// rechazarse por la llave y no romper (ningún 5xx). La opcional se manda con el cuerpo de
+    /// <see cref="CuerpoQueLeeLaLlave"/>, que es el caso en que la lee; con <c>{}</c> no llegaría.</para>
     /// </remarks>
     [Theory]
     [MemberData(nameof(Piezas))]
@@ -132,7 +184,14 @@ public sealed class SondasDelContratoTests
 
         foreach (var op in ContratoOpenApi.Operaciones(doc))
         {
-            if (LlaveDeclarada(op) is not { } llave || (bool?)llave["required"] != true) continue;
+            if (LlaveDeclarada(op) is not { } llave) continue;
+
+            string? cuerpo = null;
+            if ((bool?)llave["required"] != true
+                && ((string?)op.Op["operationId"] is not { } nombre || !CuerpoQueLeeLaLlave.TryGetValue(nombre, out cuerpo)))
+            {
+                continue;   // sin el caso que la activa no se llega a leer; el rojo lo da la sonda de arriba
+            }
 
             vistas++;
             if ((int?)llave["schema"]?["maxLength"] is not { } max)
@@ -141,14 +200,14 @@ public sealed class SondasDelContratoTests
                 continue;
             }
 
-            var justa = await Enviar(host, op, conLlaveCompartida: true, new string('k', max));
+            var justa = await Enviar(host, op, conLlaveCompartida: true, new string('k', max), cuerpo);
             if (PideLaLlave(justa) || (int)justa.Status >= 500)
             {
                 malas.Add($"  {op}: con una llave de {max} caracteres, lo que publica, contesta {(int)justa.Status} " +
                           $"{Codigo(justa.Cuerpo) ?? "(sin code)"}.");
             }
 
-            var larga = await Enviar(host, op, conLlaveCompartida: true, new string('k', max + 1));
+            var larga = await Enviar(host, op, conLlaveCompartida: true, new string('k', max + 1), cuerpo);
             if (!PideLaLlave(larga) || larga.Tipo != "application/problem+json")
             {
                 malas.Add($"  {op}: con una llave de {max + 1} caracteres, uno más de lo que publica, contesta " +
@@ -161,6 +220,22 @@ public sealed class SondasDelContratoTests
             $"{ensamblado}: el largo de {IdempotencyHeader.Name} que publica el contrato no es el que el endpoint " +
             "acepta. Los dos salen del metadato (.ConLlaveDeIdempotencia(maxLength: …), o .ConLlaveDeSaga() en un " +
             $"orquestador), que lee IdempotencyHeader.TryRead.{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
+    }
+
+    /// <summary>
+    /// Cada fila de <see cref="CuerpoQueLeeLaLlave"/> nombra una operación publicada: una fila de una
+    /// operación renombrada no la probaría nadie, y la sonda la daría por cubierta.
+    /// </summary>
+    [Fact]
+    public void Cada_cuerpo_que_lee_la_llave_es_de_una_operacion_publicada()
+    {
+        var publicadas = ContratoOpenApi.Piezas
+            .SelectMany(p => ContratoOpenApi.Operaciones(ContratoOpenApi.Comiteado(p.Ensamblado)))
+            .Select(o => (string?)o.Op["operationId"])
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.All(CuerpoQueLeeLaLlave.Keys, k => Assert.True(publicadas.Contains(k),
+            $"{nameof(CuerpoQueLeeLaLlave)} tiene «{k}» y ningún documento publica esa operación."));
     }
 
     /// <summary>
