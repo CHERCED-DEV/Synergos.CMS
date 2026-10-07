@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
-/// La copia de seguridad de los datos de las 22 (HU #31), como invariante ejecutable.
+/// La copia de seguridad de los datos de las 24 (HU #31), como invariante ejecutable.
 /// </summary>
 /// <remarks>
 /// <para><b>Lo que se vigila no es que exista un script de respaldo.</b> Es lo que hace que un

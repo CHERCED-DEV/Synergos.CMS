@@ -4,11 +4,11 @@ using System.Text.RegularExpressions;
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
-/// Que las 22 imágenes se puedan construir con <b>un solo</b> <c>Dockerfile.service</c>, y que
+/// Que las 24 imágenes se puedan construir con <b>un solo</b> <c>Dockerfile.service</c>, y que
 /// la matriz que las enumera no se quede corta (HU #17).
 /// </summary>
 /// <remarks>
-/// <para><b>Los tres supuestos que hace la imagen, y que acá se vigilan.</b> Construir 22
+/// <para><b>Los tres supuestos que hace la imagen, y que acá se vigilan.</b> Construir 24
 /// servicios con un fichero parametrizado sólo funciona mientras el molde se cumpla; el día que
 /// uno se salga, la imagen se construye igual y <b>falla al arrancar</b> — que es el peor sitio
 /// donde enterarse.</para>
@@ -120,9 +120,9 @@ public sealed class ContainerBuildTests
     {
         // Veinte servicios con veinte formas de construirse es peor que un monolito: el monolito
         // al menos es consistente. Y el día que haya que cambiar la imagen base, hay que
-        // acordarse de veintidós sitios — el que se olvide no rompe el build, rompe después.
+        // acordarse de veinticuatro sitios — el que se olvide no rompe el build, rompe después.
         Assert.True(File.Exists(Path.Combine(RepoRoot(), "Dockerfile.service")),
-            "Falta Dockerfile.service — es el único que construye las 22.");
+            "Falta Dockerfile.service — es el único que construye las 24.");
 
         var sueltos = Servicios()
             .Where(s => File.Exists(Path.Combine(RepoRoot(), s, "Dockerfile")))
@@ -146,6 +146,67 @@ public sealed class ContainerBuildTests
         // imagen—. Montar `/data` a secas, que es lo que uno escribe por costumbre, no persiste
         // nada: el servicio escribe en /app/data y el volumen queda vacío al lado.
         Assert.Contains("VOLUME /app/data", texto, StringComparison.Ordinal);
+    }
+
+    /// <summary>Los ficheros que escriben en prosa cuántas imágenes de servicio hay.</summary>
+    private static readonly string[] ProsaConLaCifra =
+    [
+        "Dockerfile.service",
+        "tools/respaldo.sh",
+        "tools/restaurar.sh",
+        "tools/prueba-restauracion.sh",
+        "tools/service-matrix.mjs",
+        "Synergos.Arquitectura.Tests/Architecture/ContainerBuildTests.cs",
+        "Synergos.Arquitectura.Tests/Architecture/PoliticaDeBuildEnLaImagenTests.cs",
+        "Synergos.Arquitectura.Tests/Architecture/RespaldoTests.cs",
+        "Synergos.Arquitectura.Tests/Architecture/RuntimesDeLosDosArbolesTests.cs",
+    ];
+
+    /// <summary>
+    /// «las N», con N de dos cifras. «las 21 opciones de almacenamiento» es otra cuenta y se salta
+    /// por nombre.
+    /// </summary>
+    private static readonly Regex CifraEnLaProsa = new(
+        @"\b(?:las|los|LAS|LOS)\s+(?:<b>)?(\d{2})(?:</b>)?\b(?!\s+opciones)", RegexOptions.Compiled, TimeSpan.FromSeconds(5));
+
+    /// <summary>
+    /// La cifra de imágenes que escribe la prosa es la de la matriz.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto.</b> La matriz construye veinticuatro imágenes desde que existen los cuatro
+    /// orquestadores (antes de la F2 de la ADR 0140), y una decena de comentarios seguía diciendo
+    /// veintidós: el número de cuando no estaban. La F2 lo copió en tres sitios más, uno de ellos en
+    /// <c>RuntimesDeLosDosArbolesTests</c>, que a la vez afirmaba «hay 24». <c>images.yml</c> no lleva
+    /// la cifra (#114); estos ficheros sí, porque la frase se lee mejor con ella, así que se cuenta
+    /// contra <see cref="Servicios"/>.</para>
+    /// </remarks>
+    [Fact]
+    public void La_cifra_de_imagenes_que_escribe_la_prosa_es_la_de_la_matriz()
+    {
+        var hay = Servicios().Count;
+        var vistas = 0;
+        var malas = new List<string>();
+
+        foreach (var fichero in ProsaConLaCifra)
+        {
+            var lineas = File.ReadAllLines(Path.Combine(RepoRoot(), fichero));
+            for (var i = 0; i < lineas.Length; i++)
+            {
+                foreach (Match m in CifraEnLaProsa.Matches(lineas[i]))
+                {
+                    vistas++;
+                    if (int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) != hay)
+                    {
+                        malas.Add($"  {fichero}:{i + 1}: «{m.Value}» y la matriz construye {hay}.");
+                    }
+                }
+            }
+        }
+
+        Assert.True(vistas >= 10, $"Sólo se encontraron {vistas} cifras en la prosa: el patrón dejó de ver.");
+        Assert.True(malas.Count == 0,
+            $"La prosa cuenta otras imágenes que las que construye la matriz ({hay}): una cifra escrita a " +
+            $"mano que nadie cuadra se pudre (#114).{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
     }
 
     [Fact]

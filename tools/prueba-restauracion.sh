@@ -57,7 +57,7 @@
 # ── LO QUE ESTE ENSAYO NO CUBRE, dicho de frente ─────────────────────────────
 #
 # El `.env` del servidor NO está en el respaldo, y es deliberado: ahí viven la
-# llave compartida de las 22, la de firma de identidad, la de la pasarela y la
+# llave compartida de las 24, la de firma de identidad, la de la pasarela y la
 # del correo. Meterlas en el archivo convertiría al respaldo en el objeto más
 # valioso del producto y a la identidad de `age` en la llave de TODO — un
 # problema de custodia de secretos disfrazado de copia de datos, y con 30
@@ -169,7 +169,7 @@ VERSION="$(tar -xzOf "$TMP/copia.tar.gz" ./MANIFIESTO 2>/dev/null | sed -n 's/^s
 # Los secretos del ensayo son de mentira A PROPÓSITO, y se generan ANTES de
 # restaurar porque `restaurar.sh` ya llama a compose. Los de producción no
 # están acá —el `.env` no viaja en el respaldo— y no hacen falta para LEER: lo
-# que hace falta es que las 22 arranquen. Que el ensayo pase con secretos
+# que hace falta es que las 24 arranquen. Que el ensayo pase con secretos
 # inventados es justamente lo que demuestra que lo restaurado son DATOS y no un
 # estado que dependía de la máquina que se perdió.
 export SYNERGOS_REGISTRY="${SYNERGOS_REGISTRY:-ghcr.io/cherced-dev}"

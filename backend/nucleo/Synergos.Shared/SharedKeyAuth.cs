@@ -60,7 +60,7 @@ public static class SharedKeyAuth
             // Degradar a ABIERTO con un LogWarning tiene sentido exacto en UN sitio: un
             // `dotnet run` recién clonado, donde exigir la llave empuja a ponerla en el repo
             // —que es peor que no tenerla—. En cualquier despliegue alcanzable es otra cosa:
-            // veintidós capacidades abiertas y un renglón de log que nadie va a leer, porque
+            // veinticuatro servicios abiertos y un renglón de log que nadie va a leer, porque
             // el sitio FUNCIONA. Un agujero que no se nota es el que se queda.
             //
             // Así que el degradado se queda, pero atado al único entorno donde la razón que

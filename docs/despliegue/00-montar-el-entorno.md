@@ -19,7 +19,7 @@ para que no se repita:
 | **Cloudflare Pages** | ficheros estáticos, con cabeceras propias | ✅ los bundles del CDN ([#20](../../../../issues/20)) |
 | **Cloudflare (proxy/DNS)** | se pone **delante** de un servidor ajeno | ✅ DDoS, caché, SSL, dominio |
 | **GitHub Actions** | trabajos que arrancan, hacen algo y **se mueren** | ✅ construir y empujar. ❌ hospedar |
-| **GHCR** | registro de imágenes | ✅ ahí quedan las 23 |
+| **GHCR** | registro de imágenes | ✅ ahí quedan las 25 |
 | **Un VPS** | máquinas de verdad, precio fijo | ✅ **ahí corre el producto** |
 
 > **La regla que resume todo:** Actions es el obrero, Cloudflare el portero, el VPS la casa.
@@ -82,7 +82,7 @@ estaban mal, y sólo se vio al ir a comprarlo:
    | **SSH Key** | pegar la pública. **Sin contraseña**, ver §1.1 |
    | **Backups** | ver §1.2 |
 
-> **Por qué 8 GB y no 4.** Son 23 procesos .NET: Umbraco solo pide 400-600 MB y 22 APIs a
+> **Por qué 8 GB y no 4.** Son 25 procesos .NET: Umbraco solo pide 400-600 MB y 24 servicios a
 > ~80-100 MB son otros ~2 GB. En 4 GB entra con swap; en 8 GB entra tranquilo. Ahorrarse €3 para
 > después depurar por qué el servidor se traba es mal negocio.
 >
@@ -798,7 +798,7 @@ Se niega a correr si el proyecto de ensayo es el de producción, y si la identid
 
 ### 6.5 Lo que el respaldo **no** lleva, dicho de frente
 
-**El `.env` del servidor.** Ahí viven la llave compartida de las 22, la de firma de identidad, las
+**El `.env` del servidor.** Ahí viven la llave compartida de las 24, la de firma de identidad, las
 de la pasarela y la del correo. Meterlas en la copia convertiría el respaldo en el objeto más
 valioso del producto y a la identidad de `age` en la llave de todo — es un problema de custodia de
 secretos disfrazado de copia de datos, con 30 copias diarias de blanco.

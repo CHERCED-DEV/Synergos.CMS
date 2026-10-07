@@ -7,7 +7,7 @@
 //
 // Una lista escrita a mano en el workflow se desincroniza el día que nadie
 // mira: alguien añade `Synergos.Api.Invoicing`, el CI sigue verde porque
-// construye las 22 de siempre, y la capacidad nueva simplemente no existe en
+// construye las 24 de siempre, y la capacidad nueva simplemente no existe en
 // producción. No falla — falta. Que es peor.
 //
 // Es el mismo razonamiento de `ApiMoldTests`, que descubre las capacidades
@@ -47,7 +47,7 @@ export function servicios(dir = raiz) {
  * La búsqueda es recursiva y NO enumera `backend/{nucleo,capacidades,orquestadores}`:
  * una lista de carpetas padre acá sería el mismo defecto que este fichero existe
  * para evitar, un nivel más arriba — alguien añade `backend/verticales/` y el CI
- * sigue verde construyendo las 22 de siempre.
+ * sigue verde construyendo las 24 de siempre.
  */
 export function descubrir(dir = raiz, prefijo = '') {
   const salida = [];
