@@ -3212,6 +3212,7 @@ node tools/spec-valida.mjs --autoprueba   # G-8: el LECTOR del spec, ejecutado (
 node tools/contract-keys.mjs  --ui-path=/tmp/ui   # lo que el borde EMITE  ↔ lo que la app LEE
 node tools/contract-bodies.mjs --ui-path=/tmp/ui  # lo que la app MANDA   ↔ lo que el borde DECLARA
 node tools/contract-bodies.mjs --autoprueba       # …y sus fixtures, sin repos ni red (#164, #170)
+node tools/contract-bodies.mjs --actualizar       # sube su piso de cobertura (rojo si BAJA: no se ciega callado)
 ```
 
 **G-7 es el que mira donde de verdad dolió.** En los ocho verticales auditados (#102 a #105)

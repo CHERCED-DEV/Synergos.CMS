@@ -35,6 +35,7 @@ on:
       - 'tools/contract-keys.mjs'
       - 'tools/contract-keys.baseline.json'
       - 'tools/contract-bodies.mjs'
+      - 'tools/contract-bodies.piso.json'
       - '.github/workflows/design-gates.yml'
   push:
     branches:
@@ -56,6 +57,7 @@ on:
       - 'tools/contract-keys.mjs'
       - 'tools/contract-keys.baseline.json'
       - 'tools/contract-bodies.mjs'
+      - 'tools/contract-bodies.piso.json'
       - '.github/workflows/design-gates.yml'
 
 jobs:

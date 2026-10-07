@@ -41,8 +41,16 @@
  * commit en LF. 2 no es vacío, así que ninguna red de seguridad lo veía. El `.gitattributes`
  * arregla el checkout de ESTE repo; el lector no puede depender de cómo se clonó el otro.
  *
+ * Y NO SE QUEDA CIEGO EN SILENCIO
+ * ------------------------------
+ * Le pasó dos veces quedar en 2 claves en 1 ruta, en verde: con el UI en CRLF (#170) y con la
+ * firma `postJson(apiBase, url, body)` de la ADR 0137. Desde entonces una llamada al helper cuya
+ * ruta no sabe leer es ROJA, y la cobertura tiene un piso (`tools/contract-bodies.piso.json`) que
+ * sólo sube: si cruza menos claves o rutas que el piso, falla.
+ *
  * USO
  *   node tools/contract-bodies.mjs [--ui-path=/ruta]   # o SYNERGOS_UI_PATH
+ *   node tools/contract-bodies.mjs --actualizar        # sube el piso cuando la cobertura crece
  *   node tools/contract-bodies.mjs --autoprueba        # sus fixtures, sin repos ni red
  */
 
@@ -175,6 +183,7 @@ function mandadoPorLaUi(app, ui = UI) {
 
     const porRuta = new Map();
     const noLiterales = [];
+    const sinRuta = [];
 
     for (const f of ficheros) {
         const src = leer(f);
@@ -286,15 +295,29 @@ function mandadoPorLaUi(app, ui = UI) {
 
         lineas.forEach((linea, i) => {
             // Las DOS formas: el helper del cliente, y un fetch con JSON.stringify.
-            const viaHelper = linea.match(/\b(?:post|put|patch)Json\s*\(\s*(\w+)\s*,\s*(.*)$/i);
+            //
+            // El helper admite un `apiBase` delante (ADR 0137, tanda C: `postJson(apiBase, url,
+            // body)`). Sin eso el regex tomaba `apiBase` por la ruta, no la resolvía y la llamada
+            // se perdía SIN DECLARARSE: el gate quedó verde cruzando 2 claves en 1 ruta. La ruta
+            // llega en una variable o escrita ahí mismo (`${apiBase}/notification` entre comillas
+            // invertidas).
+            const viaHelper = linea.match(
+                /\b(?:post|put|patch)Json\s*\(\s*(?:apiBase\s*,\s*)?(\w+|`[^`]*`)\s*,\s*(.*)$/i);
             const viaStringify = linea.match(/JSON\.stringify\(\s*(.*?)\s*\)/);
             if (!viaHelper && !viaStringify) return;
 
-            // La ruta: del primer argumento del helper, o de la variable `url` más cercana.
+            // La ruta: del argumento del helper, o de la variable `url` más cercana.
+            const enLinea = viaHelper?.[1].match(/^`\$\{apiBase\}\/([^`?]*)`$/);
             const ruta = viaHelper
-                ? resolverRuta(viaHelper[1], i)
+                ? (enLinea ? forma(enLinea[1].replace(/\$\{[^}]*\}/g, '{x}')) : resolverRuta(viaHelper[1], i))
                 : (resolverRuta('url', i) ?? null);
-            if (!ruta) return;
+            if (!ruta) {
+                // Un `JSON.stringify` sin ruta puede no ser un cuerpo (un log, una clave de caché).
+                // Una llamada al helper sin ruta SIEMPRE es un cuerpo que el gate no ve: se
+                // declara, y la corrida la pone en rojo.
+                if (viaHelper) sinRuta.push(`${app}:${path.basename(f)}:${i + 1}`);
+                return;
+            }
 
             // Se limpia la cola de la llamada (`body);` → `body`): sin esto el argumento no
             // pasa el test de identificador y el cuerpo caía fuera del cruce en silencio.
@@ -324,7 +347,7 @@ function mandadoPorLaUi(app, ui = UI) {
         });
     }
 
-    return { porRuta, noLiterales };
+    return { porRuta, noLiterales, sinRuta };
 }
 
 /**
@@ -418,6 +441,19 @@ function autoprueba() {
         '    return this.postJson(url, body);',
         '  }',
         '',
+        '  async tag(apiBase: string, name: string): Promise<unknown> {',
+        '    const url = `${apiBase}/tags`;',
+        '    return this.postJson(apiBase, url, { name });',
+        '  }',
+        '',
+        '  async ping(apiBase: string): Promise<unknown> {',
+        '    return this.postJson(apiBase, `${apiBase}/ping`, { at: 1 });',
+        '  }',
+        '',
+        '  async lost(apiBase: string, target: string): Promise<unknown> {',
+        '    return this.postJson(apiBase, target, { x: 1 });',
+        '  }',
+        '',
         '  async favorite(apiBase: string, listingId: string): Promise<unknown> {',
         '    const url = `${apiBase}/favorite`;',
         "    return fetch(url, { method: 'POST', body: JSON.stringify({ listingId }) });",
@@ -441,9 +477,13 @@ function autoprueba() {
         const lf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'lf'), '\n'));
         const crlf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'crlf'), '\r\n'));
 
-        caso('el fixture en LF cruza sus cuatro rutas', cifra(lf), '7 claves en 4 rutas');
-        caso('…con las claves de cada una',
-            plano(lf), 'favorite:listingId lead:name+phone notes/{}/draft:body+title visit:listingId+slot');
+        caso('el fixture en LF cruza sus seis rutas', cifra(lf), '9 claves en 6 rutas');
+        caso('…con las claves de cada una', plano(lf),
+            'favorite:listingId lead:name+phone notes/{}/draft:body+title ping:at tags:name visit:listingId+slot');
+        // ADR 0137 cambió la firma a `postJson(apiBase, url, body)` y el gate se quedó en 2 claves
+        // en 1 ruta sin decir nada: `tags` y `ping` son esa firma, con la ruta en variable y en línea.
+        caso('una llamada con la ruta ilegible se DECLARA, no se calla', lf.sinRuta.join(' '),
+            `fixture:fixture-api.client.ts:${cliente.findIndex((l) => l.includes('postJson(apiBase, target')) + 1}`);
         caso('el MISMO fixture en CRLF da la misma cifra (daba 1 clave en 1 ruta)', cifra(crlf), cifra(lf));
         caso('…y las mismas claves por ruta', plano(crlf), plano(lf));
     } finally {
@@ -466,6 +506,7 @@ if (process.argv.includes('--autoprueba')) autoprueba();
 const problemas = [];
 const fuera = [];
 const sinResolver = [];
+const sinRuta = [];
 let cruzadas = 0;
 let rutas = 0;
 
@@ -475,6 +516,7 @@ for (const { app, controllers } of PARES) {
     if (!ui || !cms) continue;
 
     fuera.push(...ui.noLiterales);
+    sinRuta.push(...ui.sinRuta);
 
     for (const [ruta, mandadas] of ui.porRuta) {
         const declaradas = cms.get(ruta);
@@ -528,6 +570,45 @@ if (problemas.length > 0) {
     console.error(`\n✗ ${problemas.length} cuerpo(s) que el borde no puede recibir:`);
     for (const p of problemas) console.error(`  ${p}`);
     process.exit(1);
+}
+
+// ── Que el gate no se quede ciego en silencio ─────────────────────────────────────────────────
+//
+// Pasó dos veces. Con el UI en CRLF cruzaba 2 claves en 1 ruta (#170); y con la firma
+// `postJson(apiBase, url, body)` de la ADR 0137, otra vez 2 en 1, durante semanas, en verde.
+// Las dos veces el gate no veía las llamadas y no lo decía. Ahora una llamada al helper cuya
+// ruta no sabe leer es ROJA, y la cobertura tiene un piso que sólo sube.
+if (sinRuta.length > 0) {
+    console.error(`\n✗ ${sinRuta.length} llamada(s) al helper cuya ruta el gate no sabe leer:`);
+    for (const s of sinRuta) console.error(`  ${s}`);
+    console.error('  → Su cuerpo no se cruza con nada. O el gate aprende la forma nueva de la llamada, '
+        + 'o la llamada vuelve a la forma que el gate lee (`const url = \\`${apiBase}/x\\``).');
+    process.exit(1);
+}
+
+const PISO = path.join(CMS, 'tools', 'contract-bodies.piso.json');
+const piso = fs.existsSync(PISO) ? JSON.parse(fs.readFileSync(PISO, 'utf8')) : { rutas: 0, claves: 0 };
+if (process.argv.includes('--actualizar')) {
+    if (rutas < piso.rutas || cruzadas < piso.claves) {
+        console.error(`\n✗ --actualizar sólo SUBE el piso: hoy ${cruzadas} claves en ${rutas} rutas, `
+            + `piso ${piso.claves} en ${piso.rutas}. Si la cobertura bajó, eso es lo que hay que mirar.`);
+        process.exit(1);
+    }
+    fs.writeFileSync(PISO, `${JSON.stringify({ rutas, claves: cruzadas }, null, 2)}\n`);
+    console.log(`\n✓ piso actualizado: ${cruzadas} claves en ${rutas} rutas.`);
+    process.exit(0);
+}
+if (rutas < piso.rutas || cruzadas < piso.claves) {
+    console.error(`\n✗ La cobertura BAJÓ: ${cruzadas} claves en ${rutas} rutas, contra un piso de `
+        + `${piso.claves} en ${piso.rutas} (tools/contract-bodies.piso.json).`);
+    console.error('  → Algo dejó de verse: una llamada con otra forma, un par app↔controller que ya no '
+        + 'casa, un fichero que no se lee. Un gate que cruza menos sin decirlo es el defecto que '
+        + 'este piso existe para atrapar.');
+    process.exit(1);
+}
+if (rutas > piso.rutas || cruzadas > piso.claves) {
+    console.log(`  ! la cobertura subió (piso ${piso.claves} en ${piso.rutas}): `
+        + 'node tools/contract-bodies.mjs --actualizar');
 }
 
 console.log(`\n✓ ${cruzadas} claves de petición ligan en ${rutas} rutas — ninguna se pierde.`);
