@@ -3,13 +3,20 @@ using Synergos.Api.Inventory.Domain;
 namespace Synergos.Api.Inventory.Contracts;
 
 // Lo que cruza el cable, separado de Domain/ (doc 08 §4.1).
+//
+// En lo que llega en el CUERPO de una petición, todo anulable lleva `= null` (ADR 0140, F2). No
+// cambia cómo se liga —si falta el campo, System.Text.Json ya ponía null—, cambia lo que se
+// publica: ASP.NET marca `required` todo parámetro posicional sin valor por defecto aunque sea
+// anulable, y el contrato exigía campos que el dominio no exige. El esquema publica la forma del
+// cable; lo que el negocio exige lo publican los rechazos con su código. Lo vigila el suelo del
+// contrato (SueloDelContratoTests).
 
 /// <summary>Una unidad nombrada, con coordenadas opcionales.</summary>
-public sealed record StockUnitDto(string? Code, int? Row, int? Column);
+public sealed record StockUnitDto(string? Code = null, int? Row = null, int? Column = null);
 
 /// <summary>Declarar existencias.</summary>
 public sealed record DeclareStockRequest(
-    string? SubjectKind, string? SubjectId, int? OnHand, IReadOnlyList<StockUnitDto>? Units);
+    string? SubjectKind = null, string? SubjectId = null, int? OnHand = null, IReadOnlyList<StockUnitDto>? Units = null);
 
 /// <summary>
 /// Ajustar existencias, de las dos maneras que existen — y son distintas de verdad.
@@ -27,11 +34,12 @@ public sealed record DeclareStockRequest(
 /// <para><b>Va exactamente uno de los dos.</b> Los dos juntos serían dos órdenes contradictorias
 /// en el mismo cuerpo, y ninguno no es una orden.</para>
 /// </remarks>
-public sealed record AdjustStockRequest(int? OnHand, int? Delta);
+public sealed record AdjustStockRequest(int? OnHand = null, int? Delta = null);
 
 /// <summary>Apartar existencias.</summary>
 public sealed record HoldStockRequest(
-    int? Quantity, IReadOnlyList<string>? UnitCodes, string? ForKind, string? ForId, int? TtlMinutes);
+    int? Quantity = null, IReadOnlyList<string>? UnitCodes = null, string? ForKind = null, string? ForId = null,
+    int? TtlMinutes = null);
 
 /// <summary>Cómo sale un ítem.</summary>
 public sealed record StockItemResponse(

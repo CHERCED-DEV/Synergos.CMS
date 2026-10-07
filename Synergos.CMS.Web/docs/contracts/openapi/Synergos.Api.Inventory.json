@@ -691,10 +691,6 @@
   "components": {
     "schemas": {
       "AdjustStockRequest": {
-        "required": [
-          "onHand",
-          "delta"
-        ],
         "type": "object",
         "properties": {
           "onHand": {
@@ -714,12 +710,6 @@
         }
       },
       "DeclareStockRequest": {
-        "required": [
-          "subjectKind",
-          "subjectId",
-          "onHand",
-          "units"
-        ],
         "type": "object",
         "properties": {
           "subjectKind": {
@@ -753,13 +743,6 @@
         }
       },
       "HoldStockRequest": {
-        "required": [
-          "quantity",
-          "unitCodes",
-          "forKind",
-          "forId",
-          "ttlMinutes"
-        ],
         "type": "object",
         "properties": {
           "quantity": {
@@ -936,11 +919,6 @@
         }
       },
       "StockUnitDto": {
-        "required": [
-          "code",
-          "row",
-          "column"
-        ],
         "type": "object",
         "properties": {
           "code": {

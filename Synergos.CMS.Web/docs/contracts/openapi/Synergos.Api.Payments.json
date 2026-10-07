@@ -608,13 +608,6 @@
   "components": {
     "schemas": {
       "AuthorizeRequest": {
-        "required": [
-          "forKind",
-          "forId",
-          "payerKind",
-          "payerId",
-          "amount"
-        ],
         "type": "object",
         "properties": {
           "forKind": {
@@ -823,10 +816,6 @@
         }
       },
       "RefundRequest": {
-        "required": [
-          "amount",
-          "reason"
-        ],
         "type": "object",
         "properties": {
           "amount": {

@@ -478,11 +478,6 @@
         }
       },
       "QuoteLineRequest": {
-        "required": [
-          "subjectKind",
-          "subjectId",
-          "quantity"
-        ],
         "type": "object",
         "properties": {
           "subjectKind": {
@@ -539,10 +534,6 @@
         }
       },
       "QuoteRequest": {
-        "required": [
-          "lines",
-          "promotionCode"
-        ],
         "type": "object",
         "properties": {
           "lines": {
@@ -633,14 +624,6 @@
         }
       },
       "SavePromotionRequest": {
-        "required": [
-          "code",
-          "kind",
-          "value",
-          "currency",
-          "validFrom",
-          "validTo"
-        ],
         "type": "object",
         "properties": {
           "code": {
@@ -685,12 +668,6 @@
         }
       },
       "SetPriceRequest": {
-        "required": [
-          "subjectKind",
-          "subjectId",
-          "amount",
-          "taxRateBasisPoints"
-        ],
         "type": "object",
         "properties": {
           "subjectKind": {

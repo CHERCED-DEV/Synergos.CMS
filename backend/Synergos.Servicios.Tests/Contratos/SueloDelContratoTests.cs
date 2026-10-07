@@ -85,7 +85,18 @@ public sealed class SueloDelContratoTests
             malas.Add($"components.schemas.{id}: id con sufijo numérico (dos tipos con el mismo nombre).");
         }
 
-        // 5. El rechazo y la llave compartida, presentes: sin ellos el consumidor no sabe qué forma
+        // 5. Ningún anulable REQUERIDO en lo que llega en el cuerpo de una petición. ASP.NET marca
+        //    required todo parámetro posicional sin valor por defecto aunque sea anulable, así que
+        //    el contrato exigía campos que el dominio no exige (seat en cupo general; onHand Y delta
+        //    a la vez, contra su propia regla de «exactamente uno»): rojos falsos en el gate de
+        //    compatibilidad y un TypeScript que obliga a mandar null. La salida es `= null` en el
+        //    record. Las respuestas no entran: allí «siempre viene, a veces nulo» es verdad.
+        foreach (var (esquema, campo) in AnulablesRequeridosEnPeticiones(doc, ops))
+        {
+            malas.Add($"{esquema}.{campo}: anulable y requerido en una petición (falta `= null` en el record).");
+        }
+
+        // 6. El rechazo y la llave compartida, presentes: sin ellos el consumidor no sabe qué forma
         //    tiene un no, ni que hace falta la llave.
         if (esquemas[ContratoOpenApi.EsquemaRechazo] is not JsonObject rechazo
             || rechazo["properties"]?["code"] is null || rechazo["properties"]?["transient"] is null)
@@ -113,6 +124,50 @@ public sealed class SueloDelContratoTests
             $"código (tipo de retorno, WithName, los records).{Environment.NewLine}" +
             string.Join(Environment.NewLine, malas.Select(m => "  " + m)));
     }
+
+    /// <summary>
+    /// Los campos requeridos y anulables de todo esquema alcanzable desde el cuerpo de una petición
+    /// (siguiendo <c>$ref</c>, propiedades, <c>items</c> y <c>oneOf</c>).
+    /// </summary>
+    private static IEnumerable<(string Esquema, string Campo)> AnulablesRequeridosEnPeticiones(
+        JsonObject doc, IReadOnlyList<OperacionPublicada> ops)
+    {
+        var esquemas = doc["components"]?["schemas"]?.AsObject() ?? new JsonObject();
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        var pendientes = new Queue<(string Nombre, JsonNode? Nodo)>(ops
+            .Select(o => (o.ToString(), o.Op["requestBody"]?["content"]?["application/json"]?["schema"])));
+
+        while (pendientes.TryDequeue(out var actual))
+        {
+            if (actual.Nodo is not JsonObject s) continue;
+
+            if ((string?)s["$ref"] is { } referencia)
+            {
+                var id = referencia[(referencia.LastIndexOf('/') + 1)..];
+                if (vistos.Add(id)) pendientes.Enqueue((id, esquemas[id]));
+                continue;
+            }
+
+            var requeridos = s["required"]?.AsArray().Select(x => (string)x!).ToHashSet(StringComparer.Ordinal) ?? [];
+            foreach (var (campo, prop) in s["properties"]?.AsObject() ?? new JsonObject())
+            {
+                if (requeridos.Contains(campo) && Anulable(prop)) yield return (actual.Nombre, campo);
+                pendientes.Enqueue(($"{actual.Nombre}.{campo}", prop));
+            }
+
+            pendientes.Enqueue(($"{actual.Nombre}[]", s["items"]));
+            foreach (var alternativa in s["oneOf"]?.AsArray() ?? []) pendientes.Enqueue((actual.Nombre, alternativa));
+        }
+    }
+
+    /// <summary>Si un esquema admite <c>null</c>: <c>type</c> con "null" o un <c>oneOf</c> con él.</summary>
+    private static bool Anulable(JsonNode? prop)
+        => prop?["type"] switch
+        {
+            JsonArray tipos => tipos.Any(t => (string?)t == "null"),
+            JsonValue v => (string?)v == "null",
+            _ => prop?["oneOf"]?.AsArray().Any(a => (string?)a?["type"] == "null") ?? false,
+        };
 
     /// <summary>Todos los objetos JSON del documento, con su ruta, para las reglas que miran esquemas.</summary>
     private static IEnumerable<(string Ruta, JsonObject Nodo)> Nodos(JsonNode? nodo, string ruta)

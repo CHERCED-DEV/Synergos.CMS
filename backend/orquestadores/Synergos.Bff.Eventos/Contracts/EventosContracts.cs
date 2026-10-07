@@ -6,16 +6,28 @@ namespace Synergos.Bff.Eventos.Contracts;
 // Lo que cruza el cable, separado de Domain/ (doc 08 §4.1). Acá la separación gana algo muy
 // concreto: la saga lleva los identificadores internos de cada capacidad —los apartados de aforo,
 // el pago— y los intentos de cada compensación. Nada de eso tiene por qué salir a la UI.
+//
+// En lo que llega en el CUERPO de una petición, todo anulable lleva `= null` (ADR 0140, F2). No
+// cambia cómo se liga —si falta el campo, System.Text.Json ya ponía null—, cambia lo que se
+// publica: ASP.NET marca `required` todo parámetro posicional sin valor por defecto aunque sea
+// anulable, y el contrato exigía campos que el dominio no exige. El esquema publica la forma del
+// cable; lo que el negocio exige lo publican los rechazos con su código. Lo vigila el suelo del
+// contrato (SueloDelContratoTests).
 
 /// <summary>Un monto tal como sale.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
 
-/// <summary>Una línea pedida: qué localidad, qué butaca si la hay, y cuántas.</summary>
+/// <summary>Una línea pedida: cuántas, de qué localidad, y qué butaca si la hay.</summary>
 /// <remarks>
-/// <b>Sin precio, a propósito.</b> Si el total llegara del llamador, cualquiera compraría la
-/// localidad VIP al precio de la general. Se cotiza contra <c>Api.Pricing</c>.
+/// <para><b>Sin precio, a propósito.</b> Si el total llegara del llamador, cualquiera compraría la
+/// localidad VIP al precio de la general. Se cotiza contra <c>Api.Pricing</c>.</para>
+///
+/// <para><b><c>Quantity</c> va primero</b> porque es el único que no es anulable, y en C# un
+/// parámetro sin valor por defecto no puede ir detrás de uno que lo tiene. <c>Seat</c> es nulo en
+/// cupo general, y el contrato lo exigía. El orden no cambia el cable: se liga por nombre, y nadie
+/// construye este record por posición.</para>
 /// </remarks>
-public sealed record TicketLineRequest(string? Tier, string? Seat, int Quantity);
+public sealed record TicketLineRequest(int Quantity, string? Tier = null, string? Seat = null);
 
 /// <summary>Comprar entradas de un evento.</summary>
 /// <param name="ServiceFeePercent">La comisión de servicio que paga quien compra, en porcentaje
@@ -28,7 +40,7 @@ public sealed record TicketLineRequest(string? Tier, string? Seat, int Quantity)
 /// comprador ve en el carrito.
 /// </remarks>
 public sealed record BuyTicketsRequest(
-    string? EventId, string? BuyerKind, string? BuyerId, IReadOnlyList<TicketLineRequest>? Lines,
+    string? EventId = null, string? BuyerKind = null, string? BuyerId = null, IReadOnlyList<TicketLineRequest>? Lines = null,
     decimal? ServiceFeePercent = null);
 
 /// <summary>Una butaca o cupo apartado, tal como sale.</summary>

@@ -508,12 +508,6 @@
   "components": {
     "schemas": {
       "BuyTicketsRequest": {
-        "required": [
-          "eventId",
-          "buyerKind",
-          "buyerId",
-          "lines"
-        ],
         "type": "object",
         "properties": {
           "eventId": {
@@ -712,12 +706,14 @@
       },
       "TicketLineRequest": {
         "required": [
-          "tier",
-          "seat",
           "quantity"
         ],
         "type": "object",
         "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
           "tier": {
             "type": [
               "null",
@@ -729,10 +725,6 @@
               "null",
               "string"
             ]
-          },
-          "quantity": {
-            "type": "integer",
-            "format": "int32"
           }
         }
       },

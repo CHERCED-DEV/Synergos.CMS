@@ -5,6 +5,13 @@ namespace Synergos.Api.Payments.Contracts;
 // Lo que cruza el cable, separado de Domain/ (doc 08 §4.1). Acá la separación gana algo
 // concreto: Payment lleva ProviderReference —el identificador de la pasarela— y esa es
 // justamente la clase de dato que no tiene por qué salir a un cliente cualquiera.
+//
+// En lo que llega en el CUERPO de una petición, todo anulable lleva `= null` (ADR 0140, F2). No
+// cambia cómo se liga —si falta el campo, System.Text.Json ya ponía null—, cambia lo que se
+// publica: ASP.NET marca `required` todo parámetro posicional sin valor por defecto aunque sea
+// anulable, y el contrato exigía campos que el dominio no exige. El esquema publica la forma del
+// cable; lo que el negocio exige lo publican los rechazos con su código. Lo vigila el suelo del
+// contrato (SueloDelContratoTests).
 
 /// <summary>Un monto tal como llega o sale. Nunca un decimal suelto.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
@@ -16,11 +23,11 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 /// más fuerte sin presentar el token se rechaza. Quien decide es esta capacidad.
 /// </param>
 public sealed record AuthorizeRequest(
-    string? ForKind, string? ForId, string? PayerKind, string? PayerId, MoneyDto? Amount,
-    string? Assertion = null);
+    string? ForKind = null, string? ForId = null, string? PayerKind = null, string? PayerId = null,
+    MoneyDto? Amount = null, string? Assertion = null);
 
 /// <summary>Devolver, total o parcialmente.</summary>
-public sealed record RefundRequest(MoneyDto? Amount, string? Reason);
+public sealed record RefundRequest(MoneyDto? Amount = null, string? Reason = null);
 
 /// <summary>Cómo sale una devolución.</summary>
 public sealed record RefundResponse(string Id, MoneyDto Amount, string? Reason, DateTimeOffset AtUtc);

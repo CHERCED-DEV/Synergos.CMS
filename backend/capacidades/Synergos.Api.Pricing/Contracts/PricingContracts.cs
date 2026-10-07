@@ -7,23 +7,31 @@ namespace Synergos.Api.Pricing.Contracts;
 // El dinero viaja como {amount, currency} y NUNCA como un decimal suelto: un número
 // sin moneda es exactamente el error que Money existe para impedir, y dejarlo entrar
 // por el borde lo reintroduce por la puerta de atrás.
+//
+// En lo que llega en el CUERPO de una petición, todo anulable lleva `= null` (ADR 0140, F2). No
+// cambia cómo se liga —si falta el campo, System.Text.Json ya ponía null—, cambia lo que se
+// publica: ASP.NET marca `required` todo parámetro posicional sin valor por defecto aunque sea
+// anulable, y el contrato exigía campos que el dominio no exige. El esquema publica la forma del
+// cable; lo que el negocio exige lo publican los rechazos con su código. Lo vigila el suelo del
+// contrato (SueloDelContratoTests).
 
 /// <summary>Un monto tal como llega o sale.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
 
 /// <summary>Publicar el precio de algo.</summary>
-public sealed record SetPriceRequest(string? SubjectKind, string? SubjectId, MoneyDto? Amount, int? TaxRateBasisPoints);
+public sealed record SetPriceRequest(
+    string? SubjectKind = null, string? SubjectId = null, MoneyDto? Amount = null, int? TaxRateBasisPoints = null);
 
 /// <summary>Guardar una promoción.</summary>
 public sealed record SavePromotionRequest(
-    string? Code, string? Kind, decimal? Value, string? Currency,
-    DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo);
+    string? Code = null, string? Kind = null, decimal? Value = null, string? Currency = null,
+    DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null);
 
 /// <summary>Una línea a cotizar.</summary>
-public sealed record QuoteLineRequest(string? SubjectKind, string? SubjectId, int? Quantity);
+public sealed record QuoteLineRequest(string? SubjectKind = null, string? SubjectId = null, int? Quantity = null);
 
 /// <summary>Cotizar unas líneas.</summary>
-public sealed record QuoteRequest(IReadOnlyList<QuoteLineRequest>? Lines, string? PromotionCode);
+public sealed record QuoteRequest(IReadOnlyList<QuoteLineRequest>? Lines = null, string? PromotionCode = null);
 
 /// <summary>Cómo sale un precio.</summary>
 public sealed record PriceResponse(string Id, string SubjectKind, string SubjectId, MoneyDto Amount, int TaxRateBasisPoints, DateTimeOffset UpdatedAtUtc)
