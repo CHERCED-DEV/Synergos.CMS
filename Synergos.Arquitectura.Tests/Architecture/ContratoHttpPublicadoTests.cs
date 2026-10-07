@@ -15,12 +15,13 @@ namespace Synergos.CMS.Tests.Architecture;
 /// <c>Microsoft.Extensions.ApiDescription.Server</c> genera en el build ejecutando el
 /// <c>Program</c> en Production, donde la llave compartida lo tumba (16 errores, medido).</para>
 ///
-/// <para><b>Ningún <c>.Produces*</c> en el backend.</b> La respuesta se declara con el TIPO DE
-/// RETORNO (<c>TypedResults</c>), que el compilador comprueba. Un <c>.Produces&lt;T&gt;(201)</c> es un
-/// segundo modelo escrito a mano: medido, un endpoint que lo declaraba y devolvía otra forma dejaba
-/// el documento mintiendo con todos los gates en verde; con <c>TypedResults</c> el mismo cambio no
-/// compila. Se mira todo el código de producción del backend y no sólo <c>Endpoints/</c>, porque
-/// <c>/health</c> se mapea en el <c>Program</c>.</para>
+/// <para><b>Ningún <c>Produces*</c> en el backend, ni llamada ni atributo.</b> La respuesta se
+/// declara con el TIPO DE RETORNO (<c>TypedResults</c>), que el compilador comprueba. Un
+/// <c>.Produces&lt;T&gt;(201)</c> o un <c>[ProducesResponseType&lt;T&gt;(201)]</c> es un segundo modelo
+/// escrito a mano: medido, un endpoint que lo declaraba y devolvía otra forma dejaba el documento
+/// mintiendo con todos los gates en verde; con <c>TypedResults</c> el mismo cambio no compila. Se
+/// mira todo el código de producción del backend y no sólo <c>Endpoints/</c>, porque <c>/health</c>
+/// se mapea en el <c>Program</c>.</para>
 ///
 /// <para><b>Sólo lee el disco.</b> Con red de seguridad en las dos: si el descubrimiento no ve la
 /// referencia que SÍ existe, o no ve los ficheros que mapean rutas, falla en vez de pasar mirando
@@ -42,8 +43,21 @@ public sealed class ContratoHttpPublicadoTests
         @"<PackageReference\s+(?:Include|Update)\s*=\s*""" + Regex.Escape(paquete) + @"""",
         RegexOptions.IgnoreCase, TimeSpan.FromSeconds(5));
 
-    /// <summary>Una llamada a <c>.Produces</c>, <c>.ProducesProblem</c>, <c>.ProducesValidationProblem</c>…</summary>
-    private static readonly Regex Produces = new(@"\.Produces\w*\s*[<(]", RegexOptions.Compiled, TimeSpan.FromSeconds(5));
+    /// <summary>
+    /// Cualquier cosa que se llame <c>Produces*</c>: la llamada (<c>.Produces&lt;T&gt;()</c>,
+    /// <c>.ProducesProblem</c>…), el atributo (<c>[ProducesResponseType&lt;T&gt;(200)]</c>,
+    /// <c>[Produces(…)]</c>, <c>[ProducesDefaultResponseType]</c>) y el metadato
+    /// (<c>new ProducesResponseTypeMetadata(…)</c>, <c>IProducesResponseTypeMetadata</c>).
+    /// </summary>
+    /// <remarks>
+    /// Antes pedía un punto delante, y el atributo no lo lleva: con <c>using Microsoft.AspNetCore.Mvc;</c>
+    /// un <c>[ProducesResponseType&lt;PriceResponse&gt;(200)]</c> sobre un handler que devolvía otra
+    /// forma dejaba el documento idéntico byte a byte y este gate en verde (medido, ADR 0140 F2). La
+    /// forma calificada salía en rojo por casualidad, por el punto del namespace. En el backend no hay
+    /// ningún identificador legítimo que contenga <c>Produces</c>, así que el nombre basta; el gate que
+    /// lo mira desde el host, sin depender de cómo se escriba, es <c>RespuestaPorElTipoDeRetornoTests</c>.
+    /// </remarks>
+    private static readonly Regex Produces = new(@"\w*Produces\w*", RegexOptions.Compiled, TimeSpan.FromSeconds(5));
 
     private static readonly Regex Mapea = new(@"\.Map(Get|Post|Delete|Put|Patch|Methods)\s*\(", RegexOptions.Compiled, TimeSpan.FromSeconds(5));
 
@@ -116,14 +130,15 @@ public sealed class ContratoHttpPublicadoTests
             "los 4 orquestadores): el descubrimiento dejó de ver.");
 
         var conProduces = fuentes
-            .Where(f => Produces.IsMatch(f.Texto))
-            .Select(f => "  " + Path.GetRelativePath(backend, f.Ruta).Replace('\\', '/'))
+            .Select(f => (f.Ruta, Nombres: Produces.Matches(f.Texto).Select(m => m.Value).Distinct(StringComparer.Ordinal).ToList()))
+            .Where(f => f.Nombres.Count > 0)
+            .Select(f => $"  {Path.GetRelativePath(backend, f.Ruta).Replace('\\', '/')}: {string.Join(", ", f.Nombres)}")
             .ToList();
 
         Assert.True(conProduces.Count == 0,
             "La respuesta de un endpoint se declara con su TIPO DE RETORNO (TypedResults), que el " +
-            "compilador comprueba. Un .Produces* es un segundo modelo escrito a mano: si el endpoint " +
-            "devuelve otra forma, el documento miente y todo sigue en verde (medido, ADR 0140 F2)." +
-            $"{Environment.NewLine}{string.Join(Environment.NewLine, conProduces)}");
+            "compilador comprueba. Un .Produces* o un [ProducesResponseType] es un segundo modelo escrito " +
+            "a mano: si el endpoint devuelve otra forma, el documento miente y todo sigue en verde " +
+            $"(medido, ADR 0140 F2).{Environment.NewLine}{string.Join(Environment.NewLine, conProduces)}");
     }
 }

@@ -81,10 +81,10 @@ ensamblado, igual que su `info.title`.
 
 | Fichero | Pieza | Quién lo ejecuta |
 |---|---|---|
-| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los tres gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
-| [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
-| [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
-| [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 
 Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 
@@ -93,6 +93,10 @@ Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 - **`SueloDelContratoTests`** — lo que regenerar NO arregla: `operationId` único, un 2xx JSON con
   esquema por operación, ningún número que también sea cadena, ningún anulable requerido en una
   petición, `Rechazo` y el 401 presentes.
+- **`RespuestaPorElTipoDeRetornoTests`** — en el host real, la respuesta de cada operación la
+  declara SÓLO su tipo de retorno: ni `IResult`/`object`, ni `[ProducesResponseType]`/`[Produces]`,
+  ni un `.Produces` escondido en un ayudante. Lo escrito a mano deja el documento mintiendo con la
+  deriva en verde, porque regenerarlo copia la mentira.
 - **`SondasDelContratoTests`** — lo que el documento declara a mano, contra el host real:
   `Idempotency-Key` declarada ⇔ exigida, todo rechazo real cumple `Rechazo`, y sin
   `X-Synergos-Key` toda operación contesta 401 sin cuerpo.
