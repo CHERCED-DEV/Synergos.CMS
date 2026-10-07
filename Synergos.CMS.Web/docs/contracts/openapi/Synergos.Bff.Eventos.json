@@ -52,7 +52,7 @@
             "in": "header",
             "required": true,
             "schema": {
-              "maxLength": 128,
+              "maxLength": 83,
               "type": "string"
             }
           }

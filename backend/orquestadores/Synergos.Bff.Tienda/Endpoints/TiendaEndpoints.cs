@@ -17,6 +17,8 @@ public static class TiendaEndpoints
         // La llave de idempotencia ES el identificador de la saga. No es un atajo: la saga
         // necesita un identificador estable ANTES del primer paso para poder derivar las llaves
         // de todos los demás, y el llamador ya está obligado a traer uno.
+        // Por eso acepta una llave más corta que la de una capacidad: de ella cuelgan las de cada
+        // paso, y una que no cupiera rompería a mitad de la saga (ConLlaveDeSaga).
         app.MapPost("/v1/purchases", async (BuyRequest req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
@@ -27,7 +29,7 @@ public static class TiendaEndpoints
             return r.Match(
                 s => Results.Created($"/v1/purchases/{s.Id}", PurchaseResponse.From(s)),
                 bad => bad.ToProblem());
-        });
+        }).ConLlaveDeSaga();
 
         app.MapGet("/v1/purchases/{id}", (string id, PurchaseFlow flow) =>
             flow.Get(id).Map(PurchaseResponse.From).ToHttp());

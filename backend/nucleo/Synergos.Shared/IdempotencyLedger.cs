@@ -74,14 +74,23 @@ public static class IdempotencyHeader
     /// <param name="codePrefix">Prefijo de códigos de la capacidad — <c>booking</c>, <c>audit</c>.</param>
     /// <param name="key">La llave leída, si la hay.</param>
     /// <param name="missing">El rechazo ya formado, si falta.</param>
+    /// <remarks>
+    /// <b>El largo que acepta lo dice el metadato del endpoint</b>
+    /// (<see cref="LlaveDeIdempotenciaRequerida.MaxLength"/>), el mismo del que sale el
+    /// <c>maxLength</c> del contrato publicado: así lo publicado y lo aceptado no pueden ser dos
+    /// números. Sin metadato, <see cref="IdempotencyKey.MaxLength"/>. Una llave demasiado larga sale
+    /// con el mismo código que una ausente —no hay llave que sirva—, y el mensaje dice el largo.
+    /// </remarks>
     public static bool TryRead(HttpRequest http, string codePrefix, out IdempotencyKey key, out ProblemHttpResult? missing)
     {
         var raw = http.Headers[Name].ToString();
-        if (string.IsNullOrWhiteSpace(raw) || raw.Length > IdempotencyKey.MaxLength)
+        var max = http.HttpContext.GetEndpoint()?.Metadata.GetMetadata<LlaveDeIdempotenciaRequerida>()?.MaxLength
+                  ?? IdempotencyKey.MaxLength;
+        if (string.IsNullOrWhiteSpace(raw) || raw.Length > max)
         {
             key = default;
             missing = Rejection.Invalid($"{codePrefix}.idempotency_key_required",
-                $"Toda mutación exige la cabecera {Name} (hasta {IdempotencyKey.MaxLength} caracteres). " +
+                $"Toda mutación exige la cabecera {Name} (hasta {max} caracteres). " +
                 "Sin ella, un reintento tras un timeout duplicaría la operación.").ToProblem();
             return false;
         }

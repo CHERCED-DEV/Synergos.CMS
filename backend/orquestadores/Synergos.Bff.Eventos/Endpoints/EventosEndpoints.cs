@@ -24,6 +24,8 @@ public static class EventosEndpoints
         // La llave de idempotencia ES el identificador de la saga. No es un atajo: la saga
         // necesita un identificador estable ANTES del primer paso para poder derivar las llaves
         // de todos los demás, y el llamador ya está obligado a traer uno.
+        // Por eso acepta una llave más corta que la de una capacidad: de ella cuelgan las de cada
+        // paso, y una que no cupiera rompería a mitad de la saga (ConLlaveDeSaga).
         app.MapPost("/v1/ticket-purchases", async Task<Results<Created<TicketPurchaseResponse>, ProblemHttpResult>> (
             BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
         {
@@ -42,7 +44,7 @@ public static class EventosEndpoints
             var r = await flow.BuyAsync(req.EventId!, buyer, lineas, req.ServiceFeePercent ?? 0m, key.Value, ct);
 
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
-        }).WithName("BuyTickets").ConLlaveDeIdempotencia();
+        }).WithName("BuyTickets").ConLlaveDeSaga();
 
         app.MapGet("/v1/ticket-purchases/{id}", (string id, TicketingFlow flow) =>
             flow.Get(id).Map(TicketPurchaseResponse.From).ToHttp()).WithName("GetTicketPurchase");

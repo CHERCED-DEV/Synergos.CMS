@@ -117,7 +117,8 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     }
 
     /// <summary>Cuántos intentos deshechos se admiten sobre la misma llave antes de sospechar.</summary>
-    private const int MaxIntentos = 100;
+    /// <remarks>Vive en <see cref="LlaveDeSaga"/> porque entra en la cuenta del largo de la llave.</remarks>
+    private const int MaxIntentos = LlaveDeSaga.IntentosTrasDeshacer;
 
     /// <summary>La llave sin el sufijo de intento — para que el intento 3 se busque desde la raíz.</summary>
     private static string Raiz(string llave)

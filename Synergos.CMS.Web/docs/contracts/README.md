@@ -98,8 +98,11 @@ Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
   ni un `.Produces` escondido en un ayudante. Lo escrito a mano deja el documento mintiendo con la
   deriva en verde, porque regenerarlo copia la mentira.
 - **`SondasDelContratoTests`** — lo que el documento declara a mano, contra el host real:
-  `Idempotency-Key` declarada ⇔ exigida, todo rechazo real cumple `Rechazo`, y sin
-  `X-Synergos-Key` toda operación contesta 401 sin cuerpo.
+  `Idempotency-Key` declarada ⇔ exigida, y su `maxLength` es el largo que el endpoint acepta (una
+  llave de ese largo pasa, una más larga sale con `400 *.idempotency_key_required`); todo rechazo
+  real cumple `Rechazo`, y sin `X-Synergos-Key` toda operación contesta 401 sin cuerpo. En
+  `BuyTickets` el largo es menor que los 128 de una capacidad porque la llave abre la saga y de
+  ella cuelgan las de cada paso (`LlaveDeSaga`, en `Bff.Core`, hace la cuenta).
 
 Y los tres de capacidad, además, **`ContratoConsumidorEventosTests`**: lo que `Bff.Eventos` manda
 y lee de cada una cabe en su documento (ruta, query, llave, cuerpo y respuesta, con nombres

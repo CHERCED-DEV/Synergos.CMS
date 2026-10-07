@@ -237,7 +237,9 @@ internal static class ContratoOpenApi
     /// <remarks>
     /// <c>ApiExplorer</c> no la ve: <see cref="IdempotencyHeader.TryRead"/> la lee a mano del
     /// <c>HttpRequest</c>. Sale del metadato <see cref="LlaveDeIdempotenciaRequerida"/>, con
-    /// <c>required</c> según lo exija siempre o sólo en un caso del cuerpo, y el largo de
+    /// <c>required</c> según lo exija siempre o sólo en un caso del cuerpo, y el largo que el
+    /// endpoint acepta: el mismo número que lee <see cref="IdempotencyHeader.TryRead"/>, así que un
+    /// orquestador, que deriva de la llave las de cada paso, publica menos de
     /// <see cref="IdempotencyKey.MaxLength"/>.
     /// </remarks>
     private static Task Llave(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
@@ -250,7 +252,7 @@ internal static class ContratoOpenApi
                 Name = IdempotencyHeader.Name,
                 In = ParameterLocation.Header,
                 Required = llave.Siempre,
-                Schema = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = IdempotencyKey.MaxLength },
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = llave.MaxLength },
             });
         }
 

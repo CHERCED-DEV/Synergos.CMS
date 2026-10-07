@@ -36,18 +36,39 @@ public sealed class SondasDelContratoTests
 
         foreach (var op in ContratoOpenApi.Operaciones(doc))
         {
-            var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
-            using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
-            if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
-            if (op.Op["requestBody"] is not null) req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
-
-            using var r = await host.Cliente.SendAsync(req);
-            respuestas.Add(new Respuesta(op, r.StatusCode, r.Content.Headers.ContentType?.MediaType, await r.Content.ReadAsStringAsync()));
+            respuestas.Add(await Enviar(host, op, conLlaveCompartida, llave: null));
         }
 
         Assert.True(respuestas.Count >= 4, $"{ensamblado}: se sondearon {respuestas.Count} operaciones.");
         return respuestas;
     }
+
+    /// <summary>
+    /// Manda UNA operación: <c>sonda</c> en cada parámetro de ruta, <c>{}</c> de cuerpo si lo lleva y,
+    /// si se da, la <paramref name="llave"/> en <c>Idempotency-Key</c>.
+    /// </summary>
+    private static async Task<Respuesta> Enviar(HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave)
+    {
+        var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
+        using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
+        if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
+        if (llave is not null) req.Headers.Add(IdempotencyHeader.Name, llave);
+        if (op.Op["requestBody"] is not null) req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+
+        using var r = await host.Cliente.SendAsync(req);
+        return new Respuesta(op, r.StatusCode, r.Content.Headers.ContentType?.MediaType, await r.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>La cabecera <c>Idempotency-Key</c> que declara la operación, si la declara.</summary>
+    private static JsonObject? LlaveDeclarada(OperacionPublicada op)
+        => (op.Op["parameters"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
+            .FirstOrDefault(p => (string?)p["in"] == "header" && (string?)p["name"] == IdempotencyHeader.Name);
+
+    /// <summary>Si la respuesta es el rechazo de la llave: <c>400 *.idempotency_key_required</c>.</summary>
+    private static bool PideLaLlave(Respuesta r)
+        => r.Status == HttpStatusCode.BadRequest
+           && Codigo(r.Cuerpo) is { } code
+           && code.EndsWith(".idempotency_key_required", StringComparison.Ordinal);
 
     /// <summary>
     /// Lo que el documento dice de <c>Idempotency-Key</c> es lo que el endpoint exige, en los dos
@@ -67,13 +88,8 @@ public sealed class SondasDelContratoTests
 
         foreach (var r in await Sondear(ensamblado, conLlaveCompartida: true))
         {
-            var declarada = (r.Op.Op["parameters"]?.AsArray() ?? new JsonArray())
-                .Any(p => (string?)p?["in"] == "header" && (string?)p?["name"] == IdempotencyHeader.Name
-                          && (bool?)p?["required"] == true);
-
-            var exigida = r.Status == HttpStatusCode.BadRequest
-                && Codigo(r.Cuerpo) is { } code
-                && code.EndsWith(".idempotency_key_required", StringComparison.Ordinal);
+            var declarada = (bool?)LlaveDeclarada(r.Op)?["required"] == true;
+            var exigida = PideLaLlave(r);
 
             if (declarada != exigida)
             {
@@ -86,6 +102,65 @@ public sealed class SondasDelContratoTests
             $"{ensamblado}: la cabecera {IdempotencyHeader.Name} que publica el contrato no es la que el " +
             "endpoint exige. Se declara con .ConLlaveDeIdempotencia() donde se lee con " +
             $"IdempotencyHeader.TryRead, y sólo ahí.{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
+    }
+
+    /// <summary>
+    /// El largo que el documento publica para <c>Idempotency-Key</c> es el que el endpoint acepta:
+    /// una llave de exactamente <c>maxLength</c> pasa, y una de un carácter más sale con
+    /// <c>400 *.idempotency_key_required</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El defecto que cierra.</b> El contrato publicaba 128 en todas las operaciones, y
+    /// <c>BuyTickets</c> aceptaba 128, pero de 91 en adelante la compra moría en un 500 al derivar la
+    /// llave de apartar (<c>{saga}|hold:{item}</c> no cabía en <c>IdempotencyKey</c>). Hoy el
+    /// orquestador acepta <c>LlaveDeSaga.MaxLength</c> y lo publica; esto comprueba los dos lados
+    /// del número contra el host. Que con ese largo la saga entera derive sus llaves sin pasarse lo
+    /// comprueba <c>LlaveDeSagaTests</c>, con identificadores del largo de los de verdad.</para>
+    ///
+    /// <para>La llave «justa» no tiene que dar éxito —el cuerpo es <c>{}</c> y el id es
+    /// <c>sonda</c>—: tiene que no rechazarse por la llave y no romper (ningún 5xx). Sólo se miran
+    /// las operaciones que la exigen siempre: una opcional no la lee con un cuerpo vacío.</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Piezas))]
+    public async Task El_largo_que_el_documento_publica_para_la_llave_es_el_que_el_endpoint_acepta(string ensamblado)
+    {
+        var doc = ContratoOpenApi.Comiteado(ensamblado);
+        using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
+        var malas = new List<string>();
+        var vistas = 0;
+
+        foreach (var op in ContratoOpenApi.Operaciones(doc))
+        {
+            if (LlaveDeclarada(op) is not { } llave || (bool?)llave["required"] != true) continue;
+
+            vistas++;
+            if ((int?)llave["schema"]?["maxLength"] is not { } max)
+            {
+                malas.Add($"  {op}: declara {IdempotencyHeader.Name} sin maxLength.");
+                continue;
+            }
+
+            var justa = await Enviar(host, op, conLlaveCompartida: true, new string('k', max));
+            if (PideLaLlave(justa) || (int)justa.Status >= 500)
+            {
+                malas.Add($"  {op}: con una llave de {max} caracteres, lo que publica, contesta {(int)justa.Status} " +
+                          $"{Codigo(justa.Cuerpo) ?? "(sin code)"}.");
+            }
+
+            var larga = await Enviar(host, op, conLlaveCompartida: true, new string('k', max + 1));
+            if (!PideLaLlave(larga) || larga.Tipo != "application/problem+json")
+            {
+                malas.Add($"  {op}: con una llave de {max + 1} caracteres, uno más de lo que publica, contesta " +
+                          $"{(int)larga.Status} {Codigo(larga.Cuerpo) ?? "(sin code)"} y no 400 *.idempotency_key_required.");
+            }
+        }
+
+        Assert.True(vistas >= 1, $"{ensamblado}: ninguna operación exige {IdempotencyHeader.Name}; la sonda no prueba nada.");
+        Assert.True(malas.Count == 0,
+            $"{ensamblado}: el largo de {IdempotencyHeader.Name} que publica el contrato no es el que el endpoint " +
+            "acepta. Los dos salen del metadato (.ConLlaveDeIdempotencia(maxLength: …), o .ConLlaveDeSaga() en un " +
+            $"orquestador), que lee IdempotencyHeader.TryRead.{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
     }
 
     /// <summary>
