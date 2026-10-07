@@ -81,10 +81,25 @@ ensamblado, igual que su `info.title`.
 
 | Fichero | Pieza | Quién lo ejecuta |
 |---|---|---|
-| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. | CMS: `ContratoOpenApiTests` (código ↔ fichero) |
-| [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: `ContratoOpenApiTests` |
-| [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: `ContratoOpenApiTests` |
-| [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: `ContratoOpenApiTests` |
+| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los tres gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los tres gates de abajo + `ContratoConsumidorEventosTests` |
+
+Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
+
+- **`ContratoOpenApiTests`** — la deriva: regenera desde el host real y compara byte a byte (y en
+  `openapi/` hay un documento por pieza, ninguno más).
+- **`SueloDelContratoTests`** — lo que regenerar NO arregla: `operationId` único, un 2xx JSON con
+  esquema por operación, ningún número que también sea cadena, ningún anulable requerido en una
+  petición, `Rechazo` y el 401 presentes.
+- **`SondasDelContratoTests`** — lo que el documento declara a mano, contra el host real:
+  `Idempotency-Key` declarada ⇔ exigida, todo rechazo real cumple `Rechazo`, y sin
+  `X-Synergos-Key` toda operación contesta 401 sin cuerpo.
+
+Y los tres de capacidad, además, **`ContratoConsumidorEventosTests`**: lo que `Bff.Eventos` manda
+y lee de cada una cabe en su documento (ruta, query, llave, cuerpo y respuesta, con nombres
+exactos). Así un renombre en cualquiera de los dos lados deja de ser un default silencioso.
 
 Para regenerarlos, después de cambiar un record de `Contracts/` o un endpoint:
 
@@ -96,6 +111,29 @@ Son deterministas a propósito —sin `servers`, sin `tags`, sin descripciones s
 comentarios, en orden ordinal, LF y sin BOM— para que el gate pueda comparar byte a byte en
 Windows y en el CI. Lo único que puede moverlos sin tocar código es un parche del runtime .NET 10:
 el rojo del gate imprime la versión.
+
+### Lo que el documento NO dice
+
+Se escribe porque un contrato que calla algo se lee como si lo dijera:
+
+- **Los códigos de rechazo.** Toda operación que puede rechazar publica los seis estados
+  (400/403/404/409/410/503, de `RejectionResults.StatusCodeFor`) con el esquema `Rechazo`
+  —ProblemDetails con `code: string` y `transient: boolean`—, pero no QUÉ códigos
+  (`pricing.bad_subject`…): no se derivan del tipo, y un orquestador reenvía los de sus
+  capacidades y sintetiza `{capacidad}.unreachable|empty_response|unknown|unparseable`. Un GET
+  documenta un 409 que no puede dar: sobra, no falta.
+- **Lo que el negocio exige.** `required` describe la forma del cable: en una petición, un
+  anulable nunca es requerido aunque el dominio lo necesite (`eventId`, `lines`…). Lo que exige el
+  negocio lo dice el 400 con su código; y lo prueban los tests contra host real, no el esquema.
+- **Los 400 y 415 del framework.** Un JSON malformado contesta 400 `text/plain` (vacío en
+  Production) y otro `Content-Type` contesta 415, ninguno con `Rechazo`. Un consumidor tiene que
+  tolerar un 4xx sin `code`, como ya hace `CapabilityHttp`.
+- **Lo que no es del contrato de la pieza**: `/health` (es del molde) y el webhook de la pasarela
+  en Payments (lo llama un tercero que firma, no un consumidor con la llave).
+- **Todavía no es el contrato del navegador.** `Synergos.Bff.Eventos.json` publica también lo que
+  pone la puerta (`buyerKind`, `buyerId`, `serviceFeePercent`) y operaciones de operación
+  (`RetryTicketPurchase`, `ListCompensations`). Separarlos es de la F3 (ADR 0140, la puerta): el DOM
+  no es frontera de confianza.
 
 ## Naming conventions canónicas
 

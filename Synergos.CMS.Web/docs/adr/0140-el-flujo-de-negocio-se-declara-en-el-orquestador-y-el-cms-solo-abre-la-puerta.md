@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 hecha** (2026-10-07), ver «Avance del piloto»
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), ver «Avance del piloto» (de la F2, el lado CMS; el generador de tipos del UI la cierra en el repo hermano)
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -332,6 +332,110 @@ Commits CMS `61ebbeeb` (F1) y el de endurecimiento que lo sigue.
   ante una cancelación.
 - **No se construyó la imagen** de `Bff.Eventos` en local: `Dockerfile.service` ya copia
   `Bff.Pasos`, y la prueba es el build de la matriz en CI.
+
+## Avance del piloto — F2 hecha, lado CMS (2026-10-07)
+
+**El contrato HTTP de `Bff.Eventos`, `Api.Pricing`, `Api.Inventory` y `Api.Payments` se publica,
+sale del código y se vigila.** Cuatro documentos OpenAPI 3.1 en
+`docs/contracts/openapi/<Ensamblado>.json`; las 23 operaciones con su 2xx y su esquema (201 donde
+crean), `operationId`, `Idempotency-Key` donde se lee, 401 y `Rechazo`. Commits CMS `78d976c0`
+(.NET 10), `1da318ac` (runtimes), `2a80940b` (Shared tipado), `6092ba7c` (generación y deriva),
+`ade4debc` (el contrato dice la verdad), `acff3786` (peticiones honestas), `3cbc76f3`
+(compatibilidad consumidor → capacidad) y el de esta sección. Plan y mediciones previas:
+`_informes/73-adr-0140-f2-plan.json`.
+
+**Cómo se verificó**
+- Cada paso con build en 0 avisos (el primero también en Release) y las tres suites en verde. El
+  oráculo de la F1 no se tocó: 44/44 en cada paso, y `TicketingSagaPersistidaTests` 2/2.
+- **Los cuerpos HTTP no cambiaron**: una captura temporal de 33 respuestas reales de las cuatro
+  piezas (400 y 404 `problem+json` con `code` y `transient`, 401 sin cuerpo, 201 con `Location`,
+  200) dio el mismo sha256 antes del paso 3 y después de los pasos 3, 5 y 6. No se comitea.
+- Las cuatro piezas, publicadas en Release para net10.0 y arrancadas en Production con su llave:
+  `/health` 200 y `/v1` sin llave 401. No hay Docker local: la imagen `aspnet:10.0` la prueba
+  `images.yml`.
+- Determinismo: dos procesos comparan en verde en Windows. **Linux no está medido**: la primera
+  corrida de `build-test.yml` es esa medición, y si difiere no se mergea.
+
+**Lo que la F2 decidió, y entra en la decisión**
+1. **Backend a .NET 10, y con él sus dos suites.** Los 28 csproj de `backend/`,
+   `Synergos.Servicios.Tests` y `Synergos.Arquitectura.Tests` (que mira los dos árboles y va en el
+   mayor de sus runtimes); el árbol del CMS se queda en net8.0. `Dockerfile.service` pasa a
+   `aspnet:10.0`. Multi-target se midió y se descartó (el publish de la imagen da NETSDK1129).
+   `RuntimesDeLosDosArbolesTests` cruza TFM e imágenes.
+2. **El documento se genera en `Synergos.Servicios.Tests` y en ningún otro sitio**: el host real
+   con `AddOpenApi` por `ConfigureTestServices` y el documento pedido a `IOpenApiDocumentProvider`,
+   sin `MapOpenApi`. Producción no lleva el paquete ni la ruta (`ContratoHttpPublicadoTests`).
+3. **La respuesta se declara con el TIPO DE RETORNO** (`TypedResults`), no con `.Produces<T>()`:
+   medido, un `.Produces` que miente deja 4194 de 4195 tests en verde; con tipos, no compila.
+   `Synergos.Shared` tipa `ToProblem`, `ToHttp`, `ToCreated` y `IdempotencyHeader.TryRead`.
+4. **Un esquema `Rechazo`** (ProblemDetails + `code` + `transient`, `title` como enum de
+   `RejectionKind`) en las operaciones cuyo tipo de retorno incluye `ProblemHttpResult`; los seis
+   estados de `StatusCodeFor`; el 401 sin cuerpo en todas. Los códigos no se enumeran.
+5. **`Idempotency-Key` sale de un metadato** (`.ConLlaveDeIdempotencia(siempre)`), y una sonda
+   contra el host comprueba que lo declarado es lo exigido.
+6. **En una petición, todo anulable lleva `= null`**: el esquema publica la forma del cable; lo
+   que el negocio exige lo publican los rechazos con código.
+7. **Tres capas de gate, porque la deriva sola no basta**: la deriva (`ContratoOpenApiTests`), el
+   suelo que regenerar no arregla (`SueloDelContratoTests`) y las sondas contra el host
+   (`SondasDelContratoTests`).
+8. **Los orquestadores no generan clientes .NET en la F2**: un gate de compatibilidad
+   consumidor → capacidad (`ContratoConsumidorEventosTests`, sobre `SubconjuntoOpenApi`) cruza lo
+   que `EventosCapabilities` manda y lee con el JSON comiteado. Se reabre cuando los puertos de
+   deshacer vivan en `Bff.Pasos` con un segundo consumidor.
+
+**Premisas de esta ADR que la F2 corrigió**
+- «Sin paquetes de terceros desde .NET 9»: sin terceros, sí; sin paquetes, no. Hace falta
+  `Microsoft.AspNetCore.OpenApi` 10.0.12, que sólo existe para net10.0 y no viene en el framework.
+- «Afecta sólo a capacidades, orquestadores y núcleo» / «el backend puede moverse de versión
+  solo»: falso por la vía de los tests. `Arquitectura.Tests` referencia el backend (NU1201 en
+  net8.0), así que también se movieron las dos suites, `Mvc.Testing` y la imagen.
+- «Emiten su `openapi.json` desde lo que ya existe»: con lo que existía, las 23 operaciones salían
+  «200 OK» sin esquema, sin 4xx, sin llave, con números que también eran cadenas y `required`
+  falsos. Hubo que tipar respuestas, nombrar operaciones, declarar la llave y poner `= null`.
+- «Cada pieza emite»: no en ejecución; lo genera la suite, desde el host real.
+- «Los orquestadores dejan de transcribir»: en la F2 no. Siguen transcribiendo subconjuntos a
+  propósito; lo que cambia es que la transcripción deja de ser silenciosa.
+- **Medido al construirla, y contra el plan:** ASP.NET 10.0.12 **no** sufija dos tipos con el
+  mismo nombre en un documento: el segundo apunta en silencio al esquema del primero. La
+  generación lo convierte en un rojo (`CreateSchemaReferenceId`). Una capacidad devuelta a net8.0
+  **no** compila (referencia el núcleo); lo que sólo ve el gate de runtimes es el núcleo sin
+  referencias (`Synergos.Core` en net8.0 compila todo en verde) y la imagen. Y renombrar la ruta
+  de un apartado lo ve también el oráculo de la F1 (16 rojos), no sólo el gate de compatibilidad.
+
+**Mutantes** (cada uno aplicado, visto en el diff, rojo y restaurado; los marcados con † siguen
+rojos después de regenerar el documento)
+- Runtimes: `aspnet:8.0` en `Dockerfile.service`, `aspnet:10.0` en el del CMS, `CMS.Web` en
+  net10.0, `Synergos.Core` en net8.0 (compila en verde: sólo lo ve este gate), descubrimiento
+  vacío.
+- Deriva y forma: un campo nuevo en `TicketPurchaseResponse` sin regenerar; un `openapi/` huérfano
+  (con el `ContractsIndexTests` de antes, verde); un enlace a un fichero que no existe; el paquete
+  en `Api.Pricing.csproj` o en `Directory.Build.props`; `.Produces<T>()` que miente (el único rojo
+  de 4195); sin el `Target` del analizador (`T:Program` repetida).
+- Suelo †: `(IResult)` en `GetPrice`; sin `WithName`; sin el transformer de números; un record de
+  petición sin `= null`; dos `MoneyDto` en un documento.
+- Sondas †: sin la llave declarada en `HoldStock`; declarada en `/void`, que no la lee; `code`
+  renombrado en `ToProblem`; un 401 con cuerpo; `Rechazo` sin publicar en los GET.
+- Compatibilidad: `forKind→forType` en la capacidad † y en el consumidor, `Available` renombrado
+  en la capacidad † y en el consumidor, de int a string, la ruta `holds→hold`, `currency→moneda`,
+  `CaptureAsync` sin llave, `amount` sin `currency`, un método sin recorrido. **El oráculo de la F1
+  queda 44/44 en verde en ocho de los diez**: es el hueco que este gate cierra.
+
+**Lo que queda, dicho**
+- **Lado UI de la F2**: el generador de tipos con `--check` (sólo `Synergos.Bff.*`) y su paso de
+  CI van en el repo hermano, después de empujar esta rama. Hasta la F4 nadie importa esos tipos (la
+  regla 24 del UI queda abierta con fecha).
+- **F3, la puerta**: decide las claves de operación; tiene que **separar** lo que pone la puerta
+  (`buyerKind`, `buyerId`, `serviceFeePercent`) de lo que manda el navegador —el documento de
+  `Bff.Eventos` los publica hoy como entrada— y no exponer `retry` ni `compensations`.
+- **F4**: el cliente en `vitals/core` que importa el tipo generado, con el mutante de renombre
+  que rompe `tsc`, y el typecheck de `vitals/core` en `npm test`.
+- **Fuera del piloto**: las otras 20 capacidades y 3 orquestadores; el catálogo de códigos por
+  pieza (cuando el UI los traduzca, ADR 0136); la obligatoriedad de negocio en el esquema; `status`
+  como enum.
+- **Riesgos abiertos**: un parche del runtime 10 en CI puede mover el documento sin tocar código (el
+  rojo imprime la versión; se fija el parche si pasa); Linux sin medir; los gates de
+  `Arquitectura.Tests` ejecutan código del CMS sobre el runtime 10 (al CMS en su runtime lo prueba
+  `CMS.Tests`); los 400/415 del framework no traen `Rechazo`.
 
 ## Relación con otras ADRs
 

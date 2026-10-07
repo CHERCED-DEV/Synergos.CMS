@@ -132,7 +132,11 @@
     cobra; se escala a las funcionalidades (#196). **Propuestos**, y describen el rumbo, no lo que ya
     está: coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables
     frente a 0113 (0139); y el flujo de negocio declarado en el orquestador, con el contrato
-    HTTP publicado y el CMS como puerta (0140, piloto en Eventos #201).
+    HTTP publicado y el CMS como puerta (0140, piloto en Eventos #201). Del piloto están hechas la
+    F1 —la compra de Eventos es un dato que interpreta `Bff.Core`— y la F2 —el contrato HTTP de
+    `Bff.Eventos` y sus tres capacidades se GENERA del código a `docs/contracts/openapi/` y lo
+    vigilan deriva, suelo, sondas contra el host y un gate de compatibilidad consumidor →
+    capacidad—; faltan la puerta (F3) y el front (F4).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
@@ -3027,6 +3031,17 @@ Lo vigila `RuntimesDeLosDosArbolesTests`, que sólo lee el disco: un único TFM 
 compilador ve una capacidad devuelta a net8.0 (NU1201: referencia el núcleo); lo que NO ve es la
 imagen —`aspnet:8.0` con ensamblados net10.0 se construye igual y no arranca— ni `Synergos.Core`,
 que no referencia nada, vuelto a net8.0: la integradora compila en cero avisos (medido).
+
+**Y el contrato HTTP publicado tiene cuatro gates, no uno (ADR 0140, F2)**, porque la deriva sola
+da por bueno un documento empobrecido si alguien lo regenera. `ContratoOpenApiTests` compara el
+código con `docs/contracts/openapi/<Ensamblado>.json`; `SueloDelContratoTests` exige lo que
+regenerar no arregla; `SondasDelContratoTests` cruza con el host real lo que el documento declara a
+mano (la llave, el `Rechazo`, el 401); y `ContratoConsumidorEventosTests` cruza lo que
+`Bff.Eventos` manda y lee con el documento de cada capacidad. Lo que eso pide al tocar un endpoint
+de esas cuatro piezas: la respuesta se declara con el TIPO DE RETORNO (`TypedResults`, nunca
+`.Produces*`, y hay gate), cada operación lleva `.WithName`, quien lee `Idempotency-Key` lo dice
+con `.ConLlaveDeIdempotencia()`, y en un record de petición todo anulable lleva `= null`. El
+paquete OpenAPI vive SÓLO en `Synergos.Servicios.Tests`; producción no publica ninguna ruta.
 
 ```bash
 # TODO el árbol compila en CERO avisos, y desde el #134 un aviso ES un error
