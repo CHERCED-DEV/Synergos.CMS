@@ -32,9 +32,18 @@ internal sealed record PeticionGrabada(
 /// distingue mayúsculas: <c>forkind</c> funcionaría en ejecución y aquí es rojo. Es a propósito: el
 /// contrato publica un nombre, y es ése.</para>
 ///
+/// <para><b>Y el <c>format</c>, no sólo el <c>type</c>.</b> Un <c>DateTimeOffset</c> que el
+/// consumidor lee se publica <c>string</c> + <c>date-time</c>; si la capacidad lo pasa a texto libre,
+/// el <c>type</c> sigue siendo <c>string</c> y lo único que cambia es que el <c>format</c> desaparece.
+/// Mirando sólo el tipo eso quedaba en verde, y en ejecución <c>ReadFromJsonAsync</c> lanzaba
+/// <c>JsonException</c> a mitad de la saga (medido, ADR 0140 F2). Lo que se lee pide su
+/// <c>format</c>; lo que se manda se lee con el tipo que su <c>format</c> nombra, como lo leería la
+/// capacidad.</para>
+///
 /// <para><b>Lo que no mira</b>, dicho para no mentir sobre su alcance: que el consumidor mande lo que
 /// el NEGOCIO exige (el esquema publica la forma del cable; eso lo ven los tests contra host real) ni
-/// el valor de lo que viaja. Y depende de que el documento comiteado sea el del código, que es lo
+/// el valor de lo que viaja, más allá de que se lea con su <c>format</c>. Y depende de que el
+/// documento comiteado sea el del código, que es lo
 /// que garantiza la deriva en la misma suite. Lo reutilizan los recorridos de Tienda, Salud y Viajes
 /// cuando lleguen.</para>
 /// </remarks>
@@ -160,10 +169,53 @@ internal static class SubconjuntoOpenApi
                     JsonValueKind.True or JsonValueKind.False => tipos.Contains("boolean"),
                     _ => false,
                 };
-                if (!bien) yield return $"{donde}: {v.GetValueKind()} donde el contrato dice {string.Join("|", tipos)}.";
+                if (!bien)
+                {
+                    yield return $"{donde}: {v.GetValueKind()} donde el contrato dice {string.Join("|", tipos)}.";
+                    yield break;
+                }
+
+                if ((string?)s["format"] is { } formato && !SeLeeCon(v, formato))
+                {
+                    yield return $"{donde}: «{v.ToJsonString()}» no se lee como {formato}, que es el format que publica el contrato.";
+                }
+
                 yield break;
         }
     }
+
+    /// <summary>
+    /// Si la capacidad leería <paramref name="v"/> con el tipo que nombra <paramref name="formato"/>.
+    /// Un <c>format</c> que no se conoce no se juzga: el que lo publique tendrá que entrar aquí.
+    /// </summary>
+    private static bool SeLeeCon(JsonValue v, string formato)
+    {
+        if (!TipoDelFormato.TryGetValue(formato, out var tipo)) return true;
+        try
+        {
+            v.Deserialize(tipo, JsonSerializerOptions.Web);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>El tipo con que System.Text.Json lee cada <c>format</c> que emite ASP.NET.</summary>
+    private static readonly Dictionary<string, Type> TipoDelFormato = new(StringComparer.Ordinal)
+    {
+        ["date-time"] = typeof(DateTimeOffset),
+        ["date"] = typeof(DateOnly),
+        ["time"] = typeof(TimeOnly),
+        ["uuid"] = typeof(Guid),
+        ["int16"] = typeof(short),
+        ["int32"] = typeof(int),
+        ["int64"] = typeof(long),
+        ["float"] = typeof(float),
+        ["double"] = typeof(double),
+        ["decimal"] = typeof(decimal),
+    };
 
     // ── El tipo que se lee contra el esquema que se publica ───────────────────────────────────
 
@@ -239,7 +291,33 @@ internal static class SubconjuntoOpenApi
         if (!tipos.Contains(esperado) && !(esperado == "number" && tipos.Contains("integer")))
         {
             yield return $"{donde}: el consumidor la lee como {esperado} y el contrato dice {string.Join("|", tipos)}.";
+            yield break;
         }
+
+        // El mismo type no basta: un DateTimeOffset contra un string sin date-time es texto libre que
+        // ReadFromJsonAsync no sabe leer, y un int contra un int64 se desborda.
+        var publicado = (string?)sub["format"];
+        if (FormatosQueLee(t) is { } aceptados && (publicado is null || !aceptados.Contains(publicado)))
+        {
+            yield return $"{donde}: el consumidor la lee como {t.Name} ({string.Join("|", aceptados)}) y el contrato " +
+                         $"la publica {(publicado is null ? "sin format" : $"con format {publicado}")}.";
+        }
+    }
+
+    /// <summary>
+    /// Los <c>format</c> publicados con que System.Text.Json (web) puede leer <paramref name="t"/>, o
+    /// <c>null</c> si cualquiera le sirve (una cadena lee toda cadena; un decimal, todo número).
+    /// </summary>
+    private static string[]? FormatosQueLee(Type t)
+    {
+        if (t == typeof(DateTimeOffset) || t == typeof(DateTime)) return ["date-time"];
+        if (t == typeof(DateOnly)) return ["date"];
+        if (t == typeof(TimeOnly)) return ["time"];
+        if (t == typeof(Guid)) return ["uuid"];
+        if (t == typeof(short)) return ["int16"];
+        if (t == typeof(int)) return ["int16", "int32"];
+        if (t == typeof(long)) return ["int16", "int32", "int64"];
+        return null;
     }
 
     /// <summary>El tipo JSON con que System.Text.Json (web) lee <paramref name="t"/>.</summary>
@@ -247,7 +325,8 @@ internal static class SubconjuntoOpenApi
     private static string Esperado(Type t)
     {
         if (t.IsEnum) throw new NotSupportedException($"{t.Name}: un enum no cabe en este gate sin saber su convertidor.");
-        if (t == typeof(string) || t == typeof(DateTimeOffset) || t == typeof(DateTime) || t == typeof(Guid)) return "string";
+        if (t == typeof(string) || t == typeof(DateTimeOffset) || t == typeof(DateTime) || t == typeof(Guid)
+            || t == typeof(DateOnly) || t == typeof(TimeOnly)) return "string";
         if (t == typeof(int) || t == typeof(long) || t == typeof(short)) return "integer";
         if (t == typeof(decimal) || t == typeof(double) || t == typeof(float)) return "number";
         if (t == typeof(bool)) return "boolean";

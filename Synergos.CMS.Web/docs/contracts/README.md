@@ -106,7 +106,8 @@ Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 
 Y los tres de capacidad, además, **`ContratoConsumidorEventosTests`**: lo que `Bff.Eventos` manda
 y lee de cada una cabe en su documento (ruta, query, llave, cuerpo y respuesta, con nombres
-exactos). Así un renombre en cualquiera de los dos lados deja de ser un default silencioso.
+exactos, y el `format` además del `type`: una fecha que pasa a texto libre sólo pierde su
+`date-time`). Así un renombre en cualquiera de los dos lados deja de ser un default silencioso.
 
 Para regenerarlos, después de cambiar un record de `Contracts/` o un endpoint:
 
