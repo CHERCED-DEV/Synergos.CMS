@@ -10,11 +10,11 @@ namespace Synergos.CMS.Tests.Contratos;
 /// Lo que el contrato publicado declara A MANO se cruza con el host real (ADR 0140, F2).
 /// </summary>
 /// <remarks>
-/// <para><b>Tres cosas del documento no salen del tipo de retorno</b>, y por eso pueden mentir sin
-/// que la deriva ni el suelo lo vean: la cabecera <c>Idempotency-Key</c> (sale de un metadato que el
-/// endpoint declara), el esquema <c>Rechazo</c> (lo escribe el transformer) y el 401 de la llave
-/// compartida (también). Cada una tiene aquí su diente contra el host de verdad, que es lo único
-/// que no puede mentir.</para>
+/// <para><b>Cuatro cosas del documento no salen del tipo de retorno</b>, y por eso pueden mentir sin
+/// que la deriva ni el suelo lo vean: las cabeceras <c>Idempotency-Key</c> y
+/// <c>X-Synergos-Identity</c> (salen de un metadato que el endpoint declara), el esquema
+/// <c>Rechazo</c> (lo escribe el transformer) y el 401 de la llave compartida (también). Cada una
+/// tiene aquí su diente contra el host de verdad, que es lo único que no puede mentir.</para>
 ///
 /// <para><b>La sonda manda CADA operación del documento</b> —sin <c>Idempotency-Key</c>, con
 /// <c>{}</c> de cuerpo si la operación lo lleva y con <c>sonda</c> en cada parámetro de ruta— y
@@ -47,6 +47,25 @@ public sealed class SondasDelContratoTests
         ["AdjustStock"] = """{"delta":1}""",
     };
 
+    /// <summary>
+    /// El cuerpo mínimo VÁLIDO con que una operación llega a leer el token de identidad, porque lo
+    /// lee después de validar el cuerpo. Sólo las que lo necesitan.
+    /// </summary>
+    /// <remarks>
+    /// El cobro resuelve la afirmación de identidad después de comprobar para qué, quién y cuánto:
+    /// con <c>{}</c> contesta <c>payments.bad_for</c> y nunca mira la cabecera. Igual que la tabla de
+    /// la llave, se comprueba en los dos sentidos contra el host.
+    /// </remarks>
+    private static readonly Dictionary<string, string> CuerpoQueLeeLaIdentidad = new(StringComparer.Ordinal)
+    {
+        ["AuthorizePayment"] = """
+            {"forKind":"sonda.compra","forId":"s-1","payerKind":"sonda.comprador","payerId":"p-1","amount":{"amount":1000,"currency":"COP"}}
+            """,
+    };
+
+    /// <summary>Lo que se manda en la cabecera de identidad para ver si el endpoint la lee: no es un token.</summary>
+    private const string TokenQueNoEs = "sonda-no-es-un-token";
+
     private sealed record Respuesta(OperacionPublicada Op, HttpStatusCode Status, string? Tipo, string Cuerpo);
 
     private static async Task<IReadOnlyList<Respuesta>> Sondear(string ensamblado, bool conLlaveCompartida)
@@ -69,12 +88,14 @@ public sealed class SondasDelContratoTests
     /// <c>{}</c>) si lleva cuerpo y, si se da, la <paramref name="llave"/> en <c>Idempotency-Key</c>.
     /// </summary>
     private static async Task<Respuesta> Enviar(
-        HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave, string? cuerpo = null)
+        HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave, string? cuerpo = null,
+        string? identidad = null)
     {
         var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
         using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
         if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
         if (llave is not null) req.Headers.Add(IdempotencyHeader.Name, llave);
+        if (identidad is not null) req.Headers.Add(IdentityTokens.HeaderName, identidad);
         if (op.Op["requestBody"] is not null || cuerpo is not null)
         {
             req.Content = new StringContent(cuerpo ?? "{}", Encoding.UTF8, "application/json");
@@ -223,19 +244,77 @@ public sealed class SondasDelContratoTests
     }
 
     /// <summary>
-    /// Cada fila de <see cref="CuerpoQueLeeLaLlave"/> nombra una operación publicada: una fila de una
-    /// operación renombrada no la probaría nadie, y la sonda la daría por cubierta.
+    /// Lo que el documento dice de <c>X-Synergos-Identity</c> es lo que el endpoint lee, en los dos
+    /// sentidos.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se manda cada operación con algo que no es un token en la cabecera —y una llave buena
+    /// donde la lee, para pasar ese primer filtro—: el endpoint que la lee contesta el rechazo de
+    /// identidad de la capacidad (<c>identity.*</c>; en el host de prueba, sin llave para comprobarlo,
+    /// <c>identity.token_not_verifiable</c>), y el que no la lee contesta otra cosa. Declarada ⇔ ese
+    /// rechazo.</para>
+    ///
+    /// <para>El que la lee después de validar el cuerpo necesita su fila en
+    /// <see cref="CuerpoQueLeeLaIdentidad"/>; una operación que la declara sin fila es rojo, porque no
+    /// hay petición que llegue a leerla. Así quitar <c>.ConTokenDeIdentidad()</c> de un endpoint que
+    /// la lee sigue en rojo después de regenerar, y ponérselo a uno que no la lee también.</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Piezas))]
+    public async Task El_token_de_identidad_que_el_documento_declara_es_el_que_el_endpoint_lee(string ensamblado)
+    {
+        var doc = ContratoOpenApi.Comiteado(ensamblado);
+        using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
+        var malas = new List<string>();
+
+        foreach (var op in ContratoOpenApi.Operaciones(doc))
+        {
+            var declarada = (op.Op["parameters"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
+                .Any(p => (string?)p["in"] == "header" && (string?)p["name"] == IdentityTokens.HeaderName);
+
+            string? cuerpo = null;
+            if ((string?)op.Op["operationId"] is { } nombre) CuerpoQueLeeLaIdentidad.TryGetValue(nombre, out cuerpo);
+            if (declarada && cuerpo is null && op.Op["requestBody"] is not null)
+            {
+                malas.Add($"  {op}: el documento declara {IdentityTokens.HeaderName} y no hay cuerpo en " +
+                          $"{nameof(CuerpoQueLeeLaIdentidad)} con que llegue a leerla: o no la lee, o falta su fila.");
+                continue;
+            }
+
+            var llave = LlaveDeclarada(op) is null ? null : "sonda-identidad";
+            var r = await Enviar(host, op, conLlaveCompartida: true, llave, cuerpo, identidad: TokenQueNoEs);
+            var leida = r.Status == HttpStatusCode.BadRequest
+                        && Codigo(r.Cuerpo) is { } code
+                        && code.StartsWith(IdentityTokens.CodePrefix + ".", StringComparison.Ordinal);
+
+            if (declarada != leida)
+            {
+                malas.Add($"  {op}: el documento dice que {(declarada ? "LEE" : "no lee")} {IdentityTokens.HeaderName} " +
+                          $"y con «{TokenQueNoEs}» ahí contesta {(int)r.Status} {Codigo(r.Cuerpo) ?? "(sin code)"}.");
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            $"{ensamblado}: la cabecera {IdentityTokens.HeaderName} que publica el contrato no es la que el " +
+            "endpoint lee. Se declara con .ConTokenDeIdentidad() donde se lee, y sólo ahí." +
+            $"{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
+    }
+
+    /// <summary>
+    /// Cada fila de <see cref="CuerpoQueLeeLaLlave"/> y de <see cref="CuerpoQueLeeLaIdentidad"/> nombra
+    /// una operación publicada: una fila de una operación renombrada no la probaría nadie, y la sonda
+    /// la daría por cubierta.
     /// </summary>
     [Fact]
-    public void Cada_cuerpo_que_lee_la_llave_es_de_una_operacion_publicada()
+    public void Cada_cuerpo_de_las_sondas_es_de_una_operacion_publicada()
     {
         var publicadas = ContratoOpenApi.Piezas
             .SelectMany(p => ContratoOpenApi.Operaciones(ContratoOpenApi.Comiteado(p.Ensamblado)))
             .Select(o => (string?)o.Op["operationId"])
             .ToHashSet(StringComparer.Ordinal);
 
-        Assert.All(CuerpoQueLeeLaLlave.Keys, k => Assert.True(publicadas.Contains(k),
-            $"{nameof(CuerpoQueLeeLaLlave)} tiene «{k}» y ningún documento publica esa operación."));
+        Assert.All(CuerpoQueLeeLaLlave.Keys.Concat(CuerpoQueLeeLaIdentidad.Keys), k => Assert.True(publicadas.Contains(k),
+            $"Una tabla de cuerpos de la sonda tiene «{k}» y ningún documento publica esa operación."));
     }
 
     /// <summary>

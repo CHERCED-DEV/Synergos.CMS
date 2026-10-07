@@ -17,6 +17,13 @@
               "maxLength": 128,
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Identity",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {

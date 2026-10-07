@@ -39,7 +39,7 @@ public static class PaymentEndpoints
 
             return (await svc.AuthorizeAsync(forWhat, payer, amount, assertion, key, ct))
                 .Map(PaymentResponse.From).ToCreated(p => $"/v1/payments/{p.Id}");
-        }).WithName("AuthorizePayment").ConLlaveDeIdempotencia();
+        }).WithName("AuthorizePayment").ConLlaveDeIdempotencia().ConTokenDeIdentidad();
 
         app.MapGet("/v1/payments/{id}", (string id, PaymentService svc) =>
             svc.Get(id).Map(PaymentResponse.From).ToHttp()).WithName("GetPayment");

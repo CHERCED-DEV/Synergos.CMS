@@ -41,8 +41,9 @@ namespace Synergos.CMS.Tests.Contratos;
 /// que no hay listas por endpoint que deriven (y un GET documenta un 409 que no puede dar). Los
 /// CÓDIGOS (<c>pricing.bad_subject</c>…) no se enumeran: no se derivan del tipo, y el BFF reenvía
 /// los de sus capacidades. La cabecera <c>Idempotency-Key</c> sale del metadato
-/// <see cref="LlaveDeIdempotenciaRequerida"/>, y una sonda contra el host comprueba que lo declarado
-/// es lo exigido.</para>
+/// <see cref="LlaveDeIdempotenciaRequerida"/> y la del token de identidad de
+/// <see cref="TokenDeIdentidadAdmitido"/>, y una sonda contra el host comprueba que lo declarado es
+/// lo que el endpoint lee.</para>
 /// </remarks>
 internal static class ContratoOpenApi
 {
@@ -135,6 +136,7 @@ internal static class ContratoOpenApi
 
         o.AddSchemaTransformer(Numeros);
         o.AddOperationTransformer(Llave);
+        o.AddOperationTransformer(Identidad);
         o.AddOperationTransformer(Rechazos);
         o.AddDocumentTransformer((doc, ctx, ct) =>
         {
@@ -253,6 +255,32 @@ internal static class ContratoOpenApi
                 In = ParameterLocation.Header,
                 Required = llave.Siempre,
                 Schema = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = llave.MaxLength },
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// La cabecera del token de identidad, opcional, donde el endpoint declara que la lee.
+    /// </summary>
+    /// <remarks>
+    /// Como la llave: el endpoint la lee a mano y <c>ApiExplorer</c> no la ve, así que sale del
+    /// metadato <see cref="TokenDeIdentidadAdmitido"/>. Siempre opcional: sin token la capacidad
+    /// resuelve con lo que se declara, o con «no consta». Una sonda contra el host comprueba que la
+    /// declarada sea la que el endpoint lee.
+    /// </remarks>
+    private static Task Identidad(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
+    {
+        if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<TokenDeIdentidadAdmitido>().Any())
+        {
+            op.Parameters ??= new List<IOpenApiParameter>();
+            op.Parameters.Add(new OpenApiParameter
+            {
+                Name = IdentityTokens.HeaderName,
+                In = ParameterLocation.Header,
+                Required = false,
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String },
             });
         }
 
