@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 hecha** (2026-10-07), ver «Avance del piloto»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -277,6 +277,61 @@ hosts reales. Cada fase se comitea en verde y se empuja a la rama designada.
 
 **Se descarta si:** el intérprete necesita un lenguaje de expresiones para el flujo más simple, o el
 flujo declarado no reproduce el comportamiento que los tests actuales fijan.
+
+## Avance del piloto — F1 hecha (2026-10-07)
+
+**El flujo de compra de Eventos es un dato** (`flujos/eventos.compra.json`) que interpreta
+`Bff.Core/Flow`; `TicketingFlow` quedó de fachada (318 → 187 líneas) con su API de siempre.
+Commits CMS `61ebbeeb` (F1) y el de endurecimiento que lo sigue.
+
+**Cómo se verificó**
+- El oráculo —`TicketingCompensationTests`, `ReintentoTrasDeshacerTests`, `ComisionDeServicioTests`,
+  `EventosCapabilities`, `EventosCompensationExecutor`— no se tocó: 44/44.
+- Un arnés temporal comparó el `TicketingFlow` imperativo de `cf544bd0` con la fachada en 22
+  escenarios (feliz, rechazos en cada paso, captura y consumo que fallan a medias, compensaciones
+  colgadas con barrido, caída tras capturar, reintento tras deshacer): **22/22 idénticos**, 238
+  llamadas HTTP (método, ruta, query, llave, cuerpo) y 140 escrituras de saga. Con un motivo mutado
+  en el JSON, 16/22 salen distintos: el arnés ve lo que tiene que ver. Se borró después.
+- El JSON que guarda el almacén real se capturó ANTES del cambio y sigue idéntico byte a byte
+  (`TicketingSagaPersistidaTests`): las sagas en vuelo se deshacen igual.
+- Panel de diseño (3 diseños, 3 jueces, síntesis) y verificación adversarial: 22 mutantes fieles,
+  todos los esperados en rojo; 25 hallazgos de revisión, 7 confirmados por un escéptico, más 3 que
+  quedaron sin juzgar por límite de uso y resultaron reales. Todos arreglados, cada uno con su test
+  y su mutante.
+
+**Lo que la F1 decidió, y entra en la decisión**
+1. **Sólo el camino hacia adelante es dato.** El deshacer (`SagaEngine.CompensateAsync` → el
+   ejecutor del dominio) no se reescribió, y por eso el oráculo y lo persistido se respetan por
+   construcción. Los `Kind` de compensación son datos de la definición (`antes`/`despues`).
+2. **Reservas nombradas por el paso que reserva**, N únicas y N por ítem: caben Salud (agenda +
+   cobro) y Tienda (pedido + cobro) sin tocar `Bff.Core`. El paso que cierra puede producir el
+   objetivo de `despues` (Viajes: cancelar la reserva que devuelve confirmar).
+3. **El código y la definición firman un contrato** (`ContratoDelFlujo`) que se cruza al arrancar:
+   las fases que la fachada invoca (las mismas y en el mismo orden), lo que pone al abrir (toda la
+   `entrada` del JSON tiene que estar), lo que reconstruye al continuar (cada fase arranca con eso
+   y nada más), los campos de cada ítem y las reservas que la saga sabe guardar. Y el intérprete
+   comprueba lo que el arranque no puede preguntar: que la fachada ponga lo que declara y que la saga
+   sepa leer cada reserva declarada al nacer, antes de reservar nada.
+4. **Cada tipo de paso declara qué llave necesita** (ninguna, fija o por ítem) y el validador lo
+   cruza; un cierre es el `consumado_por` de su reserva y de ninguna otra; el lector rechaza claves
+   repetidas en cualquier objeto.
+5. **Una fase que continúa sólo corre sobre una saga en curso** (`flow.not_running`), además de las
+   guardas con código de dominio de la fachada.
+6. **`Bff.Pasos`** nace con los puertos de avance (cotizar, hallar/apartar/consumir,
+   autorizar/capturar); su regla de admisión vive en `BackendSegregationTests` (17 → 19) y el barrido
+   de identidad la incluye.
+
+**Lo que queda, dicho**
+- **Doble costura**: el avance va por los puertos de `Bff.Pasos`; el deshacer, por
+  `EventosCapabilities` (lo exige el oráculo). Se cierra cuando los puertos de deshacer existan con
+  un segundo consumidor.
+- **Diferido**: la confirmación parcial de Viajes (que el cierre respete compensaciones que el
+  dominio marque vivas) y `omitir_si_cero`/`al_fallar`. Se construyen al portar ese flujo.
+- **Sin red ante excepciones**: una excepción de un paso después de sembrar sale como antes (la saga
+  queda `Running` y la compensa el barrido de abandono). No se cambió para no mover la semántica
+  ante una cancelación.
+- **No se construyó la imagen** de `Bff.Eventos` en local: `Dockerfile.service` ya copia
+  `Bff.Pasos`, y la prueba es el build de la matriz en CI.
 
 ## Relación con otras ADRs
 
