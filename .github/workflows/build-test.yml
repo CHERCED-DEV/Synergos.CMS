@@ -29,9 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # global.json pinea SDK 10.x (rollForward latestFeature) mientras los
-      # proyectos targetean net8.0. Instalamos los dos: el 10 porque lo exige
-      # global.json, el 8 para tener el targeting pack sin ir a buscarlo.
+      # global.json pinea SDK 10.x (rollForward latestFeature). Hay DOS runtimes
+      # desde la F2 de la ADR 0140: el backend, Servicios.Tests y Arquitectura.Tests
+      # targetean net10.0, y el CMS y su suite (CMS.Tests) siguen en net8.0 por el
+      # pin de Umbraco 13 (ADR 0001). Instalamos los dos: el 10 lo exige global.json
+      # y el 8 trae el runtime en el que corre CMS.Tests.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

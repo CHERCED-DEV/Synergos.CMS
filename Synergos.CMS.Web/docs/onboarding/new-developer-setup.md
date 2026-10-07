@@ -5,9 +5,11 @@ From a clean machine to a running Synergos.CMS in under 15 minutes.
 ## Prerequisites
 
 - **.NET SDK**: whichever version is pinned in `global.json` at the repo
-  root. Today that is `10.0.202`, which can build `.NET 8` targets used
-  by every project in this solution. Install from
-  <https://dotnet.microsoft.com/download>.
+  root. Today that is `10.0.202`, which builds both runtimes this
+  solution targets: `.NET 8` for the CMS tree (Umbraco 13, ADR 0001) and
+  `.NET 10` for `backend/` and its two test suites (ADR 0140). Install it
+  from <https://dotnet.microsoft.com/download>, plus the **ASP.NET Core 8
+  runtime**, which `Synergos.CMS.Tests` and `dotnet run` of the CMS need.
 - **Git**.
 - **An IDE**: Visual Studio 2022 17.10+, JetBrains Rider 2024.1+, or
   VS Code with the C# Dev Kit extension.

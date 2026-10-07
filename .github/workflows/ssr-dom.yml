@@ -51,8 +51,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Mismos dos SDK que build-test.yml: global.json pinea 10.x y los
-      # proyectos targetean net8.0.
+      # Mismos dos SDK que build-test.yml: global.json pinea 10.x y el CMS que
+      # este gate arranca targetea net8.0.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

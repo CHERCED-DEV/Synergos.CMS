@@ -81,9 +81,16 @@ find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
 
 ## Troubleshooting
 
-### `NETSDK1045: The current .NET SDK does not support targeting net8.0`
+### `NETSDK1045: The current .NET SDK does not support targeting net8.0` (or `net10.0`)
 
 Install the SDK pinned in `global.json`. Currently `10.0.202`.
+
+The repo targets **two** runtimes since ADR 0140 (F2): the CMS tree
+(`Synergos.CMS.Web`, `.Application`, `.Interfaces`, `.CMS.Tests`, `.Benchmarks`)
+stays on `net8.0` because of the Umbraco 13 pin (ADR 0001), while `backend/`,
+`Synergos.Servicios.Tests` and `Synergos.Arquitectura.Tests` target `net10.0`.
+`dotnet test Synergos.CMS.sln` therefore needs both the ASP.NET Core 8 and 10
+runtimes installed; the SDK 10 brings the 10 one.
 
 ### `HTTP Error 500.30 — ASP.NET Core app failed to start`
 

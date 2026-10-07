@@ -3011,6 +3011,18 @@ grupo. Hay gate, y es la regla de #133 generalizada: **toda solución es CERRADA
 son **estrictamente menores** que la integradora, para que la salida barata (meterlo todo en
 las cuatro) no pase. Mutado en los dos sentidos antes de darlo por bueno.
 
+**Y hay DOS runtimes desde la F2 de la ADR 0140, cada suite en el suyo.** El backend entero
+(`backend/`: núcleo, capacidades y orquestadores) y `Synergos.Servicios.Tests` van en **net10.0**;
+el árbol del CMS (`Synergos.CMS.Web`, `.Application`, `.Interfaces`, `Synergos.CMS.Tests`,
+`.Benchmarks`) se queda en **net8.0** por el pin de Umbraco 13 (ADR 0001); y
+`Synergos.Arquitectura.Tests`, que mira los dos árboles, va en el **mayor** de los dos, porque un
+proyecto net8.0 no puede referenciar uno net10.0 (NU1201, medido). El precio va dicho: los gates
+que ejecutan código del CMS —los composers de `ComposicionDelCms`— lo hacen sobre el runtime 10 y
+no sobre el 8 de producción; al CMS en su runtime lo sigue probando `Synergos.CMS.Tests`, y un gate
+que ARRANQUE el host del CMS no puede vivir en Arquitectura. Por eso `dotnet test Synergos.CMS.sln`
+necesita los runtimes de ASP.NET Core 8 **y** 10 (el CI instala los dos SDK), y cada imagen sigue
+a su árbol: `Dockerfile.service` en `aspnet:10.0`, el `Dockerfile` del CMS en `aspnet:8.0`.
+
 ```bash
 # TODO el árbol compila en CERO avisos, y desde el #134 un aviso ES un error
 # (TreatWarningsAsErrors en Directory.Build.props). Si tu SDK saca uno que acá

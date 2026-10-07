@@ -57,11 +57,13 @@
     mandaba la afirmación de identidad que `Api.Payments` EXIGE desde la #14.
     Las veinte capacidades ya declaran `public partial class Program`, así que la
     costura estaba puesta y no la usaba nadie.
-    8.0.31 cuadra con el runtime que corre la suite (net8.0); verificado en
-    nuget.org — es el último 8.0.x publicado.
+    10.0.12 cuadra con el runtime que corre la suite (net10.0 desde la F2 de la
+    ADR 0140, con todo el backend); verificado en nuget.org el 2026-10-07 — es el
+    último 10.0.x estable, y su nuspec trae un único grupo net10.0. Sigue al
+    runtime en cada parche, como antes 8.0.31 seguía al 8.0.31.
   -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.31" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
   </ItemGroup>
 
   <!--

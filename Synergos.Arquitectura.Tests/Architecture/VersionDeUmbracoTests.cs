@@ -129,7 +129,8 @@ public sealed class VersionDeUmbracoTests
             v.StartsWith("13.", StringComparison.Ordinal),
             $"Umbraco.Cms está clavado en {v}, fuera de la rama 13 LTS. ADR 0001 prohíbe subir " +
             "a 14+ sin un ADR que lo suceda: 14+ descontinuó Macros, cambió el editor de Block " +
-            "Grid a Lit/TS y pide .NET 9+, y este árbol apunta entero a net8.0. Si el ADR nuevo " +
+            "Grid a Lit/TS y pide .NET 9+, y el árbol del CMS apunta a net8.0 (el backend ya va " +
+            "en net10.0 por la ADR 0140, que no lo arrastra). Si el ADR nuevo " +
             "existe y esto es deliberado, este gate se mueve en el MISMO commit.");
     }
 

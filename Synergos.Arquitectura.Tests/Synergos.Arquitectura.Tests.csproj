@@ -10,10 +10,20 @@
     producción — leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
     .mjs, un compose o un appsettings, ninguno de los cuales tiene tipos. Las cuatro
     referencias de abajo son las de los once que sí instancian algo.
+
+    Y por mirar los dos árboles corre en el MAYOR de sus dos runtimes (ADR 0140, F2). El
+    backend está en net10.0 y el CMS sigue en net8.0 por el pin de Umbraco 13 (ADR 0001): un
+    proyecto en net8.0 no puede referenciar uno en net10.0 (NU1201, medido), y al revés sí.
+    El precio va dicho: los gates que ejecutan código del CMS (los composers en
+    `ComposicionDelCms`, los GetTypes de Synergos.CMS.Web) lo hacen sobre el runtime 10, no
+    sobre el 8 de producción. Al CMS en su runtime lo sigue probando Synergos.CMS.Tests, que
+    se queda en net8.0; y un gate que ARRANQUE el host del CMS no puede vivir aquí.
+    Multi-target (net8.0;net10.0 en el núcleo) se midió y se descartó: el publish de la
+    imagen falla con NETSDK1129.
   -->
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Synergos.CMS.Tests</RootNamespace>

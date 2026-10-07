@@ -26,8 +26,10 @@ ARG PROJECT
 ARG PROJECT_DIR
 
 # ─────────────────────────── build ───────────────────────────
-# SDK 10 porque global.json lo pinea (rollForward latestFeature), aunque los
-# proyectos targeteen net8.0. Igual que el Dockerfile del CMS.
+# SDK 10 porque global.json lo pinea (rollForward latestFeature). Igual que el
+# Dockerfile del CMS; pero aquí los proyectos targetean net10.0 (ADR 0140, F2) y
+# el CMS se queda en net8.0 (ADR 0001), así que las dos imágenes de RUNTIME ya
+# no son la misma — ver el FROM de abajo.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG PROJECT
 ARG PROJECT_DIR
@@ -85,7 +87,12 @@ RUN dotnet publish ${PROJECT_DIR}/${PROJECT}.csproj \
         --output /app/publish
 
 # ────────────────────────── runtime ──────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+# La versión tiene que ser la del TargetFramework del backend: el publish se
+# hace en la etapa de SDK, así que una imagen aspnet:8.0 con ensamblados
+# net10.0 se construye igual y no arranca (su runtimeconfig pide el framework
+# 10.0). Sin Docker en local, eso sólo lo vería el job `arranca` de images.yml,
+# que prueba 2 de las 22.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ARG PROJECT
 ARG PROJECT_DIR
 WORKDIR /app
