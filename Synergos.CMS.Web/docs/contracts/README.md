@@ -72,6 +72,31 @@ fixture lo ejecuta un gate de cada lado.
 > de una implementación es una FOTO — detecta que se separan, no que las dos están mal
 > a la vez.
 
+## El contrato HTTP publicado — `openapi/` (ADR 0140)
+
+El documento OpenAPI 3.1 de cada pieza del árbol de servicios que publica contrato. **Generado**
+del código —los metadatos de los endpoints del host real, con `Microsoft.AspNetCore.OpenApi`
+SÓLO en `Synergos.Servicios.Tests`—: no se edita a mano. El nombre del fichero es el del
+ensamblado, igual que su `info.title`.
+
+| Fichero | Pieza | Quién lo ejecuta |
+|---|---|---|
+| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. | CMS: `ContratoOpenApiTests` (código ↔ fichero) |
+| [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: `ContratoOpenApiTests` |
+| [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: `ContratoOpenApiTests` |
+| [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: `ContratoOpenApiTests` |
+
+Para regenerarlos, después de cambiar un record de `Contracts/` o un endpoint:
+
+```bash
+SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --filter ContratoOpenApi
+```
+
+Son deterministas a propósito —sin `servers`, sin `tags`, sin descripciones sacadas de
+comentarios, en orden ordinal, LF y sin BOM— para que el gate pueda comparar byte a byte en
+Windows y en el CI. Lo único que puede moverlos sin tocar código es un parche del runtime .NET 10:
+el rojo del gate imprime la versión.
+
 ## Naming conventions canónicas
 
 | Asset | Convention | Example |

@@ -67,6 +67,25 @@
   </ItemGroup>
 
   <!--
+    El contrato HTTP publicado (ADR 0140, F2) — Microsoft.AspNetCore.OpenApi.
+    Va SÓLO en `Synergos.Servicios.Tests`, que genera el openapi.json de cada pieza
+    desde los metadatos de sus endpoints sobre el host real (IOpenApiDocumentProvider,
+    sin MapOpenApi) y lo compara con el comiteado en docs/contracts/openapi/. Producción
+    no lo lleva, y no es ahorro: dentro de un servicio su generador de comentarios XML
+    mete CRLF en Windows (el documento saldría distinto que en CI) y cada comentario
+    editado sería deriva del contrato; y generarlo en el build (ApiDescription.Server)
+    ejecuta el Program en Production, donde la llave compartida lo tumba. Medido las
+    tres cosas. `ContratoHttpPublicadoTests` prohíbe la referencia en otro csproj.
+    10.0.12: última estable en nuget.org (2026-10-07); sólo existe para net10.0, que
+    es por lo que el backend pasó a .NET 10. Arrastra Microsoft.OpenApi [2.12.0, 3.0.0)
+    y NO se fija: resuelve al mínimo del rango, 2.12.0, que es la versión medida.
+    Subirla cambia el documento, y el gate de deriva lo dice.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+  </ItemGroup>
+
+  <!--
     HTTP resilience (Ola 113) — Microsoft.Extensions.Http.Resilience.
     Wraps los 15 named HttpClients (3 webhook + 3 Slack + 3 Discord +
     3 Teams + 3 cart abandonment scanner) con retry policy estándar

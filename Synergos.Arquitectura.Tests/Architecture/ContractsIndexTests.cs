@@ -116,15 +116,23 @@ public sealed class ContractsIndexTests
     ///
     /// <para>Va en los dos sentidos como los otros dos, y con su red de seguridad: si el
     /// descubrimiento deja de ver, la lista sale vacía y esto pasaría en verde sin mirar nada.
-    /// <c>node_modules</c> y el harness Vitest quedan fuera porque no son de la carpeta: son de
-    /// <c>tests/</c>, que es un subdirectorio, y el barrido no es recursivo.</para>
+    /// <c>node_modules</c> y el harness Vitest quedan fuera porque no son contratos sino el
+    /// banco que prueba cuatro de ellos: viven en <c>tests/</c>, la única subcarpeta que el
+    /// barrido salta.</para>
+    ///
+    /// <para><b>El barrido baja a las subcarpetas desde la F2 de la ADR 0140</b>, que dejó los
+    /// contratos HTTP en <c>openapi/</c>. Antes no era recursivo, y una subcarpeta habría sido
+    /// invisible para este diente: cuatro documentos que el UI genera, fuera de su índice. Los dos
+    /// sentidos se protegen entre sí: si el barrido dejara de bajar, los enlaces a
+    /// <c>openapi/…</c> saldrían como fantasmas.</para>
     /// </remarks>
     [Fact]
     public void Todo_fixture_del_disco_esta_en_el_indice()
     {
-        var fixtures = Directory.EnumerateFiles(CarpetaContratos())
-            .Select(Path.GetFileName)
-            .Select(n => n!)
+        var carpeta = CarpetaContratos();
+        var fixtures = Directory.EnumerateFiles(carpeta, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(carpeta, f).Replace('\\', '/'))
+            .Where(n => !n.StartsWith("tests/", StringComparison.Ordinal))
             .Where(n => !n.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
@@ -144,7 +152,7 @@ public sealed class ContractsIndexTests
             + "estar en su índice es invisible justo para quien viene a integrarse.");
 
         // Y al revés: un enlace a un fixture que ya no está parece que hay algo y no lo hay.
-        var fantasmas = Regex.Matches(indice, @"\]\((?!\.\./|https?:)([^)/#]+\.(?:json|csv|ya?ml))\)")
+        var fantasmas = Regex.Matches(indice, @"\]\((?!\.\./|https?:|tests/)((?:[\w.-]+/)*[^)/#]+\.(?:json|csv|ya?ml))\)")
             .Select(m => m.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
             .Where(e => !fixtures.Contains(e, StringComparer.Ordinal))

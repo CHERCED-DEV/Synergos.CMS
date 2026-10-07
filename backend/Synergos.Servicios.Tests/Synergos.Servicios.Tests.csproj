@@ -20,6 +20,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!-- Sólo aquí: genera el contrato HTTP publicado (ADR 0140). Ver Directory.Packages.props. -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
@@ -73,5 +75,20 @@
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Viajes\Synergos.Bff.Viajes.csproj" />
   </ItemGroup>
+
+  <!--
+    Microsoft.AspNetCore.OpenApi trae un generador de código que lee los comentarios XML de
+    cada ProjectReference para meterlos como `description` en el documento. Aquí sobra y
+    rompe: las veinte capacidades y los orquestadores declaran un `Program` global
+    documentado, y la clave T:Program repetida tumba la generación en ejecución (medido).
+    Y aunque no rompiera, el contrato no debe depender de un comentario: editar uno sería
+    deriva, y en Windows los literales salen con CRLF. Si el paquete renombra el analizador,
+    el fallo vuelve a ser ruidoso (la clave repetida), no silencioso.
+  -->
+  <Target Name="SinComentariosXmlEnElContrato" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Microsoft.AspNetCore.OpenApi.SourceGenerators'" />
+    </ItemGroup>
+  </Target>
 
 </Project>
