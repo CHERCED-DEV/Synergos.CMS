@@ -7,6 +7,18 @@
   "paths": {
     "/v1/prices": {
       "post": {
+        "operationId": "SetPrice",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18,8 +30,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -89,6 +108,7 @@
     },
     "/v1/prices/{id}": {
       "get": {
+        "operationId": "GetPrice",
         "parameters": [
           {
             "name": "id",
@@ -178,6 +198,18 @@
     },
     "/v1/promotions": {
       "post": {
+        "operationId": "SavePromotion",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -189,8 +221,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -260,6 +299,7 @@
     },
     "/v1/quotes": {
       "post": {
+        "operationId": "GetQuote",
         "requestBody": {
           "content": {
             "application/json": {
@@ -272,7 +312,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -392,6 +439,44 @@
           }
         }
       },
+      "PromotionResponse": {
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "value",
+          "currency",
+          "validFrom",
+          "validTo"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validTo": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "QuoteLineRequest": {
         "required": [
           "subjectKind",
@@ -421,6 +506,38 @@
           }
         }
       },
+      "QuoteLineResponse": {
+        "required": [
+          "subjectKind",
+          "subjectId",
+          "quantity",
+          "unitPrice",
+          "subtotal",
+          "tax"
+        ],
+        "type": "object",
+        "properties": {
+          "subjectKind": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unitPrice": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/MoneyDto"
+          }
+        }
+      },
       "QuoteRequest": {
         "required": [
           "lines",
@@ -442,6 +559,36 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "QuoteResponse": {
+        "required": [
+          "lines",
+          "subtotal",
+          "discount",
+          "tax",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteLineResponse"
+            }
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "discount": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "total": {
+            "$ref": "#/components/schemas/MoneyDto"
           }
         }
       },

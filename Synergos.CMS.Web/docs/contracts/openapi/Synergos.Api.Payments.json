@@ -7,6 +7,18 @@
   "paths": {
     "/v1/payments": {
       "post": {
+        "operationId": "AuthorizePayment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18,8 +30,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -87,6 +106,7 @@
         }
       },
       "get": {
+        "operationId": "ListPayments",
         "parameters": [
           {
             "name": "forKind",
@@ -198,6 +218,7 @@
     },
     "/v1/payments/{id}": {
       "get": {
+        "operationId": "GetPayment",
         "parameters": [
           {
             "name": "id",
@@ -287,12 +308,22 @@
     },
     "/v1/payments/{id}/capture": {
       "post": {
+        "operationId": "CapturePayment",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -376,12 +407,22 @@
     },
     "/v1/payments/{id}/refund": {
       "post": {
+        "operationId": "RefundPayment",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -396,88 +437,6 @@
           },
           "required": true
         },
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/payments/{id}/void": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -555,11 +514,29 @@
         }
       }
     },
-    "/v1/webhooks/wompi": {
+    "/v1/payments/{id}/void": {
       "post": {
+        "operationId": "VoidPayment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",

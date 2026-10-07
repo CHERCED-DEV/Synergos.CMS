@@ -1,5 +1,9 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.TestHost;
@@ -31,11 +35,14 @@ namespace Synergos.CMS.Tests.Contratos;
 /// System.Text.Json del framework compartido): por eso el rojo imprime la versión.</para>
 ///
 /// <para><b>Lo que el documento dice de más, a propósito, y lo que no dice.</b> Cada operación
-/// publica el 401 de la llave compartida (sin cuerpo) y los seis estados de
-/// <see cref="RejectionResults.StatusCodeFor"/> con el esquema <see cref="EsquemaRechazo"/>: salen
-/// de la única fuente que decide el código, así que no hay listas por endpoint que deriven. Los
+/// publica el 401 de la llave compartida (sin cuerpo), y la que puede rechazar —su tipo de retorno
+/// incluye <c>ProblemHttpResult</c>— los seis estados de <see cref="RejectionResults.StatusCodeFor"/>
+/// con el esquema <see cref="EsquemaRechazo"/>: salen de la única fuente que decide el código, así
+/// que no hay listas por endpoint que deriven (y un GET documenta un 409 que no puede dar). Los
 /// CÓDIGOS (<c>pricing.bad_subject</c>…) no se enumeran: no se derivan del tipo, y el BFF reenvía
-/// los de sus capacidades.</para>
+/// los de sus capacidades. La cabecera <c>Idempotency-Key</c> sale del metadato
+/// <see cref="LlaveDeIdempotenciaRequerida"/>, y una sonda contra el host comprueba que lo declarado
+/// es lo exigido.</para>
 /// </remarks>
 internal static class ContratoOpenApi
 {
@@ -78,6 +85,27 @@ internal static class ContratoOpenApi
     public static string Ruta(string ensamblado)
         => Proyectos.Dir("Synergos.CMS.Web", "docs", "contracts", "openapi", ensamblado + ".json");
 
+    /// <summary>El documento COMITEADO de una pieza: lo que leen el UI y los consumidores.</summary>
+    /// <remarks>
+    /// Los gates que juzgan el contrato leen el comiteado y no uno recién generado: la deriva ya
+    /// obliga a que sean el mismo, y así un documento empobrecido y regenerado sigue en rojo.
+    /// </remarks>
+    public static JsonObject Comiteado(string ensamblado)
+        => JsonNode.Parse(File.ReadAllText(Ruta(ensamblado)))!.AsObject();
+
+    /// <summary>Las operaciones de un documento, con su método en mayúsculas y su ruta.</summary>
+    public static IReadOnlyList<OperacionPublicada> Operaciones(JsonObject doc)
+        => doc["paths"]!.AsObject()
+            .SelectMany(p => p.Value!.AsObject()
+                .Where(m => MetodosHttp.Contains(m.Key))
+                .Select(m => new OperacionPublicada(m.Key.ToUpperInvariant(), p.Key, m.Value!.AsObject())))
+            .ToList();
+
+    private static readonly HashSet<string> MetodosHttp = new(StringComparer.Ordinal)
+    {
+        "get", "post", "put", "delete", "patch",
+    };
+
     /// <summary>Las opciones del documento de <paramref name="titulo"/>.</summary>
     public static Action<OpenApiOptions> Opciones(string titulo) => o =>
     {
@@ -86,7 +114,28 @@ internal static class ContratoOpenApi
         // /health es del molde (lo pide el healthcheck de la imagen), no del contrato de la pieza.
         o.ShouldInclude = d => !string.Equals(d.RelativePath, "health", StringComparison.Ordinal);
 
+        // Un id de esquema, un tipo. ASP.NET nombra el esquema por el Name del tipo, y dos tipos
+        // con el mismo Name en un documento NO salen como X y X2: el segundo apunta en silencio al
+        // esquema del primero (medido con un MoneyDto {moneda} junto al {amount, currency}: el campo
+        // nuevo publicaba la forma del otro). Se convierte en un rojo al generar, que regenerar no
+        // salva; la salida es renombrar uno de los dos.
+        var ids = new System.Collections.Concurrent.ConcurrentDictionary<string, Type>(StringComparer.Ordinal);
+        o.CreateSchemaReferenceId = info =>
+        {
+            var id = OpenApiOptions.CreateDefaultSchemaReferenceId(info);
+            if (id is not null && ids.GetOrAdd(id, info.Type) is var primero && primero != info.Type)
+            {
+                throw new InvalidOperationException(
+                    $"Dos tipos publican el mismo esquema «{id}» en {titulo}: {primero.FullName} y " +
+                    $"{info.Type.FullName}. El documento usaría la forma del primero para los dos; renombrá uno.");
+            }
+
+            return id;
+        };
+
         o.AddSchemaTransformer(Numeros);
+        o.AddOperationTransformer(Llave);
+        o.AddOperationTransformer(Rechazos);
         o.AddDocumentTransformer((doc, ctx, ct) =>
         {
             Normalizar(doc, titulo);
@@ -166,7 +215,6 @@ internal static class ContratoOpenApi
                 // el nombre del ensamblado como tag (medido). Vacío, no se escribe.
                 op.Tags?.Clear();
                 op.Responses ??= new OpenApiResponses();
-                PublicarRechazos(op, doc);
 
                 var respuestas = op.Responses.OrderBy(r => r.Key, StringComparer.Ordinal).ToList();
                 op.Responses = new OpenApiResponses();
@@ -184,19 +232,49 @@ internal static class ContratoOpenApi
     }
 
     /// <summary>
-    /// El 401 de la llave compartida y los seis estados de rechazo, en la operación.
+    /// La cabecera <c>Idempotency-Key</c>, donde el endpoint declara que la lee.
+    /// </summary>
+    /// <remarks>
+    /// <c>ApiExplorer</c> no la ve: <see cref="IdempotencyHeader.TryRead"/> la lee a mano del
+    /// <c>HttpRequest</c>. Sale del metadato <see cref="LlaveDeIdempotenciaRequerida"/>, con
+    /// <c>required</c> según lo exija siempre o sólo en un caso del cuerpo, y el largo de
+    /// <see cref="IdempotencyKey.MaxLength"/>.
+    /// </remarks>
+    private static Task Llave(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
+    {
+        if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<LlaveDeIdempotenciaRequerida>().FirstOrDefault() is { } llave)
+        {
+            op.Parameters ??= new List<IOpenApiParameter>();
+            op.Parameters.Add(new OpenApiParameter
+            {
+                Name = IdempotencyHeader.Name,
+                In = ParameterLocation.Header,
+                Required = llave.Siempre,
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String, MaxLength = IdempotencyKey.MaxLength },
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// El 401 de la llave compartida en toda operación, y los seis estados de rechazo en la que
+    /// puede rechazar.
     /// </summary>
     /// <remarks>
     /// El 401 va SIN cuerpo porque así sale de <c>SharedKeyAuth</c> (medido: sin Content-Type). Los
     /// seis estados salen de <see cref="RejectionResults.StatusCodeFor"/>, la única fuente que decide
-    /// qué número lleva cada clase de rechazo.
+    /// qué número lleva cada clase de rechazo, y se publican donde <see cref="PuedeRechazar"/>.
     /// </remarks>
-    private static void PublicarRechazos(OpenApiOperation op, OpenApiDocument doc)
+    private static Task Rechazos(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
     {
-        op.Responses!["401"] = new OpenApiResponse
+        op.Responses ??= new OpenApiResponses();
+        op.Responses["401"] = new OpenApiResponse
         {
             Description = "Falta la llave compartida o no es la buena (sin cuerpo).",
         };
+
+        if (!PuedeRechazar(ctx.Description)) return Task.CompletedTask;
 
         foreach (var kind in Enum.GetValues<RejectionKind>())
         {
@@ -208,11 +286,40 @@ internal static class ContratoOpenApi
                 {
                     ["application/problem+json"] = new OpenApiMediaType
                     {
-                        Schema = new OpenApiSchemaReference(EsquemaRechazo, doc),
+                        Schema = new OpenApiSchemaReference(EsquemaRechazo, ctx.Document),
                     },
                 },
             };
         }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Si el endpoint puede contestar con un rechazo: su tipo de retorno incluye
+    /// <c>ProblemHttpResult</c>.
+    /// </summary>
+    /// <remarks>
+    /// Se lee del <see cref="MethodInfo"/> del handler, que Minimal APIs deja en los metadatos del
+    /// endpoint. Si no está, o el handler devuelve un <c>IResult</c> sin tipo, no se puede saber, y
+    /// se publica el rechazo: es el lado seguro (sobra en el documento, no falta). Hoy sólo
+    /// <c>GET /v1/compensations</c> de Eventos no rechaza.
+    /// </remarks>
+    internal static bool PuedeRechazar(ApiDescription descripcion)
+    {
+        var metodo = descripcion.ActionDescriptor.EndpointMetadata.OfType<MethodInfo>().FirstOrDefault();
+        if (metodo is null) return true;
+
+        var tipo = metodo.ReturnType;
+        if (tipo.IsGenericType && (tipo.GetGenericTypeDefinition() == typeof(Task<>)
+                                || tipo.GetGenericTypeDefinition() == typeof(ValueTask<>)))
+        {
+            tipo = tipo.GetGenericArguments()[0];
+        }
+
+        if (tipo == typeof(ProblemHttpResult)) return true;
+        if (tipo == typeof(IResult) || tipo == typeof(object)) return true;
+        return tipo.IsGenericType && tipo.GetGenericArguments().Contains(typeof(ProblemHttpResult));
     }
 
     /// <summary>
@@ -244,9 +351,21 @@ internal static class ContratoOpenApi
     };
 }
 
+/// <summary>Una operación de un documento publicado.</summary>
+/// <param name="Metodo">GET, POST… en mayúsculas.</param>
+/// <param name="Ruta">La plantilla de ruta, con sus <c>{parámetros}</c>.</param>
+/// <param name="Op">El objeto de la operación en el JSON.</param>
+internal sealed record OperacionPublicada(string Metodo, string Ruta, JsonObject Op)
+{
+    public override string ToString() => $"{Metodo} {Ruta}";
+}
+
 /// <summary>Una pieza que publica contrato, y cómo levantarla de verdad en proceso.</summary>
 internal abstract class PiezaPublicada
 {
+    /// <summary>La llave compartida que exige el host de prueba.</summary>
+    public const string Llave = "llave-del-contrato";
+
     /// <summary>El nombre del ensamblado: título del documento y nombre del fichero.</summary>
     public abstract string Ensamblado { get; }
 
@@ -269,9 +388,6 @@ internal abstract class PiezaPublicada
 internal sealed class PiezaPublicada<TMarcador>(string seccion) : PiezaPublicada
     where TMarcador : class
 {
-    /// <summary>La llave compartida que el host de prueba exige.</summary>
-    public const string Llave = "llave-del-contrato";
-
     public override string Ensamblado { get; } = typeof(TMarcador).Assembly.GetName().Name!;
 
     public override HostDeLaPieza Levantar(bool conContrato = true)

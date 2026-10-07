@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Api.Pricing.Contracts;
 using Synergos.Api.Pricing.Domain;
 using Synergos.Core;
@@ -6,11 +7,17 @@ using Synergos.Shared;
 namespace Synergos.Api.Pricing.Endpoints;
 
 /// <summary>El ruteo de precios, promociones y cotizaciones.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c>: de ahí
+/// sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Api.Pricing.json</c>, ADR 0140),
+/// y un endpoint que devuelva otra forma no compila. Quien lee <c>Idempotency-Key</c> lo declara
+/// con <c>ConLlaveDeIdempotencia</c>, y una sonda contra el host comprueba que sea verdad.
+/// </remarks>
 public static class PricingEndpoints
 {
     public static IEndpointRouteBuilder MapPricingEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/prices", (SetPriceRequest req, HttpRequest http, PricingService svc) =>
+        app.MapPost("/v1/prices", Results<Created<PriceResponse>, ProblemHttpResult> (SetPriceRequest req, HttpRequest http, PricingService svc) =>
         {
             if (!IdempotencyHeader.TryRead(http, PricingRules.CodePrefix, out var key, out var falta)) return falta!;
 
@@ -18,15 +25,14 @@ public static class PricingEndpoints
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
-            return svc.SetPrice(subject, amount, req.TaxRateBasisPoints ?? 0, key).Match(
-                p => Results.Created($"/v1/prices/{p.Id}", PriceResponse.From(p)),
-                bad => bad.ToProblem());
-        });
+            return svc.SetPrice(subject, amount, req.TaxRateBasisPoints ?? 0, key)
+                .Map(PriceResponse.From).ToCreated(p => $"/v1/prices/{p.Id}");
+        }).WithName("SetPrice").ConLlaveDeIdempotencia();
 
         app.MapGet("/v1/prices/{id}", (string id, PricingService svc) =>
-            svc.GetPrice(id).Map(PriceResponse.From).ToHttp());
+            svc.GetPrice(id).Map(PriceResponse.From).ToHttp()).WithName("GetPrice");
 
-        app.MapPost("/v1/promotions", (SavePromotionRequest req, HttpRequest http, PricingService svc) =>
+        app.MapPost("/v1/promotions", Results<Created<PromotionResponse>, ProblemHttpResult> (SavePromotionRequest req, HttpRequest http, PricingService svc) =>
         {
             if (!IdempotencyHeader.TryRead(http, PricingRules.CodePrefix, out var key, out var falta)) return falta!;
 
@@ -40,14 +46,13 @@ public static class PricingEndpoints
             }
 
             return svc.SavePromotion(req.Code, kind, req.Value ?? 0, (req.Currency ?? Money.Cop).ToUpperInvariant(),
-                    TimeWindow.Of(req.ValidFrom.Value, req.ValidTo.Value), key).Match(
-                p => Results.Created($"/v1/promotions/{p.Id}", PromotionResponse.From(p)),
-                bad => bad.ToProblem());
-        });
+                    TimeWindow.Of(req.ValidFrom.Value, req.ValidTo.Value), key)
+                .Map(PromotionResponse.From).ToCreated(p => $"/v1/promotions/{p.Id}");
+        }).WithName("SavePromotion").ConLlaveDeIdempotencia();
 
         // Cotizar es un POST aunque no muta: las líneas no caben razonablemente en una query
         // string, y meterlas ahí las dejaría en logs de proxy y en el historial del navegador.
-        app.MapPost("/v1/quotes", (QuoteRequest req, PricingService svc) =>
+        app.MapPost("/v1/quotes", Results<Ok<QuoteResponse>, ProblemHttpResult> (QuoteRequest req, PricingService svc) =>
         {
             var items = new List<(Ref, int)>();
             foreach (var l in req.Lines ?? Array.Empty<QuoteLineRequest>())
@@ -58,12 +63,12 @@ public static class PricingEndpoints
             }
 
             return svc.Quote(items, req.PromotionCode).Map(QuoteResponse.From).ToHttp();
-        });
+        }).WithName("GetQuote");
 
         return app;
     }
 
-    private static bool TryMoney(MoneyDto? dto, out Money money, out IResult? bad)
+    private static bool TryMoney(MoneyDto? dto, out Money money, out ProblemHttpResult? bad)
     {
         money = default;
         bad = null;
@@ -86,6 +91,6 @@ public static class PricingEndpoints
         }
     }
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{PricingRules.CodePrefix}.{code}", message).ToProblem();
 }

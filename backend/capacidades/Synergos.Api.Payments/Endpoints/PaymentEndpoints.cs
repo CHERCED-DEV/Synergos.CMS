@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Api.Payments.Contracts;
 using Synergos.Api.Payments.Domain;
 using Synergos.Api.Payments.Transport;
@@ -7,11 +8,17 @@ using Synergos.Shared;
 namespace Synergos.Api.Payments.Endpoints;
 
 /// <summary>El ruteo de cobros.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c>: de ahí
+/// sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Api.Payments.json</c>, ADR 0140).
+/// El webhook de la pasarela queda FUERA del documento: no lo llama ningún consumidor del contrato
+/// sino un tercero, que firma en vez de llevar la llave.
+/// </remarks>
 public static class PaymentEndpoints
 {
     public static IEndpointRouteBuilder MapPaymentEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/payments", async (
+        app.MapPost("/v1/payments", async Task<Results<Created<PaymentResponse>, ProblemHttpResult>> (
             AuthorizeRequest req, HttpRequest http, PaymentService svc,
             IdentityTokenGate identidad, TimeProvider clock, CancellationToken ct) =>
         {
@@ -30,41 +37,40 @@ public static class PaymentEndpoints
             var (assertion, motivo) = Afirmacion(identidad, http, payer, req.Assertion, clock);
             if (motivo is not null) return motivo.ToProblem();
 
-            return (await svc.AuthorizeAsync(forWhat, payer, amount, assertion, key, ct)).Match(
-                p => Results.Created($"/v1/payments/{p.Id}", PaymentResponse.From(p)),
-                bad => bad.ToProblem());
-        });
+            return (await svc.AuthorizeAsync(forWhat, payer, amount, assertion, key, ct))
+                .Map(PaymentResponse.From).ToCreated(p => $"/v1/payments/{p.Id}");
+        }).WithName("AuthorizePayment").ConLlaveDeIdempotencia();
 
         app.MapGet("/v1/payments/{id}", (string id, PaymentService svc) =>
-            svc.Get(id).Map(PaymentResponse.From).ToHttp());
+            svc.Get(id).Map(PaymentResponse.From).ToHttp()).WithName("GetPayment");
 
         app.MapGet("/v1/payments", (string? forKind, string? forId, int? offset, int? limit, PaymentService svc) =>
             svc.ListFor(Ref.TryCreate(forKind, forId), Math.Max(0, offset ?? 0), QueryWindow.Limit(limit))
                 .Map(p => new PageResponse<PaymentResponse>(
                     p.Items.Select(PaymentResponse.From).ToList(), p.Total, p.Offset, p.HasMore))
-                .ToHttp());
+                .ToHttp()).WithName("ListPayments");
 
-        app.MapPost("/v1/payments/{id}/capture", async (
+        app.MapPost("/v1/payments/{id}/capture", async Task<Results<Ok<PaymentResponse>, ProblemHttpResult>> (
             string id, HttpRequest http, PaymentService svc, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, PaymentRules.CodePrefix, out var key, out var falta)) return falta!;
             return (await svc.CaptureAsync(id, key, ct)).Map(PaymentResponse.From).ToHttp();
-        });
+        }).WithName("CapturePayment").ConLlaveDeIdempotencia();
 
         // Liberar NO lleva llave: la operación ya es idempotente por diseño —liberar lo
         // liberado devuelve lo mismo— y exigir una cabecera que no protege de nada solo
         // enseñaría a los clientes a inventar llaves.
         app.MapPost("/v1/payments/{id}/void", async (string id, PaymentService svc, CancellationToken ct) =>
-            (await svc.VoidAsync(id, ct)).Map(PaymentResponse.From).ToHttp());
+            (await svc.VoidAsync(id, ct)).Map(PaymentResponse.From).ToHttp()).WithName("VoidPayment");
 
-        app.MapPost("/v1/payments/{id}/refund", async (
+        app.MapPost("/v1/payments/{id}/refund", async Task<Results<Ok<PaymentResponse>, ProblemHttpResult>> (
             string id, RefundRequest req, HttpRequest http, PaymentService svc, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, PaymentRules.CodePrefix, out var key, out var falta)) return falta!;
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
             return (await svc.RefundPaymentAsync(id, amount, req.Reason, key, ct)).Map(PaymentResponse.From).ToHttp();
-        });
+        }).WithName("RefundPayment").ConLlaveDeIdempotencia();
 
         // El camino de vuelta: lo que la pasarela cuenta de un cobro suyo.
         //
@@ -83,12 +89,12 @@ public static class PaymentEndpoints
             return await WebhookHandler.HandleAsync(
                 new WebhookHeaders(http.Headers["X-Event-Checksum"].FirstOrDefault()),
                 cuerpo, verificador, svc, ct);
-        });
+        }).ExcludeFromDescription();
 
         return app;
     }
 
-    private static bool TryMoney(MoneyDto? dto, out Money money, out IResult? bad)
+    private static bool TryMoney(MoneyDto? dto, out Money money, out ProblemHttpResult? bad)
     {
         money = default;
         bad = null;
@@ -183,6 +189,6 @@ public static class PaymentEndpoints
             PaymentRules.CodePrefix);
     }
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{PaymentRules.CodePrefix}.{code}", message).ToProblem();
 }

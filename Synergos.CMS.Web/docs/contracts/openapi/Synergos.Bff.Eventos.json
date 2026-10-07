@@ -7,6 +7,7 @@
   "paths": {
     "/v1/compensations": {
       "get": {
+        "operationId": "ListCompensations",
         "parameters": [
           {
             "name": "offset",
@@ -27,76 +28,35 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
-          },
-          "400": {
-            "description": "Invalid",
+            "description": "OK",
             "content": {
-              "application/problem+json": {
+              "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
+                  "$ref": "#/components/schemas/PageResponseOfPendingCompensationResponse"
                 }
               }
             }
           },
           "401": {
             "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
           }
         }
       }
     },
     "/v1/ticket-purchases": {
       "post": {
+        "operationId": "BuyTickets",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -108,8 +68,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketPurchaseResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -179,6 +146,7 @@
     },
     "/v1/ticket-purchases/{id}": {
       "get": {
+        "operationId": "GetTicketPurchase",
         "parameters": [
           {
             "name": "id",
@@ -268,6 +236,7 @@
     },
     "/v1/ticket-purchases/{id}/cancel": {
       "post": {
+        "operationId": "CancelTicketPurchase",
         "parameters": [
           {
             "name": "id",
@@ -357,6 +326,7 @@
     },
     "/v1/ticket-purchases/{id}/confirm": {
       "post": {
+        "operationId": "ConfirmTicketPurchase",
         "parameters": [
           {
             "name": "id",
@@ -446,6 +416,7 @@
     },
     "/v1/ticket-purchases/{id}/retry": {
       "post": {
+        "operationId": "RetryTicketPurchase",
         "parameters": [
           {
             "name": "id",
@@ -617,6 +588,85 @@
           },
           "currency": {
             "type": "string"
+          }
+        }
+      },
+      "PageResponseOfPendingCompensationResponse": {
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingCompensationResponse"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PendingCompensationResponse": {
+        "required": [
+          "purchaseId",
+          "kind",
+          "reason",
+          "attempts",
+          "nextAttemptUtc",
+          "lastError",
+          "stuck",
+          "alertedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "purchaseId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextAttemptUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stuck": {
+            "type": "boolean"
+          },
+          "alertedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },

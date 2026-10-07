@@ -7,6 +7,7 @@
   "paths": {
     "/v1/holds/{id}/consume": {
       "post": {
+        "operationId": "ConsumeHold",
         "parameters": [
           {
             "name": "id",
@@ -96,6 +97,7 @@
     },
     "/v1/holds/{id}/release": {
       "post": {
+        "operationId": "ReleaseHold",
         "parameters": [
           {
             "name": "id",
@@ -185,6 +187,18 @@
     },
     "/v1/items": {
       "post": {
+        "operationId": "DeclareStock",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -196,8 +210,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockItemResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -265,6 +286,7 @@
         }
       },
       "get": {
+        "operationId": "FindStockItem",
         "parameters": [
           {
             "name": "subjectKind",
@@ -283,7 +305,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockItemResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -353,6 +382,7 @@
     },
     "/v1/items/{id}": {
       "get": {
+        "operationId": "GetStockItem",
         "parameters": [
           {
             "name": "id",
@@ -442,12 +472,21 @@
     },
     "/v1/items/{id}/adjust": {
       "post": {
+        "operationId": "AdjustStock",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -464,7 +503,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockItemResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
@@ -534,12 +580,22 @@
     },
     "/v1/items/{id}/holds": {
       "post": {
+        "operationId": "HoldStock",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
               "type": "string"
             }
           }
@@ -555,8 +611,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockHoldResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid",
