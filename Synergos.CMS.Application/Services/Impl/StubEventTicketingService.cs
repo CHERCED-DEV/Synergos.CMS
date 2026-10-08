@@ -227,7 +227,7 @@ public sealed class StubEventTicketingService : IEventTicketingService
         }
 
         // 2) Apartar cada unidad como una reserva (hold-timeout incluido) +
-        //    armar las líneas de pago. El comprador es el primer asistente.
+        //    armar las líneas de pago.
         // Quien compra, que NO tiene por qué ir (#107). Sin él, el primer asistente — el
         // supuesto de siempre, correcto en el caso común y lo que mantiene funcionando a los
         // consumidores que no lo mandan.
@@ -311,7 +311,12 @@ public sealed class StubEventTicketingService : IEventTicketingService
                 Total: total,
                 Currency: currency!,
                 Units: units,
-                CreatedAt: _now()),
+                CreatedAt: _now())
+            {
+                // El mismo a quien se le abrió la sesión de pago: al confirmar, el aviso es suyo.
+                BuyerName = purchaser.Name.Trim(),
+                BuyerEmail = purchaser.Email.Trim(),
+            },
             cancellationToken);
 
         return new EventCheckoutResult(orderRef, session.SessionId, total, currency!);
@@ -394,13 +399,11 @@ public sealed class StubEventTicketingService : IEventTicketingService
     /// las entradas, nunca uno por asistente.
     /// </summary>
     /// <remarks>
-    /// Razón dura: el motor solo VALIDA el email del comprador (attendees[0] en
-    /// <see cref="CheckoutAsync"/>); a los demás asistentes apenas les hace Trim(), así que
-    /// notificar por-asistente dispararía contra strings vacíos. El comprador es la unidad
-    /// original (<c>AttendeeEmail</c>, no <c>HolderEmail</c>: transferir un ticket cambia el
-    /// portador, no a quién le confirmamos la compra). Si el destinatario persistido no es
-    /// usable, NO se emite basura — el dispatcher filtra inválidos, pero no le inventamos
-    /// un placeholder.
+    /// Razón dura: el motor solo VALIDA el email del comprador (el que guarda
+    /// <see cref="CheckoutAsync"/> en la orden, que no tiene por qué ser un asistente, #107); a
+    /// los asistentes apenas les hace Trim(), así que notificar por-asistente dispararía contra
+    /// strings vacíos. Si el destinatario persistido no es usable, NO se emite basura — el
+    /// dispatcher filtra inválidos, pero no le inventamos un placeholder.
     /// </remarks>
     private Task EmitConfirmedAsync(PersistedEventOrder order, CancellationToken cancellationToken)
         => EventPurchaseNotification.EmitAsync(_notifier, order, _now(), cancellationToken);

@@ -425,4 +425,25 @@ public sealed record PersistedEventOrder(
 
     /// <inheritdoc cref="BuyerKind"/>
     public string? BuyerId { get; init; }
+
+    /// <summary>
+    /// A quién se le confirma la compra: quien la pagó, que no tiene por qué ir al evento (#107).
+    /// Nulo en las anotadas antes de guardarlo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque el aviso se lo mandaba al primer asistente.</b> El checkout ya abría la
+    /// sesión de pago a nombre del comprador, pero la orden no lo guardaba, así que al confirmar
+    /// no quedaba de dónde sacarlo y <see cref="EventPurchaseNotification"/> tomaba la primera
+    /// unidad: quien compra cuatro entradas para su familia y se queda en casa no recibía su
+    /// propia confirmación. <see cref="BuyerId"/> no sirve para esto: en el camino del orquestador
+    /// es un seudónimo, y del seudónimo no se vuelve al correo.</para>
+    ///
+    /// <para>Opcional y fuera de la lista posicional por la misma razón que
+    /// <see cref="BuyerKind"/>: lo ya escrito en disco se sigue leyendo, y una orden sin comprador
+    /// guardado avisa al primer asistente, que es lo que hacía antes.</para>
+    /// </remarks>
+    public string? BuyerName { get; init; }
+
+    /// <inheritdoc cref="BuyerName"/>
+    public string? BuyerEmail { get; init; }
 }

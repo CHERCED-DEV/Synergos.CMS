@@ -194,6 +194,10 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             // Confirmar sólo recibe la orden, y el orquestador comprueba que confirme quien compró.
             BuyerKind = s.BuyerKind,
             BuyerId = buyerId,
+            // Y el aviso de la compra es suyo. Del seudónimo no se vuelve al correo, así que se
+            // guarda de este lado, junto a los asistentes, y no viaja.
+            BuyerName = comprador.Name.Trim(),
+            BuyerEmail = comprador.Email.Trim(),
         };
 
         await _ledger.SaveAsync(orden, cancellationToken).ConfigureAwait(false);
