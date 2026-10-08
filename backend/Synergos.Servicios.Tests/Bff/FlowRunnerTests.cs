@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
@@ -90,6 +92,21 @@ public sealed class FlowRunnerTests
         }
         """;
 
+    /// <summary>
+    /// La de arriba con un aviso al final de «cerrar», después del último cierre, que puede fallar sin
+    /// deshacer nada, y con la dirección como efímera de «cerrar»: la forma de <c>avisar</c> en Eventos.
+    /// </summary>
+    private static readonly string ConAviso = Definicion
+        .Replace("\"entrada\": [\"items\", \"monto\"],",
+            "\"entrada\": [\"items\", \"monto\"],\n  \"efimera\": { \"cerrar\": [\"nota\"] },", StringComparison.Ordinal)
+        .Replace("{ \"para_cada\": \"reservas:apartar\", \"como\": \"ap\", \"pasos\": [\"consumir\"] }",
+            "{ \"para_cada\": \"reservas:apartar\", \"como\": \"ap\", \"pasos\": [\"consumir\"] },\n      \"avisar\"", StringComparison.Ordinal)
+        .Replace("\"consumir\": { \"tipo\": \"t.consumir\",",
+            "\"avisar\": { \"tipo\": \"t.avisar\", \"lee\": [\"nota\"], \"al_fallar\": \"seguir\" },\n    \"consumir\": { \"tipo\": \"t.consumir\",", StringComparison.Ordinal);
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> NotaEnCerrar =
+        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "nota" } };
+
     private static readonly string[] Fases = { "abrir", "cerrar" };
 
     // ── El banco: una saga mínima con su ranura, y pasos guionados ──────────
@@ -130,6 +147,8 @@ public sealed class FlowRunnerTests
 
         /// <summary>Una reserva que declara y la saga no sabe leer.</summary>
         public string? ReservaDeMas { get; init; }
+
+        public IReadOnlyDictionary<string, IReadOnlyCollection<string>> Efimera { get; init; } = ContratoDelFlujo.SinEfimera;
 
         public IReadOnlyCollection<string> PoneAlAbrir => PoneDeMas is null
             ? new[] { "items", "monto" }
@@ -219,9 +238,20 @@ public sealed class FlowRunnerTests
                     return SalidaDePaso.Reserva(new Reservado("pedido-1"), "pedido-1");
                 }),
                 Paso("t.confirmar", 1, 0, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue(), e => e.Lee<string>(0)),
+                Paso("t.avisar", 1, 0, LlaveRequerida.Ninguna, _ =>
+                {
+                    if (AvisarLanza is { } excepcion) throw excepcion;
+                    return SalidaDePaso.Sigue();
+                }, e => e.Lee<string?>(0) ?? "-"),
             });
-            Runner = new FlowRunner<SagaDePrueba>(Motor, Registro, Flujo, Binding, Fases, Reloj, NullLogger.Instance);
+            Runner = new FlowRunner<SagaDePrueba>(Motor, Registro, Flujo, Binding, Fases, Reloj, Log);
         }
+
+        /// <summary>Lo que el intérprete escribe en el log, con las excepciones enteras.</summary>
+        public LogQueGuarda Log { get; } = new();
+
+        /// <summary>Si el aviso, en vez de rechazar, lanza.</summary>
+        public Exception? AvisarLanza { get; set; }
 
         public List<string> Bitacora { get; } = new();
 
@@ -266,9 +296,25 @@ public sealed class FlowRunnerTests
         public Task<Result<SagaDePrueba>> Cerrar()
             => Runner.EjecutarFaseAsync("cerrar", "s1", new FlowContext(), CancellationToken.None);
 
+        public Task<Result<SagaDePrueba>> Cerrar(string? nota, CancellationToken ct = default)
+            => Runner.EjecutarFaseAsync("cerrar", "s1", new FlowContext().Set("nota", nota), ct);
+
         public IEnumerable<string> Escrituras => Bitacora.Where(l => l.StartsWith("put", StringComparison.Ordinal));
         public IEnumerable<string> Deshechos => Bitacora.Where(l => l.StartsWith("undo", StringComparison.Ordinal));
         public IEnumerable<string> Pasos => Bitacora.Where(l => l.StartsWith("paso", StringComparison.Ordinal));
+    }
+
+    private sealed class LogQueGuarda : ILogger
+    {
+        public List<string> Lineas { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Lineas.Add($"{formatter(state, exception)} {exception}");
     }
 
     private sealed class Guionado(string tipo, int lee, int escribe, LlaveRequerida llave, Func<EntradaDePaso, SalidaDePaso> hace) : IPaso
@@ -702,5 +748,92 @@ public sealed class FlowRunnerTests
             banco.Motor, banco.Registro, rota, new BindingDePrueba(), Fases, banco.Reloj, NullLogger.Instance));
 
         Assert.Contains("«t.entregar»", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ── al_fallar: seguir, y lo efímero (ADR 0140 F3) ──────────────────────
+
+    private static Banco ConAvisoAlFinal() => new(ConAviso, new BindingDePrueba { Efimera = NotaEnCerrar });
+
+    [Fact]
+    public async Task Un_paso_con_al_fallar_seguir_que_rechaza_se_anota_y_la_saga_se_completa_sin_deshacer()
+    {
+        // Es el aviso que no salió: la compra está cobrada y consumida, y deshacerla por eso
+        // devolvería la plata de una compra que sí se hizo.
+        var banco = ConAvisoAlFinal();
+        Assert.True(banco.Flujo.Pasos["avisar"].SigueSiFalla);   // la definición del banco entró
+        await banco.Abrir("a");
+        banco.Fallan.Add("t.avisar");
+
+        var r = await banco.Cerrar("ana@ejemplo.co");
+
+        Assert.True(r.IsOk);
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Contains("paso t.avisar ana@ejemplo.co", banco.Pasos);
+        Assert.Empty(banco.Deshechos);
+        Assert.All(r.Value.Compensations, c => Assert.False(c.IsPending));
+        Assert.Null(r.Value.Falla);
+        Assert.Contains(banco.Log.Lineas, l => l.Contains("t.avisar.no", StringComparison.Ordinal)
+                                              && l.Contains("s1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Un_paso_con_al_fallar_seguir_que_LANZA_tampoco_deshace_ni_escribe_lo_efimero_en_el_log()
+    {
+        var banco = ConAvisoAlFinal();
+        await banco.Abrir("a");
+        banco.AvisarLanza = new HttpRequestException("no se pudo avisar a ana@ejemplo.co");
+
+        var r = await banco.Cerrar("ana@ejemplo.co");
+
+        Assert.True(r.IsOk);
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Empty(banco.Deshechos);
+        Assert.Contains(banco.Log.Lineas, l => l.Contains(nameof(HttpRequestException), StringComparison.Ordinal));
+        Assert.DoesNotContain(banco.Log.Lineas, l => l.Contains("ana@ejemplo.co", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task La_cancelacion_de_quien_llama_no_se_traga_como_un_fallo_del_paso()
+    {
+        // Seguir es para el paso que falla, no para la petición que se cancela.
+        var banco = ConAvisoAlFinal();
+        await banco.Abrir("a");
+        banco.AvisarLanza = new OperationCanceledException();
+        using var cancelada = new CancellationTokenSource();
+        await cancelada.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => banco.Cerrar("ana@ejemplo.co", cancelada.Token));
+
+        // Control: la misma excepción SIN que nadie haya cancelado es un fallo del paso, y se sigue.
+        var otro = ConAvisoAlFinal();
+        await otro.Abrir("a");
+        otro.AvisarLanza = new OperationCanceledException();
+        Assert.True((await otro.Cerrar("ana@ejemplo.co")).IsOk);
+    }
+
+    [Fact]
+    public async Task Lo_efimero_lo_lee_su_fase_y_no_llega_a_la_saga()
+    {
+        var banco = ConAvisoAlFinal();
+        await banco.Abrir("a");
+
+        var r = await banco.Cerrar("dato-efimero-1f3");
+
+        Assert.True(r.IsOk);
+        Assert.Contains("paso t.avisar dato-efimero-1f3", banco.Pasos);
+        Assert.DoesNotContain("dato-efimero-1f3", JsonSerializer.Serialize(banco.Sagas.Find("s1")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Una_fachada_que_no_pone_lo_efimero_que_declara_falla_ANTES_de_llamar_a_nadie()
+    {
+        var banco = ConAvisoAlFinal();
+        await banco.Abrir("a");
+        banco.Bitacora.Clear();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(banco.Cerrar);
+
+        Assert.Contains("pone nota en «cerrar»", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(banco.Bitacora);
     }
 }

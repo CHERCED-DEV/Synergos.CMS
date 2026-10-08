@@ -43,6 +43,7 @@ public static class FlowValidator
         var errores = new List<string>();
 
         RevisarFases(flujo, contrato, errores);
+        RevisarEfimera(flujo, contrato, errores);
         RevisarTipos(flujo, registro, errores);
         var donde = RevisarOrden(flujo, contrato, errores);
 
@@ -52,8 +53,98 @@ public static class FlowValidator
         }
 
         RevisarReservas(flujo, donde, contrato, errores);
+        RevisarAlFallar(flujo, donde, errores);
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
+    }
+
+    /// <summary>
+    /// Lo efímero es de UNA fase, lo pone la fachada, y no puede tapar lo que la fase ya tiene.
+    /// </summary>
+    /// <remarks>
+    /// Que no tape importa más de lo que parece: la entrada de una fase que continúa gana sobre lo
+    /// reconstruido, así que una efímera llamada como algo que la saga guarda —el total— dejaría a
+    /// la fachada reescribir lo que se cobra.
+    /// </remarks>
+    private static void RevisarEfimera(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
+    {
+        foreach (var (fase, nombres) in flujo.Efimera ?? new Dictionary<string, IReadOnlyList<string>>())
+        {
+            var f = flujo.Fases.ToList().FindIndex(x => string.Equals(x.Nombre, fase, StringComparison.Ordinal));
+            if (f < 0)
+            {
+                errores.Add($"declara lo efímero de la fase «{fase}», que no existe.");
+                continue;
+            }
+
+            var alEmpezar = f == 0 ? flujo.Entrada : contrato.Reconstruye;
+            foreach (var nombre in nombres)
+            {
+                if (!contrato.EfimeraDe(fase).Contains(nombre))
+                {
+                    errores.Add($"declara la efímera «{nombre}» en «{fase}» y la fachada no la pone ahí "
+                        + $"({nameof(ContratoDelFlujo.Efimera)}).");
+                }
+                if (alEmpezar.Contains(nombre))
+                {
+                    errores.Add($"declara la efímera «{nombre}» en «{fase}», y la fase ya empieza con ese nombre: "
+                        + "lo que pusiera la fachada taparía lo que la saga guarda.");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>al_fallar: seguir</c> sólo donde seguir no deja nada a medias: después del último cierre.
+    /// </summary>
+    /// <remarks>
+    /// <para>Antes de ese punto, seguir tras un fallo completaría una saga con algo reservado sin
+    /// consumir, o consumido sin cobrar. Después, ya no queda nada que deshacer, y deshacer por un
+    /// aviso que no salió devolvería la plata de una compra que sí se hizo.</para>
+    ///
+    /// <para>Por eso además no reserva, no cierra, no va en un bloque y no escribe: lo que escribiera
+    /// un paso que puede fallar sin parar la fase no tendría con qué contar quien lo lea.</para>
+    /// </remarks>
+    private static void RevisarAlFallar(
+        FlujoDef flujo, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => p.AlFallar is not null))
+        {
+            var aqui = $"«{paso.Id}» declara «al_fallar»";
+            if (paso.Reserva is not null || paso.CierraReserva is not null)
+            {
+                errores.Add($"{aqui} y reserva o cierra una reserva: seguir dejaría la saga a medias.");
+            }
+            if (paso.Escribe.Count > 0)
+            {
+                errores.Add($"{aqui} y escribe: si falla, quien lea lo que escribe no tendría qué leer.");
+            }
+
+            if (!donde.TryGetValue(paso.Id, out var u)) continue;
+
+            var ultima = flujo.Fases.Count - 1;
+            if (u.Fase != ultima)
+            {
+                errores.Add($"{aqui} y no está en la última fase: después de él todavía se reserva o se cierra algo.");
+                continue;
+            }
+            if (u.Bloque is not null)
+            {
+                errores.Add($"{aqui} dentro de un bloque: sólo vale como paso suelto, después del último cierre.");
+                continue;
+            }
+
+            var elementos = flujo.Fases[ultima].Pasos;
+            var posicion = elementos.ToList().FindIndex(e => string.Equals(e.Paso, paso.Id, StringComparison.Ordinal));
+            var ultimoCierre = elementos.ToList().FindLastIndex(e =>
+                (e.ParaCada?.Pasos ?? new[] { e.Paso! }).Any(id =>
+                    flujo.Pasos.TryGetValue(id, out var p) && p.CierraReserva is not null));
+            if (posicion < ultimoCierre)
+            {
+                errores.Add($"{aqui} y va antes del último cierre de «{flujo.Fases[ultima].Nombre}»: seguir "
+                    + "completaría la saga con una reserva sin consumir.");
+            }
+        }
     }
 
     private static void RevisarFases(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
@@ -158,7 +249,10 @@ public static class FlowValidator
         for (var f = 0; f < flujo.Fases.Count; f++)
         {
             var fase = flujo.Fases[f];
-            var alEmpezar = f == 0 ? flujo.Entrada : contrato.Reconstruye;
+            // Lo efímero de ESTA fase se suma a lo que tiene al empezar; el de otra no está.
+            var alEmpezar = (f == 0 ? flujo.Entrada : contrato.Reconstruye)
+                .Concat(flujo.EfimeraDe(fase.Nombre))
+                .ToList();
             var escritos = new HashSet<string>(alEmpezar, StringComparer.Ordinal);
 
             foreach (var elemento in fase.Pasos)

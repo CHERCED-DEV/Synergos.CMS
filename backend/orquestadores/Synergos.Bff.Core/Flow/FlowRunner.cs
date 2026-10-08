@@ -33,7 +33,11 @@ namespace Synergos.Bff.Core.Flow;
 ///   son de la fachada; ésta es la red para la fachada que se las olvide, porque continuar una
 ///   saga ya completada volvería a consumir lo consumido.</item>
 ///   <item>Un paso que falla después de nacer la saga la deshace con su motivo y devuelve el
-///   rechazo ORIGINAL de la capacidad.</item>
+///   rechazo ORIGINAL de la capacidad. Salvo uno con <c>al_fallar: seguir</c>, que el validador
+///   sólo admite después del último cierre: ése se anota —la saga y el código, nada más— y la
+///   fase sigue, porque ya no queda nada que deshacer y deshacer devolvería una compra hecha.</item>
+///   <item>Lo efímero de una fase (<see cref="IFlowBinding{TSaga}.Efimera"/>) lo tiene que poner la
+///   fachada antes del primer paso, y vive sólo en el contexto de esa llamada.</item>
 ///   <item>Al terminar la última fase, la saga queda <c>Completed</c> y lo que estaba armado,
 ///   hecho: el barrido no tiene nada que intentar.</item>
 /// </list>
@@ -110,8 +114,8 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// <param name="fase">El nombre de la fase.</param>
     /// <param name="sagaId">La saga. Quien llama ya resolvió su llave con <see cref="SagaEngine{TSaga}.Abrir"/>.</param>
     /// <param name="entrada">Lo que pone el llamador. En una fase que continúa se suma a lo que
-    /// <see cref="IFlowBinding{TSaga}.Leer"/> reconstruye de la saga, y gana; pero el validador no
-    /// cuenta con ella, así que ningún paso de esa fase puede depender de lo que traiga.</param>
+    /// <see cref="IFlowBinding{TSaga}.Leer"/> reconstruye de la saga, y gana; pero el validador sólo
+    /// cuenta con lo que el binding declara efímero para esa fase.</param>
     /// <param name="ct">Cancelación.</param>
     /// <returns>La saga como quedó, o el rechazo ORIGINAL del paso que falló; <see cref="NoEnCurso"/>
     /// si una fase que continúa encuentra la saga en otro estado que <c>Running</c>.</returns>
@@ -125,6 +129,15 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 
         var definicion = _flujo.Fase(fase);
         var abre = ReferenceEquals(definicion, _flujo.Fases[0]);
+
+        // Lo efímero lo pone la fachada en cada llamada, aunque sea nulo: el validador aceptó las
+        // lecturas de esta fase contando con ello, y es mejor saberlo antes de llamar a nadie.
+        if (_binding.Efimera.GetValueOrDefault(fase) is { } efimera
+            && efimera.Where(n => !entrada.Has(n)).ToList() is { Count: > 0 } sinPoner)
+        {
+            throw new InvalidOperationException(
+                $"La fachada de «{_flujo.Clave}» declara que pone {string.Join(", ", sinPoner)} en «{fase}» y no lo pone.");
+        }
 
         // La que abre NO relee: la llave ya la resolvió quien llama con SagaEngine.Abrir, y la
         // saga nace nueva aunque una llamada simultánea con la misma llave ya hubiera escrito — el
@@ -261,11 +274,29 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
 
         var paso = _pasos.Para(definicion.Tipo)!;
-        var salida = await paso.EjecutarAsync(
-            new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item), ct);
+        SalidaDePaso salida;
+        try
+        {
+            salida = await paso.EjecutarAsync(
+                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item), ct);
+        }
+        catch (Exception ex) when (definicion.SigueSiFalla && !(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            // Sólo el tipo: el mensaje puede llevar lo que el paso recibió, y lo efímero no se escribe
+            // en ningún sitio, tampoco en el log.
+            _log.LogWarning("El flujo {Flujo} sigue sin el paso {Paso} en la saga {Saga}: lanzó {Tipo}.",
+                _flujo.Clave, definicion.Id, corrida.SagaId, ex.GetType().Name);
+            return Desenlace.Sigue;
+        }
 
         if (salida.Rechazo is { } rechazo)
         {
+            if (definicion.SigueSiFalla)
+            {
+                _log.LogWarning("El flujo {Flujo} sigue sin el paso {Paso} en la saga {Saga}: {Codigo}.",
+                    _flujo.Clave, definicion.Id, corrida.SagaId, rechazo.Code);
+                return Desenlace.Sigue;
+            }
             return new Desenlace(PasoResultado.Abortar, rechazo, definicion.Motivo ?? $"falló el paso «{definicion.Id}»");
         }
 

@@ -267,12 +267,108 @@ public sealed class FlowValidatorTests
     [Fact]
     public void Un_campo_que_el_interprete_no_conoce_no_se_lee()
     {
-        // Quien escribe «al_fallar» cree haber declarado algo; si se ignorara, la primera compra
-        // le enseñaría que no.
+        // Quien escribe «si» cree haber declarado una condición; si se ignorara, la primera compra
+        // le enseñaría que no. (Era «al_fallar» hasta que la F3 lo hizo un campo de verdad.)
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(Mutar(
+            "\"llave\": \"capture\",", "\"llave\": \"capture\", \"si\": \"total > 0\",")));
+
+        Assert.Contains("«si»", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ── al_fallar y lo efímero (ADR 0140 F3) ────────────────────────────────
+
+    [Fact]
+    public void Al_fallar_solo_admite_seguir()
+    {
         var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(Mutar(
             "\"llave\": \"capture\",", "\"llave\": \"capture\", \"al_fallar\": \"soltar-y-seguir\",")));
 
-        Assert.Contains("«al_fallar»", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("«al_fallar» sólo admite «seguir»", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Al_fallar_solo_va_en_un_paso_que_no_reserva_ni_cierra_en_la_ultima_fase()
+    {
+        // Seguir tras un fallo antes del último cierre completaría una saga con algo reservado sin
+        // consumir, o consumido sin cobrar.
+        var enCapturar = Errores(Mutar("\"llave\": \"capture\",", "\"llave\": \"capture\", \"al_fallar\": \"seguir\","));
+        var enAutorizar = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"al_fallar\": \"seguir\","));
+        var enAbrir = Errores(Mutar(
+            "{ \"tipo\": \"eventos.revisar-lineas\", \"lee\": [\"lineas\"] }",
+            "{ \"tipo\": \"eventos.revisar-lineas\", \"lee\": [\"lineas\"], \"al_fallar\": \"seguir\" }"));
+
+        Assert.Contains(enCapturar, e => e.Contains("«capturar» declara «al_fallar» y reserva o cierra", StringComparison.Ordinal));
+        Assert.Contains(enAutorizar, e => e.Contains("«autorizar» declara «al_fallar» y reserva o cierra", StringComparison.Ordinal));
+        Assert.Contains(enAbrir, e => e.Contains("«revisar-lineas» declara «al_fallar» y no está en la última fase", StringComparison.Ordinal));
+    }
+
+    /// <summary>Un paso de «cerrar» que se puede declarar con al_fallar: lee lo que la saga reconstruye.</summary>
+    private static PasoDef Nota(string id, string? cierra = null, IReadOnlyList<string>? escribe = null)
+        => new(id, "eventos.total", new[] { "total", "paymentId" }, escribe ?? new[] { "x" }, null, null, null, cierra, null,
+            PasoDef.Seguir);
+
+    [Fact]
+    public void Al_fallar_va_despues_del_ultimo_cierre_suelto_y_sin_escribir()
+    {
+        var f = EventosFlujos.Compra;
+        var cerrar = f.Fases[1];
+        FlujoDef Con(PasoDef paso, IReadOnlyList<PasoRef> elementos)
+            => f with
+            {
+                Fases = new[] { f.Fases[0], cerrar with { Pasos = elementos } },
+                Pasos = f.Pasos.Append(new KeyValuePair<string, PasoDef>(paso.Id, paso)).ToDictionary(),
+            };
+
+        var alFinal = Nota("nota");
+        var alFinalSinEscribir = Nota("nota", escribe: Array.Empty<string>()) with { Tipo = "inventory.consumir", Lee = new[] { "paymentId" } };
+        var antes = Con(alFinal, cerrar.Pasos.Prepend(new PasoRef("nota", null)).ToList());
+        var despues = Con(alFinal, cerrar.Pasos.Append(new PasoRef("nota", null)).ToList());
+        var bien = Con(alFinalSinEscribir, cerrar.Pasos.Append(new PasoRef("nota", null)).ToList());
+        var bloque = cerrar.Pasos[1].ParaCada!;
+        var enBloque = Con(alFinalSinEscribir with { Lee = new[] { "hold.holdId" } },
+            new[] { cerrar.Pasos[0], new PasoRef(null, bloque with { Pasos = bloque.Pasos.Append("nota").ToList() }) });
+
+        Assert.Empty(FlowValidator.Validar(bien, Registro, Contrato));   // el control: así sí vale
+        Assert.Contains(FlowValidator.Validar(antes, Registro, Contrato), e => e.Contains("va antes del último cierre de «cerrar»", StringComparison.Ordinal));
+        Assert.Contains(FlowValidator.Validar(despues, Registro, Contrato), e => e.Contains("«nota» declara «al_fallar» y escribe", StringComparison.Ordinal));
+        Assert.Contains(FlowValidator.Validar(enBloque, Registro, Contrato), e => e.Contains("«nota» declara «al_fallar» dentro de un bloque", StringComparison.Ordinal));
+    }
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> ContactoEnCerrar =
+        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "contacto" } };
+
+    private static string ConEfimera(string json, string fase = "cerrar", string nombre = "contacto")
+        => json.Replace(
+            "\"entrada\": [\"eventId\", \"comprador\", \"lineas\", \"comisionPct\"],",
+            $"\"entrada\": [\"eventId\", \"comprador\", \"lineas\", \"comisionPct\"],\n  \"efimera\": {{ \"{fase}\": [\"{nombre}\"] }},",
+            StringComparison.Ordinal);
+
+    [Fact]
+    public void Lo_efimero_se_lee_en_su_fase_y_en_ninguna_otra()
+    {
+        var conEfimera = Contrato with { Efimera = ContactoEnCerrar };
+        Assert.Contains("\"efimera\"", ConEfimera(Original()), StringComparison.Ordinal);   // la mutación entró
+
+        var enSuFase = Errores(ConEfimera(Mutar("\"lee\": [\"paymentId\"]", "\"lee\": [\"contacto\"]")), conEfimera);
+        var enOtra = Errores(ConEfimera(Mutar("\"lee\": [\"comisionPct\"] }", "\"lee\": [\"contacto\"] }")), conEfimera);
+
+        Assert.DoesNotContain(enSuFase, e => e.Contains("«contacto»", StringComparison.Ordinal));
+        Assert.Contains(enOtra, e => e.Contains("«revisar-comision» lee «contacto» y nadie lo escribe antes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_efimero_lo_tiene_que_poner_la_fachada_en_una_fase_que_existe_sin_tapar_nada()
+    {
+        var noLoPone = Errores(ConEfimera(Original()));
+        var otraFase = Errores(ConEfimera(Original(), fase: "pagar"), Contrato with { Efimera = ContactoEnCerrar });
+        var tapa = Errores(ConEfimera(Original(), nombre: "total"), Contrato with
+        {
+            Efimera = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "total" } },
+        });
+
+        Assert.Contains(noLoPone, e => e.Contains("declara la efímera «contacto» en «cerrar» y la fachada no la pone", StringComparison.Ordinal));
+        Assert.Contains(otraFase, e => e.Contains("declara lo efímero de la fase «pagar», que no existe", StringComparison.Ordinal));
+        Assert.Contains(tapa, e => e.Contains("la efímera «total» en «cerrar», y la fase ya empieza con ese nombre", StringComparison.Ordinal));
     }
 
     [Fact]

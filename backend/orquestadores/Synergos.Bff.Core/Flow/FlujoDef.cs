@@ -10,6 +10,9 @@ namespace Synergos.Bff.Core.Flow;
 /// <param name="Entrada">Lo que el llamador pone en el contexto antes del primer paso.</param>
 /// <param name="Fases">En el orden del documento: la primera abre la saga y las demás la continúan.</param>
 /// <param name="Pasos">Cada paso por su identificador dentro del flujo.</param>
+/// <param name="Efimera">Por fase, lo que la fachada pone SÓLO para esa llamada y no se guarda en
+/// ningún sitio: la dirección a la que se avisa, que la saga no puede llevar porque no lleva datos
+/// personales. Un paso sólo lo lee en su fase.</param>
 /// <remarks>
 /// <para><b>Por qué un dato y no otro <c>*Flow.cs</c>.</b> El orden de los pasos y la reserva en dos
 /// tiempos —anotar cómo se deshace al apartar, cambiarle el carácter al consumir— se escribían a
@@ -27,8 +30,13 @@ public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
     IReadOnlyList<FaseDef> Fases,
-    IReadOnlyDictionary<string, PasoDef> Pasos)
+    IReadOnlyDictionary<string, PasoDef> Pasos,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Efimera = null)
 {
+    /// <summary>Lo efímero de una fase: vacío si no declara nada.</summary>
+    public IReadOnlyList<string> EfimeraDe(string fase)
+        => Efimera?.GetValueOrDefault(fase) ?? Array.Empty<string>();
+
     /// <summary>La fase con ese nombre, o rechaza: una fase que no existe es un defecto del llamador.</summary>
     public FaseDef Fase(string nombre)
         => Fases.FirstOrDefault(f => string.Equals(f.Nombre, nombre, StringComparison.Ordinal))
@@ -74,6 +82,10 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// <param name="CierraReserva">El paso cuya reserva éste consuma. Tiene que ser el que esa reserva
 /// nombra en <c>consumado_por</c>: cada reserva tiene un solo cierre.</param>
 /// <param name="Motivo">Con qué motivo se deshace la saga si este paso falla.</param>
+/// <param name="AlFallar"><c>seguir</c>: si el paso rechaza o lanza, se anota y la fase sigue, sin
+/// deshacer nada. Sólo vale después del último cierre de la última fase, en un paso que no
+/// reserva, no cierra ni escribe: lo que ya se cobró y se consumió no se devuelve porque un aviso
+/// no salió.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -83,7 +95,15 @@ public sealed record PasoDef(
     string? LlaveBase,
     ReservaDef? Reserva,
     string? CierraReserva,
-    string? Motivo);
+    string? Motivo,
+    string? AlFallar = null)
+{
+    /// <summary>El único valor de <c>al_fallar</c>.</summary>
+    public const string Seguir = "seguir";
+
+    /// <summary>Si un fallo de este paso se anota y la fase sigue.</summary>
+    public bool SigueSiFalla => string.Equals(AlFallar, Seguir, StringComparison.Ordinal);
+}
 
 /// <summary>
 /// La reserva en dos tiempos: con qué paso se consuma y cómo se deshace antes y después.
@@ -105,8 +125,9 @@ public sealed record ReservaDef(string ConsumadoPor, string Antes, string? Despu
 /// <summary>Lee el JSON de un flujo con la forma exacta que el intérprete ejecuta.</summary>
 /// <remarks>
 /// <para><b>Estricto con los campos que no conoce.</b> Un campo que el intérprete no lee es una
-/// regla que nadie cumple: quien escribe <c>"al_fallar"</c> creería haber declarado algo, y la
-/// primera compra le enseñaría que no. Mejor que no arranque.</para>
+/// regla que nadie cumple: quien escribe <c>"si"</c> creería haber declarado una condición, y la
+/// primera compra le enseñaría que no. Mejor que no arranque. Lo mismo con un valor que no
+/// conoce: <c>al_fallar</c> admite <c>seguir</c> y nada más.</para>
 ///
 /// <para><b>Y con los que se repiten</b>, por la misma razón. JSON los admite y
 /// <see cref="JsonDocument"/> también: en <c>pasos</c> ganaría el último sin aviso, y en
@@ -132,7 +153,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -155,7 +176,18 @@ internal static class LectorDeFlujo
                 fases.Add(Fase(f.Name, f.Value, donde));
             }
 
-            return new FlujoDef(clave, entrada, fases, pasos);
+            Dictionary<string, IReadOnlyList<string>>? efimera = null;
+            if (raiz.TryGetProperty("efimera", out var nodoEfimera))
+            {
+                Objeto(nodoEfimera, $"{donde}, «efimera»");
+                efimera = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+                foreach (var f in nodoEfimera.EnumerateObject())
+                {
+                    efimera[f.Name] = Textos(nodoEfimera, f.Name, $"{donde}, «efimera»");
+                }
+            }
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera);
         }
     }
 
@@ -187,7 +219,13 @@ internal static class LectorDeFlujo
         var aqui = $"{donde}, paso «{id}»";
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
-            "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo");
+            "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar");
+
+        var alFallar = Opcional(nodo, "al_fallar", aqui);
+        if (alFallar is not null && !string.Equals(alFallar, PasoDef.Seguir, StringComparison.Ordinal))
+        {
+            throw new FormatException($"{aqui}: «al_fallar» sólo admite «{PasoDef.Seguir}», y trae «{alFallar}».");
+        }
 
         ReservaDef? reserva = null;
         if (nodo.TryGetProperty("reserva", out var r))
@@ -209,7 +247,8 @@ internal static class LectorDeFlujo
             Opcional(nodo, "llave_base", aqui),
             reserva,
             Opcional(nodo, "cierra_reserva", aqui),
-            Opcional(nodo, "motivo", aqui));
+            Opcional(nodo, "motivo", aqui),
+            alFallar);
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

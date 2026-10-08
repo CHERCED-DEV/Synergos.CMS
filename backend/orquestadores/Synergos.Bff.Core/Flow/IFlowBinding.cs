@@ -59,6 +59,22 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
     IReadOnlyDictionary<string, FormaDeReserva> Reservas { get; }
 
     /// <summary>
+    /// Por fase, lo que la fachada pone SÓLO para esa llamada: la <c>efimera</c> que la definición
+    /// puede declarar. Por defecto, nada.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es la forma de darle a un paso algo que la saga no puede guardar —la dirección del
+    /// aviso: la saga está fijada byte a byte y no lleva datos personales— sin que pase por
+    /// <see cref="Crear"/>, <see cref="ConReserva"/> ni <see cref="ConError"/>. Entra con la entrada
+    /// de la fase y muere con ella.</para>
+    ///
+    /// <para>El validador exige que toda la <c>efimera</c> de la definición esté acá y que ningún
+    /// paso la lea fuera de su fase; el intérprete, que la fachada la ponga (aunque sea nula) antes
+    /// del primer paso. Un binding que no la declara deja la definición sin arrancar, no la ignora.</para>
+    /// </remarks>
+    IReadOnlyDictionary<string, IReadOnlyCollection<string>> Efimera => ContratoDelFlujo.SinEfimera;
+
+    /// <summary>
     /// La saga recién nacida, <c>Running</c>, con lo que la fase lleva calculado.
     /// </summary>
     /// <remarks>
@@ -101,6 +117,7 @@ public enum FormaDeReserva
 /// <param name="CamposDeItem">Los campos de cada lista de ítems que el dominio pone en el contexto.</param>
 /// <param name="Reservas">Las reservas que la saga sabe guardar, por paso.</param>
 /// <param name="Saga">El tipo de saga: tiene que tener la ranura que el intérprete lee.</param>
+/// <param name="Efimera">Lo que la fachada pone, por fase, sólo para esa llamada.</param>
 /// <remarks>
 /// <b>Existe porque el JSON y el C# se escriben en sitios distintos.</b> La definición nombra fases,
 /// campos y pasos que algún código tiene que poner; si los dos se desvían, el lector y el
@@ -112,14 +129,24 @@ public sealed record ContratoDelFlujo(
     IReadOnlyCollection<string> Reconstruye,
     IReadOnlyDictionary<string, IReadOnlyCollection<string>> CamposDeItem,
     IReadOnlyDictionary<string, FormaDeReserva> Reservas,
-    Type Saga)
+    Type Saga,
+    IReadOnlyDictionary<string, IReadOnlyCollection<string>>? Efimera = null)
 {
+    /// <summary>Ninguna fase con nada efímero.</summary>
+    public static IReadOnlyDictionary<string, IReadOnlyCollection<string>> SinEfimera { get; } =
+        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal);
+
+    /// <summary>Lo efímero que la fachada pone en una fase: vacío si no declara nada.</summary>
+    public IReadOnlyCollection<string> EfimeraDe(string fase)
+        => Efimera?.GetValueOrDefault(fase) ?? Array.Empty<string>();
+
     /// <summary>El contrato de un binding y las fases que su fachada invoca.</summary>
     public static ContratoDelFlujo De<TSaga>(IFlowBinding<TSaga> binding, IReadOnlyList<string> fases)
         where TSaga : class, ISaga<TSaga>
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(fases);
-        return new(fases, binding.PoneAlAbrir, binding.Reconstruye, binding.CamposDeItem, binding.Reservas, typeof(TSaga));
+        return new(fases, binding.PoneAlAbrir, binding.Reconstruye, binding.CamposDeItem, binding.Reservas, typeof(TSaga),
+            binding.Efimera);
     }
 }
