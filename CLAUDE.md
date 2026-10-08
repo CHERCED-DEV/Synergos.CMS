@@ -182,6 +182,18 @@ versión de la rama 13 que lo cierre.
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
 
+> **Y tres NU1903 SÍ se aceptan, uno por uno** (ADR 0140 F3, decisión del arquitecto del
+> 2026-10-08). `SixLabors.ImageSharp` 3.1.12 llega transitiva por `Umbraco.Cms.Imaging.ImageSharp`
+> y el 2026-10-07 salieron `GHSA-j3p4-wp97-rph4`, `GHSA-j9gm-c75j-xc9q` y `GHSA-jjfr-hcj7-qf5w`
+> —HIGH, rango hasta 4.1.1, parche sólo en 4.1.2—; medido: 3.1.12 es la última 3.x. Es la misma
+> razón que NU1902 (ninguna versión de la rama clavada lo cierra), así que van como
+> `<NuGetAuditSuppress>` **por aviso** en `Directory.Build.props`, con la razón al lado, y **no**
+> como `NoWarn` de NU1903: el próximo con parche en la rama tiene que seguir rompiendo el
+> restore. Mutado: quitar una de las tres líneas vuelve a romperlo con ese aviso y sólo ése.
+> Evaluar ImageSharp 4 debajo de Umbraco 13 es un ticket aparte. Sólo lo veía
+> `Synergos.Arquitectura.Tests` (net10.0 audita las transitivas; el CMS en net8.0, sólo las
+> directas), y por eso estuvo rojo para todos desde el 2026-10-07 20:24Z sin que nadie tocara un commit.
+
 ## 2. Mapa del proyecto
 
 ```

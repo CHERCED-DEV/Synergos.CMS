@@ -103,6 +103,29 @@
     <NoWarn>$(NoWarn);1591;1573;NU1902</NoWarn>
   </PropertyGroup>
 
+  <!--
+    NU1903 aceptado POR AVISO, nunca por código (ADR 0140 F3, decisión del arquitecto del
+    2026-10-08). SixLabors.ImageSharp 3.1.12 llega transitiva —Umbraco.Cms →
+    Umbraco.Cms.Imaging.ImageSharp, directa y vía ImageSharp.Web 3.1.5— y el 2026-10-07 se
+    publicaron tres avisos HIGH sobre ella: la ecualización de histograma y los codificadores
+    TIFF CCITT T4 y T6. Rango `>= 2.0.0, <= 4.1.1` (el de T6 desde 2.1.0), parche sólo en
+    4.1.2. Medido el 2026-10-08 en api.nuget.org y en la API de avisos de GitHub: 3.1.12 es la
+    ÚLTIMA 3.x, así que ninguna versión de la rama que clava Umbraco 13 lo cierra, que es la
+    misma razón que acepta NU1902. Pasar a 4.x por debajo de Umbraco 13 es una evaluación
+    propia y va en su ticket («Evaluar SixLabors.ImageSharp 4 bajo Umbraco 13»), no acá.
+
+    Por qué tres líneas y no NU1903 en el NoWarn de arriba: un NU1903 FUTURO con parche dentro
+    de la rama tiene que seguir saliendo rojo —la nota de NU1903 de arriba—, y un NoWarn entero
+    lo callaría junto con estos. Sólo lo ve Synergos.Arquitectura.Tests, que va en net10.0 y
+    audita las transitivas; el CMS en net8.0 audita sólo las directas, así que el aviso
+    existe también en el CMS de producción aunque su restore no lo diga.
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+  </ItemGroup>
+
   <PropertyGroup>
     <NeutralLanguage>en</NeutralLanguage>
     <InvariantGlobalization>false</InvariantGlobalization>
