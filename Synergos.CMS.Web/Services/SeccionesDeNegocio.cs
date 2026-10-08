@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
@@ -42,6 +43,40 @@ public static class SeccionesDeNegocio
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger(seccion.Path));
         });
 
+        // Y por su NOMBRE, para quien no conoce el tipo: la puerta adjunta los campos que un flujo
+        // declara de la sección que nombra su configuración (ADR 0140 F3). Es la misma fusión por
+        // sitio —el mismo INegocioDelSitio—, no una segunda lectura de la configuración.
+        services.AddSingleton(new SeccionDeNegocioRegistrada(
+            seccion.Key, typeof(TNegocio), sp => sp.GetRequiredService<INegocioDelSitio<TNegocio>>().Actual()));
+        services.TryAddSingleton<SeccionesDelSitio>();
+
         return services;
     }
+}
+
+/// <summary>Una sección de negocio registrada, con el nombre por el que se la pide.</summary>
+/// <param name="Nombre">El último tramo de la sección: <c>Eventos</c> por <c>Synergos:Features:Eventos</c>.</param>
+/// <param name="Tipo">El tipo de su configuración fusionada.</param>
+/// <param name="Actual">La configuración que rige la petición en curso.</param>
+public sealed record SeccionDeNegocioRegistrada(string Nombre, Type Tipo, Func<IServiceProvider, object> Actual);
+
+/// <summary>
+/// Las secciones de negocio registradas, por nombre: el acceso genérico que usa la puerta (ADR 0140 F3).
+/// </summary>
+public sealed class SeccionesDelSitio
+{
+    private readonly IServiceProvider _servicios;
+    private readonly Dictionary<string, SeccionDeNegocioRegistrada> _porNombre;
+
+    public SeccionesDelSitio(IEnumerable<SeccionDeNegocioRegistrada> registradas, IServiceProvider servicios)
+    {
+        _servicios = servicios;
+        _porNombre = registradas.ToDictionary(r => r.Nombre, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>El tipo de la sección <paramref name="nombre"/>, o nulo si no está registrada.</summary>
+    public Type? TipoDe(string nombre) => _porNombre.GetValueOrDefault(nombre)?.Tipo;
+
+    /// <summary>La configuración de la sección <paramref name="nombre"/> para el sitio de la petición.</summary>
+    public object? Actual(string nombre) => _porNombre.GetValueOrDefault(nombre)?.Actual(_servicios);
 }

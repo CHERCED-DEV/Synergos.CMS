@@ -139,6 +139,7 @@ internal static class ContratoOpenApi
         o.AddOperationTransformer(Llave);
         o.AddOperationTransformer(Identidad);
         o.AddOperationTransformer(Puerta);
+        o.AddOperationTransformer(Flujo);
         o.AddOperationTransformer(Rechazos);
         o.AddDocumentTransformer((doc, ctx, ct) =>
         {
@@ -318,6 +319,32 @@ internal static class ContratoOpenApi
                 {
                     [MarcaDeLaPuerta] = new JsonNodeExtension(JsonValue.Create(true)),
                 },
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>La marca de una operación que la puerta del CMS expone: <c>{ flujo, operacion }</c>.</summary>
+    public const string MarcaDelFlujo = "x-synergos-flujo";
+
+    /// <summary>
+    /// La operación que el orquestador expone en la puerta, marcada con <see cref="MarcaDelFlujo"/>
+    /// desde el metadato <see cref="OperacionEnLaPuerta"/> (ADR 0140 F3).
+    /// </summary>
+    /// <remarks>
+    /// Es lo que lee la puerta del CMS para armar su tabla, y el generador del UI para saber qué emitir.
+    /// Sin marca, la operación no existe para ninguno de los dos.
+    /// </remarks>
+    private static Task Flujo(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
+    {
+        if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<OperacionEnLaPuerta>().FirstOrDefault() is { } marca)
+        {
+            op.Extensions ??= new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal);
+            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(new JsonObject
+            {
+                ["flujo"] = marca.Flujo,
+                ["operacion"] = marca.Operacion,
             });
         }
 

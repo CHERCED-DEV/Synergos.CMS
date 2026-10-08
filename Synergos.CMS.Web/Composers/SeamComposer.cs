@@ -33,6 +33,7 @@ public sealed partial class SeamComposer : IComposer
         ComposePlatformServicesAndHealthcare(builder);
         ComposeEventsPropertiesAndGov(builder);
         ComposeModerationDevAndNotifications(builder);
+        ComposePuerta(builder);
     }
 
     /// <summary>

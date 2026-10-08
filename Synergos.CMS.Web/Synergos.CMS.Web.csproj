@@ -26,6 +26,19 @@
       Condition="$(RuntimeIdentifier.StartsWith('linux')) or $(RuntimeIdentifier.StartsWith('win')) or ('$(RuntimeIdentifier)' == '' and !$([MSBuild]::IsOSPlatform('osx')))" />
   </ItemGroup>
 
+  <!--
+    LOS CONTRATOS DE LOS ORQUESTADORES VIAJAN DENTRO DEL CMS (ADR 0140 F3).
+
+    La puerta (/api/flujos) arma su tabla de los `x-synergos-flujo` que cada Synergos.Bff.* publica.
+    Se incrustan y no se leen del disco: el CMS y el orquestador son imágenes distintas, y el contrato
+    contra el que la puerta se armó tiene que viajar con ella. Los de capacidad (Synergos.Api.*) no:
+    la puerta sólo habla con orquestadores. Hay gate (PuertaGenericaTests): lo incrustado es lo del
+    disco, y .dockerignore no deja fuera la carpeta.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="docs\contracts\openapi\Synergos.Bff.*.json" LogicalName="contratos/%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Synergos.CMS.Application\Synergos.CMS.Application.csproj" />
     <ProjectReference Include="..\Synergos.CMS.Interfaces\Synergos.CMS.Interfaces.csproj" />
