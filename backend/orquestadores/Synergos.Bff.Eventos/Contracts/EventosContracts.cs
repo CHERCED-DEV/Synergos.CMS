@@ -87,5 +87,49 @@ public sealed record PendingCompensationResponse(
     string PurchaseId, string Kind, string Reason, int Attempts,
     DateTimeOffset? NextAttemptUtc, string? LastError, bool Stuck, DateTimeOffset? AlertedAtUtc);
 
+/// <summary>Una localidad de la oferta de un evento, tal como la publica el CMS.</summary>
+/// <param name="Code">El código de la localidad: el mismo con que la nombra una línea de la compra.</param>
+/// <param name="Price">Cuánto vale una entrada, en la moneda de la oferta.</param>
+/// <param name="MaxPerOrder">Cuántas admite una compra, sumando sus líneas. Sin él, sin tope.</param>
+/// <param name="Capacity">El aforo de cupo general. Con butacas no se mira: cada butaca es un pozo de 1.</param>
+/// <param name="Seats">Las butacas nominadas, si la localidad las tiene.</param>
+/// <param name="SaleOpensUtc">Desde cuándo se vende, incluido. Sin él, desde ya.</param>
+/// <param name="SaleClosesUtc">Hasta cuándo, excluido. Sin él, hasta que empiece el evento.</param>
+public sealed record OfferTierRequest(
+    string? Code = null, decimal? Price = null, int? MaxPerOrder = null, int? Capacity = null,
+    IReadOnlyList<string>? Seats = null, DateTimeOffset? SaleOpensUtc = null, DateTimeOffset? SaleClosesUtc = null);
+
+/// <summary>Publicar la oferta de un evento: el precio de cada localidad y sus pozos de aforo (ADR 0140 F3).</summary>
+/// <param name="EventId">De qué evento.</param>
+/// <param name="Currency">La moneda de los precios.</param>
+/// <param name="StartsAtUtc">Cuándo empieza: desde ahí no se vende ninguna localidad.</param>
+/// <param name="Tiers">Sus localidades.</param>
+/// <remarks>
+/// La manda el CMS al publicar un evento, no el navegador: por eso no lleva marca de la puerta.
+/// </remarks>
+public sealed record PublishEventOfferRequest(
+    string? EventId = null, string? Currency = null, DateTimeOffset? StartsAtUtc = null,
+    IReadOnlyList<OfferTierRequest>? Tiers = null);
+
+/// <summary>Cómo quedó publicada una localidad.</summary>
+/// <param name="Code">La localidad.</param>
+/// <param name="Price">Su precio, sin impuesto.</param>
+/// <param name="ValidFrom">Desde cuándo se cotiza.</param>
+/// <param name="ValidTo">Hasta cuándo: lo primero entre el cierre de la venta y el inicio del evento.</param>
+/// <param name="MaxPerOrder">Cuántas admite una compra.</param>
+/// <param name="Capacity">El aforo declarado: el de cupo general, o cuántas butacas.</param>
+/// <param name="Pools">Cuántos pozos de aforo tiene.</param>
+public sealed record OfferTierResponse(
+    string Code, MoneyDto Price, DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo, int? MaxPerOrder, int Capacity, int Pools);
+
+/// <summary>Cómo quedó publicada la oferta de un evento.</summary>
+public sealed record EventOfferResponse(string EventId, IReadOnlyList<OfferTierResponse> Tiers)
+{
+    public static EventOfferResponse From(OfertaPublicada o) => new(
+        o.EventId,
+        o.Tiers.Select(t => new OfferTierResponse(
+            t.Code, new MoneyDto(t.Price.Amount, t.Price.Currency), t.ValidFrom, t.ValidTo, t.MaxPerOrder, t.Capacity, t.Pools)).ToList());
+}
+
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

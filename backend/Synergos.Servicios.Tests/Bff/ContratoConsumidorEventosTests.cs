@@ -42,6 +42,9 @@ public sealed class ContratoConsumidorEventosTests
     private static readonly Dictionary<string, Func<EventosCapabilities, Task>> Recorrido = new(StringComparer.Ordinal)
     {
         ["QuoteAsync"] = c => c.QuoteAsync([(Ref.Create("eventos.localidad", "e1/vip"), 2)], Ct),
+        ["SetPriceAsync"] = c => c.SetPriceAsync(
+            Ref.Create("eventos.localidad", "e1/vip"), Monto, 0, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddDays(1), 4, Llave, Ct),
+        ["DeclareAforoAsync"] = c => c.DeclareAforoAsync(Ref.Create("eventos.aforo", "e1/vip"), 400, Llave, Ct),
         ["FindAforoAsync"] = c => c.FindAforoAsync(Ref.Create("eventos.aforo", "e1/vip/A-14"), Ct),
         ["HoldAforoAsync"] = c => c.HoldAforoAsync("po-1", 1, Algo, Llave, Ct),
         ["ReleaseAforoAsync"] = c => c.ReleaseAforoAsync("ah-1", Ct),
@@ -89,8 +92,8 @@ public sealed class ContratoConsumidorEventosTests
     {
         var declarados = DelCliente().Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.True(declarados.Count >= 12,
-            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en EventosCapabilities y son 12: el censo dejó de ver.");
+        Assert.True(declarados.Count >= 14,
+            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en EventosCapabilities y son 14: el censo dejó de ver.");
         Assert.True(declarados.SequenceEqual(Recorrido.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal),
             "EventosCapabilities y el recorrido de este gate no tienen los mismos métodos. Sin recorrido, " +
             "un método nuevo habla con su capacidad sin que nadie cruce su forma con el contrato." +

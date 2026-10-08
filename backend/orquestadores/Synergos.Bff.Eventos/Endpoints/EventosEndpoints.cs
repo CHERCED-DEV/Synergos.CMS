@@ -85,6 +85,20 @@ public static class EventosEndpoints
             return (await flow.CancelAsync(id, dueno!, ct)).Map(TicketPurchaseResponse.From).ToHttp();
         }).WithName("CancelTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
 
+        // La oferta de un evento: el precio de cada localidad y sus pozos de aforo (ADR 0140 F3). La
+        // llama el CMS al publicar, no un navegador, así que no lleva marca de la puerta ni cabeceras
+        // suyas. Repetirla no duplica nada; ver OfertaDeEventos.
+        app.MapPost("/v1/ofertas", async Task<Results<Ok<EventOfferResponse>, ProblemHttpResult>> (
+            PublishEventOfferRequest req, HttpRequest http, OfertaDeEventos ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+
+            var oferta = new OfertaDeEvento(req.EventId, req.Currency, req.StartsAtUtc, req.Tiers?
+                .Select(t => new LocalidadOfertada(t.Code, t.Price, t.MaxPerOrder, t.Capacity, t.Seats, t.SaleOpensUtc, t.SaleClosesUtc))
+                .ToList());
+            return (await ofertas.PublicarAsync(oferta, key, ct)).Map(EventOfferResponse.From).ToHttp();
+        }).WithName("PublishEventOffer").ConLlaveDeIdempotencia();
+
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, «se rinde a los ocho intentos» sería «se abandona», y arreglar una devolución
         // colgada exigiría tocarla a mano en la capacidad, por fuera del rastro de la saga.

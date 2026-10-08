@@ -53,6 +53,7 @@ builder.AddSagaMachinery<TicketingSaga, EventosCompensationExecutor>(
 
 builder.Services.AddSingleton<EventosCapabilities>();
 builder.Services.AddSingleton<TicketingFlow>();
+builder.Services.AddSingleton<OfertaDeEventos>();
 
 // La compra se DECLARA en flujos/eventos.compra.json y se valida AL ARRANCAR (ADR 0140): un tipo
 // de paso que nadie registró, una lectura sin escritura previa o una reserva sin quien la consuma

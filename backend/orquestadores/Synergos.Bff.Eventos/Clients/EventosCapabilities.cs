@@ -46,6 +46,25 @@ public sealed class EventosCapabilities : CapabilityClients
             lines = lineas.Select(l => new { subjectKind = l.Subject.Kind, subjectId = l.Subject.Id, quantity = l.Quantity }),
         }, null, ct);
 
+    /// <summary>Publica el precio de una localidad, con su vigencia y su tope (la oferta, ADR 0140 F3).</summary>
+    /// <remarks>
+    /// Es un absoluto —«la localidad vale esto»—, así que repetirlo no suma nada; la llave está para que
+    /// un reintento del mismo paso devuelva lo mismo.
+    /// </remarks>
+    public Task<Result<PriceDto>> SetPriceAsync(
+        Ref subject, Money amount, int taxRateBasisPoints, DateTimeOffset? validFrom, DateTimeOffset? validTo,
+        int? maxPerQuote, IdempotencyKey key, CancellationToken ct)
+        => Post<PriceDto>(Pricing, "v1/prices", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            amount = new { amount = amount.Amount, currency = amount.Currency },
+            taxRateBasisPoints,
+            validFrom,
+            validTo,
+            maxPerQuote,
+        }, key, ct);
+
     // ── Inventory ───────────────────────────────────────────────────────────
 
     /// <summary>Del sujeto del pozo a su ítem de aforo.</summary>
@@ -57,6 +76,19 @@ public sealed class EventosCapabilities : CapabilityClients
     public Task<Result<StockItemDto>> FindAforoAsync(Ref subject, CancellationToken ct)
         => Get<StockItemDto>(Inventory,
             $"v1/items?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}", ct);
+
+    /// <summary>Declara un pozo de aforo con sus existencias (la oferta, ADR 0140 F3).</summary>
+    /// <remarks>
+    /// Sólo para un pozo que no existe: la capacidad rechaza declarar dos veces el mismo sujeto, y cambiar
+    /// el aforo de uno que ya existe es <see cref="RestockAforoAsync"/> con la diferencia.
+    /// </remarks>
+    public Task<Result<StockItemDto>> DeclareAforoAsync(Ref subject, int onHand, IdempotencyKey key, CancellationToken ct)
+        => Post<StockItemDto>(Inventory, "v1/items", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            onHand,
+        }, key, ct);
 
     public Task<Result<StockHoldDto>> HoldAforoAsync(
         string itemId, int quantity, Ref forWhat, IdempotencyKey key, CancellationToken ct)
@@ -78,9 +110,13 @@ public sealed class EventosCapabilities : CapabilityClients
     /// Devuelve aforo sumando sobre lo que haya, sin leer primero.
     /// </summary>
     /// <remarks>
-    /// La llave no es decoración: un relativo reintentado suma dos veces y el motor reintenta
+    /// <para>La llave no es decoración: un relativo reintentado suma dos veces y el motor reintenta
     /// hasta ocho. Va determinista desde la saga para que los ocho intentos sean el mismo ajuste
-    /// (defecto #30).
+    /// (defecto #30).</para>
+    ///
+    /// <para>Lo usa también la oferta para cambiar el aforo declarado de un pozo (ADR 0140 F3), con un
+    /// delta que puede ser negativo: es el mismo ajuste relativo, y un segundo método que mandara el
+    /// mismo cuerpo a la misma ruta sería una copia que el contrato tendría que cruzar dos veces.</para>
     /// </remarks>
     public Task<Result<StockItemDto>> RestockAforoAsync(
         string itemId, int delta, IdempotencyKey key, CancellationToken ct)
@@ -143,6 +179,7 @@ public sealed class EventosCapabilities : CapabilityClients
 
 public sealed record MoneyDto(decimal Amount, string Currency);
 public sealed record QuoteDto(MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total);
+public sealed record PriceDto(string Id, MoneyDto Amount, DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo, int? MaxPerQuote);
 public sealed record StockItemDto(string Id, string SubjectKind, string SubjectId, int OnHand, int Available);
 public sealed record StockHoldDto(string Id, int Quantity, DateTimeOffset ExpiresAtUtc, bool Released);
 public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
