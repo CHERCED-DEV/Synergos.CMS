@@ -43,6 +43,13 @@ namespace Synergos.CMS.Web.Services;
 /// que compra ANTES de la primera llamada, y es el identificador de la saga: si la petición se
 /// pierde en el aire, se pregunta si la compra llegó a existir en vez de crear una segunda.</para>
 ///
+/// <para><b>Y por eso la saga NO es la orden que ve el navegador.</b> La compra es anónima, así que
+/// la orden es la credencial de quien compró como invitado, y la saga se deriva de lo que se
+/// compra, que no es secreto. La orden es aleatoria —la misma forma que la del motor en proceso—,
+/// la saga se guarda en <see cref="PersistedEventOrder.PaymentSessionId"/>, un checkout entrega sólo
+/// la orden que él mismo anotó y una saga emite sus entradas una sola vez. Lo fijan
+/// <c>OrdenDelInvitadoEnEventosTests</c>.</para>
+///
 /// <para><b>Con el orquestador apagado, el vertical sigue sirviendo.</b> «Mis entradas»,
 /// transferir y la puerta no lo tocan —salen del registro—; solo comprar y confirmar fallan, con
 /// el motivo puesto. Un BFF caído no puede dejar a nadie fuera de un concierto que ya pagó.</para>
@@ -152,13 +159,31 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         var compra = await ComprarAsync(eventId, buyerId, s.BuyerKind, lineas, comision, key, cancellationToken)
             .ConfigureAwait(false);
 
+        // La misma llave devuelve la misma saga, y eso es lo que impide cobrar dos veces. Pero si
+        // esa saga ya tiene orden de este lado, la anotó OTRO checkout: devolverla sería entregarle
+        // a quien repite los datos una compra que no hizo, y reescribirla, cambiarle el portador a
+        // las entradas. Se rechaza sin nombrarla y sin tocarla.
+        if (await OrdenDeLaSagaAsync(compra.Id, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            _log.LogWarning("Un checkout cayó sobre la saga {Saga}, que ya tiene orden: se rechaza.", compra.Id);
+            throw new ArgumentException(
+                "Ya hay una compra con estos mismos datos. Si la empezaste tú, termínala desde donde la "
+                + "empezaste; si ya la confirmaste, tus entradas están en «Mis entradas».");
+        }
+
+        // La orden que sale al navegador NO es la saga. La saga se deriva de lo que se compra y lo
+        // que se compra no es secreto; la orden es la credencial de quien compró como invitado,
+        // la misma forma inadivinable que la del motor en proceso.
+        var orderRef = NuevaOrden();
+
         // Y acá se anota lo que la saga no lleva. Si esto no ocurriera, la compra existiría del
         // lado del orquestador y no habría de dónde emitir ni a quién nombrar en la entrada.
         var orden = new PersistedEventOrder(
-            OrderRef: compra.Id,
+            OrderRef: orderRef,
             EventId: eventId.Trim(),
-            // El identificador de la saga ES lo que hay que llamar para confirmar. No hay sesión
-            // de PSP a la que redirigir: la autorización ocurre servidor adentro.
+            // El identificador de la saga ES lo que hay que llamar para confirmar, y se queda de
+            // este lado. No hay sesión de PSP a la que redirigir: la autorización ocurre servidor
+            // adentro.
             PaymentSessionId: compra.Id,
             Total: compra.Total.Amount,
             Currency: compra.Total.Currency,
@@ -167,8 +192,17 @@ public sealed class HttpEventTicketingService : IEventTicketingService
 
         await _ledger.SaveAsync(orden, cancellationToken).ConfigureAwait(false);
 
-        return new EventCheckoutResult(compra.Id, compra.Id, compra.Total.Amount, compra.Total.Currency);
+        return new EventCheckoutResult(orderRef, orderRef, compra.Total.Amount, compra.Total.Currency);
     }
+
+    /// <summary>La orden que el navegador presenta para confirmar: 128 bits de azar criptográfico.</summary>
+    private static string NuevaOrden()
+        => "evord_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+    /// <summary>La orden de este lado que nombra a la saga, si alguna la nombra.</summary>
+    private async Task<PersistedEventOrder?> OrdenDeLaSagaAsync(string sagaId, CancellationToken ct)
+        => (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
+            .FirstOrDefault(o => string.Equals(o.PaymentSessionId, sagaId, StringComparison.Ordinal));
 
     private async Task<PurchaseDto> ComprarAsync(
         string eventId, string buyerId, string buyerKind,
@@ -291,8 +325,19 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             return _ledger.ConfirmationOf(orden);
         }
 
+        // Una saga emite sus entradas UNA vez. Dos checkouts simultáneos pueden anotar dos órdenes
+        // antes de que ninguno vea la del otro, y confirmar la segunda emitiría las mismas butacas
+        // otra vez, con otros portadores.
+        if ((await _ledger.LoadAllAsync(cancellationToken).ConfigureAwait(false)).Any(o =>
+                o.Status == EventOrderStatus.Confirmed
+                && !string.Equals(o.OrderRef, orden.OrderRef, StringComparison.Ordinal)
+                && string.Equals(o.PaymentSessionId, orden.PaymentSessionId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Esta compra ya se confirmó con otra orden.");
+        }
+
         using var req = new HttpRequestMessage(
-            HttpMethod.Post, $"v1/ticket-purchases/{Uri.EscapeDataString(orden.OrderRef)}/confirm");
+            HttpMethod.Post, $"v1/ticket-purchases/{Uri.EscapeDataString(orden.PaymentSessionId)}/confirm");
 
         var compra = await EnviarAsync<PurchaseDto>(req, "confirmar la compra", cancellationToken)
             .ConfigureAwait(false);
@@ -302,7 +347,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         if (!string.Equals(compra.Status, "Completed", StringComparison.Ordinal))
         {
             _log.LogWarning("La compra {Id} quedó en {Estado}: {Motivo}",
-                orden.OrderRef, compra.Status ?? "-", compra.LastError ?? "sin detalle");
+                orden.PaymentSessionId, compra.Status ?? "-", compra.LastError ?? "sin detalle");
             throw new InvalidOperationException(
                 compra.LastError ?? "No pudimos confirmar tus entradas. Si se te cobró, se devolverá.");
         }

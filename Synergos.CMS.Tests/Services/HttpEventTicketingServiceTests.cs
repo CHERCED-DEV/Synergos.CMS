@@ -221,12 +221,14 @@ public sealed class HttpEventTicketingServiceTests
 
         var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
-        Assert.Equal("tp-1", compra.OrderRef);
         Assert.Equal(240000m, compra.Amount);
 
-        var orden = await registro.LoadAsync("tp-1");
+        // La orden que vuelve al navegador NO es la saga; la saga queda anotada de este lado
+        // (OrdenDelInvitadoEnEventosTests).
+        var orden = await registro.LoadAsync(compra.OrderRef);
         Assert.NotNull(orden);
-        Assert.Equal(EventOrderStatus.Pending, orden!.Status);
+        Assert.Equal("tp-1", orden!.PaymentSessionId);
+        Assert.Equal(EventOrderStatus.Pending, orden.Status);
         Assert.Equal(2, orden.Units.Count);
         Assert.Equal("Ana Compradora", orden.Units[0].AttendeeName);
         Assert.Equal("beto@ejemplo.co", orden.Units[1].AttendeeEmail);
@@ -329,8 +331,7 @@ public sealed class HttpEventTicketingServiceTests
         var (svc, registro) = Nuevo(orq);
         var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
-        Assert.Equal("tp-1", compra.OrderRef);
-        Assert.NotNull(await registro.LoadAsync("tp-1"));
+        Assert.Equal("tp-1", (await registro.LoadAsync(compra.OrderRef))?.PaymentSessionId);
     }
 
     /// <summary>Y si de verdad no existía, se falla. Nunca «compra exitosa».</summary>
@@ -429,11 +430,11 @@ public sealed class HttpEventTicketingServiceTests
     public async Task Dentro_de_la_ventana_la_compra_llega_al_orquestador()
     {
         var orq = Feliz();
-        var (svc, _) = Nuevo(orq, EventoUno(abre: Hoy, cierra: Hoy.AddTicks(1)));
+        var (svc, registro) = Nuevo(orq, EventoUno(abre: Hoy, cierra: Hoy.AddTicks(1)));
 
         var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
-        Assert.Equal("tp-1", compra.OrderRef);
+        Assert.Equal("tp-1", (await registro.LoadAsync(compra.OrderRef))?.PaymentSessionId);
         Assert.Equal(1, orq.Veces("POST", "/v1/ticket-purchases"));
     }
 
@@ -491,7 +492,7 @@ public sealed class HttpEventTicketingServiceTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ConfirmAsync(compra.OrderRef));
         Assert.Contains("rechazado", ex.Message, StringComparison.Ordinal);
 
-        var orden = await registro.LoadAsync("tp-1");
+        var orden = await registro.LoadAsync(compra.OrderRef);
         Assert.Equal(EventOrderStatus.Pending, orden!.Status);
         Assert.Empty(await registro.TicketsOfAsync("ana@ejemplo.co"));
     }
