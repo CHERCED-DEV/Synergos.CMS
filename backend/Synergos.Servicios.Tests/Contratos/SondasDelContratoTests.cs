@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Synergos.Bff.Core;
 using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Contratos;
@@ -89,13 +90,14 @@ public sealed class SondasDelContratoTests
     /// </summary>
     private static async Task<Respuesta> Enviar(
         HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave, string? cuerpo = null,
-        string? identidad = null)
+        string? identidad = null, (string Nombre, string Valor)? otra = null)
     {
         var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
         using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
         if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
         if (llave is not null) req.Headers.Add(IdempotencyHeader.Name, llave);
         if (identidad is not null) req.Headers.Add(IdentityTokens.HeaderName, identidad);
+        if (otra is { } cabecera) req.Headers.TryAddWithoutValidation(cabecera.Nombre, cabecera.Valor);
         if (op.Op["requestBody"] is not null || cuerpo is not null)
         {
             req.Content = new StringContent(cuerpo ?? "{}", Encoding.UTF8, "application/json");
@@ -297,6 +299,71 @@ public sealed class SondasDelContratoTests
         Assert.True(malas.Count == 0,
             $"{ensamblado}: la cabecera {IdentityTokens.HeaderName} que publica el contrato no es la que el " +
             "endpoint lee. Se declara con .ConTokenDeIdentidad() donde se lee, y sólo ahí." +
+            $"{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
+    }
+
+    /// <summary>Lo que se manda en una cabecera de la puerta para ver si el endpoint la lee: no es base64url.</summary>
+    private const string CabeceraQueNoEs = "%%sonda-no-es-base64url%%";
+
+    /// <summary>Las cabeceras de la puerta que conoce el árbol: las constantes de <see cref="CabecerasDeLaPuerta"/>.</summary>
+    private static IReadOnlyList<string> CabecerasConocidas()
+        => typeof(CabecerasDeLaPuerta)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToList();
+
+    /// <summary>Las cabeceras que una operación declara con <see cref="ContratoOpenApi.MarcaDeLaPuerta"/>.</summary>
+    private static IEnumerable<string> DeLaPuerta(OperacionPublicada op)
+        => (op.Op["parameters"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
+            .Where(p => (string?)p["in"] == "header" && p[ContratoOpenApi.MarcaDeLaPuerta]?.GetValue<bool>() == true)
+            .Select(p => (string)p["name"]!);
+
+    /// <summary>
+    /// Lo que el documento declara de las cabeceras de la PUERTA (<c>x-synergos-puerta</c>) es lo que el
+    /// endpoint lee, en los dos sentidos (ADR 0140 F3).
+    /// </summary>
+    /// <remarks>
+    /// <para>Cada cabecera de la puerta se lee antes que cualquier otra regla —como la llave—, así que
+    /// con un valor que no es base64url el endpoint que la lee contesta
+    /// <c>400 &lt;dominio&gt;.&lt;cabecera&gt;_invalido</c> sea cual sea el resto de la petición, y el que
+    /// no la lee no se entera. Se prueba cada cabecera conocida en cada operación de cada pieza: una
+    /// capacidad que empezara a leer lo que pone la puerta también sale aquí.</para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Piezas))]
+    public async Task Las_cabeceras_de_la_puerta_que_el_documento_declara_son_las_que_el_endpoint_lee(string ensamblado)
+    {
+        var doc = ContratoOpenApi.Comiteado(ensamblado);
+        var ops = ContratoOpenApi.Operaciones(doc);
+        var nombres = CabecerasConocidas().Concat(ops.SelectMany(DeLaPuerta)).Distinct(StringComparer.Ordinal).ToList();
+        Assert.Contains(CabecerasDeLaPuerta.Contacto, nombres);   // el censo de las conocidas no está vacío
+
+        using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
+        var malas = new List<string>();
+
+        foreach (var op in ops)
+        {
+            var declaradas = DeLaPuerta(op).ToHashSet(StringComparer.Ordinal);
+            foreach (var nombre in nombres)
+            {
+                var llave = LlaveDeclarada(op) is null ? null : "sonda-puerta";
+                var r = await Enviar(host, op, conLlaveCompartida: true, llave, otra: (nombre, CabeceraQueNoEs));
+                var leida = r.Status == HttpStatusCode.BadRequest
+                            && Codigo(r.Cuerpo) is { } code
+                            && code.EndsWith(CabecerasDeLaPuerta.CodigoInvalido(string.Empty, nombre), StringComparison.Ordinal);
+
+                if (declaradas.Contains(nombre) != leida)
+                {
+                    malas.Add($"  {op}: el documento dice que {(declaradas.Contains(nombre) ? "LEE" : "no lee")} {nombre} " +
+                              $"y con «{CabeceraQueNoEs}» ahí contesta {(int)r.Status} {Codigo(r.Cuerpo) ?? "(sin code)"}.");
+                }
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            $"{ensamblado}: las cabeceras de la puerta que publica el contrato no son las que el endpoint lee. " +
+            "Se declaran con .ConCabeceraDeLaPuerta(...) donde se leen, y sólo ahí." +
             $"{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
     }
 

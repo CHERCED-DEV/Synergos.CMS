@@ -1,6 +1,7 @@
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Eventos.Clients;
+using Synergos.Bff.Pasos;
 using Synergos.Core;
 
 namespace Synergos.Bff.Eventos.Domain;
@@ -116,8 +117,16 @@ public sealed class TicketingFlow
             Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje), ct);
     }
 
-    /// <summary>Captura el cobro y consume el aforo. A partir de acá hay plata movida.</summary>
-    public async Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
+    /// <summary>Captura el cobro y consume el aforo, sin avisar a nadie.</summary>
+    public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
+        => ConfirmAsync(sagaId, null, ct);
+
+    /// <summary>Captura el cobro, consume el aforo y avisa al comprador. A partir de acá hay plata movida.</summary>
+    /// <param name="sagaId">La compra.</param>
+    /// <param name="contacto">Adónde avisar, que pone la puerta: entra como efímero de «cerrar» y
+    /// no se guarda. Nulo si nadie pidió el aviso, y entonces el paso no avisa.</param>
+    /// <param name="ct">Cancelación.</param>
+    public async Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Contacto? contacto, CancellationToken ct)
     {
         var saga = _sagas.Find(sagaId);
         if (saga is null)
@@ -133,7 +142,7 @@ public sealed class TicketingFlow
         // NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
         // donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
         // allá de sus sagas, y entonces sería una capacidad mal cortada.
-        return await _flujo.EjecutarFaseAsync(Cerrar, sagaId, new FlowContext(), ct);
+        return await _flujo.EjecutarFaseAsync(Cerrar, sagaId, EventosFlowBinding.EntradaDeCerrar(contacto), ct);
     }
 
     /// <summary>Cancela una compra todavía sin confirmar.</summary>

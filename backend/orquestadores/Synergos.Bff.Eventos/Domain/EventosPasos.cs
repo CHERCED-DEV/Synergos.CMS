@@ -36,6 +36,7 @@ public static class EventosPasos
             new PasoInventarioConsumir(puertos),
             new PasoPagosAutorizar(puertos),
             new PasoPagosCapturar(puertos),
+            new PasoAvisar(puertos),
         });
     }
 }

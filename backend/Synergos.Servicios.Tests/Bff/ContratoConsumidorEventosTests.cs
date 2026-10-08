@@ -52,6 +52,20 @@ public sealed class ContratoConsumidorEventosTests
         ["VoidAsync"] = c => c.VoidAsync("pg-1", Ct),
         ["RefundAsync"] = c => c.RefundAsync("pg-1", Monto, "motivo", Llave, Ct),
         ["GetPaymentAsync"] = c => c.GetPaymentAsync("pg-1", Ct),
+        ["NotifyAsync"] = c => c.NotifyAsync(
+            Ref.Create("eventos.comprador", "u-1"), "ana@ejemplo.co", "eventos.entradas.confirmadas",
+            new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave, Ct),
+    };
+
+    /// <summary>
+    /// Las capacidades a las que habla <see cref="EventosCapabilities"/> y que NO publican contrato, con
+    /// quién cruza entonces su forma. Caduca sola: si la capacidad publica documento, es rojo.
+    /// </summary>
+    private static readonly Dictionary<string, string> SinContrato = new(StringComparer.Ordinal)
+    {
+        [EventosCapabilities.Notifications] =
+            "Api.Notifications no publica documento (la F2 publicó Bff.Eventos y sus tres capacidades): la forma " +
+            "del aviso la cruza TicketingAvisoTests contra la capacidad REAL, con la compra entera.",
     };
 
     public static TheoryData<string> Metodos()
@@ -75,8 +89,8 @@ public sealed class ContratoConsumidorEventosTests
     {
         var declarados = DelCliente().Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.True(declarados.Count >= 11,
-            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en EventosCapabilities y son 11: el censo dejó de ver.");
+        Assert.True(declarados.Count >= 12,
+            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en EventosCapabilities y son 12: el censo dejó de ver.");
         Assert.True(declarados.SequenceEqual(Recorrido.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal),
             "EventosCapabilities y el recorrido de este gate no tienen los mismos métodos. Sin recorrido, " +
             "un método nuevo habla con su capacidad sin que nadie cruce su forma con el contrato." +
@@ -94,6 +108,13 @@ public sealed class ContratoConsumidorEventosTests
 
         var p = grabadora.Peticiones[0];
         var ensamblado = DocumentoDe(p.Cliente);
+        if (SinContrato.ContainsKey(p.Cliente))
+        {
+            Assert.False(File.Exists(ContratoOpenApi.Ruta(ensamblado)),
+                $"{ensamblado} ya publica contrato: quitá «{p.Cliente}» de {nameof(SinContrato)} para que este gate lo cruce.");
+            return;
+        }
+
         var doc = ContratoOpenApi.Comiteado(ensamblado);
         var quien = $"{metodo} → {p.Metodo} /{p.Ruta}";
 

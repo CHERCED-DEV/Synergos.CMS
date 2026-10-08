@@ -21,6 +21,12 @@ public sealed class EventosCapabilities : CapabilityClients
     public const string Inventory = "inventory";
     public const string Payments = "payments";
 
+    /// <summary>
+    /// El cliente de avisos que <c>AddSagaMachinery</c> ya registra en todo orquestador (lo usa el
+    /// aviso de compensación colgada). Desde la ADR 0140 F3, también el aviso al comprador.
+    /// </summary>
+    public const string Notifications = CompensationAlert.Capability;
+
     public EventosCapabilities(IHttpClientFactory clients) : base(clients) { }
 
     // ── Pricing ─────────────────────────────────────────────────────────────
@@ -109,6 +115,26 @@ public sealed class EventosCapabilities : CapabilityClients
 
     public Task<Result<PaymentDto>> GetPaymentAsync(string paymentId, CancellationToken ct)
         => Get<PaymentDto>(Payments, $"v1/payments/{paymentId}", ct);
+
+    // ── Notifications ───────────────────────────────────────────────────────
+
+    /// <summary>Pide un aviso con una plantilla por clave. El texto lo rellena la capacidad.</summary>
+    /// <remarks>
+    /// <c>Api.Notifications</c> no publica contrato, así que su forma no la cruza
+    /// <c>ContratoConsumidorEventosTests</c> contra un documento: la cruza <c>TicketingAvisoTests</c>
+    /// contra la capacidad REAL, con la compra entera y el <c>.eml</c> abierto.
+    /// </remarks>
+    public Task<Result<DeliveryDto>> NotifyAsync(
+        Ref to, string address, string templateKey, IReadOnlyDictionary<string, string> values,
+        IdempotencyKey key, CancellationToken ct)
+        => Post<DeliveryDto>(Notifications, "v1/deliveries", new
+        {
+            toKind = to.Kind,
+            toId = to.Id,
+            address,
+            templateKey,
+            values,
+        }, key, ct);
 }
 
 // ── Las formas mínimas que este BFF consume de cada capacidad ────────────────
@@ -120,3 +146,4 @@ public sealed record QuoteDto(MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total);
 public sealed record StockItemDto(string Id, string SubjectKind, string SubjectId, int OnHand, int Available);
 public sealed record StockHoldDto(string Id, int Quantity, DateTimeOffset ExpiresAtUtc, bool Released);
 public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
+public sealed record DeliveryDto(string Id, string Status);

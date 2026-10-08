@@ -1,5 +1,6 @@
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
 using Synergos.Core;
 
 namespace Synergos.Bff.Eventos.Domain;
@@ -27,6 +28,9 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
     internal const string Total = "total";
     internal const string Cobro = "paymentId";
 
+    /// <summary>Adónde avisar al cerrar: lo pone la puerta, es efímero y no se guarda (ADR 0140 F3).</summary>
+    internal const string Contacto = "contacto";
+
     // Los campos de cada línea, dentro del bloque que las recorre.
     internal const string Localidad = "tier";
     internal const string Butaca = "seat";
@@ -47,6 +51,19 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
         {
             [Lineas] = new[] { Localidad, Butaca, Cantidad },
         };
+
+    /// <summary>
+    /// Lo que la fachada pone SÓLO para cerrar: el contacto del aviso. La saga no lo lleva —está
+    /// fijada byte a byte y sin datos personales—, así que entra con la llamada y muere con ella.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyCollection<string>> Efimera { get; } =
+        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal)
+        {
+            ["cerrar"] = new[] { Contacto },
+        };
+
+    /// <summary>La entrada de la fase que cierra: el contacto, o nulo si nadie pidió el aviso.</summary>
+    public static FlowContext EntradaDeCerrar(Contacto? contacto) => new FlowContext().Set(Contacto, contacto);
 
     /// <summary>El aforo de cada línea va a <c>Holds</c>; el cobro, a <c>PaymentId</c>.</summary>
     public IReadOnlyDictionary<string, FormaDeReserva> Reservas { get; } =

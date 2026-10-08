@@ -17,7 +17,7 @@ namespace Synergos.Bff.Eventos.Clients;
 /// <para><b>Mismas llamadas, mismo orden, mismos cuerpos</b>: cada método es exactamente lo que
 /// <c>TicketingFlow</c> llamaba, y el dinero se arma con <see cref="Money.Of"/> igual que allá.</para>
 /// </remarks>
-public sealed class EventosPorts : IPricingPort, IInventoryPort, IPaymentsPort
+public sealed class EventosPorts : IPricingPort, IInventoryPort, IPaymentsPort, INotificationsPort
 {
     private readonly EventosCapabilities _caps;
 
@@ -43,4 +43,9 @@ public sealed class EventosPorts : IPricingPort, IInventoryPort, IPaymentsPort
 
     public async Task<Result<string>> CapturarAsync(string cobroId, IdempotencyKey llave, CancellationToken ct)
         => (await _caps.CaptureAsync(cobroId, llave, ct)).Map(p => p.Id);
+
+    public async Task<Result<string>> AvisarAsync(
+        Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
+        IdempotencyKey llave, CancellationToken ct)
+        => (await _caps.NotifyAsync(destinatario, direccion, plantilla, valores, llave, ct)).Map(d => d.Id);
 }

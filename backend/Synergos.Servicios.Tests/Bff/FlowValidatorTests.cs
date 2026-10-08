@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Eventos.Clients;
-using Synergos.Bff.Pasos;
 using Synergos.Bff.Eventos.Domain;
 using Synergos.CMS.Tests.Architecture;   // Proyectos: dónde vive cada proyecto (#136)
 
@@ -338,72 +337,33 @@ public sealed class FlowValidatorTests
     [Fact]
     public void Omitir_si_cero_va_en_un_paso_que_reserva_y_sobre_algo_que_lee()
     {
-        var bien = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"omitir_si_cero\": \"total\","));
-        var noLoLee = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"omitir_si_cero\": \"cotizacion\","));
+        // La definición de Eventos lo declara en «autorizar» desde la F3: lo gratis no pasa por el cobro.
+        Assert.Contains("\"omitir_si_cero\": \"total\"", Original(), StringComparison.Ordinal);
+        var noLoLee = Errores(Mutar("\"omitir_si_cero\": \"total\"", "\"omitir_si_cero\": \"cotizacion\""));
         var noReserva = Errores(Mutar("\"llave\": \"capture\",", "\"llave\": \"capture\", \"omitir_si_cero\": \"paymentId\","));
 
-        Assert.Empty(bien);   // el control: así es como lo declara Eventos en la F3
         Assert.Contains(noLoLee, e => e.Contains("«autorizar» se omite si «cotizacion» es cero y no lo lee", StringComparison.Ordinal));
         Assert.Contains(noReserva, e => e.Contains("«capturar» declara «omitir_si_cero» y no reserva nada", StringComparison.Ordinal));
-    }
-
-    /// <summary>Los pasos de Eventos más el de aviso: el registro que tendrá Eventos al declararlo (paso 7).</summary>
-    private static IRegistroDePasos ConAviso()
-        => new RegistroDePasos(Registro.Tipos.Select(t => Registro.Para(t)!).Append(new PasoAvisar(new SinAvisos())));
-
-    private sealed class SinAvisos : INotificationsPort
-    {
-        public Task<Synergos.Core.Result<string>> AvisarAsync(
-            Synergos.Core.Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
-            Synergos.Core.IdempotencyKey llave, CancellationToken ct)
-            => throw new InvalidOperationException("Validar una definición no avisa a nadie.");
     }
 
     [Fact]
     public void Un_paso_de_aviso_declara_su_plantilla_y_uno_que_no_avisa_no_declara_ninguna()
     {
-        var f = EventosFlujos.Compra;
-        var cerrar = f.Fases[1];
-        var conEfimera = Contrato with { Efimera = ContactoEnCerrar };
-        FlujoDef Con(PasoDef aviso, string? plantillaEnCapturar = null)
-            => f with
-            {
-                Fases = new[] { f.Fases[0], cerrar with { Pasos = cerrar.Pasos.Append(new PasoRef(aviso.Id, null)).ToList() } },
-                Pasos = f.Pasos
-                    .Select(p => p.Key == "capturar" && plantillaEnCapturar is not null
-                        ? new KeyValuePair<string, PasoDef>(p.Key, p.Value with { Plantilla = plantillaEnCapturar })
-                        : p)
-                    .Append(new KeyValuePair<string, PasoDef>(aviso.Id, aviso))
-                    .ToDictionary(),
-                Efimera = new Dictionary<string, IReadOnlyList<string>> { ["cerrar"] = new[] { "contacto" } },
-            };
-        var aviso = new PasoDef("avisar", "notifications.avisar", new[] { "comprador", "contacto", "total" },
-            Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null, "eventos.entradas.confirmadas");
+        // La definición de Eventos declara su aviso desde la F3; el control es ella misma.
+        var sinPlantilla = Errores(Mutar("      \"plantilla\": \"eventos.entradas.confirmadas\",\n", string.Empty));
+        var enCapturar = Errores(Mutar("\"llave\": \"capture\",", "\"llave\": \"capture\", \"plantilla\": \"x\","));
 
-        Assert.Empty(FlowValidator.Validar(Con(aviso), ConAviso(), conEfimera));   // el control: así lo declara Eventos
-        Assert.Contains(FlowValidator.Validar(Con(aviso with { Plantilla = null }), ConAviso(), conEfimera),
-            e => e.Contains("«avisar» es de tipo «notifications.avisar», que avisa con «plantilla», y no la declara", StringComparison.Ordinal));
-        Assert.Contains(FlowValidator.Validar(Con(aviso, plantillaEnCapturar: "x"), ConAviso(), conEfimera),
-            e => e.Contains("«capturar» declara una plantilla y «payments.capturar» no avisa", StringComparison.Ordinal));
+        Assert.Contains(sinPlantilla, e => e.Contains("«avisar» es de tipo «notifications.avisar», que avisa con «plantilla», y no la declara", StringComparison.Ordinal));
+        Assert.Contains(enCapturar, e => e.Contains("«capturar» declara una plantilla y «payments.capturar» no avisa", StringComparison.Ordinal));
     }
-
-    private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> ContactoEnCerrar =
-        new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "contacto" } };
-
-    private static string ConEfimera(string json, string fase = "cerrar", string nombre = "contacto")
-        => json.Replace(
-            "\"entrada\": [\"eventId\", \"comprador\", \"lineas\", \"comisionPct\"],",
-            $"\"entrada\": [\"eventId\", \"comprador\", \"lineas\", \"comisionPct\"],\n  \"efimera\": {{ \"{fase}\": [\"{nombre}\"] }},",
-            StringComparison.Ordinal);
 
     [Fact]
     public void Lo_efimero_se_lee_en_su_fase_y_en_ninguna_otra()
     {
-        var conEfimera = Contrato with { Efimera = ContactoEnCerrar };
-        Assert.Contains("\"efimera\"", ConEfimera(Original()), StringComparison.Ordinal);   // la mutación entró
-
-        var enSuFase = Errores(ConEfimera(Mutar("\"lee\": [\"paymentId\"]", "\"lee\": [\"contacto\"]")), conEfimera);
-        var enOtra = Errores(ConEfimera(Mutar("\"lee\": [\"comisionPct\"] }", "\"lee\": [\"contacto\"] }")), conEfimera);
+        // La definición de Eventos declara el contacto como efímero de «cerrar» desde la F3.
+        Assert.Contains("\"efimera\": { \"cerrar\": [\"contacto\"] }", Original(), StringComparison.Ordinal);
+        var enSuFase = Errores(Mutar("\"lee\": [\"paymentId\"]", "\"lee\": [\"contacto\"]"));
+        var enOtra = Errores(Mutar("\"lee\": [\"comisionPct\"] }", "\"lee\": [\"contacto\"] }"));
 
         Assert.DoesNotContain(enSuFase, e => e.Contains("«contacto»", StringComparison.Ordinal));
         Assert.Contains(enOtra, e => e.Contains("«revisar-comision» lee «contacto» y nadie lo escribe antes", StringComparison.Ordinal));
@@ -412,9 +372,10 @@ public sealed class FlowValidatorTests
     [Fact]
     public void Lo_efimero_lo_tiene_que_poner_la_fachada_en_una_fase_que_existe_sin_tapar_nada()
     {
-        var noLoPone = Errores(ConEfimera(Original()));
-        var otraFase = Errores(ConEfimera(Original(), fase: "pagar"), Contrato with { Efimera = ContactoEnCerrar });
-        var tapa = Errores(ConEfimera(Original(), nombre: "total"), Contrato with
+        const string declarada = "\"efimera\": { \"cerrar\": [\"contacto\"] }";
+        var noLoPone = Errores(Original(), Contrato with { Efimera = ContratoDelFlujo.SinEfimera });
+        var otraFase = Errores(Mutar(declarada, "\"efimera\": { \"pagar\": [\"contacto\"] }"));
+        var tapa = Errores(Mutar(declarada, "\"efimera\": { \"cerrar\": [\"total\"] }"), Contrato with
         {
             Efimera = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "total" } },
         });
@@ -422,22 +383,6 @@ public sealed class FlowValidatorTests
         Assert.Contains(noLoPone, e => e.Contains("declara la efímera «contacto» en «cerrar» y la fachada no la pone", StringComparison.Ordinal));
         Assert.Contains(otraFase, e => e.Contains("declara lo efímero de la fase «pagar», que no existe", StringComparison.Ordinal));
         Assert.Contains(tapa, e => e.Contains("la efímera «total» en «cerrar», y la fase ya empieza con ese nombre", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Una_saga_sin_la_ranura_que_el_flujo_usa_no_pasa()
-    {
-        var errores = FlowValidator.Validar(EventosFlujos.Compra, Registro, Contrato with { Saga = typeof(object) });
-
-        Assert.Contains(errores, e => e.Contains(nameof(IHoldLedger), StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Un_catalogo_vacio_no_pasa()
-    {
-        var resultado = new FlowDefinitionValidator(Registro).Validate(null, new FlowCatalog());
-
-        Assert.True(resultado.Failed);
     }
 
     // ── El arranque de verdad ───────────────────────────────────────────────

@@ -1,6 +1,7 @@
 {
   "clave": "eventos.compra",
   "entrada": ["eventId", "comprador", "lineas", "comisionPct"],
+  "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": [
       "revisar-lineas",
@@ -13,7 +14,8 @@
     ],
     "cerrar": [
       "capturar",
-      { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["consumir"] }
+      { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["consumir"] },
+      "avisar"
     ]
   },
   "pasos": {
@@ -47,6 +49,7 @@
       "lee": ["comprador", "total"],
       "escribe": ["paymentId"],
       "llave": "authorize",
+      "omitir_si_cero": "total",
       "motivo": "el cobro no se pudo autorizar",
       "reserva": {
         "consumado_por": "capturar",
@@ -67,6 +70,13 @@
       "lee": ["hold.holdId"],
       "cierra_reserva": "apartar",
       "motivo": "no se pudo consumir el aforo apartado"
+    },
+    "avisar": {
+      "tipo": "notifications.avisar",
+      "lee": ["comprador", "contacto", "total"],
+      "llave": "avisar",
+      "plantilla": "eventos.entradas.confirmadas",
+      "al_fallar": "seguir"
     }
   }
 }

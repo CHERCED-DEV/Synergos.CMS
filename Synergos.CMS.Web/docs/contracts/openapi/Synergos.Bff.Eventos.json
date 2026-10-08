@@ -335,6 +335,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Contacto",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           }
         ],
         "responses": {

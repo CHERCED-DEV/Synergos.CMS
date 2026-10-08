@@ -41,6 +41,9 @@ public sealed class HttpEventTicketingServiceTests
         /// <summary>Lo que se mandó, tal cual. Sin esto, «el correo no sale por el cable» no se
         /// puede afirmar: se estaría mirando la URL, que nunca lo llevó.</summary>
         public List<string> Cuerpos { get; } = new();
+
+        /// <summary>Las cabeceras de cada petición, por nombre.</summary>
+        public List<string> Cabeceras { get; } = new();
         public HashSet<string> Caidas { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public OrquestadorFalso Ok(string ruta, string json)
@@ -74,6 +77,7 @@ public sealed class HttpEventTicketingServiceTests
             var clave = $"{req.Method.Method} {path}";
             req.Headers.TryGetValues("Idempotency-Key", out var k);
             Llamadas.Add((req.Method.Method, path, k?.FirstOrDefault()));
+            Cabeceras.AddRange(req.Headers.Select(h => h.Key));
             if (req.Content is not null)
             {
                 Cuerpos.Add(req.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
@@ -495,6 +499,28 @@ public sealed class HttpEventTicketingServiceTests
         var orden = await registro.LoadAsync(compra.OrderRef);
         Assert.Equal(EventOrderStatus.Pending, orden!.Status);
         Assert.Empty(await registro.TicketsOfAsync("ana@ejemplo.co"));
+    }
+
+    /// <summary>
+    /// La ruta vieja NO pide el aviso del orquestador: lo sigue mandando el CMS, por
+    /// <c>EventPurchaseNotification</c>. Si además mandara el contacto, el comprador recibiría dos.
+    /// </summary>
+    /// <remarks>
+    /// Desde la ADR 0140 F3 el orquestador avisa al cerrar cuando la puerta le pone
+    /// <c>X-Synergos-Contacto</c>. Conviven hasta el retiro, así que la frontera es ésa: quien compra
+    /// por la ruta vieja recibe el aviso del CMS y sólo ése.
+    /// </remarks>
+    [Fact]
+    public async Task La_ruta_vieja_no_manda_el_contacto_del_aviso_al_orquestador()
+    {
+        var orq = Feliz();
+        var (svc, _) = Nuevo(orq);
+
+        var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+        await svc.ConfirmAsync(compra.OrderRef);
+
+        Assert.Equal(1, orq.Veces("POST", "/confirm"));
+        Assert.DoesNotContain("X-Synergos-Contacto", orq.Cabeceras, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact] // idempotent: re-confirmar devuelve lo mismo y NO vuelve a salir a la red.

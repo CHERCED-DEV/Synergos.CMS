@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
+using Synergos.Bff.Core;
 using Synergos.CMS.Tests.Architecture;
 using Synergos.Core;
 using Synergos.Shared;
@@ -137,6 +138,7 @@ internal static class ContratoOpenApi
         o.AddSchemaTransformer(Numeros);
         o.AddOperationTransformer(Llave);
         o.AddOperationTransformer(Identidad);
+        o.AddOperationTransformer(Puerta);
         o.AddOperationTransformer(Rechazos);
         o.AddDocumentTransformer((doc, ctx, ct) =>
         {
@@ -281,6 +283,41 @@ internal static class ContratoOpenApi
                 In = ParameterLocation.Header,
                 Required = false,
                 Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>La marca de una cabecera que pone la puerta del CMS y no el navegador (ADR 0140 F3).</summary>
+    public const string MarcaDeLaPuerta = "x-synergos-puerta";
+
+    /// <summary>
+    /// Las cabeceras que pone la PUERTA, donde el endpoint declara que las lee, marcadas con
+    /// <see cref="MarcaDeLaPuerta"/>.
+    /// </summary>
+    /// <remarks>
+    /// Como la llave y el token: el endpoint las lee a mano y <c>ApiExplorer</c> no las ve, así que
+    /// salen del metadato <see cref="CabeceraDeLaPuerta"/>. La marca es lo que deja al generador del
+    /// UI omitirlas del tipo del navegador —no las manda él— sin aflojar su regla de rechazar
+    /// cualquier otra cabecera. Una sonda contra el host comprueba que la declarada sea la que el
+    /// endpoint lee.
+    /// </remarks>
+    private static Task Puerta(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
+    {
+        foreach (var cabecera in ctx.Description.ActionDescriptor.EndpointMetadata.OfType<CabeceraDeLaPuerta>())
+        {
+            op.Parameters ??= new List<IOpenApiParameter>();
+            op.Parameters.Add(new OpenApiParameter
+            {
+                Name = cabecera.Nombre,
+                In = ParameterLocation.Header,
+                Required = cabecera.Requerida,
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String },
+                Extensions = new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal)
+                {
+                    [MarcaDeLaPuerta] = new JsonNodeExtension(JsonValue.Create(true)),
+                },
             });
         }
 

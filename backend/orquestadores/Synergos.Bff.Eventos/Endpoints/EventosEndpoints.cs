@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Core;
 using Synergos.Bff.Eventos.Contracts;
 using Synergos.Bff.Eventos.Domain;
+using Synergos.Bff.Pasos;
 using Synergos.Core;
 using Synergos.Shared;
 
@@ -51,9 +52,21 @@ public static class EventosEndpoints
 
         // Confirmar NO recibe cuerpo, al revés que en Tienda: allá hacía falta la dirección de
         // entrega antes de capturar. Una entrada no se despacha, así que no hay nada que validar
-        // antes de mover plata.
-        app.MapPost("/v1/ticket-purchases/{id}/confirm", async (string id, TicketingFlow flow, CancellationToken ct) =>
-            (await flow.ConfirmAsync(id, ct)).Map(TicketPurchaseResponse.From).ToHttp()).WithName("ConfirmTicketPurchase");
+        // antes de mover plata. Lo que sí puede traer es el CONTACTO del aviso, que pone la puerta
+        // en una cabecera (ADR 0140 F3): se lee primero, y sin él el paso de aviso no manda nada.
+        app.MapPost("/v1/ticket-purchases/{id}/confirm", async Task<Results<Ok<TicketPurchaseResponse>, ProblemHttpResult>> (
+            string id, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
+        {
+            if (!CabecerasDeLaPuerta.TryLeerJson<ContactoDeLaPuerta>(http, CabecerasDeLaPuerta.Contacto, out var contacto)
+                || contacto is { Correo: null or "" })
+            {
+                return Rejection.Invalid(CabecerasDeLaPuerta.CodigoInvalido(CodePrefix, CabecerasDeLaPuerta.Contacto),
+                    "El contacto del aviso no se puede leer: base64url de {correo, nombre, enlace, sitio}.").ToProblem();
+            }
+
+            var aviso = contacto is null ? null : new Contacto(contacto.Correo!, contacto.Nombre, contacto.Enlace, contacto.Sitio);
+            return (await flow.ConfirmAsync(id, aviso, ct)).Map(TicketPurchaseResponse.From).ToHttp();
+        }).WithName("ConfirmTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
 
         app.MapPost("/v1/ticket-purchases/{id}/cancel", async (string id, TicketingFlow flow, CancellationToken ct) =>
             (await flow.CancelAsync(id, ct)).Map(TicketPurchaseResponse.From).ToHttp()).WithName("CancelTicketPurchase");
@@ -85,4 +98,7 @@ public static class EventosEndpoints
 
     private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>Lo que trae <c>X-Synergos-Contacto</c>, tal como lo escribe la puerta.</summary>
+    private sealed record ContactoDeLaPuerta(string? Correo, string? Nombre, string? Enlace, string? Sitio);
 }
