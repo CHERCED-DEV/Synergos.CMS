@@ -268,11 +268,11 @@ public sealed class HttpEventTicketingServiceTests
     [Fact]
     public void El_id_de_lo_apartado_no_lleva_guiones()
     {
-        var seatRef = HttpEventTicketingService.SeatRef("evt-9f3a2b", 7);
+        var seatRef = CompraDeEventosEnElOrquestador.SeatRef("evt-9f3a2b", 7);
 
         Assert.DoesNotContain('-', seatRef);
-        Assert.Equal(seatRef, HttpEventTicketingService.SeatRef("evt-9f3a2b", 7));
-        Assert.NotEqual(seatRef, HttpEventTicketingService.SeatRef("evt-9f3a2b", 8));
+        Assert.Equal(seatRef, CompraDeEventosEnElOrquestador.SeatRef("evt-9f3a2b", 7));
+        Assert.NotEqual(seatRef, CompraDeEventosEnElOrquestador.SeatRef("evt-9f3a2b", 8));
 
         // Y el emisor no lo deja pasar si alguien lo derivara de otra forma.
         Assert.Throws<ArgumentException>(() => EventTicketIssuer.TicketIdOf("evt-9f3a2b-07"));

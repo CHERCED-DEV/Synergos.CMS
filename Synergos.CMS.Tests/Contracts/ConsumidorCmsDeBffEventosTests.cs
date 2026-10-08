@@ -1,4 +1,6 @@
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Synergos.CMS.Tests.Services;
 using Synergos.CMS.Web.Services;
 
@@ -60,6 +62,56 @@ public sealed class ConsumidorCmsDeBffEventosTests
         Assert.Contains("seats", cuerpo, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Lo que LEEN el artefacto de la puerta y la ruta vieja de una compra (ADR 0140 F3) existe en la
+    /// respuesta de <c>GetTicketPurchase</c>, y la cabecera del sujeto que mandan está declarada.
+    /// </summary>
+    /// <remarks>
+    /// Se lee del tipo que deserializa (<c>PurchaseDto</c> y los suyos), con el nombre que su JSON usa:
+    /// un campo que el orquestador renombra —o que el CMS lee con otro nombre— se quedaría en nulo en
+    /// silencio, y una compra sin <c>held</c> emite cero entradas.
+    /// </remarks>
+    [Fact]
+    public void Lo_que_lee_el_artefacto_de_una_compra_existe_en_GetTicketPurchase()
+    {
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/ticket-purchases/{id}").GetProperty("get");
+        Assert.Equal("GetTicketPurchase", op.GetProperty("operationId").GetString());
+        Assert.Contains(op.GetProperty("parameters").EnumerateArray(), p =>
+            p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "X-Synergos-Sujeto");
+
+        var respuesta = op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        var malas = new List<string>();
+        Lee(typeof(CompraDeEventosEnElOrquestador.PurchaseDto), respuesta, "$", malas);
+
+        Assert.True(malas.Count == 0,
+            $"El CMS lee de una compra campos que GetTicketPurchase no publica:{Environment.NewLine}" +
+            string.Join(Environment.NewLine, malas.Select(m => "  " + m)));
+    }
+
+    /// <summary>Cada propiedad de <paramref name="tipo"/>, con su nombre en el JSON, está en <paramref name="esquema"/>.</summary>
+    private static void Lee(Type tipo, JsonElement esquema, string donde, List<string> malas)
+    {
+        esquema = Resolver(esquema);
+        var propiedades = esquema.GetProperty("properties");
+        foreach (var p in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var nombre = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? JsonNamingPolicy.CamelCase.ConvertName(p.Name);
+            if (!propiedades.TryGetProperty(nombre, out var sub))
+            {
+                malas.Add($"{donde}.{nombre}: el CMS lo lee y la respuesta no lo publica.");
+                continue;
+            }
+
+            var dentro = p.PropertyType.IsGenericType && p.PropertyType.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
+                ? (Tipo: p.PropertyType.GetGenericArguments()[0], Esquema: Resolver(sub).GetProperty("items"))
+                : (Tipo: p.PropertyType, Esquema: sub);
+            if (dentro.Tipo.DeclaringType == typeof(CompraDeEventosEnElOrquestador))
+            {
+                Lee(dentro.Tipo, dentro.Esquema, $"{donde}.{nombre}", malas);
+            }
+        }
+    }
+
     /// <summary>Si <paramref name="valor"/> cabe en <paramref name="esquema"/>; lo que no, a <paramref name="malas"/>.</summary>
     private static void Cabe(JsonElement valor, JsonElement esquema, string donde, List<string> malas)
     {
@@ -107,6 +159,11 @@ public sealed class ConsumidorCmsDeBffEventosTests
 
     private static JsonElement Resolver(JsonElement esquema)
     {
+        // Un anulable sale como oneOf [null, $ref]: se mira la rama que no es nula.
+        if (esquema.TryGetProperty("oneOf", out var ramas))
+        {
+            esquema = ramas.EnumerateArray().First(r => !(r.TryGetProperty("type", out var t) && t.GetString() == "null"));
+        }
         while (esquema.TryGetProperty("$ref", out var referencia))
         {
             var nombre = referencia.GetString()!.Split('/').Last();

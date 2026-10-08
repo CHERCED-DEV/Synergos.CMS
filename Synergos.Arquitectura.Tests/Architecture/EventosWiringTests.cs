@@ -79,14 +79,19 @@ public sealed class EventosWiringTests
         Assert.Contains("v1/ticket-purchases", codigo, StringComparison.Ordinal);
     }
 
-    /// <summary>El artefacto no depende del orquestador, ni para emitirse ni para escanearse.</summary>
+    /// <summary>Lo confirmado no depende del orquestador: ni «mis entradas», ni transferir, ni volver a pedirlas.</summary>
     /// <remarks>
-    /// Es lo que hace que un BFF caído no deje a nadie fuera de un concierto que ya pagó. Si
-    /// «mis entradas» o transferir empezaran a salir a la red, esa propiedad se pierde sin que
-    /// nada más cambie de aspecto.
+    /// <para>Es lo que hace que un BFF caído no deje a nadie fuera de un concierto que ya pagó. Si
+    /// «mis entradas» o transferir empezaran a salir a la red, esa propiedad se pierde sin que nada
+    /// más cambie de aspecto.</para>
+    ///
+    /// <para><b>Reescrito en la ADR 0140 F3</b>: con la puerta, el artefacto SÍ habla con el orquestador
+    /// —para leer una compra que no se confirmó todavía— y la regla pasa a ser «lo confirmado no toca la
+    /// red»: el artefacto busca lo emitido en el registro ANTES de leer la compra, y sólo reconcilia lo
+    /// pendiente. Lo prueba con un contador de llamadas <c>EventosArtefactoTests</c>.</para>
     /// </remarks>
     [Fact]
-    public void Mis_entradas_y_transferir_NO_tocan_la_red()
+    public void Lo_confirmado_no_toca_la_red()
     {
         var codigo = CodigoDelCliente();
 
@@ -99,30 +104,63 @@ public sealed class EventosWiringTests
             Assert.Contains("_ledger.", cuerpo, StringComparison.Ordinal);
             Assert.DoesNotContain("HttpRequestMessage", cuerpo, StringComparison.Ordinal);
         }
+
+        var artefacto = CodigoDelArtefacto();
+        var entradas = Cuerpo(artefacto, "public async Task<ResultadoDelArtefacto> EntradasAsync");
+        var confirmado = entradas.IndexOf("EventOrderStatus.Confirmed", StringComparison.Ordinal);
+        var leer = entradas.IndexOf("LeerAsync(", StringComparison.Ordinal);
+        Assert.True(confirmado >= 0 && leer > confirmado,
+            "Las entradas ya emitidas se buscan en el registro ANTES de leer la compra en el orquestador.");
+
+        var reconciliar = Cuerpo(artefacto, "public async Task ReconciliarAsync");
+        Assert.True(reconciliar.IndexOf("EventOrderStatus.Pending", StringComparison.Ordinal) is var p && p >= 0
+                    && p < reconciliar.IndexOf("LeerAsync(", StringComparison.Ordinal),
+            "Reconciliar mira sólo lo PENDIENTE: lo confirmado no sale a la red.");
+    }
+
+    private static string CodigoDelArtefacto()
+        => SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Services", "ArtefactoDeEventos.cs"));
+
+    /// <summary>El cuerpo de un método: desde su firma hasta la firma del siguiente miembro público o privado.</summary>
+    private static string Cuerpo(string codigo, string firma)
+    {
+        var desde = codigo.IndexOf(firma, StringComparison.Ordinal);
+        Assert.True(desde >= 0, $"No se encontró «{firma}»: revisar este gate.");
+        var hasta = new[] { "\n    public ", "\n    private " }
+            .Select(m => codigo.IndexOf(m, desde + firma.Length, StringComparison.Ordinal))
+            .Where(i => i > 0)
+            .DefaultIfEmpty(codigo.Length)
+            .Min();
+        return codigo[desde..hasta];
     }
 
     /// <summary>
-    /// El CMS recuerda a los asistentes de su lado, porque la saga NO los lleva.
+    /// El CMS recuerda a los asistentes de su lado, porque la saga NO los lleva, y los anota ANTES de
+    /// cerrar la compra.
     /// </summary>
     /// <remarks>
     /// <para>No es un detalle de implementación: es la consecuencia directa de que el orquestador
-    /// no cargue datos personales. Si el cliente dejara de anotarlos, la compra existiría del
-    /// lado del BFF y de este lado no habría de dónde emitir ni a quién nombrar en la entrada —
-    /// y el fallo aparecería al confirmar, no al comprar.</para>
+    /// no cargue datos personales. Si el CMS dejara de anotarlos, la compra existiría del lado del
+    /// BFF y de este lado no habría a quién nombrar en la entrada.</para>
     ///
-    /// <para>Se comprueba además que lo anote AL COMPRAR y no al confirmar: entre las dos cosas
-    /// puede caerse el proceso, y una compra pagada cuyos asistentes se perdieron no se puede
-    /// reconstruir desde ningún lado.</para>
+    /// <para><b>Reescrito en la ADR 0140 F3</b>: por la puerta, comprar y cerrar los hace el
+    /// orquestador, así que el CMS anota por el ARTEFACTO, sobre una compra en curso
+    /// (<c>Running</c>) y antes de guardar; cerrada, ya no se corrige. La ruta vieja sigue anotando al
+    /// comprar hasta su retiro (paso 19).</para>
     /// </remarks>
     [Fact]
-    public void El_CMS_anota_los_asistentes_al_COMPRAR()
+    public void El_CMS_anota_los_asistentes_antes_de_cerrar_por_el_artefacto()
     {
-        var codigo = CodigoDelCliente();
+        var anotar = Cuerpo(CodigoDelArtefacto(), "public async Task<ResultadoDelArtefacto> AnotarAsistentesAsync");
+        var enCurso = anotar.IndexOf("\"Running\"", StringComparison.Ordinal);
+        var guardar = anotar.IndexOf("_ledger.SaveAsync(", StringComparison.Ordinal);
+        Assert.True(enCurso >= 0 && guardar > enCurso, "Los asistentes se anotan sólo sobre una compra en curso.");
+        Assert.Contains("Emparejar(", anotar, StringComparison.Ordinal);
 
+        var codigo = CodigoDelCliente();
         var comprar = codigo.IndexOf("public async Task<EventCheckoutResult> CheckoutAsync", StringComparison.Ordinal);
         var confirmar = codigo.IndexOf("public async Task<EventConfirmationResult> ConfirmAsync", StringComparison.Ordinal);
         Assert.True(comprar >= 0 && confirmar > comprar, "Cambió la forma del cliente: revisar este gate.");
-
         var cuerpoDeComprar = codigo[comprar..confirmar];
         Assert.Contains("_ledger.SaveAsync(", cuerpoDeComprar, StringComparison.Ordinal);
         Assert.Contains("new PersistedEventOrder(", cuerpoDeComprar, StringComparison.Ordinal);

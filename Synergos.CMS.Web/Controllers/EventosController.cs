@@ -1,8 +1,12 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -49,6 +53,9 @@ public sealed class EventosController : ControllerBase
     /// <summary>Dónde se republica la oferta del catálogo (ADR 0140 F3). Nulo: no hay a dónde.</summary>
     private readonly IEventOfferPublisher? _ofertas;
 
+    /// <summary>El artefacto de las compras hechas por la puerta (ADR 0140 F3). Nulo: no hay puerta.</summary>
+    private readonly ArtefactoDeEventos? _artefacto;
+
     public EventosController(
         IEventCatalogProvider catalog,
         IEventTicketingService ticketing,
@@ -58,9 +65,11 @@ public sealed class EventosController : ControllerBase
         IRealtimeNotifier realtime,
         ILogger<EventosController> logger,
         TimeProvider? reloj = null,
-        IEventOfferPublisher? ofertas = null)
+        IEventOfferPublisher? ofertas = null,
+        ArtefactoDeEventos? artefacto = null)
     {
         _ofertas = ofertas;
+        _artefacto = artefacto;
         _catalog = catalog;
         _ticketing = ticketing;
         _management = management;
@@ -343,10 +352,19 @@ public sealed class EventosController : ControllerBase
             return BadRequest(new { error = "eventId es requerido." });
         }
 
+        // Las compras por la puerta que el orquestador ya cerró y nadie volvió a pedir: se confirman
+        // acá para que cuenten. Sólo las PENDIENTES de este evento; lo confirmado no toca la red.
+        var delEvento = eventId.Trim();
+        if (_artefacto is not null)
+        {
+            await _artefacto.ReconciliarAsync(
+                o => string.Equals(o.EventId, delEvento, StringComparison.OrdinalIgnoreCase), cancellationToken);
+        }
+
         EventManageView view;
         try
         {
-            view = await _management.GetManageAsync(eventId.Trim(), cancellationToken);
+            view = await _management.GetManageAsync(delEvento, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -404,6 +422,16 @@ public sealed class EventosController : ControllerBase
     {
         var (denied, email) = RequireMemberEmail();
         if (denied is not null) { return denied; }
+
+        // Las compras PENDIENTES de quien pide que el orquestador ya cerró: si cerró y no volvió a
+        // pedir sus entradas, las ve igual. Lo confirmado no toca la red.
+        if (_artefacto is not null)
+        {
+            var miembro = _gate.CurrentMemberKey?.ToString("n");
+            await _artefacto.ReconciliarAsync(o =>
+                string.Equals(o.BuyerEmail, email, StringComparison.OrdinalIgnoreCase)
+                || (miembro is not null && string.Equals(o.BuyerId, miembro, StringComparison.Ordinal)), cancellationToken);
+        }
 
         var tickets = await _ticketing.GetTicketsAsync(email, cancellationToken);
         var events = await ResolveEventsAsync(tickets, cancellationToken);
@@ -518,6 +546,87 @@ public sealed class EventosController : ControllerBase
                 ? string.Empty
                 : EventContentRules.BuildStatus(published.Summary.StartUtc, _reloj.GetUtcNow())));
     }
+
+    // ── 11. El artefacto de una compra por la puerta (ADR 0140 F3) ──────
+    // POST /api/eventos/compras/{id}/asistentes { attendees:[...] } → { id, asistentes }   🔒 sesión
+    // GET  /api/eventos/compras/{id}/entradas → { status, tickets:[...] }                   🔒 sesión
+    //
+    // La compra la abre y la cierra la PUERTA (/api/flujos/eventos.compra/…); el orquestador no trae
+    // entradas ni guarda asistentes. Esto es lo que el CMS agrega: quién se sienta, antes de cerrar, y
+    // las entradas con su QR, después. Con el mismo filtro de mismo origen y JSON que la puerta.
+
+    [HttpPost("compras/{id}/asistentes")]
+    public async Task<IActionResult> AnotarAsistentes(string id, CancellationToken cancellationToken)
+    {
+        if (Miembro() is { } sinSesion) return sinSesion;
+        if (FiltroMismoOrigenJson.Origen(Request) is { } ajeno) return Problema(ajeno);
+        if (FiltroMismoOrigenJson.Tipo(Request) is { } tipo) return Problema(tipo);
+        var (cuerpo, grande) = await FiltroMismoOrigenJson.LeerCuerpoAsync(Request, cancellationToken);
+        if (grande is not null) return Problema(grande);
+        if (_artefacto is null) return Problema(SinArtefacto);
+
+        AsistentesRequest? pedido;
+        try { pedido = JsonSerializer.Deserialize<AsistentesRequest>(cuerpo!, LecturaWeb); }
+        catch (JsonException) { pedido = null; }
+
+        var asistentes = (pedido?.Attendees ?? Array.Empty<AttendeeRequest>())
+            .Select(a => new EventAttendeeInfo((a.Name ?? string.Empty).Trim(), (a.Email ?? string.Empty).Trim(), a.Identification?.Trim()))
+            .ToList();
+
+        var r = await _artefacto.AnotarAsistentesAsync(
+            id, _gate.CurrentMemberKey!.Value, _gate.CurrentMemberEmail, _gate.CurrentMemberDisplayName, asistentes, cancellationToken);
+        return r.Bien ? Ok(new AsistentesAnotadosResponse(id, r.Anotados)) : Problema(r);
+    }
+
+    [HttpGet("compras/{id}/entradas")]
+    public async Task<IActionResult> Entradas(string id, CancellationToken cancellationToken)
+    {
+        if (Miembro() is { } sinSesion) return sinSesion;
+        if (_artefacto is null) return Problema(SinArtefacto);
+
+        var r = await _artefacto.EntradasAsync(
+            id, _gate.CurrentMemberKey!.Value, _gate.CurrentMemberEmail, _gate.CurrentMemberDisplayName, cancellationToken);
+        if (!r.Bien) return Problema(r);
+
+        var events = await ResolveEventsAsync(r.Entradas!.Tickets, cancellationToken);
+        return Ok(new ConfirmResponse(
+            Status: r.Entradas.Status,
+            Tickets: r.Entradas.Tickets.Select(t => ToTicketDto(t, Lookup(events, t))).ToList()));
+    }
+
+    private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
+
+    private static readonly ResultadoDelArtefacto SinArtefacto = new(
+        StatusCodes.Status503ServiceUnavailable, "eventos.artefacto_no_disponible", "La compra por la puerta no está abierta en este sitio.");
+
+    /// <summary>El miembro de la sesión con su <c>MemberKey</c>, que es el sujeto de sus compras; si no, 401.</summary>
+    private ContentResult? Miembro()
+        => _gate.IsAuthenticated && _gate.CurrentMemberKey is { } k && k != Guid.Empty
+            ? null
+            : Problema(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida", "Hace falta iniciar sesión."));
+
+    private static ContentResult Problema(FalloDeLaPuerta f) => Problema(f.Estado, f.Codigo, f.Mensaje, f.Transitorio, null);
+
+    private static ContentResult Problema(ResultadoDelArtefacto r)
+        => Problema(r.Estado, r.Codigo!, r.Mensaje ?? string.Empty, r.Transitorio, r.EstadoDeLaCompra);
+
+    /// <summary>Un «no» del artefacto como problem+json, con <c>code</c> y <c>transient</c> como la puerta.</summary>
+    private static ContentResult Problema(int estado, string codigo, string mensaje, bool transitorio, string? deLaCompra) => new()
+    {
+        StatusCode = estado,
+        ContentType = "application/problem+json",
+        Content = JsonSerializer.Serialize(new
+        {
+            type = "about:blank",
+            title = ReasonPhrases.GetReasonPhrase(estado),
+            status = estado,
+            detail = mensaje,
+            code = codigo,
+            transient = transitorio,
+            // En qué quedó la saga, cuando eso es el motivo: «en curso», «compensada».
+            purchaseStatus = deLaCompra,
+        }, LecturaWeb),
+    };
 
     // ── 10. Republicar la oferta (administración, a mano) ──────────────
     // POST /api/eventos/oferta/republicar → { total, publicados, fallidos, sinDestino }   🔒 admin
@@ -786,6 +895,12 @@ public sealed class EventosController : ControllerBase
 
     /// <summary>Quien compra, que no tiene por qué ir al evento.</summary>
     public sealed record BuyerRequest(string? Name, string? Email);
+
+    /// <summary><c>POST /compras/{id}/asistentes</c>: quién va a sentarse, uno por entrada apartada.</summary>
+    public sealed record AsistentesRequest(IReadOnlyList<AttendeeRequest>? Attendees);
+
+    /// <summary>Cuántos asistentes quedaron anotados en la compra.</summary>
+    public sealed record AsistentesAnotadosResponse(string Id, int Asistentes);
 
     /// <summary>
     /// <c>POST /checkout</c> — evento + ítems + asistentes + quien compra.

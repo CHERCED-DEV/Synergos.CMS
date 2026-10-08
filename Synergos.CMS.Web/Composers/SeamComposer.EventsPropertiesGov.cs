@@ -166,6 +166,22 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<ILogger<HttpEventOfferPublisher>>(),
             hayOrquestadorDeEventos));
 
+        // El ARTEFACTO de una compra por la puerta (ADR 0140 F3): asistentes antes de cerrar y entradas
+        // después, sobre el MISMO registro que la ruta vieja y la consola. Habla con el orquestador sólo
+        // para leer la compra con el sujeto del miembro; lo confirmado ya no sale a la red.
+        if (hayOrquestadorDeEventos)
+        {
+            services.AddClienteDelArbolDeServicios(
+                ArtefactoDeEventos.ClientName,
+                DestinoDelArbol.De(seccionDeEventos, "http://127.0.0.1:5303/", 10));
+        }
+        services.AddSingleton(sp => new ArtefactoDeEventos(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<EventTicketLedger>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<ILogger<ArtefactoDeEventos>>(),
+            hayOrquestadorDeEventos));
+
         // Se dispara en tres sitios y NUNCA al arrancar (ADR 0013): al publicar un eventPage, al crear
         // un evento de organizador y a mano (POST /api/eventos/oferta/republicar).
         builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEventoAlPublicar>();

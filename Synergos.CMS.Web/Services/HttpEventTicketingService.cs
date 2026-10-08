@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using static Synergos.CMS.Web.Services.CompraDeEventosEnElOrquestador;
 
 namespace Synergos.CMS.Web.Services;
 
@@ -205,10 +206,6 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         return new EventCheckoutResult(orderRef, orderRef, compra.Total.Amount, compra.Total.Currency);
     }
 
-    /// <summary>La orden que el navegador presenta para confirmar: 128 bits de azar criptográfico.</summary>
-    private static string NuevaOrden()
-        => "evord_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
-
     /// <summary>La orden de este lado que nombra a la saga, si alguna la nombra.</summary>
     private async Task<PersistedEventOrder?> OrdenDeLaSagaAsync(string sagaId, CancellationToken ct)
         => (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
@@ -251,73 +248,6 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             }
             throw;
         }
-    }
-
-    /// <summary>
-    /// Empareja lo que el orquestador apartó con los asistentes que solo conoce el CMS.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Por orden, y el orden está garantizado</b>: el orquestador aparta un cupo por
-    /// línea y las devuelve en el mismo orden en que se mandaron. Una línea de tres entradas es
-    /// UN apartado de cantidad tres, así que se expande antes de emparejar — exactamente como
-    /// hace el motor en proceso.</para>
-    ///
-    /// <para><b>El identificador de lo apartado se DERIVA, no se pide.</b> El orquestador no
-    /// expone los identificadores internos de <c>Api.Inventory</c> y hace bien: sacarlos solo
-    /// invita a que alguien los cablee río arriba. Sirve cualquier cosa estable y única dentro de
-    /// la compra, así que se usa la saga más el ordinal — y como la llave de idempotencia es
-    /// determinista, un reintento reproduce los mismos identificadores y por tanto las mismas
-    /// entradas.</para>
-    /// </remarks>
-    internal static List<PersistedEventUnit> Emparejar(PurchaseDto compra, IReadOnlyList<EventAttendeeInfo> attendees)
-    {
-        var unidades = new List<PersistedEventUnit>(attendees.Count);
-        var n = 0;
-
-        foreach (var apartado in compra.Held ?? Array.Empty<HeldDto>())
-        {
-            for (var i = 0; i < Math.Max(1, apartado.Quantity); i++)
-            {
-                if (n >= attendees.Count)
-                {
-                    // El orquestador apartó más de lo que se pidió. No se inventa un asistente:
-                    // una entrada sin portador no se puede emitir ni escanear.
-                    break;
-                }
-                var quien = attendees[n];
-                unidades.Add(new PersistedEventUnit(
-                    TierCode: apartado.Tier,
-                    TierName: apartado.Tier,
-                    Seat: apartado.Seat,
-                    // El desglose por butaca no vuelve del orquestador —su respuesta lleva el
-                    // total— y repartirlo a ojo sería inventar. Cero es honesto; el total de la
-                    // compra, que es lo que se cobró, sí está y va en la orden.
-                    Price: 0m,
-                    Currency: compra.Total.Currency,
-                    AttendeeName: (quien.Name ?? string.Empty).Trim(),
-                    AttendeeEmail: (quien.Email ?? string.Empty).Trim(),
-                    AttendeeDocument: quien.DocumentId?.Trim(),
-                    ReservationId: SeatRef(compra.Id, n)));
-                n++;
-            }
-        }
-
-        return unidades;
-    }
-
-    /// <summary>El identificador de lo apartado, determinista dentro de la compra.</summary>
-    /// <remarks>
-    /// <b>Sin guiones, y lo descubrió un test</b>: el payload del token es
-    /// <c>SYN-TKT-{evento}-{entrada}-v{n}</c> y al deshacerlo se corta por el último guion, así
-    /// que un id de entrada con guiones verifica bien y devuelve OTRA entrada — QR firmado,
-    /// puerta cerrada, cero errores en el log. El identificador de la saga sí los lleva
-    /// (<c>evt-…</c>), así que se quitan acá. <c>EventTicketIssuer.TicketIdOf</c> lo exige de
-    /// todos modos: esto es cumplir el contrato, no esquivarlo.
-    /// </remarks>
-    internal static string SeatRef(string sagaId, int ordinal)
-    {
-        var limpio = new string(sagaId.Where(char.IsAsciiLetterOrDigit).ToArray());
-        return $"{limpio}{ordinal:D2}";
     }
 
     // ── Confirmar ───────────────────────────────────────────────────────────
@@ -591,14 +521,4 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     internal static string Base64Url(byte[] bytes)
         => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    // Los DTO viven acá y NO en Synergos.CMS.Interfaces: son la forma del contrato HTTP con otro
-    // servicio, no vocabulario del dominio del CMS.
-
-    internal sealed record MoneyDto(decimal Amount, string Currency);
-
-    internal sealed record HeldDto(string Tier, string? Seat, int Quantity);
-
-    internal sealed record PurchaseDto(
-        string Id, string? BuyerKind, string? BuyerId, string? EventId, string? Status,
-        MoneyDto Total, IReadOnlyList<HeldDto>? Held, int PendingCompensations, string? LastError);
 }
