@@ -36,6 +36,9 @@ namespace Synergos.Bff.Core.Flow;
 ///   rechazo ORIGINAL de la capacidad. Salvo uno con <c>al_fallar: seguir</c>, que el validador
 ///   sólo admite después del último cierre: ése se anota —la saga y el código, nada más— y la
 ///   fase sigue, porque ya no queda nada que deshacer y deshacer devolvería una compra hecha.</item>
+///   <item>Un paso que reserva con <c>omitir_si_cero</c> no corre cuando ese monto es cero: no reserva
+///   nada, deja nulo lo que escribiría, y su cierre se salta solo (la regla de la reserva que nunca
+///   se hizo). Es lo gratis, que <c>Api.Payments</c> rechaza como cobro.</item>
 ///   <item>Lo efímero de una fase (<see cref="IFlowBinding{TSaga}.Efimera"/>) lo tiene que poner la
 ///   fachada antes del primer paso, y vive sólo en el contexto de esa llamada.</item>
 ///   <item>Al terminar la última fase, la saga queda <c>Completed</c> y lo que estaba armado,
@@ -270,6 +273,15 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // y autorizar quedó Running sin cobro, y confirmarla consume el aforo sin capturar nada.
         if (definicion.CierraReserva is { } unica && item is null && Ledger(corrida).Legs(unica).Count == 0)
         {
+            return Desenlace.Sigue;
+        }
+
+        // Un cobro de cero no es un cobro: el paso no corre, no reserva, y lo que escribiría queda
+        // nulo —como al saltar la fase— para que nadie lea un valor que no se produjo.
+        if (definicion.OmitirSiCero is { } monto
+            && Ambito.Leer<Money?>(monto, corrida.Ctx, alias, item) is { IsZero: true })
+        {
+            foreach (var nombre in definicion.Escribe) Ambito.Escribir(nombre, null, corrida.Ctx, alias, item);
             return Desenlace.Sigue;
         }
 

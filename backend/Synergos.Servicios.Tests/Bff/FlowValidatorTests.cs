@@ -334,6 +334,18 @@ public sealed class FlowValidatorTests
         Assert.Contains(FlowValidator.Validar(enBloque, Registro, Contrato), e => e.Contains("«nota» declara «al_fallar» dentro de un bloque", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Omitir_si_cero_va_en_un_paso_que_reserva_y_sobre_algo_que_lee()
+    {
+        var bien = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"omitir_si_cero\": \"total\","));
+        var noLoLee = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"omitir_si_cero\": \"cotizacion\","));
+        var noReserva = Errores(Mutar("\"llave\": \"capture\",", "\"llave\": \"capture\", \"omitir_si_cero\": \"paymentId\","));
+
+        Assert.Empty(bien);   // el control: así es como lo declara Eventos en la F3
+        Assert.Contains(noLoLee, e => e.Contains("«autorizar» se omite si «cotizacion» es cero y no lo lee", StringComparison.Ordinal));
+        Assert.Contains(noReserva, e => e.Contains("«capturar» declara «omitir_si_cero» y no reserva nada", StringComparison.Ordinal));
+    }
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> ContactoEnCerrar =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "contacto" } };
 

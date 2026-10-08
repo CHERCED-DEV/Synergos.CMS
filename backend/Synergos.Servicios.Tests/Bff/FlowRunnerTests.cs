@@ -104,6 +104,11 @@ public sealed class FlowRunnerTests
         .Replace("\"consumir\": { \"tipo\": \"t.consumir\",",
             "\"avisar\": { \"tipo\": \"t.avisar\", \"lee\": [\"nota\"], \"al_fallar\": \"seguir\" },\n    \"consumir\": { \"tipo\": \"t.consumir\",", StringComparison.Ordinal);
 
+    /// <summary>La de arriba, gratis si la cotización da cero: autorizar no corre, capturar se salta.</summary>
+    private static readonly string GratisSiCero = Definicion.Replace(
+        "\"llave\": \"auth\", \"motivo\": \"no autorizó\",",
+        "\"llave\": \"auth\", \"motivo\": \"no autorizó\", \"omitir_si_cero\": \"precio\",", StringComparison.Ordinal);
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> NotaEnCerrar =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "nota" } };
 
@@ -214,7 +219,7 @@ public sealed class FlowRunnerTests
             Registro = new RegistroDePasos(new IPaso[]
             {
                 Paso("t.revisar", 1, 0, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue()),
-                Paso("t.cotizar", 1, 1, LlaveRequerida.Ninguna, e => SalidaDePaso.Sigue(e.Lee<decimal>(0) * 2)),
+                Paso("t.cotizar", 1, 1, LlaveRequerida.Ninguna, e => SalidaDePaso.Sigue(Money.Of(e.Lee<decimal>(0) * 2, "COP"))),
                 Paso("t.marcar", 1, 1, LlaveRequerida.Ninguna, e => SalidaDePaso.Sigue($"pozo-{e.Lee<string>(0)}"),
                     e => e.Lee<string>(0)),
                 Paso("t.apartar", 2, 0, LlaveRequerida.PorItem, e =>
@@ -225,6 +230,8 @@ public sealed class FlowRunnerTests
                 }, e => e.Lee<string>(0)),
                 Paso("t.autorizar", 1, 1, LlaveRequerida.Fija, e =>
                 {
+                    // Como Api.Payments: un cobro de cero no es un cobro (payments.zero_amount).
+                    if (e.Lee<object>(0) is Money { IsZero: true }) return SalidaDePaso.Rechaza(Rejection.Invalid("t.autorizar.zero_amount", "guionado"));
                     Bitacora.Add($"  llave {e.Llave().Value}");
                     return SalidaDePaso.Reserva(new Reservado("cobro-1"), "cobro-1");
                 }),
@@ -288,10 +295,12 @@ public sealed class FlowRunnerTests
                     : hace(e);
             });
 
-        public Task<Result<SagaDePrueba>> Abrir(params string[] skus)
+        public Task<Result<SagaDePrueba>> Abrir(params string[] skus) => AbrirPor(10m, skus);
+
+        public Task<Result<SagaDePrueba>> AbrirPor(decimal monto, params string[] skus)
             => Runner.EjecutarFaseAsync("abrir", "s1", new FlowContext()
                 .Set("items", skus.Select(s => new FlowContext().Set("sku", s)).ToList())
-                .Set("monto", 10m), CancellationToken.None);
+                .Set("monto", monto), CancellationToken.None);
 
         public Task<Result<SagaDePrueba>> Cerrar()
             => Runner.EjecutarFaseAsync("cerrar", "s1", new FlowContext(), CancellationToken.None);
@@ -835,5 +844,45 @@ public sealed class FlowRunnerTests
 
         Assert.Contains("pone nota en «cerrar»", ex.Message, StringComparison.Ordinal);
         Assert.Empty(banco.Bitacora);
+    }
+
+    // ── omitir_si_cero (ADR 0140 F3) ────────────────────────────────────────
+
+    [Fact]
+    public async Task Con_monto_cero_la_reserva_que_lo_omite_no_corre_y_su_cierre_se_salta_solo()
+    {
+        // Lo gratis: sin esto, Api.Payments rechaza el cobro de cero y la compra se deshace.
+        var banco = new Banco(GratisSiCero);
+        Assert.Equal("precio", banco.Flujo.Pasos["autorizar"].OmitirSiCero);   // la definición del banco entró
+
+        var abierta = await banco.AbrirPor(0m, "a");
+
+        Assert.True(abierta.IsOk);
+        Assert.DoesNotContain(banco.Pasos, p => p.StartsWith("paso t.autorizar", StringComparison.Ordinal));
+        Assert.Empty(abierta.Value.Legs("autorizar"));
+        Assert.Equal(new[] { "Soltar" }, abierta.Value.Compensations.Select(c => c.Kind));
+        banco.Bitacora.Clear();
+
+        var cerrada = await banco.Cerrar();
+
+        Assert.True(cerrada.IsOk);
+        Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
+        Assert.DoesNotContain(banco.Pasos, p => p.StartsWith("paso t.capturar", StringComparison.Ordinal));
+        Assert.Contains("paso t.consumir h-a", banco.Pasos);
+        Assert.Empty(banco.Deshechos);
+        Assert.All(cerrada.Value.Compensations, c => Assert.False(c.IsPending));
+    }
+
+    [Fact]
+    public async Task Con_monto_la_misma_definicion_autoriza_y_captura_como_siempre()
+    {
+        var banco = new Banco(GratisSiCero);
+
+        await banco.AbrirPor(10m, "a");
+        var cerrada = await banco.Cerrar();
+
+        Assert.True(cerrada.IsOk);
+        Assert.Contains("paso t.autorizar", banco.Pasos);
+        Assert.Contains("paso t.capturar cobro-1", banco.Pasos);
     }
 }

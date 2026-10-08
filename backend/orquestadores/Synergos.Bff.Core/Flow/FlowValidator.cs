@@ -54,6 +54,7 @@ public static class FlowValidator
 
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
+        RevisarOmitirSiCero(flujo, errores);
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
     }
@@ -454,6 +455,29 @@ public static class FlowValidator
         {
             errores.Add($"reserva y {contrato.Saga.Name} no implementa {nameof(IHoldLedger)}: el intérprete no tendría "
                 + "de dónde leer lo reservado para cerrarlo.");
+        }
+    }
+
+    /// <summary>
+    /// <c>omitir_si_cero</c> sólo en un paso que reserva, y sobre algo que el paso lee.
+    /// </summary>
+    /// <remarks>
+    /// Que reserve es lo que hace que saltárselo no deje nada a medias: su cierre ve que no hay
+    /// reserva y no corre. Que lo lea es lo que garantiza que el monto esté ahí en ese punto — el
+    /// orden de las lecturas ya lo comprueba <see cref="RevisarOrden"/>.
+    /// </remarks>
+    private static void RevisarOmitirSiCero(FlujoDef flujo, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => p.OmitirSiCero is not null))
+        {
+            if (paso.Reserva is null)
+            {
+                errores.Add($"«{paso.Id}» declara «omitir_si_cero» y no reserva nada: no hay cierre que se salte solo.");
+            }
+            if (!paso.Lee.Contains(paso.OmitirSiCero!, StringComparer.Ordinal))
+            {
+                errores.Add($"«{paso.Id}» se omite si «{paso.OmitirSiCero}» es cero y no lo lee.");
+            }
         }
     }
 

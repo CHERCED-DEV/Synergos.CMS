@@ -86,6 +86,9 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// deshacer nada. Sólo vale después del último cierre de la última fase, en un paso que no
 /// reserva, no cierra ni escribe: lo que ya se cobró y se consumió no se devuelve porque un aviso
 /// no salió.</param>
+/// <param name="OmitirSiCero">Un <c>Money</c> que el paso lee: si vale cero, el paso no corre ni
+/// reserva nada, y su cierre se salta solo porque no hay reserva que cerrar. Es lo gratis: un cobro
+/// de cero no es un cobro, y <c>Api.Payments</c> lo rechaza.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -96,7 +99,8 @@ public sealed record PasoDef(
     ReservaDef? Reserva,
     string? CierraReserva,
     string? Motivo,
-    string? AlFallar = null)
+    string? AlFallar = null,
+    string? OmitirSiCero = null)
 {
     /// <summary>El único valor de <c>al_fallar</c>.</summary>
     public const string Seguir = "seguir";
@@ -219,7 +223,8 @@ internal static class LectorDeFlujo
         var aqui = $"{donde}, paso «{id}»";
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
-            "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar");
+            "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
+            "omitir_si_cero");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && !string.Equals(alFallar, PasoDef.Seguir, StringComparison.Ordinal))
@@ -248,7 +253,8 @@ internal static class LectorDeFlujo
             reserva,
             Opcional(nodo, "cierra_reserva", aqui),
             Opcional(nodo, "motivo", aqui),
-            alFallar);
+            alFallar,
+            Opcional(nodo, "omitir_si_cero", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>
