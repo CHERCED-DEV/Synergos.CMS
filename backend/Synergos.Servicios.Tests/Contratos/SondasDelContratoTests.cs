@@ -90,14 +90,14 @@ public sealed class SondasDelContratoTests
     /// </summary>
     private static async Task<Respuesta> Enviar(
         HostDeLaPieza host, OperacionPublicada op, bool conLlaveCompartida, string? llave, string? cuerpo = null,
-        string? identidad = null, (string Nombre, string Valor)? otra = null)
+        string? identidad = null, IReadOnlyDictionary<string, string>? otras = null)
     {
         var ruta = System.Text.RegularExpressions.Regex.Replace(op.Ruta, @"\{[^}]+\}", "sonda");
         using var req = new HttpRequestMessage(new HttpMethod(op.Metodo), new Uri(ruta, UriKind.Relative));
         if (conLlaveCompartida) req.Headers.Add(SharedKeyAuth.HeaderName, PiezaPublicada.Llave);
         if (llave is not null) req.Headers.Add(IdempotencyHeader.Name, llave);
         if (identidad is not null) req.Headers.Add(IdentityTokens.HeaderName, identidad);
-        if (otra is { } cabecera) req.Headers.TryAddWithoutValidation(cabecera.Nombre, cabecera.Valor);
+        foreach (var (nombre, valor) in otras ?? new Dictionary<string, string>()) req.Headers.TryAddWithoutValidation(nombre, valor);
         if (op.Op["requestBody"] is not null || cuerpo is not null)
         {
             req.Content = new StringContent(cuerpo ?? "{}", Encoding.UTF8, "application/json");
@@ -313,11 +313,31 @@ public sealed class SondasDelContratoTests
             .Select(f => (string)f.GetRawConstantValue()!)
             .ToList();
 
-    /// <summary>Las cabeceras que una operación declara con <see cref="ContratoOpenApi.MarcaDeLaPuerta"/>.</summary>
-    private static IEnumerable<string> DeLaPuerta(OperacionPublicada op)
+    /// <summary>Las cabeceras que una operación declara con <see cref="ContratoOpenApi.MarcaDeLaPuerta"/>, y si son requeridas.</summary>
+    private static Dictionary<string, bool> DeclaradasDeLaPuerta(OperacionPublicada op)
         => (op.Op["parameters"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
             .Where(p => (string?)p["in"] == "header" && p[ContratoOpenApi.MarcaDeLaPuerta]?.GetValue<bool>() == true)
-            .Select(p => (string)p["name"]!);
+            .ToDictionary(p => (string)p["name"]!, p => p["required"]?.GetValue<bool>() == true, StringComparer.Ordinal);
+
+    private static IEnumerable<string> DeLaPuerta(OperacionPublicada op) => DeclaradasDeLaPuerta(op).Keys;
+
+    /// <summary>
+    /// Un valor que cada cabecera conocida de la puerta LEE bien: con él se manda una cabecera cuando
+    /// lo que se prueba es otra. Una cabecera nueva sin valor acá es rojo, no un hueco.
+    /// </summary>
+    private static readonly Dictionary<string, string> ValorQueSeLee = new(StringComparer.Ordinal)
+    {
+        [CabecerasDeLaPuerta.Sujeto] = "sonda.sujeto:s-1",
+        [CabecerasDeLaPuerta.Negocio] = Base64Url("""{"feePercent":0}"""),
+        [CabecerasDeLaPuerta.Contacto] = Base64Url("""{"correo":"sonda@ejemplo.co"}"""),
+    };
+
+    private static string Base64Url(string json)
+        => System.Buffers.Text.Base64Url.EncodeToString(Encoding.UTF8.GetBytes(json));
+
+    /// <summary>Las OTRAS cabeceras de la puerta que la operación declara, con un valor que se lee.</summary>
+    private static Dictionary<string, string> LasDemasBien(OperacionPublicada op, string salvo)
+        => DeLaPuerta(op).Where(n => n != salvo).ToDictionary(n => n, n => ValorQueSeLee[n], StringComparer.Ordinal);
 
     /// <summary>
     /// Lo que el documento declara de las cabeceras de la PUERTA (<c>x-synergos-puerta</c>) es lo que el
@@ -338,6 +358,8 @@ public sealed class SondasDelContratoTests
         var ops = ContratoOpenApi.Operaciones(doc);
         var nombres = CabecerasConocidas().Concat(ops.SelectMany(DeLaPuerta)).Distinct(StringComparer.Ordinal).ToList();
         Assert.Contains(CabecerasDeLaPuerta.Contacto, nombres);   // el censo de las conocidas no está vacío
+        Assert.All(nombres, n => Assert.True(ValorQueSeLee.ContainsKey(n),
+            $"La cabecera de la puerta «{n}» no tiene valor en {nameof(ValorQueSeLee)}: sin él, las demás no se prueban a su lado."));
 
         using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
         var malas = new List<string>();
@@ -348,7 +370,9 @@ public sealed class SondasDelContratoTests
             foreach (var nombre in nombres)
             {
                 var llave = LlaveDeclarada(op) is null ? null : "sonda-puerta";
-                var r = await Enviar(host, op, conLlaveCompartida: true, llave, otra: (nombre, CabeceraQueNoEs));
+                var otras = LasDemasBien(op, nombre);
+                otras[nombre] = CabeceraQueNoEs;
+                var r = await Enviar(host, op, conLlaveCompartida: true, llave, otras: otras);
                 var leida = r.Status == HttpStatusCode.BadRequest
                             && Codigo(r.Cuerpo) is { } code
                             && code.EndsWith(CabecerasDeLaPuerta.CodigoInvalido(string.Empty, nombre), StringComparison.Ordinal);
@@ -365,6 +389,45 @@ public sealed class SondasDelContratoTests
             $"{ensamblado}: las cabeceras de la puerta que publica el contrato no son las que el endpoint lee. " +
             "Se declaran con .ConCabeceraDeLaPuerta(...) donde se leen, y sólo ahí." +
             $"{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
+    }
+
+    /// <summary>
+    /// Una cabecera de la puerta que el documento declara REQUERIDA es la que el endpoint exige: sin
+    /// ella contesta <c>400 &lt;dominio&gt;.&lt;cabecera&gt;_requerido</c>, y sin una opcional no.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que hace que el sujeto sea obligatorio de verdad: con el sujeto opcional, consultar o
+    /// confirmar sin él no comprobaba de quién era la compra (medido en el prototipo de la F3: 200).
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Piezas))]
+    public async Task Las_cabeceras_de_la_puerta_requeridas_son_las_que_el_endpoint_exige(string ensamblado)
+    {
+        var doc = ContratoOpenApi.Comiteado(ensamblado);
+        using var host = ContratoOpenApi.Pieza(ensamblado).Levantar(conContrato: false);
+        var malas = new List<string>();
+
+        foreach (var op in ContratoOpenApi.Operaciones(doc))
+        {
+            foreach (var (nombre, requerida) in DeclaradasDeLaPuerta(op))
+            {
+                var llave = LlaveDeclarada(op) is null ? null : "sonda-requerida";
+                var r = await Enviar(host, op, conLlaveCompartida: true, llave, otras: LasDemasBien(op, nombre));
+                var exigida = r.Status == HttpStatusCode.BadRequest
+                              && Codigo(r.Cuerpo) is { } code
+                              && code.EndsWith(CabecerasDeLaPuerta.CodigoRequerido(string.Empty, nombre), StringComparison.Ordinal);
+
+                if (requerida != exigida)
+                {
+                    malas.Add($"  {op}: el documento dice que {nombre} es {(requerida ? "REQUERIDA" : "opcional")} " +
+                              $"y sin ella contesta {(int)r.Status} {Codigo(r.Cuerpo) ?? "(sin code)"}.");
+                }
+            }
+        }
+
+        Assert.True(malas.Count == 0,
+            $"{ensamblado}: lo que el contrato dice de las cabeceras requeridas de la puerta no es lo que el " +
+            $"endpoint exige.{Environment.NewLine}{string.Join(Environment.NewLine, malas)}");
     }
 
     /// <summary>

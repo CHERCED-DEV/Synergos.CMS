@@ -323,7 +323,12 @@ public sealed class PropagacionDeIdentidadTests
     /// vez que este repo paga por una lista sacada de la cabeza («los seis de
     /// <c>Synergos.Shared</c>», «faltan las otras 16», los tres endpoints de <c>Api.Consent</c>).
     /// La regla mecánica: un <c>*Request</c> que declare un par <c>XKind</c> + <c>XId</c> está
-    /// nombrando a alguien —o a algo— por la palabra de quien llama.</para>
+    /// nombrando a alguien —o a algo— por la palabra de quien llama. <b>Y un endpoint que declare el
+    /// sujeto de la puerta</b> (<c>.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto</c>, ADR 0140 F3)
+    /// también: mover el comprador del cuerpo a una cabecera cambia QUIÉN llama —hoy el CMS con la
+    /// sesión del miembro, no el navegador— pero no que el orquestador lo nombre por la palabra de
+    /// quien llama en vez de citarlo de un registro. Sin esta segunda regla, sacar el par del cuerpo
+    /// sacaba a Eventos de la lista sin haberlo anclado: el gate engañado.</para>
     ///
     /// <para><b>Y se vigila en los dos sentidos</b>, como la lista de permisos de <c>HttpClient</c>
     /// del gate de #49. Que aparezca un cuarto rompe el build: sería un orquestador nuevo
@@ -357,7 +362,13 @@ public sealed class PropagacionDeIdentidadTests
                 .SelectMany(RecordsDePeticion)
                 .Any(TieneParKindId);
 
-            if (nombra) medidos.Add(proyecto);
+            var endpoints = Proyectos.Dir(proyecto, "Endpoints");
+            var declaraElSujeto = Directory.Exists(endpoints)
+                && Directory.EnumerateFiles(endpoints, "*.cs", SearchOption.AllDirectories)
+                    .Select(SinComentarios)
+                    .Any(f => f.Contains(SujetoDeLaPuerta, StringComparison.Ordinal));
+
+            if (nombra || declaraElSujeto) medidos.Add(proyecto);
         }
 
         Assert.True(
@@ -373,6 +384,9 @@ public sealed class PropagacionDeIdentidadTests
             + "de CLAUDE.md en el MISMO commit — una guía que se queda diciendo que falta algo "
             + "que ya está hecho es cómo esa sección llegó a decir «UNA» durante once HU.");
     }
+
+    /// <summary>Cómo declara un endpoint que lee el sujeto que pone la puerta.</summary>
+    private const string SujetoDeLaPuerta = "ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto";
 
     /// <summary>
     /// La lista de parámetros del record de saga del fichero, o <c>null</c> si no declara uno.

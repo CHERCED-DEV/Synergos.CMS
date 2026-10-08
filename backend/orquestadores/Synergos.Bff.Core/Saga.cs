@@ -121,6 +121,25 @@ public interface ISaga
 /// ponerlo <b>en nulo</b> —es lo que rearma el aviso tras un reintento manual— y con un
 /// «nulo significa no cambiar» eso sería imposible de expresar.</para>
 /// </remarks>
+/// <summary>
+/// Una saga que sabe de quién es: el sujeto que la abrió (ADR 0140 F3).
+/// </summary>
+/// <remarks>
+/// <para><b>El dueño lo comprueba quien es dueño de la saga</b>, no la puerta que la abre: con la
+/// regla sólo en la puerta, un fallo de la puerta reabriría el IDOR. Con ella acá, quien no es el
+/// dueño ve la compra de otro como inexistente —el mismo 404 que una que no existe, para no confirmar
+/// que existe— y una llave que ya usó otro no le devuelve esa saga (<see cref="SagaEngine{TSaga}.Abrir"/>).</para>
+///
+/// <para><b>Se implementa EXPLÍCITO</b>, como <c>IHoldLedger</c>: así no es una propiedad pública
+/// del record y no sale en el JSON de la saga, que está fijado byte a byte
+/// (<c>TicketingSagaPersistidaTests</c>).</para>
+/// </remarks>
+public interface ISagaConDueno
+{
+    /// <summary>Quién la abrió.</summary>
+    Ref Dueno { get; }
+}
+
 public interface ISaga<out TSelf> : ISaga where TSelf : ISaga<TSelf>
 {
     TSelf WithStatus(SagaStatus status);

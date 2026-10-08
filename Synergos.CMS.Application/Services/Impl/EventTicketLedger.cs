@@ -410,4 +410,19 @@ public sealed record PersistedEventOrder(
     DateTimeOffset CreatedAt)
 {
     public EventOrderStatus Status { get; init; } = EventOrderStatus.Pending;
+
+    /// <summary>
+    /// Quién compró, en el vocabulario del orquestador: el <c>Kind</c> y el <c>Id</c> del sujeto con
+    /// que se abrió la saga. Nulo en las del motor en proceso y en las anteriores a la ADR 0140 F3.
+    /// </summary>
+    /// <remarks>
+    /// Desde la F3 el orquestador comprueba que quien confirma sea quien compró, y confirmar sólo
+    /// recibe la orden: el sujeto tiene que estar guardado acá. Opcional y fuera de la lista
+    /// posicional a propósito —se pone con un inicializador o con <c>with</c>, nunca por posición—,
+    /// así lo ya escrito en disco se sigue leyendo.
+    /// </remarks>
+    public string? BuyerKind { get; init; }
+
+    /// <inheritdoc cref="BuyerKind"/>
+    public string? BuyerId { get; init; }
 }

@@ -52,11 +52,13 @@ public sealed class OrdenDelInvitadoEnEventosTests
                 if (!_sagas.TryGetValue(llave, out var saga))
                 {
                     var cuerpo = JsonNode.Parse(await req.Content!.ReadAsStringAsync(ct))!.AsObject();
+                    // Quién compra llega en la cabecera de la puerta (ADR 0140 F3), como en el de verdad.
+                    var sujeto = req.Headers.GetValues("X-Synergos-Sujeto").Single().Split(':', 2);
                     saga = new JsonObject
                     {
                         ["id"] = llave,
-                        ["buyerKind"] = cuerpo["buyerKind"]?.GetValue<string>(),
-                        ["buyerId"] = cuerpo["buyerId"]?.GetValue<string>(),
+                        ["buyerKind"] = sujeto[0],
+                        ["buyerId"] = sujeto[1],
                         ["eventId"] = cuerpo["eventId"]?.GetValue<string>(),
                         ["status"] = "Running",
                         ["total"] = new JsonObject { ["amount"] = 240000, ["currency"] = "COP" },

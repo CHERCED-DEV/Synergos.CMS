@@ -42,8 +42,12 @@ public sealed class HttpEventTicketingServiceTests
         /// puede afirmar: se estaría mirando la URL, que nunca lo llevó.</summary>
         public List<string> Cuerpos { get; } = new();
 
-        /// <summary>Las cabeceras de cada petición, por nombre.</summary>
-        public List<string> Cabeceras { get; } = new();
+        /// <summary>Las cabeceras de cada petición, con su valor y la ruta a la que fueron.</summary>
+        public List<(string Path, string Nombre, string Valor)> Cabeceras { get; } = new();
+
+        /// <summary>El valor de la cabecera <paramref name="nombre"/> en la petición a <paramref name="sufijo"/>.</summary>
+        public string? Cabecera(string sufijo, string nombre)
+            => Cabeceras.LastOrDefault(c => c.Path.EndsWith(sufijo, StringComparison.Ordinal) && c.Nombre == nombre).Valor;
         public HashSet<string> Caidas { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public OrquestadorFalso Ok(string ruta, string json)
@@ -77,7 +81,7 @@ public sealed class HttpEventTicketingServiceTests
             var clave = $"{req.Method.Method} {path}";
             req.Headers.TryGetValues("Idempotency-Key", out var k);
             Llamadas.Add((req.Method.Method, path, k?.FirstOrDefault()));
-            Cabeceras.AddRange(req.Headers.Select(h => h.Key));
+            Cabeceras.AddRange(req.Headers.Select(h => (path, h.Key, string.Join(",", h.Value))));
             if (req.Content is not null)
             {
                 Cuerpos.Add(req.Content.ReadAsStringAsync(ct).GetAwaiter().GetResult());
@@ -199,8 +203,20 @@ public sealed class HttpEventTicketingServiceTests
 
         await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
-        using var cuerpo = System.Text.Json.JsonDocument.Parse(orq.Cuerpos[0]);
-        Assert.Equal(8.5m, cuerpo.RootElement.GetProperty("serviceFeePercent").GetDecimal());
+        // En la cabecera de la puerta, no en el cuerpo (ADR 0140 F3): el contrato del orquestador ya
+        // no acepta la comisión de quien manda el cuerpo.
+        Assert.Equal(8.5m, ComisionEnLaCabecera(orq));
+        Assert.DoesNotContain("serviceFeePercent", orq.Cuerpos[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>La comisión que viajó en <c>X-Synergos-Negocio</c>: base64url de <c>{feePercent}</c>.</summary>
+    private static decimal ComisionEnLaCabecera(OrquestadorFalso orq)
+    {
+        var valor = orq.Cabecera("/v1/ticket-purchases", "X-Synergos-Negocio")!;
+        var base64 = valor.Replace('-', '+').Replace('_', '/');
+        base64 = base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '=');
+        using var json = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(base64));
+        return json.RootElement.GetProperty("feePercent").GetDecimal();
     }
 
     [Fact]
@@ -211,8 +227,7 @@ public sealed class HttpEventTicketingServiceTests
 
         await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
-        using var cuerpo = System.Text.Json.JsonDocument.Parse(orq.Cuerpos[0]);
-        Assert.Equal(0m, cuerpo.RootElement.GetProperty("serviceFeePercent").GetDecimal());
+        Assert.Equal(0m, ComisionEnLaCabecera(orq));
     }
 
     /// <summary>
@@ -311,14 +326,52 @@ public sealed class HttpEventTicketingServiceTests
         await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
         Assert.NotEmpty(orq.Cuerpos);
-        Assert.All(orq.Cuerpos, c =>
+        Assert.All(orq.Cuerpos.Concat(orq.Cabeceras.Select(h => h.Valor)), c =>
         {
             Assert.DoesNotContain("ana@ejemplo.co", c, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("beto@ejemplo.co", c, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Ana Compradora", c, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("1001", c, StringComparison.Ordinal);   // el documento tampoco
         });
-        Assert.Contains(orq.Cuerpos, c => c.Contains(id, StringComparison.Ordinal));
+        // Desde la ADR 0140 F3 viaja en la cabecera de la puerta, como la pondría ella.
+        Assert.Equal($"eventos.comprador:{id}", orq.Cabecera("/v1/ticket-purchases", "X-Synergos-Sujeto"));
+    }
+
+    /// <summary>
+    /// Confirmar manda el MISMO sujeto que compró, que la orden guardó: el orquestador confirma sólo
+    /// a quien compró (ADR 0140 F3).
+    /// </summary>
+    [Fact]
+    public async Task Confirmar_manda_el_sujeto_que_guardo_la_orden()
+    {
+        var orq = Feliz();
+        var (svc, registro) = Nuevo(orq);
+        var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+
+        var orden = await registro.LoadAsync(compra.OrderRef);
+        Assert.Equal(("eventos.comprador", HttpEventTicketingService.BuyerId(Dos[0])), (orden!.BuyerKind, orden.BuyerId));
+
+        await svc.ConfirmAsync(compra.OrderRef);
+
+        Assert.Equal(
+            orq.Cabecera("/v1/ticket-purchases", "X-Synergos-Sujeto"),
+            orq.Cabecera("/confirm", "X-Synergos-Sujeto"));
+    }
+
+    /// <summary>Una orden anotada sin comprador —de antes de guardarlo— no se puede confirmar, y no sale a la red.</summary>
+    [Fact]
+    public async Task Una_orden_sin_comprador_guardado_no_se_confirma()
+    {
+        var orq = Feliz();
+        var (svc, registro) = Nuevo(orq);
+        var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
+        var orden = (await registro.LoadAsync(compra.OrderRef))!;
+        await registro.SaveAsync(orden with { BuyerKind = null, BuyerId = null });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ConfirmAsync(compra.OrderRef));
+
+        Assert.Contains("no se te cobró", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, orq.Veces("POST", "/confirm"));
     }
 
     /// <summary>Un timeout dice «no sé», así que se PREGUNTA antes de crear una segunda compra.</summary>
@@ -520,7 +573,7 @@ public sealed class HttpEventTicketingServiceTests
         await svc.ConfirmAsync(compra.OrderRef);
 
         Assert.Equal(1, orq.Veces("POST", "/confirm"));
-        Assert.DoesNotContain("X-Synergos-Contacto", orq.Cabeceras, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(orq.Cabeceras, c => string.Equals(c.Nombre, "X-Synergos-Contacto", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact] // idempotent: re-confirmar devuelve lo mismo y NO vuelve a salir a la red.

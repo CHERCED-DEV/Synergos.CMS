@@ -29,19 +29,17 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 /// </remarks>
 public sealed record TicketLineRequest(int Quantity, string? Tier = null, string? Seat = null);
 
-/// <summary>Comprar entradas de un evento.</summary>
-/// <param name="ServiceFeePercent">La comisión de servicio que paga quien compra, en porcentaje
-/// del subtotal; sin ella no hay comisión.</param>
+/// <summary>Comprar entradas de un evento: lo que manda el NAVEGADOR, y nada más.</summary>
 /// <remarks>
-/// <b>El porcentaje sí viaja, y el precio no.</b> Lo que no puede llegar del llamador es lo que el
-/// comprador querría cambiar: el precio se cotiza acá. La comisión es configuración del despliegue
-/// del CMS, por sitio (ADR 0137): el navegador no la manda —la pone el CMS, el único con la llave
-/// de este servicio— y tenerla también acá sería una segunda fuente para la regla que el
-/// comprador ve en el carrito.
+/// <para><b>Ni quién compra ni la comisión van acá</b> (ADR 0140 F3). Los pone la puerta del CMS en
+/// cabeceras —<c>X-Synergos-Sujeto</c> desde la sesión, <c>X-Synergos-Negocio</c> desde la
+/// configuración del sitio (ADR 0137)— y el cuerpo pasa tal cual del navegador. Con los dos en el
+/// cuerpo, el contrato público le dejaba al navegador nombrar a otro comprador o fijarse un 0 % de
+/// comisión. Un <c>buyerId</c> o un <c>serviceFeePercent</c> que lleguen en el cuerpo se ignoran.</para>
+///
+/// <para><b>El precio tampoco viaja</b>: se cotiza contra <c>Api.Pricing</c>.</para>
 /// </remarks>
-public sealed record BuyTicketsRequest(
-    string? EventId = null, string? BuyerKind = null, string? BuyerId = null, IReadOnlyList<TicketLineRequest>? Lines = null,
-    decimal? ServiceFeePercent = null);
+public sealed record BuyTicketsRequest(string? EventId = null, IReadOnlyList<TicketLineRequest>? Lines = null);
 
 /// <summary>Una butaca o cupo apartado, tal como sale.</summary>
 /// <param name="Tier">La localidad.</param>

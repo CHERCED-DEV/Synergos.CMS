@@ -46,6 +46,19 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
 
     public TSaga? Find(string id) => _sagas.Find(id);
 
+    /// <summary>
+    /// La saga si existe y es de <paramref name="dueno"/>; nula si no existe o es de otro.
+    /// </summary>
+    /// <remarks>
+    /// Las dos cosas dan lo mismo a propósito: quien pregunta por una saga ajena no tiene que poder
+    /// saber que existe. Una saga que no sabe de quién es (<see cref="ISagaConDueno"/>) se devuelve
+    /// como hoy.
+    /// </remarks>
+    public TSaga? FindDe(string id, Ref dueno) => _sagas.Find(id) is { } s && EsDe(s, dueno) ? s : null;
+
+    private static bool EsDe(TSaga saga, Ref? dueno)
+        => dueno is null || saga is not ISagaConDueno conDueno || conDueno.Dueno == dueno;
+
     public void Put(TSaga saga) => _sagas.Put(saga);
 
     // ── La llave de idempotencia, y qué significa encontrarla (defecto #41) ──
@@ -85,11 +98,16 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     ///   cupo que no se pudo devolver se pierde sin que nadie lo mire.</item>
     /// </list>
     /// </remarks>
-    public SagaSlot Abrir(string llave)
+    /// <param name="llave">La llave de idempotencia del llamador.</param>
+    /// <param name="dueno">Quién abre (ADR 0140 F3). Con él, una saga ajena con la misma llave se trata
+    /// como una deshecha: no se reutiliza ni se pisa, y el intento sigue en el primer hueco desde la
+    /// raíz de la llave. Así el reintento de este dueño vuelve a caer en el MISMO hueco —la
+    /// idempotencia no se pierde— y lo de otro no se toca. Sin él, como siempre.</param>
+    public SagaSlot Abrir(string llave, Ref? dueno = null)
     {
         var previa = _sagas.Find(llave);
         if (previa is null) return new SagaSlot(null, llave);
-        if (previa.Status != SagaStatus.Compensated) return new SagaSlot(previa, llave);
+        if (EsDe(previa, dueno) && previa.Status != SagaStatus.Compensated) return new SagaSlot(previa, llave);
 
         // Se deshizo todo: se puede volver a intentar. Pero con identidad PROPIA — sobrescribir la
         // muerta borraría qué falló y, peor, las compensaciones que el barrido todavía pudiera
@@ -105,6 +123,7 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
             var id = $"{raiz}#{intento}";
             var otra = _sagas.Find(id);
             if (otra is null) return new SagaSlot(null, id);
+            if (!EsDe(otra, dueno)) continue;
             if (otra.Status != SagaStatus.Compensated) return new SagaSlot(otra, id);
         }
 

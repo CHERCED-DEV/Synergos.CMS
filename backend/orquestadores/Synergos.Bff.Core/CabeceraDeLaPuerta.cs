@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Synergos.Core;
 
 namespace Synergos.Bff.Core;
 
@@ -27,6 +28,19 @@ public sealed record CabeceraDeLaPuerta(string Nombre, bool Requerida);
 public static class CabecerasDeLaPuerta
 {
     /// <summary>
+    /// Quién compra, cita o viaja: <c>&lt;kind&gt;:&lt;id&gt;</c> en texto plano. Lo pone la puerta
+    /// desde la sesión —el <c>Kind</c> de la configuración del flujo, el <c>MemberKey</c> de quien
+    /// entró— y el navegador no lo puede escribir: la puerta tira toda cabecera que él mande.
+    /// </summary>
+    public const string Sujeto = "X-Synergos-Sujeto";
+
+    /// <summary>
+    /// La configuración de negocio del sitio que la operación necesita (ADR 0137): base64url de un
+    /// JSON con SÓLO los campos que la puerta declara para el flujo —hoy, la comisión—.
+    /// </summary>
+    public const string Negocio = "X-Synergos-Negocio";
+
+    /// <summary>
     /// Adónde avisar y a nombre de quién: base64url de <c>{correo, nombre, enlace, sitio}</c>. Sólo en
     /// la fase que avisa; es efímero y no se guarda.
     /// </summary>
@@ -45,6 +59,25 @@ public static class CabecerasDeLaPuerta
     /// </summary>
     public static string CodigoInvalido(string prefijo, string nombre)
         => $"{prefijo}.{nombre["X-Synergos-".Length..].ToLowerInvariant()}_invalido";
+
+    /// <summary>El código con que se rechaza una cabecera de la puerta que hace falta y no vino.</summary>
+    public static string CodigoRequerido(string prefijo, string nombre)
+        => $"{prefijo}.{nombre["X-Synergos-".Length..].ToLowerInvariant()}_requerido";
+
+    /// <summary>Lee el sujeto: <c>&lt;kind&gt;:&lt;id&gt;</c>.</summary>
+    /// <returns><c>true</c> con <paramref name="sujeto"/> nulo si no viene; <c>true</c> con el sujeto
+    /// si se lee; <c>false</c> si viene y no es un <see cref="Ref"/>.</returns>
+    public static bool TryLeerSujeto(HttpRequest http, out Ref? sujeto)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        sujeto = null;
+        if (!http.Headers.TryGetValue(Sujeto, out var crudo) || crudo.Count == 0) return true;
+        if (crudo.Count != 1 || crudo[0] is not { } valor) return false;
+
+        var corte = valor.IndexOf(':', StringComparison.Ordinal);
+        sujeto = corte > 0 ? Ref.TryCreate(valor[..corte], valor[(corte + 1)..]) : null;
+        return sujeto is not null;
+    }
 
     /// <summary>
     /// Lee un JSON en base64url de la cabecera <paramref name="nombre"/>.

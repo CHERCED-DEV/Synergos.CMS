@@ -12,8 +12,10 @@ namespace Synergos.Bff.Eventos.Endpoints;
 /// <remarks>
 /// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c>: de ahí
 /// sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Bff.Eventos.json</c>, ADR 0140),
-/// el que el UI convierte en tipos. Todavía publica también lo que pone la puerta (comprador,
-/// comisión) y las operaciones de operación (reintento, compensaciones): separarlos es de la F3.
+/// el que el UI convierte en tipos. Lo que pone la puerta del CMS (quién compra, la comisión, el
+/// contacto del aviso) viaja en cabeceras declaradas con <c>.ConCabeceraDeLaPuerta</c> y se lee ANTES
+/// que cualquier otra regla (ADR 0140 F3); el cuerpo es sólo lo del navegador. Consultar, confirmar y
+/// cancelar exigen el sujeto y una compra de otro no existe para él.
 /// </remarks>
 public static class EventosEndpoints
 {
@@ -31,10 +33,9 @@ public static class EventosEndpoints
             BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+            if (Sujeto(http, out var buyer) is { } sinSujeto) return sinSujeto;
+            if (Negocio(http, out var negocio) is { } sinNegocio) return sinNegocio;
             if (string.IsNullOrWhiteSpace(req.EventId)) return Invalid("bad_event", "Hace falta eventId.");
-
-            var buyer = Ref.TryCreate(req.BuyerKind, req.BuyerId);
-            if (buyer is null) return Invalid("bad_buyer", "Hacen falta buyerKind y buyerId.");
 
             if (req.Lines is null || req.Lines.Count == 0) return Invalid("no_lines", "Hace falta al menos una línea.");
 
@@ -42,13 +43,19 @@ public static class EventosEndpoints
                 .Select(l => new TicketLine(l.Tier ?? string.Empty, l.Seat, l.Quantity))
                 .ToList();
 
-            var r = await flow.BuyAsync(req.EventId!, buyer, lineas, req.ServiceFeePercent ?? 0m, key.Value, ct);
+            var r = await flow.BuyAsync(req.EventId!, buyer!, lineas, negocio!.FeePercent!.Value, key.Value, ct);
 
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
-        }).WithName("BuyTickets").ConLlaveDeSaga();
+        }).WithName("BuyTickets").ConLlaveDeSaga()
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
 
-        app.MapGet("/v1/ticket-purchases/{id}", (string id, TicketingFlow flow) =>
-            flow.Get(id).Map(TicketPurchaseResponse.From).ToHttp()).WithName("GetTicketPurchase");
+        app.MapGet("/v1/ticket-purchases/{id}", Results<Ok<TicketPurchaseResponse>, ProblemHttpResult> (
+            string id, HttpRequest http, TicketingFlow flow) =>
+        {
+            if (Sujeto(http, out var dueno) is { } sinSujeto) return sinSujeto;
+            return flow.Get(id, dueno!).Map(TicketPurchaseResponse.From).ToHttp();
+        }).WithName("GetTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
 
         // Confirmar NO recibe cuerpo, al revés que en Tienda: allá hacía falta la dirección de
         // entrega antes de capturar. Una entrada no se despacha, así que no hay nada que validar
@@ -57,6 +64,7 @@ public static class EventosEndpoints
         app.MapPost("/v1/ticket-purchases/{id}/confirm", async Task<Results<Ok<TicketPurchaseResponse>, ProblemHttpResult>> (
             string id, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
         {
+            if (Sujeto(http, out var dueno) is { } sinSujeto) return sinSujeto;
             if (!CabecerasDeLaPuerta.TryLeerJson<ContactoDeLaPuerta>(http, CabecerasDeLaPuerta.Contacto, out var contacto)
                 || contacto is { Correo: null or "" })
             {
@@ -65,11 +73,17 @@ public static class EventosEndpoints
             }
 
             var aviso = contacto is null ? null : new Contacto(contacto.Correo!, contacto.Nombre, contacto.Enlace, contacto.Sitio);
-            return (await flow.ConfirmAsync(id, aviso, ct)).Map(TicketPurchaseResponse.From).ToHttp();
-        }).WithName("ConfirmTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
+            return (await flow.ConfirmAsync(id, dueno, aviso, ct)).Map(TicketPurchaseResponse.From).ToHttp();
+        }).WithName("ConfirmTicketPurchase")
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
 
-        app.MapPost("/v1/ticket-purchases/{id}/cancel", async (string id, TicketingFlow flow, CancellationToken ct) =>
-            (await flow.CancelAsync(id, ct)).Map(TicketPurchaseResponse.From).ToHttp()).WithName("CancelTicketPurchase");
+        app.MapPost("/v1/ticket-purchases/{id}/cancel", async Task<Results<Ok<TicketPurchaseResponse>, ProblemHttpResult>> (
+            string id, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
+        {
+            if (Sujeto(http, out var dueno) is { } sinSujeto) return sinSujeto;
+            return (await flow.CancelAsync(id, dueno!, ct)).Map(TicketPurchaseResponse.From).ToHttp();
+        }).WithName("CancelTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
 
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, «se rinde a los ocho intentos» sería «se abandona», y arreglar una devolución
@@ -98,6 +112,46 @@ public static class EventosEndpoints
 
     private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>
+    /// Quién compra, de <c>X-Synergos-Sujeto</c>: el rechazo si falta o no se lee; si no, nulo y el sujeto.
+    /// </summary>
+    /// <remarks>
+    /// Sin sujeto no hay a quién atar la compra, así que no se sigue: un sujeto opcional dejaba leer,
+    /// confirmar y cancelar lo de cualquiera (medido en el prototipo de la F3: sin cabecera, 200).
+    /// </remarks>
+    private static ProblemHttpResult? Sujeto(HttpRequest http, out Ref? sujeto)
+    {
+        if (!CabecerasDeLaPuerta.TryLeerSujeto(http, out sujeto))
+        {
+            return Rejection.Invalid(CabecerasDeLaPuerta.CodigoInvalido(CodePrefix, CabecerasDeLaPuerta.Sujeto),
+                "El sujeto no se puede leer: <kind>:<id>.").ToProblem();
+        }
+        return sujeto is null
+            ? Rejection.Invalid(CabecerasDeLaPuerta.CodigoRequerido(CodePrefix, CabecerasDeLaPuerta.Sujeto),
+                "Hace falta quién compra: lo pone la puerta del CMS.").ToProblem()
+            : null;
+    }
+
+    /// <summary>
+    /// La configuración de negocio, de <c>X-Synergos-Negocio</c>. Obligatoria al abrir: sin ella se
+    /// cobraría sin la comisión que el carrito le muestra al comprador (ADR 0137).
+    /// </summary>
+    private static ProblemHttpResult? Negocio(HttpRequest http, out NegocioDeLaPuerta? negocio)
+    {
+        if (!CabecerasDeLaPuerta.TryLeerJson(http, CabecerasDeLaPuerta.Negocio, out negocio))
+        {
+            return Rejection.Invalid(CabecerasDeLaPuerta.CodigoInvalido(CodePrefix, CabecerasDeLaPuerta.Negocio),
+                "La configuración de negocio no se puede leer: base64url de {feePercent}.").ToProblem();
+        }
+        return negocio?.FeePercent is null
+            ? Rejection.Invalid(CabecerasDeLaPuerta.CodigoRequerido(CodePrefix, CabecerasDeLaPuerta.Negocio),
+                "Hace falta la comisión de servicio del sitio: la pone la puerta del CMS.").ToProblem()
+            : null;
+    }
+
+    /// <summary>Lo que trae <c>X-Synergos-Negocio</c>: los campos de la sección del sitio que la operación declara.</summary>
+    private sealed record NegocioDeLaPuerta(decimal? FeePercent);
 
     /// <summary>Lo que trae <c>X-Synergos-Contacto</c>, tal como lo escribe la puerta.</summary>
     private sealed record ContactoDeLaPuerta(string? Correo, string? Nombre, string? Enlace, string? Sitio);

@@ -96,8 +96,11 @@ public sealed record TicketingSaga(
     string? LastError,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
-    int AlertsSent = 0) : ISaga<TicketingSaga>, IHoldLedger
+    int AlertsSent = 0) : ISaga<TicketingSaga>, IHoldLedger, ISagaConDueno
 {
+    /// <summary>La compra es de quien compra. Explícito: no es una propiedad y no sale en el JSON.</summary>
+    Ref ISagaConDueno.Dueno => Buyer;
+
     public TicketingSaga WithStatus(SagaStatus status) => this with { Status = status };
 
     public TicketingSaga WithCompensations(IReadOnlyList<Compensation> compensations)

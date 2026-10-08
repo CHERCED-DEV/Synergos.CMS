@@ -55,6 +55,24 @@
               "maxLength": 83,
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          },
+          {
+            "name": "X-Synergos-Negocio",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           }
         ],
         "requestBody": {
@@ -155,6 +173,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           }
         ],
         "responses": {
@@ -245,6 +272,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           }
         ],
         "responses": {
@@ -335,6 +371,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           },
           {
             "name": "X-Synergos-Contacto",
@@ -524,18 +569,6 @@
               "string"
             ]
           },
-          "buyerKind": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "buyerId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "lines": {
             "type": [
               "null",
@@ -544,13 +577,6 @@
             "items": {
               "$ref": "#/components/schemas/TicketLineRequest"
             }
-          },
-          "serviceFeePercent": {
-            "type": [
-              "null",
-              "number"
-            ],
-            "format": "decimal"
           }
         }
       },

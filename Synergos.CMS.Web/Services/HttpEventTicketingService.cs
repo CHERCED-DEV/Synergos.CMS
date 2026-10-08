@@ -156,7 +156,8 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         // reintento de la misma compra es la misma compra, con la comisión con que se pidió.
         var comision = _negocio?.Actual().FeePercent ?? 0m;
 
-        var compra = await ComprarAsync(eventId, buyerId, s.BuyerKind, lineas, comision, key, cancellationToken)
+        var sujeto = Sujeto(s.BuyerKind, buyerId);
+        var compra = await ComprarAsync(eventId, sujeto, lineas, comision, key, cancellationToken)
             .ConfigureAwait(false);
 
         // La misma llave devuelve la misma saga, y eso es lo que impide cobrar dos veces. Pero si
@@ -188,7 +189,12 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             Total: compra.Total.Amount,
             Currency: compra.Total.Currency,
             Units: Emparejar(compra, attendees),
-            CreatedAt: _now());
+            CreatedAt: _now())
+        {
+            // Confirmar sólo recibe la orden, y el orquestador comprueba que confirme quien compró.
+            BuyerKind = s.BuyerKind,
+            BuyerId = buyerId,
+        };
 
         await _ledger.SaveAsync(orden, cancellationToken).ConfigureAwait(false);
 
@@ -205,21 +211,23 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             .FirstOrDefault(o => string.Equals(o.PaymentSessionId, sagaId, StringComparison.Ordinal));
 
     private async Task<PurchaseDto> ComprarAsync(
-        string eventId, string buyerId, string buyerKind,
+        string eventId, string sujeto,
         IReadOnlyList<EventCheckoutItem> lineas, decimal comision, string key, CancellationToken ct)
     {
+        // Quién compra y la comisión viajan en las cabeceras de la PUERTA (ADR 0140 F3): el contrato
+        // del orquestador ya no los acepta en el cuerpo, que es lo que manda el navegador. Esta ruta
+        // es el CMS hablando de servidor a servidor, así que los pone ella, como la puerta.
         using var req = new HttpRequestMessage(HttpMethod.Post, "v1/ticket-purchases")
         {
             Content = JsonContent.Create(new
             {
                 eventId = eventId.Trim(),
-                buyerKind,
-                buyerId,
                 lines = lineas.Select(l => new { tier = l.Tier, seat = l.Seat, quantity = l.Quantity }),
-                serviceFeePercent = comision,
             }),
         };
         req.Headers.Add("Idempotency-Key", key);
+        req.Headers.Add(CabeceraSujeto, sujeto);
+        req.Headers.Add(CabeceraNegocio, Base64Url(JsonSerializer.SerializeToUtf8Bytes(new { feePercent = comision })));
 
         try
         {
@@ -231,7 +239,7 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             // podemos permitirnos, así que se PREGUNTA. La llave es el identificador de la saga.
             _log.LogWarning("La compra de entradas {Key} no respondió; se consulta si llegó a existir.", key);
 
-            var existente = await LeerCompraAsync(key, ct).ConfigureAwait(false);
+            var existente = await LeerCompraAsync(key, sujeto, ct).ConfigureAwait(false);
             if (existente is not null)
             {
                 _log.LogWarning("La compra {Key} SÍ existía: se sigue con ella en vez de crear otra.", key);
@@ -336,8 +344,17 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             throw new InvalidOperationException("Esta compra ya se confirmó con otra orden.");
         }
 
+        // El orquestador confirma sólo a quien compró (ADR 0140 F3). Una orden anotada antes de
+        // guardar el comprador no tiene con qué decirlo: no se puede confirmar, y se dice.
+        if (string.IsNullOrWhiteSpace(orden.BuyerKind) || string.IsNullOrWhiteSpace(orden.BuyerId))
+        {
+            throw new InvalidOperationException(
+                "Esta compra se empezó antes de un cambio en la venta y ya no se puede confirmar. Vuelve a comprar: no se te cobró.");
+        }
+
         using var req = new HttpRequestMessage(
             HttpMethod.Post, $"v1/ticket-purchases/{Uri.EscapeDataString(orden.PaymentSessionId)}/confirm");
+        req.Headers.Add(CabeceraSujeto, Sujeto(orden.BuyerKind, orden.BuyerId));
 
         var compra = await EnviarAsync<PurchaseDto>(req, "confirmar la compra", cancellationToken)
             .ConfigureAwait(false);
@@ -437,12 +454,13 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     }
 
     /// <summary>Una lectura: si no está o no responde, es null. Nunca revienta la página.</summary>
-    private async Task<PurchaseDto?> LeerCompraAsync(string sagaId, CancellationToken ct)
+    private async Task<PurchaseDto?> LeerCompraAsync(string sagaId, string sujeto, CancellationToken ct)
     {
         try
         {
             using var req = new HttpRequestMessage(
                 HttpMethod.Get, $"v1/ticket-purchases/{Uri.EscapeDataString(sagaId)}");
+            req.Headers.Add(CabeceraSujeto, sujeto);
             using var res = await _clients.CreateClient(ClientName).SendAsync(req, ct).ConfigureAwait(false);
             if (!res.IsSuccessStatusCode)
             {
@@ -554,6 +572,20 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(semilla));
         return "evt-" + Convert.ToHexString(hash)[..32].ToLowerInvariant();
     }
+
+    // ── Lo que pone la puerta, que esta ruta pone igual (ADR 0140 F3) ────────
+    // El CMS no referencia el árbol de servicios: el nombre de la cabecera es el contrato, como el
+    // de la correlación. Lo cruza SondasDelContratoTests del lado del orquestador.
+
+    private const string CabeceraSujeto = "X-Synergos-Sujeto";
+    private const string CabeceraNegocio = "X-Synergos-Negocio";
+
+    /// <summary>El sujeto como lo lee el orquestador: <c>&lt;kind&gt;:&lt;id&gt;</c>.</summary>
+    internal static string Sujeto(string kind, string id) => $"{kind}:{id}";
+
+    /// <summary>base64url sin relleno (RFC 4648 §5), que es lo que lee el orquestador.</summary>
+    internal static string Base64Url(byte[] bytes)
+        => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     // Los DTO viven acá y NO en Synergos.CMS.Interfaces: son la forma del contrato HTTP con otro
     // servicio, no vocabulario del dominio del CMS.

@@ -110,7 +110,8 @@ public sealed class TicketingFlow
         // deshizo entera, no queda nada que duplicar y el comprador tiene derecho a reintentar.
         // Quién decide eso vive en el motor, no acá — estas líneas estaban copiadas en los dos
         // orquestadores y el defecto #41 también (encerraba al comprador para siempre).
-        var slot = _sagas.Abrir(sagaId);
+        // Con el comprador: una llave que ya usó OTRO no le devuelve su compra (ADR 0140 F3).
+        var slot = _sagas.Abrir(sagaId, buyer);
         if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
 
         return await _flujo.EjecutarFaseAsync(
@@ -121,14 +122,20 @@ public sealed class TicketingFlow
     public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
         => ConfirmAsync(sagaId, null, ct);
 
+    /// <summary>Captura el cobro, consume el aforo y avisa al comprador, sin mirar de quién es.</summary>
+    public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Contacto? contacto, CancellationToken ct)
+        => ConfirmAsync(sagaId, null, contacto, ct);
+
     /// <summary>Captura el cobro, consume el aforo y avisa al comprador. A partir de acá hay plata movida.</summary>
     /// <param name="sagaId">La compra.</param>
+    /// <param name="dueno">Quién confirma. Una compra de otro es <c>eventos.purchase_not_found</c>,
+    /// como una que no existe. Nulo sólo para quien ya comprobó el dueño (los tests de la compra).</param>
     /// <param name="contacto">Adónde avisar, que pone la puerta: entra como efímero de «cerrar» y
     /// no se guarda. Nulo si nadie pidió el aviso, y entonces el paso no avisa.</param>
     /// <param name="ct">Cancelación.</param>
-    public async Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Contacto? contacto, CancellationToken ct)
+    public async Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Ref? dueno, Contacto? contacto, CancellationToken ct)
     {
-        var saga = _sagas.Find(sagaId);
+        var saga = dueno is null ? _sagas.Find(sagaId) : _sagas.FindDe(sagaId, dueno);
         if (saga is null)
         {
             return Rejection.NotFound("eventos.purchase_not_found", $"No existe la compra {sagaId}.");
@@ -149,14 +156,25 @@ public sealed class TicketingFlow
     public Task<Result<TicketingSaga>> CancelAsync(string sagaId, CancellationToken ct)
         => _sagas.CompensateAsync(sagaId, "cancelada por el comprador", ct);
 
+    /// <summary>Cancela una compra de <paramref name="dueno"/> todavía sin confirmar.</summary>
+    public Task<Result<TicketingSaga>> CancelAsync(string sagaId, Ref dueno, CancellationToken ct)
+        => _sagas.FindDe(sagaId, dueno) is null
+            ? Task.FromResult<Result<TicketingSaga>>(NoExiste(sagaId))
+            : CancelAsync(sagaId, ct);
+
     /// <summary>Vuelve a intentar lo que se había rendido.</summary>
     public Task<Result<TicketingSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
         => _sagas.RetryStuckAsync(sagaId, ct);
 
     public Result<TicketingSaga> Get(string id)
-        => _sagas.Find(id) is { } s
-            ? Result.Ok(s)
-            : Rejection.NotFound("eventos.purchase_not_found", $"No existe la compra {id}.");
+        => _sagas.Find(id) is { } s ? Result.Ok(s) : NoExiste(id);
+
+    /// <summary>La compra si es de <paramref name="dueno"/>; una de otro no existe para él.</summary>
+    public Result<TicketingSaga> Get(string id, Ref dueno)
+        => _sagas.FindDe(id, dueno) is { } s ? Result.Ok(s) : NoExiste(id);
+
+    private static Rejection NoExiste(string id)
+        => Rejection.NotFound("eventos.purchase_not_found", $"No existe la compra {id}.");
 
     public IReadOnlyList<TicketingSaga> PendingCompensations() => _sagas.PendingCompensations();
 
