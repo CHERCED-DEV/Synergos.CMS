@@ -229,6 +229,14 @@ public static class FlowValidator
             {
                 errores.Add($"el paso «{paso.Id}» declara «llave» y «llave_base»: es una o la otra.");
             }
+
+            if (registro.Para(paso.Tipo) is { } avisa && avisa.UsaPlantilla != paso.Plantilla is not null)
+            {
+                errores.Add(avisa.UsaPlantilla
+                    ? $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que avisa con «plantilla», y no la declara."
+                    : $"el paso «{paso.Id}» declara una plantilla y «{paso.Tipo}» no avisa: quien la lea creerá que ese "
+                      + "paso manda algo.");
+            }
         }
     }
 

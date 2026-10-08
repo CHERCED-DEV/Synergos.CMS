@@ -63,7 +63,11 @@ public sealed class ArnesDeCapacidades : IHttpClientFactory, IDisposable
     /// <typeparamref name="TMarcador"/>. El nombre tiene que ser el que el orquestador le pide al
     /// <see cref="IHttpClientFactory"/> — que es el nombre de la capacidad.
     /// </summary>
-    public ArnesDeCapacidades Levanta<TMarcador>(string capacidad)
+    /// <param name="capacidad">El nombre del cliente, y la sección de su configuración.</param>
+    /// <param name="ajustes">Claves de configuración de más, con la sección entera
+    /// (<c>Notifications:Pickup:Directory</c>): lo que un test necesita de esa capacidad y el
+    /// arnés no pone por su cuenta.</param>
+    public ArnesDeCapacidades Levanta<TMarcador>(string capacidad, params (string Clave, string Valor)[] ajustes)
         where TMarcador : class
     {
         var raiz = Path.Combine(Path.GetTempPath(), "arnes-" + Guid.NewGuid().ToString("N"));
@@ -86,6 +90,7 @@ public sealed class ArnesDeCapacidades : IHttpClientFactory, IDisposable
                 // «notifications»— y la configuración no distingue mayúsculas.
                 b.UseSetting($"{capacidad}:Storage:Root", raiz);
                 b.UseSetting($"{capacidad}:ApiKey", Llave);
+                foreach (var (clave, valor) in ajustes) b.UseSetting(clave, valor);
             });
 
         // `CreateClient()` es lo que de verdad arranca el host; sin esto el fallo aparecería más

@@ -283,8 +283,11 @@ public sealed class ProvisionWiringTests
         var primera = await Correr(notificaciones.Url);
         Assert.True(primera.Codigo == 0, primera.Salida);
 
-        var (llave, cuerpo) = Assert.Single(notificaciones.Publicadas);
-        Assert.StartsWith($"provisionar:plantilla:{ClaveDelAviso}:", llave, StringComparison.Ordinal);
+        // Cada plantilla declarada UNA vez (desde la F3 de la ADR 0140 el fichero declara más de
+        // una); la del aviso se mira entera.
+        Assert.Equal(Declaradas().Count, notificaciones.Publicadas.Count);
+        var (llave, cuerpo) = Assert.Single(notificaciones.Publicadas, p => p.Llave.StartsWith(
+            $"provisionar:plantilla:{ClaveDelAviso}:", StringComparison.Ordinal));
 
         var declarada = Declaradas().Single(d => d["key"] == ClaveDelAviso);
         foreach (var campo in new[] { "key", "channel", "subject", "body" })
@@ -296,7 +299,7 @@ public sealed class ProvisionWiringTests
         // compararla—, así que una tercera con `--verificar` costaría segundos y no diría más.
         var segunda = await Correr(notificaciones.Url);
         Assert.True(segunda.Codigo == 0, segunda.Salida);
-        Assert.True(notificaciones.Publicadas.Count == 1,
+        Assert.True(notificaciones.Publicadas.Count == Declaradas().Count,
             "La segunda corrida volvió a publicar la plantilla: no la encontró porque estaba en la "
             + "segunda página, y cada corrida dejaría otra publicación de lo mismo."
             + Environment.NewLine + segunda.Salida);
@@ -329,13 +332,15 @@ public sealed class ProvisionWiringTests
 
         var primera = await Correr(notificaciones.Url);
         Assert.True(primera.Codigo == 0, primera.Salida);
-        var (_, cuerpo) = Assert.Single(notificaciones.Publicadas);
+        Assert.Equal(Declaradas().Count, notificaciones.Publicadas.Count);
+        var (_, cuerpo) = Assert.Single(notificaciones.Publicadas, p => p.Llave.StartsWith(
+            $"provisionar:plantilla:{ClaveDelAviso}:", StringComparison.Ordinal));
         Assert.Equal(declarada["subject"], cuerpo["subject"]);
         Assert.Contains("versión nueva", primera.Salida, StringComparison.Ordinal);
 
         var segunda = await Correr(notificaciones.Url);
         Assert.True(segunda.Codigo == 0, segunda.Salida);
-        Assert.True(notificaciones.Publicadas.Count == 1,
+        Assert.True(notificaciones.Publicadas.Count == Declaradas().Count,
             "La segunda corrida volvió a publicar: no vio la versión que puso la primera." + Environment.NewLine + segunda.Salida);
         Assert.Contains($"✓ plantilla {ClaveDelAviso}", segunda.Salida, StringComparison.Ordinal);
     }

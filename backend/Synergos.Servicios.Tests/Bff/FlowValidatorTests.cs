@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Eventos.Clients;
+using Synergos.Bff.Pasos;
 using Synergos.Bff.Eventos.Domain;
 using Synergos.CMS.Tests.Architecture;   // Proyectos: dónde vive cada proyecto (#136)
 
@@ -344,6 +345,46 @@ public sealed class FlowValidatorTests
         Assert.Empty(bien);   // el control: así es como lo declara Eventos en la F3
         Assert.Contains(noLoLee, e => e.Contains("«autorizar» se omite si «cotizacion» es cero y no lo lee", StringComparison.Ordinal));
         Assert.Contains(noReserva, e => e.Contains("«capturar» declara «omitir_si_cero» y no reserva nada", StringComparison.Ordinal));
+    }
+
+    /// <summary>Los pasos de Eventos más el de aviso: el registro que tendrá Eventos al declararlo (paso 7).</summary>
+    private static IRegistroDePasos ConAviso()
+        => new RegistroDePasos(Registro.Tipos.Select(t => Registro.Para(t)!).Append(new PasoAvisar(new SinAvisos())));
+
+    private sealed class SinAvisos : INotificationsPort
+    {
+        public Task<Synergos.Core.Result<string>> AvisarAsync(
+            Synergos.Core.Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
+            Synergos.Core.IdempotencyKey llave, CancellationToken ct)
+            => throw new InvalidOperationException("Validar una definición no avisa a nadie.");
+    }
+
+    [Fact]
+    public void Un_paso_de_aviso_declara_su_plantilla_y_uno_que_no_avisa_no_declara_ninguna()
+    {
+        var f = EventosFlujos.Compra;
+        var cerrar = f.Fases[1];
+        var conEfimera = Contrato with { Efimera = ContactoEnCerrar };
+        FlujoDef Con(PasoDef aviso, string? plantillaEnCapturar = null)
+            => f with
+            {
+                Fases = new[] { f.Fases[0], cerrar with { Pasos = cerrar.Pasos.Append(new PasoRef(aviso.Id, null)).ToList() } },
+                Pasos = f.Pasos
+                    .Select(p => p.Key == "capturar" && plantillaEnCapturar is not null
+                        ? new KeyValuePair<string, PasoDef>(p.Key, p.Value with { Plantilla = plantillaEnCapturar })
+                        : p)
+                    .Append(new KeyValuePair<string, PasoDef>(aviso.Id, aviso))
+                    .ToDictionary(),
+                Efimera = new Dictionary<string, IReadOnlyList<string>> { ["cerrar"] = new[] { "contacto" } },
+            };
+        var aviso = new PasoDef("avisar", "notifications.avisar", new[] { "comprador", "contacto", "total" },
+            Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null, "eventos.entradas.confirmadas");
+
+        Assert.Empty(FlowValidator.Validar(Con(aviso), ConAviso(), conEfimera));   // el control: así lo declara Eventos
+        Assert.Contains(FlowValidator.Validar(Con(aviso with { Plantilla = null }), ConAviso(), conEfimera),
+            e => e.Contains("«avisar» es de tipo «notifications.avisar», que avisa con «plantilla», y no la declara", StringComparison.Ordinal));
+        Assert.Contains(FlowValidator.Validar(Con(aviso, plantillaEnCapturar: "x"), ConAviso(), conEfimera),
+            e => e.Contains("«capturar» declara una plantilla y «payments.capturar» no avisa", StringComparison.Ordinal));
     }
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> ContactoEnCerrar =

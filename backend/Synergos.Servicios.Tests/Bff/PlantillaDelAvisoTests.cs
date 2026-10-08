@@ -5,7 +5,10 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Synergos.Api.Notifications.Domain;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
 using Synergos.CMS.Tests.Architecture;   // Proyectos: la raíz del repo, resuelta del disco (#136)
+using Synergos.Core;
 
 namespace Synergos.CMS.Tests.Bff;
 
@@ -316,5 +319,61 @@ public sealed class PlantillaDelAvisoTests
         var asunto = entrega.GetProperty("subject").GetString()!;
         Assert.Contains("saga-1", asunto, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"\{\w+\}", asunto);
+    }
+
+    // ── El aviso al comprador de entradas (ADR 0140 F3) ─────────────────────
+
+    /// <summary>Apunta lo que el paso de aviso manda: la clave de la plantilla y los valores.</summary>
+    private sealed class PuertoQueApunta : INotificationsPort
+    {
+        public string? Plantilla { get; private set; }
+        public IReadOnlyDictionary<string, string>? Valores { get; private set; }
+
+        public Task<Result<string>> AvisarAsync(
+            Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
+            IdempotencyKey llave, CancellationToken ct)
+        {
+            Plantilla = plantilla;
+            Valores = valores;
+            return Task.FromResult(Result.Ok("d1"));
+        }
+    }
+
+    /// <summary>
+    /// La plantilla de las entradas usa justo los valores que el paso <c>notifications.avisar</c>
+    /// manda: ni uno que no mande, ni uno que mande y no se lea.
+    /// </summary>
+    /// <remarks>
+    /// Los valores son fijos y los define el paso, no un mapeo en el JSON; así que lo que se cruza es
+    /// lo que el paso MANDA, capturado en su puerto, contra la plantilla del fichero juzgada con la
+    /// regla de la capacidad. Un marcador que el paso no manda deja cada aviso en
+    /// <c>missing_placeholder</c>; uno que manda y nadie lee es un dato de más en el rastro.
+    /// </remarks>
+    [Fact]
+    public async Task La_plantilla_de_las_entradas_usa_justo_los_valores_que_manda_el_paso()
+    {
+        const string clave = "eventos.entradas.confirmadas";
+        var puerto = new PuertoQueApunta();
+        var definicion = new PasoDef("avisar", "notifications.avisar", new[] { "comprador", "contacto", "total" },
+            Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null, clave);
+        var contexto = new FlowContext()
+            .Set("comprador", Ref.Create("eventos.comprador", "m1"))
+            .Set("contacto", new Contacto("ana@ejemplo.co", "Ana", "https://sitio/compra?id=s-1", "Teatro"))
+            .Set("total", Money.Of(10_000m, "COP"));
+
+        await new PasoAvisar(puerto).EjecutarAsync(
+            new EntradaDePaso("s-1", Ref.Create("eventos.compra", "s-1"), definicion, contexto, null, null), CancellationToken.None);
+
+        Assert.Equal(clave, puerto.Plantilla);
+        var plantilla = ComoLaGuardaLaCapacidad(LaQuePide(clave));
+        var relleno = NotificationRules.Fill(plantilla, puerto.Valores!);
+        Assert.True(relleno.IsOk, $"La plantilla «{clave}» no se rellena con lo que manda el paso: {relleno.Rejection?.Message}");
+
+        var sinLeer = puerto.Valores!.Keys
+            .Where(k => !plantilla.Subject.Contains("{" + k + "}", StringComparison.Ordinal)
+                        && !plantilla.Body.Contains("{" + k + "}", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(sinLeer.Count == 0,
+            $"El paso manda {string.Join(", ", sinLeer.Select(k => "{" + k + "}"))} y la plantilla «{clave}» no lo usa.");
     }
 }

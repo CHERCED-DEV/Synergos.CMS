@@ -48,3 +48,28 @@ public interface IPaymentsPort
     /// <summary>Mueve la plata autorizada.</summary>
     Task<Result<string>> CapturarAsync(string cobroId, IdempotencyKey llave, CancellationToken ct);
 }
+
+/// <summary>Adónde y a nombre de quién va un aviso: lo que la saga no puede llevar.</summary>
+/// <param name="Correo">La dirección. Sin ella no se avisa.</param>
+/// <param name="Nombre">Cómo saludar.</param>
+/// <param name="Enlace">Dónde ver lo avisado.</param>
+/// <param name="Sitio">Desde qué sitio se hizo.</param>
+/// <remarks>
+/// <b>Es efímero y no se guarda en ningún sitio</b> (ADR 0140 F3): llega en la entrada de la fase que
+/// avisa, sirve para esa llamada y muere con ella. La saga no lleva datos personales a propósito, y
+/// un aviso no es razón para cambiar eso.
+/// </remarks>
+public sealed record Contacto(string Correo, string? Nombre, string? Enlace, string? Sitio);
+
+/// <summary>Mandar un aviso por <c>Api.Notifications</c>.</summary>
+public interface INotificationsPort
+{
+    /// <summary>
+    /// Pide el aviso con la plantilla <paramref name="plantilla"/> y esos valores. Devuelve el id de
+    /// la entrega. El TEXTO no viaja: la capacidad rellena la plantilla, y la plantilla la escribe el
+    /// dominio.
+    /// </summary>
+    Task<Result<string>> AvisarAsync(
+        Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
+        IdempotencyKey llave, CancellationToken ct);
+}

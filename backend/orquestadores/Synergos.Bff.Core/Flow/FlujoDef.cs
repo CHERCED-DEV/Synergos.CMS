@@ -89,6 +89,8 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// <param name="OmitirSiCero">Un <c>Money</c> que el paso lee: si vale cero, el paso no corre ni
 /// reserva nada, y su cierre se salta solo porque no hay reserva que cerrar. Es lo gratis: un cobro
 /// de cero no es un cobro, y <c>Api.Payments</c> lo rechaza.</param>
+/// <param name="Plantilla">La clave de la plantilla con que avisa un paso de aviso: el texto lo
+/// escribe el dominio y vive en <c>Api.Notifications</c>, el flujo sólo dice cuál.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -100,7 +102,8 @@ public sealed record PasoDef(
     string? CierraReserva,
     string? Motivo,
     string? AlFallar = null,
-    string? OmitirSiCero = null)
+    string? OmitirSiCero = null,
+    string? Plantilla = null)
 {
     /// <summary>El único valor de <c>al_fallar</c>.</summary>
     public const string Seguir = "seguir";
@@ -224,7 +227,7 @@ internal static class LectorDeFlujo
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
-            "omitir_si_cero");
+            "omitir_si_cero", "plantilla");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && !string.Equals(alFallar, PasoDef.Seguir, StringComparison.Ordinal))
@@ -254,7 +257,8 @@ internal static class LectorDeFlujo
             Opcional(nodo, "cierra_reserva", aqui),
             Opcional(nodo, "motivo", aqui),
             alFallar,
-            Opcional(nodo, "omitir_si_cero", aqui));
+            Opcional(nodo, "omitir_si_cero", aqui),
+            Opcional(nodo, "plantilla", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

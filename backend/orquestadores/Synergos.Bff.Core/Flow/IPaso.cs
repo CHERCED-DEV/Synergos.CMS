@@ -34,6 +34,14 @@ public interface IPaso
     /// <summary>Qué llave de idempotencia pide: ninguna, la de <c>llave</c> o la de <c>llave_base</c>.</summary>
     LlaveRequerida Llave { get; }
 
+    /// <summary>Si avisa con la <c>plantilla</c> que declara su definición. Por defecto, no.</summary>
+    /// <remarks>
+    /// Se cruza como la llave, en los dos sentidos: un paso de aviso sin plantilla saldría
+    /// <c>template_not_found</c> en cada compra, y una plantilla declarada en un paso que no avisa
+    /// es una regla que nadie cumple.
+    /// </remarks>
+    bool UsaPlantilla => false;
+
     Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct);
 }
 

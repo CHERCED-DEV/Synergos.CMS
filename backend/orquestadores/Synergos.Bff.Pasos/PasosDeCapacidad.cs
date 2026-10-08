@@ -123,3 +123,67 @@ public sealed class PasoPagosCapturar(IPaymentsPort pagos) : IPaso
         return capturado.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(capturado.Rejection!);
     }
 }
+
+/// <summary>
+/// <c>notifications.avisar</c>: lee a quién, adónde y cuánto, y avisa con la plantilla que declara.
+/// </summary>
+/// <remarks>
+/// <para><b>Los valores son FIJOS y los define el paso</b>: <c>nombre</c>, <c>numero</c>,
+/// <c>total</c>, <c>enlace</c> y <c>sitio</c>. Sin mapeo en el JSON, que sería el lenguaje de
+/// expresiones que la ADR 0140 no quiere. La plantilla puede usar éstos y ninguno más
+/// (<c>PlantillaDelAvisoTests</c> lo cruza contra lo que el paso manda de verdad).</para>
+///
+/// <para><b>El número sale de la saga</b>: sus últimos ocho caracteres alfanuméricos, sin prefijo.
+/// El aviso del CMS lo armaba recortando un prefijo que este camino no tenía, y salía
+/// «SYN-EVT-EVT-…».</para>
+///
+/// <para><b>Sin dirección no avisa, y sigue</b>: no es un fallo, es que nadie pidió el aviso por
+/// este camino. La llave es fija por saga (<c>llave</c> en la definición), así que repetir el paso
+/// —una confirmación reintentada— no manda dos correos. Lo que falle al mandar vuelve tal cual: si
+/// eso deshace o no la saga lo decide la definición (<c>al_fallar</c>), no el paso.</para>
+/// </remarks>
+public sealed class PasoAvisar(INotificationsPort avisos) : IPaso
+{
+    /// <summary>El total como se lee en es-CO, sin depender de la cultura del proceso.</summary>
+    private static readonly System.Globalization.NumberFormatInfo EsCo = new()
+    {
+        NumberGroupSeparator = ".",
+        NumberDecimalSeparator = ",",
+        NumberGroupSizes = new[] { 3 },
+    };
+
+    public string Tipo => "notifications.avisar";
+    public int Lecturas => 3;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Fija;
+    public bool UsaPlantilla => true;
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var contacto = entrada.Lee<Contacto?>(1);
+        if (contacto is null || string.IsNullOrWhiteSpace(contacto.Correo)) return SalidaDePaso.Sigue();
+
+        var avisado = await avisos.AvisarAsync(
+            entrada.Lee<Ref>(0), contacto.Correo, entrada.Paso.Plantilla!,
+            Valores(entrada.SagaId, contacto, entrada.Lee<Money>(2)), entrada.Llave(), ct);
+
+        return avisado.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(avisado.Rejection!);
+    }
+
+    /// <summary>Los valores fijos del aviso.</summary>
+    public static IReadOnlyDictionary<string, string> Valores(string sagaId, Contacto contacto, Money total)
+    {
+        ArgumentNullException.ThrowIfNull(contacto);
+        var alfanumerico = new string(sagaId.Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["nombre"] = contacto.Nombre ?? string.Empty,
+            ["numero"] = alfanumerico.Length <= 8 ? alfanumerico : alfanumerico[^8..],
+            ["total"] = $"{total.Amount.ToString("#,##0.##", EsCo)} {total.Currency}",
+            ["enlace"] = contacto.Enlace ?? string.Empty,
+            ["sitio"] = contacto.Sitio ?? string.Empty,
+        };
+    }
+}
