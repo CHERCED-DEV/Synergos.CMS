@@ -28,6 +28,46 @@ public static class PricingRules
         return null;
     }
 
+    /// <summary>Si la vigencia y el tope que se quieren publicar con un precio sirven.</summary>
+    public static Rejection? CheckValidityAndLimit(DateTimeOffset? from, DateTimeOffset? to, int? maxPerQuote)
+    {
+        if (from is { } desde && to is { } hasta && hasta <= desde)
+        {
+            return Rejection.Invalid($"{CodePrefix}.bad_validity", "validTo tiene que ser posterior a validFrom.");
+        }
+        return maxPerQuote is <= 0
+            ? Rejection.Invalid($"{CodePrefix}.bad_limit", "El tope por cotización tiene que ser mayor que cero.")
+            : null;
+    }
+
+    /// <summary>Si el precio vale en <paramref name="now"/>: desde incluido, hasta excluido.</summary>
+    /// <remarks>
+    /// <b>No transitorio, y antes de que nadie aparte nada</b>: cotizar va primero en el flujo, así
+    /// que un precio fuera de vigencia rechaza la compra sin haber tocado el aforo ni el cobro.
+    /// Reintentar no lo arregla; que pase el tiempo, sí, y por eso el mensaje dice las fechas.
+    /// </remarks>
+    public static Rejection? CheckInEffect(Price price, DateTimeOffset now)
+    {
+        if (price.ValidFrom is { } desde && now < desde)
+        {
+            return Rejection.Conflict($"{CodePrefix}.price_not_in_effect",
+                $"El precio de {price.Subject} todavía no vale: rige desde {desde:O}.");
+        }
+        if (price.ValidTo is { } hasta && now >= hasta)
+        {
+            return Rejection.Conflict($"{CodePrefix}.price_not_in_effect",
+                $"El precio de {price.Subject} ya no vale: rigió hasta {hasta:O}.");
+        }
+        return null;
+    }
+
+    /// <summary>Si las unidades de un sujeto en la cotización caben en su tope.</summary>
+    public static Rejection? CheckLimit(Price price, int unidades)
+        => price.MaxPerQuote is { } tope && unidades > tope
+            ? Rejection.Invalid($"{CodePrefix}.quantity_over_limit",
+                $"Una cotización admite hasta {tope} de {price.Subject}, y ésta pide {unidades}.")
+            : null;
+
     /// <summary>Si la promoción es usable ahora.</summary>
     public static Rejection? CheckPromotion(Promotion? promo, DateTimeOffset now)
     {

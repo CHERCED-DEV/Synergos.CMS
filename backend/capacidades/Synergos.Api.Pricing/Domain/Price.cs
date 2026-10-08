@@ -8,13 +8,25 @@ namespace Synergos.Api.Pricing.Domain;
 /// <param name="Amount">Cuánto, con su moneda.</param>
 /// <param name="TaxRateBasisPoints">Impuesto en puntos básicos: 1900 = 19 %.</param>
 /// <param name="UpdatedAtUtc">Cuándo se fijó.</param>
+/// <param name="ValidFrom">Desde cuándo vale, incluido. Nulo: desde siempre.</param>
+/// <param name="ValidTo">Hasta cuándo vale, excluido. Nulo: para siempre.</param>
+/// <param name="MaxPerQuote">Cuántas unidades de este sujeto admite una cotización, sumando todas
+/// sus líneas. Nulo: sin tope.</param>
 /// <remarks>
-/// <b>El impuesto en puntos básicos y no en decimal</b> porque un <c>0.19</c> guardado como
+/// <para><b>El impuesto en puntos básicos y no en decimal</b> porque un <c>0.19</c> guardado como
 /// coma flotante y multiplicado por miles de líneas acumula centavos que no cuadran con lo
-/// declarado. Un entero no se desvía.
+/// declarado. Un entero no se desvía.</para>
+///
+/// <para><b>La vigencia y el tope son del precio, y por eso viven acá</b> (ADR 0140 F3): esta
+/// capacidad es dueña del CUÁNDO de un precio (principio 12), y quien cotiza fuera de él no puede
+/// comprar a ese precio. Es lo que se movió del CMS —que lo comprobaba él solo, en los dos caminos
+/// de compra— para que cualquier flujo que cotice lo respete sin código por vertical. Los dos son
+/// opcionales: un precio sin ellos vale siempre y sin tope, como antes. La ventana es la de
+/// <see cref="TimeWindow.Contains"/> —desde incluido, hasta excluido—, con cada extremo opcional.</para>
 /// </remarks>
 public sealed record Price(
-    string Id, Ref Subject, Money Amount, int TaxRateBasisPoints, DateTimeOffset UpdatedAtUtc);
+    string Id, Ref Subject, Money Amount, int TaxRateBasisPoints, DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null, int? MaxPerQuote = null);
 
 /// <summary>Cómo descuenta una promoción.</summary>
 public enum DiscountKind

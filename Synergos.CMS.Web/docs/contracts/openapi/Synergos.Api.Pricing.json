@@ -413,7 +413,10 @@
           "subjectId",
           "amount",
           "taxRateBasisPoints",
-          "updatedAtUtc"
+          "updatedAtUtc",
+          "validFrom",
+          "validTo",
+          "maxPerQuote"
         ],
         "type": "object",
         "properties": {
@@ -436,6 +439,27 @@
           "updatedAtUtc": {
             "type": "string",
             "format": "date-time"
+          },
+          "validFrom": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "validTo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "maxPerQuote": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -693,6 +717,27 @@
             ]
           },
           "taxRateBasisPoints": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "validFrom": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "validTo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "maxPerQuote": {
             "type": [
               "null",
               "integer"

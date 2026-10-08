@@ -25,7 +25,7 @@ public static class PricingEndpoints
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
             if (!TryMoney(req.Amount, out var amount, out var badMoney)) return badMoney!;
 
-            return svc.SetPrice(subject, amount, req.TaxRateBasisPoints ?? 0, key)
+            return svc.SetPrice(subject, amount, req.TaxRateBasisPoints ?? 0, key, req.ValidFrom, req.ValidTo, req.MaxPerQuote)
                 .Map(PriceResponse.From).ToCreated(p => $"/v1/prices/{p.Id}");
         }).WithName("SetPrice").ConLlaveDeIdempotencia();
 

@@ -18,9 +18,13 @@ namespace Synergos.Api.Pricing.Contracts;
 /// <summary>Un monto tal como llega o sale.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
 
-/// <summary>Publicar el precio de algo.</summary>
+/// <summary>Publicar el precio de algo, con su vigencia y su tope por cotización si los tiene.</summary>
+/// <param name="ValidFrom">Desde cuándo vale, incluido. Sin él, desde siempre.</param>
+/// <param name="ValidTo">Hasta cuándo vale, excluido. Sin él, para siempre.</param>
+/// <param name="MaxPerQuote">Cuántas unidades del sujeto admite una cotización, sumando sus líneas.</param>
 public sealed record SetPriceRequest(
-    string? SubjectKind = null, string? SubjectId = null, MoneyDto? Amount = null, int? TaxRateBasisPoints = null);
+    string? SubjectKind = null, string? SubjectId = null, MoneyDto? Amount = null, int? TaxRateBasisPoints = null,
+    DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidTo = null, int? MaxPerQuote = null);
 
 /// <summary>Guardar una promoción.</summary>
 public sealed record SavePromotionRequest(
@@ -34,10 +38,13 @@ public sealed record QuoteLineRequest(string? SubjectKind = null, string? Subjec
 public sealed record QuoteRequest(IReadOnlyList<QuoteLineRequest>? Lines = null, string? PromotionCode = null);
 
 /// <summary>Cómo sale un precio.</summary>
-public sealed record PriceResponse(string Id, string SubjectKind, string SubjectId, MoneyDto Amount, int TaxRateBasisPoints, DateTimeOffset UpdatedAtUtc)
+public sealed record PriceResponse(
+    string Id, string SubjectKind, string SubjectId, MoneyDto Amount, int TaxRateBasisPoints, DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo, int? MaxPerQuote)
 {
     public static PriceResponse From(Price p) => new(
-        p.Id, p.Subject.Kind, p.Subject.Id, new MoneyDto(p.Amount.Amount, p.Amount.Currency), p.TaxRateBasisPoints, p.UpdatedAtUtc);
+        p.Id, p.Subject.Kind, p.Subject.Id, new MoneyDto(p.Amount.Amount, p.Amount.Currency), p.TaxRateBasisPoints, p.UpdatedAtUtc,
+        p.ValidFrom, p.ValidTo, p.MaxPerQuote);
 }
 
 /// <summary>Cómo sale una promoción.</summary>

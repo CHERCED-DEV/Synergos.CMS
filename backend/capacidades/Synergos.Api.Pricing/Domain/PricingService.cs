@@ -28,7 +28,16 @@ public sealed class PricingService
     /// Reescribe si ese sujeto ya tenía precio: subir el precio de un producto no es crear otro
     /// producto, y rechazarlo obligaría a cada dominio a llevar la cuenta de qué ya publicó.
     /// </remarks>
-    public Result<Price> SetPrice(Ref subject, Money amount, int taxBasisPoints, IdempotencyKey key)
+    /// <param name="subject">De qué es el precio.</param>
+    /// <param name="amount">Cuánto.</param>
+    /// <param name="taxBasisPoints">El impuesto, en puntos básicos.</param>
+    /// <param name="key">La llave de idempotencia.</param>
+    /// <param name="validFrom">Desde cuándo vale (incluido); nulo, desde siempre.</param>
+    /// <param name="validTo">Hasta cuándo vale (excluido); nulo, para siempre.</param>
+    /// <param name="maxPerQuote">Tope de unidades de este sujeto por cotización; nulo, sin tope.</param>
+    public Result<Price> SetPrice(
+        Ref subject, Money amount, int taxBasisPoints, IdempotencyKey key,
+        DateTimeOffset? validFrom = null, DateTimeOffset? validTo = null, int? maxPerQuote = null)
     {
         lock (_gate)
         {
@@ -39,11 +48,12 @@ public sealed class PricingService
                     : Rejection.Conflict($"{PricingRules.CodePrefix}.idempotency_orphan", "La llave ya se usó pero el precio no está.");
             }
 
-            var motivo = PricingRules.CheckPrice(amount, taxBasisPoints);
+            var motivo = PricingRules.CheckPrice(amount, taxBasisPoints)
+                ?? PricingRules.CheckValidityAndLimit(validFrom, validTo, maxPerQuote);
             if (motivo is not null) return Result.Rejected<Price>(motivo);
 
             var id = _prices.FindBySubject(subject)?.Id ?? Guid.NewGuid().ToString("n");
-            var price = new Price(id, subject, amount, taxBasisPoints, Now);
+            var price = new Price(id, subject, amount, taxBasisPoints, Now, validFrom, validTo, maxPerQuote);
             _prices.Put(price);
             _idempotency.Remember("price", key, id);
             return Result.Ok(price);
@@ -117,6 +127,11 @@ public sealed class PricingService
 
         var lineas = new List<QuoteLine>(items.Count);
         string? moneda = null;
+        var ahora = Now;
+
+        // El tope es por SUJETO y no por línea: dos líneas de la misma localidad —o una por butaca—
+        // suman. Contado por línea, partir el pedido en líneas de a uno lo saltaba.
+        var porSujeto = new Dictionary<Ref, int>();
 
         foreach (var (subject, cantidad) in items)
         {
@@ -127,6 +142,13 @@ public sealed class PricingService
             {
                 return Rejection.NotFound($"{PricingRules.CodePrefix}.price_not_found", $"No hay precio publicado para {subject}.");
             }
+
+            var fueraDeVigencia = PricingRules.CheckInEffect(price, ahora);
+            if (fueraDeVigencia is not null) return Result.Rejected<Quote>(fueraDeVigencia);
+
+            porSujeto[subject] = porSujeto.GetValueOrDefault(subject) + cantidad;
+            var sobreElTope = PricingRules.CheckLimit(price, porSujeto[subject]);
+            if (sobreElTope is not null) return Result.Rejected<Quote>(sobreElTope);
 
             moneda ??= price.Amount.Currency;
             if (!string.Equals(moneda, price.Amount.Currency, StringComparison.Ordinal))
