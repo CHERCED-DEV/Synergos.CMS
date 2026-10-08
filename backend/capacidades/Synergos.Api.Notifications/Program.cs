@@ -17,9 +17,11 @@ using Synergos.Shared;
 // cableado por caso de uso, la primera plantilla clínica la habría atado a Salud.
 //
 // El transporte es una costura (INotificationSender). Con credenciales sale por
-// Resend; sin ellas, el transporte por defecto RECHAZA y lo grita. No da nada
-// por entregado: un transporte silencioso que dice "entregado" sin entregar es
-// la forma más cara de descubrir en producción que nadie configuró el correo.
+// Resend; en Development puede dejar .eml en una carpeta (Notifications:Pickup,
+// para verificar sin proveedor); sin nada de eso, el transporte por defecto
+// RECHAZA y lo grita. No da nada por entregado: un transporte silencioso que
+// dice "entregado" sin entregar es la forma más cara de descubrir en producción
+// que nadie configuró el correo.
 //
 // El estado real de un envío llega DESPUÉS, por webhook, y puede llegar fuera de
 // orden. Por eso /v1/webhooks/resend está exento de la llave compartida —quien
@@ -37,15 +39,7 @@ builder.Services.AddSingleton<IDeliveryStore, FileSystemDeliveryStore>();
 // El transporte se elige por configuración, y la elección se GRITA al arrancar:
 // un despliegue que cree que manda correos y no manda es un fallo silencioso que
 // solo se descubre cuando alguien reclama que nunca le llegó nada.
-builder.Services.Configure<ResendOptions>(builder.Configuration.GetSection("Notifications:Resend"));
-if (builder.Configuration.GetSection("Notifications:Resend")["ApiKey"] is { Length: > 0 })
-{
-    builder.Services.AddHttpClient<INotificationSender, ResendNotificationSender>();
-}
-else
-{
-    builder.Services.AddSingleton<INotificationSender, LoggingNotificationSender>();
-}
+EleccionDelTransporte.Registrar(builder.Services, builder.Configuration, builder.Environment);
 builder.Services.AddSingleton<WebhookVerifier>();
 builder.Services.AddSingleton<IIdempotencyLedger>(sp =>
     new FileIdempotencyLedger(sp.GetRequiredService<IOptions<NotificationStorageOptions>>().Value.Root));
