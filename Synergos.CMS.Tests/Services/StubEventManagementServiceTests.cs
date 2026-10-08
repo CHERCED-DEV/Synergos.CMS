@@ -1,3 +1,4 @@
+using NSubstitute;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
@@ -134,6 +135,22 @@ public class StubEventManagementServiceTests
         var view = await mgmt.GetManageAsync(result.EventId);
         Assert.Equal(600, view.Capacity);
         Assert.Equal(0, view.Sold);
+    }
+
+    [Fact] // happy (ADR 0140 F3): el evento creado se publica también como oferta, con el id del catálogo
+    public async Task CreateEvent_PublicaLaOfertaConElIdQueLeDioElCatalogo()
+    {
+        var catalog = new StubEventCatalogProvider();
+        var ofertas = Substitute.For<IEventOfferPublisher>();
+        var mgmt = new StubEventManagementService(new EventTicketLedger(signer: Signer), catalog, ofertas);
+
+        var result = await mgmt.CreateEventAsync(new EventDraft(
+            "Concierto con oferta", "Movistar Arena", DateTimeOffset.UtcNow.AddDays(45),
+            new[] { new EventTierDraft("General", 120_000m, 500) }));
+
+        await ofertas.Received(1).PublishAsync(
+            Arg.Is<EventDetail>(e => e.Summary.Id == result.EventId && e.Tiers.Single().Remaining == 500),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact] // filter/invalid: sin tiers o aforo <= 0 lanza

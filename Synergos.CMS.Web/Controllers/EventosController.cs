@@ -46,6 +46,9 @@ public sealed class EventosController : ControllerBase
     /// </summary>
     private readonly TimeProvider _reloj;
 
+    /// <summary>Dónde se republica la oferta del catálogo (ADR 0140 F3). Nulo: no hay a dónde.</summary>
+    private readonly IEventOfferPublisher? _ofertas;
+
     public EventosController(
         IEventCatalogProvider catalog,
         IEventTicketingService ticketing,
@@ -54,8 +57,10 @@ public sealed class EventosController : ControllerBase
         IMemberAccessGate gate,
         IRealtimeNotifier realtime,
         ILogger<EventosController> logger,
-        TimeProvider? reloj = null)
+        TimeProvider? reloj = null,
+        IEventOfferPublisher? ofertas = null)
     {
+        _ofertas = ofertas;
         _catalog = catalog;
         _ticketing = ticketing;
         _management = management;
@@ -513,6 +518,55 @@ public sealed class EventosController : ControllerBase
                 ? string.Empty
                 : EventContentRules.BuildStatus(published.Summary.StartUtc, _reloj.GetUtcNow())));
     }
+
+    // ── 10. Republicar la oferta (administración, a mano) ──────────────
+    // POST /api/eventos/oferta/republicar → { total, publicados, fallidos, sinDestino }   🔒 admin
+    //
+    // Recorre el catálogo activo y publica la oferta de cada evento en el orquestador (ADR 0140 F3).
+    // Es la reparación de un publicar que no llegó y la forma de poner a la venta la siembra de la
+    // demo, que ningún editor publica. NUNCA corre al arrancar (ADR 0013): lo invoca una persona.
+    // Sólo admin, y no el organizador: escribe la oferta de TODOS los eventos, no la de uno.
+    [HttpPost("oferta/republicar")]
+    public async Task<IActionResult> RepublicarOferta(CancellationToken cancellationToken)
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new { error = "Inicie sesión como administrador." });
+        }
+        if (!_gate.HasAnyRole("admin"))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Republicar la oferta es de administración." });
+        }
+        if (_ofertas is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "No hay publicador de la oferta registrado." });
+        }
+
+        var resumenes = await _catalog.SearchAsync(null, cancellationToken);
+        int publicados = 0, fallidos = 0, sinDestino = 0;
+        foreach (var resumen in resumenes)
+        {
+            var evento = await _catalog.GetEventAsync(resumen.Id, cancellationToken);
+            if (evento is null)
+            {
+                fallidos++;
+                _logger.LogWarning("Republicar: el catálogo lista {Evento} y no sirve su ficha.", resumen.Id);
+                continue;
+            }
+
+            switch (await _ofertas.PublishAsync(evento, cancellationToken))
+            {
+                case EventOfferOutcome.Published: publicados++; break;
+                case EventOfferOutcome.NoDestination: sinDestino++; break;
+                default: fallidos++; break;
+            }
+        }
+
+        return Ok(new RepublicarOfertaResponse(resumenes.Count, publicados, fallidos, sinDestino));
+    }
+
+    /// <summary>Cómo terminó republicar: cuántos eventos se recorrieron y qué pasó con cada uno.</summary>
+    public sealed record RepublicarOfertaResponse(int Total, int Publicados, int Fallidos, int SinDestino);
 
     // ── Mappers a DTOs JSON estables ────────────────────────────────────
 

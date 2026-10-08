@@ -112,6 +112,49 @@ public sealed class EventosControllerTests
             new EventosController.EventDraftRequest("Fiesta pirata", null, default, null, null, null, null, null, null, null), default));
     }
 
+    // ── REPUBLICAR la oferta (ADR 0140 F3): escribe la de TODOS los eventos ────────
+
+    [Fact] // empty + filter: ni anónimo ni organizador republican — es de administración
+    public async Task RepublicarOferta_SinAdmin_NoTocaElPublicador()
+    {
+        var ofertas = Substitute.For<IEventOfferPublisher>();
+        var sut = new EventosController(_catalog, _ticketing, _management, _priceFormatter, _gate, _realtime,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<EventosController>.Instance, ofertas: ofertas);
+
+        Anonymous();
+        Assert.IsType<UnauthorizedObjectResult>(await sut.RepublicarOferta(default));
+
+        _gate.IsAuthenticated.Returns(true);
+        _gate.HasAnyRole("admin").Returns(false);
+        _gate.HasAnyRole("organizador,admin").Returns(true);
+        AssertForbidden(await sut.RepublicarOferta(default));
+
+        await ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
+    }
+
+    [Fact] // happy: el admin recorre el catálogo y cuenta qué pasó con cada evento
+    public async Task RepublicarOferta_Admin_PublicaCadaEventoDelCatalogoYCuenta()
+    {
+        var ofertas = Substitute.For<IEventOfferPublisher>();
+        var sut = new EventosController(_catalog, _ticketing, _management, _priceFormatter, _gate, _realtime,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<EventosController>.Instance, ofertas: ofertas);
+        _gate.IsAuthenticated.Returns(true);
+        _gate.HasAnyRole("admin").Returns(true);
+
+        var bueno = Services.HttpEventOfferPublisherTests.Evento();
+        var caido = bueno with { Summary = bueno.Summary with { Id = "evt-caido" } };
+        _catalog.SearchAsync(null, Arg.Any<CancellationToken>()).Returns(new[] { bueno.Summary, caido.Summary, bueno.Summary with { Id = "evt-sin-ficha" } });
+        _catalog.GetEventAsync(bueno.Summary.Id, Arg.Any<CancellationToken>()).Returns(bueno);
+        _catalog.GetEventAsync("evt-caido", Arg.Any<CancellationToken>()).Returns(caido);
+        _catalog.GetEventAsync("evt-sin-ficha", Arg.Any<CancellationToken>()).Returns((EventDetail?)null);
+        ofertas.PublishAsync(bueno, Arg.Any<CancellationToken>()).Returns(EventOfferOutcome.Published);
+        ofertas.PublishAsync(caido, Arg.Any<CancellationToken>()).Returns(EventOfferOutcome.Failed);
+
+        var ok = Assert.IsType<OkObjectResult>(await sut.RepublicarOferta(default));
+
+        Assert.Equal(new EventosController.RepublicarOfertaResponse(3, 1, 2, 0), ok.Value);
+    }
+
     // ── CHECK-IN: quemar una entrada es irreversible para su dueño ─────────────────
 
     [Fact] // empty: anónimo no quema entradas

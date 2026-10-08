@@ -27,11 +27,17 @@ public sealed class StubEventManagementService : IEventManagementService
 {
     private readonly EventTicketLedger _ledger;
     private readonly IEventCatalogProvider _catalog;
+    private readonly IEventOfferPublisher? _ofertas;
 
-    public StubEventManagementService(EventTicketLedger ledger, IEventCatalogProvider catalog)
+    /// <param name="ledger">El registro de entradas.</param>
+    /// <param name="catalog">Donde se publica el evento creado.</param>
+    /// <param name="ofertas">Donde se publica su oferta para venderlo por el orquestador (ADR 0140 F3).
+    /// Sin él, el evento se crea igual y sólo se vende por el motor en proceso.</param>
+    public StubEventManagementService(EventTicketLedger ledger, IEventCatalogProvider catalog, IEventOfferPublisher? ofertas = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _ofertas = ofertas;
     }
 
     public async Task<EventManageView> GetManageAsync(string eventId, CancellationToken cancellationToken = default)
@@ -144,6 +150,14 @@ public sealed class StubEventManagementService : IEventManagementService
             SeatMap: draft.SeatMap);
 
         var published = await _catalog.PublishEventAsync(detail, cancellationToken);
+
+        // Con el id que le dio el catálogo, que es el que nombra la oferta. El publicador no lanza por el
+        // orquestador: el evento ya existe y crearlo no puede fallar porque otro proceso esté caído.
+        if (_ofertas is not null)
+        {
+            await _ofertas.PublishAsync(published, cancellationToken);
+        }
+
         return new EventCreateResult(published.Summary.Id);
     }
 

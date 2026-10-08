@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -142,10 +144,37 @@ public sealed partial class SeamComposer
         {
             services.AddSingleton<IEventTicketingService>(sp => sp.GetRequiredService<StubEventTicketingService>());
         }
+        // La OFERTA (ADR 0140 F3): el precio, la ventana de venta y el aforo de cada evento, publicados
+        // en el orquestador para que se pueda vender por él. No depende del modo de la compra: la
+        // puerta habla con el orquestador también con el motor en proceso de default. Hay destino si
+        // el despliegue dice dónde vive (BaseUrl) o si la compra ya va por él (Mode=Bff, que usa el
+        // puerto local por defecto). Sin destino el publicador no intenta: un clon limpio no tiene
+        // orquestador, y salir a buscarlo en cada publicar del editor sería esperar a la red para nada.
+        var seccionDeEventos = builder.Config.GetSection("Synergos:Eventos");
+        var hayOrquestadorDeEventos = !string.IsNullOrWhiteSpace(seccionDeEventos["BaseUrl"])
+            || Interruptor.Encendido(builder.Config, "Synergos:Eventos:Mode", "Bff", new EventosSettings().Mode);
+        if (hayOrquestadorDeEventos)
+        {
+            // Diez segundos y no los treinta de comprar: quien espera es el editor que publica, y una
+            // oferta que no salió se repara republicando.
+            services.AddClienteDelArbolDeServicios(
+                HttpEventOfferPublisher.ClientName,
+                DestinoDelArbol.De(seccionDeEventos, "http://127.0.0.1:5303/", 10));
+        }
+        services.AddSingleton<IEventOfferPublisher>(sp => new HttpEventOfferPublisher(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HttpEventOfferPublisher>>(),
+            hayOrquestadorDeEventos));
+
+        // Se dispara en tres sitios y NUNCA al arrancar (ADR 0013): al publicar un eventPage, al crear
+        // un evento de organizador y a mano (POST /api/eventos/oferta/republicar).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEventoAlPublicar>();
+
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(
                 sp.GetRequiredService<EventTicketLedger>(),
-                sp.GetRequiredService<IEventCatalogProvider>()));
+                sp.GetRequiredService<IEventCatalogProvider>(),
+                sp.GetRequiredService<IEventOfferPublisher>()));
 
         // OLA 7 Propiedades — portal inmobiliario (doc propiedades-app-spec).
         // Cuatro seams stub-first, aditivos (no tocan Booking/Travel/Shop/Blogs/
