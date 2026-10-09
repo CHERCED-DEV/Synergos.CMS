@@ -2,11 +2,14 @@
   "objetivo": 0.9,
   "verticales": {
     "eventos": {
-      "cobertura": 1,
-      "reales": 23,
+      "cobertura": 0.9231,
+      "reales": 26,
       "inventados": [],
-      "perdidos": []
+      "perdidos": [
+        "Synergos.CMS.Interfaces/IEventOfferPublisher.cs",
+        "Synergos.CMS.Web/Services/HttpEventOfferPublisher.cs"
+      ]
     }
   },
-  "generado": "2026-09-22"
+  "generado": "2026-10-09"
 }

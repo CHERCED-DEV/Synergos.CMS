@@ -136,8 +136,12 @@
     F1 —la compra de Eventos es un dato que interpreta `Bff.Core`— y la F2 —el contrato HTTP de
     `Bff.Eventos` y sus tres capacidades se GENERA del código a `docs/contracts/openapi/` y lo
     vigilan deriva, suelo, la respuesta por su tipo, sondas contra el host y un gate de
-    compatibilidad consumidor → capacidad; el UI genera de él sus tipos con `--check`—; faltan la
-    puerta (F3) y el front (F4).
+    compatibilidad consumidor → capacidad; el UI genera de él sus tipos con `--check`— y la F3 —la
+    **puerta** genérica `GET|POST /api/flujos/{flujo}/{operacion}` abre `eventos.compra` con la sesión
+    del miembro: la tabla sale de los contratos incrustados (`x-synergos-flujo`, que el orquestador
+    pone con `.EnLaPuerta`), lo que pone el CMS viaja en cabeceras declaradas, la compra es de quien la
+    abrió y el artefacto (asistentes, entradas, QR) se queda en el CMS—; faltan su verificación en
+    vivo, el front (F4) y, después de la F4, el retiro de checkout/confirm.
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
@@ -3086,6 +3090,14 @@ dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v qu
 # Servicios.Tests (el paquete OpenAPI sólo vive ahí) y ContratoOpenApiTests lo compara byte a
 # byte. Tras cambiar un record de Contracts/ o un endpoint de esas cuatro, se regenera y se comitea:
 SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --filter ContratoOpenApi
+# Y si cambia lo que un orquestador expone en la PUERTA (.EnLaPuerta, una cabecera de la puerta), el
+# documento lo incrusta Synergos.CMS.Web: se recompila, y en el UI `npm run contratos:http` (su par).
+# Gates de la puerta (ADR 0140 F3): LoQueExponeLaPuertaTests (Servicios: ni retry ni compensations
+# se abren, toda operación marcada exige el sujeto), FlujosControllerTests y
+# ConsumidorCmsDeBffEventosTests (CMS: los códigos puerta.* en su orden, lo que viaja y lo que no, y
+# lo que el CMS manda y lee de Bff.Eventos contra su contrato), PuertaGenericaTests (la puerta no
+# nombra flujos ni verticales, su techo de 25 s, lo incrustado es lo del disco) y
+# CorrelacionUnaSolaTests (la correlación del CMS se limpia como la de Shared).
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -4513,7 +4525,8 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   > registro previo que citar. Darles uno es trabajo de verdad —¿dónde vive el
   > «carrito» de una cita?—, no un cableado.
   >
-  > **Eventos cambió QUIÉN llama, no eso** (ADR 0140 F3). Desde la puerta, el
+  > **Eventos cambió QUIÉN llama, no eso** (ADR 0140 F3). Desde la puerta —abierta
+  > para `eventos.compra` en `Synergos:Puerta:Flujos`, sólo para miembros—, el
   > comprador ya no viaja en el cuerpo que manda el navegador: lo pone el CMS en
   > `X-Synergos-Sujeto`, desde la sesión del miembro (el `Kind` del flujo y el
   > `MemberKey`), y el orquestador comprueba que consultar, confirmar y cancelar
@@ -5118,7 +5131,14 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
 
   > **Y ya está cableado** (HU #35, rebanada 2b):
   > `Synergos:Eventos:Mode=Bff` compra contra el orquestador, con el stub de
-  > default. Verificado con los cuatro procesos vivos: matando `Api.Payments`
+  > default. **Desde la ADR 0140 F3 hay un segundo camino que no depende del
+  > modo**: la puerta (`/api/flujos/eventos.compra/…`) y el artefacto
+  > (`/api/eventos/compras/{id}/asistentes|entradas`), que necesitan
+  > `Synergos:Eventos:BaseUrl` —sin ella, 503 `puerta.flujo_no_disponible`—, y
+  > la OFERTA publicada en el orquestador (`POST /v1/ofertas`: precio con su
+  > vigencia y su tope, y el aforo), que el CMS manda al publicar un
+  > `eventPage`, al crear un evento de organizador y con
+  > `POST /api/eventos/oferta/republicar` (admin; cubre la siembra de la demo). Verificado con los cuatro procesos vivos: matando `Api.Payments`
   > a mitad de la confirmación, el aforo vuelve al pozo solo y no se emite
   > ninguna entrada.
   >

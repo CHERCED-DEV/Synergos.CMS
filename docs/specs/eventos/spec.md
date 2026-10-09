@@ -24,13 +24,27 @@ ui:
   app: eventos
 rechazos:                                 # leídos de Bff.Eventos/Domain/, no inventados
   - "eventos.no_lines · comprar sin entradas · Invalid · NO transitorio"
-  - "eventos.bad_tier · una línea sin localidad · Invalid · NO transitorio"
+  - "eventos.bad_tier · una línea sin localidad, o una localidad de la oferta sin código o repetida · Invalid · NO transitorio"
   - "eventos.bad_quantity · cantidad fuera de rango · Invalid · NO transitorio"
   - "eventos.seat_is_one · una butaca nominada con cantidad > 1 · Invalid · NO transitorio"
   - "eventos.duplicate_seat · la misma butaca dos veces en la compra · Invalid · NO transitorio"
   - "eventos.too_many_lines · más líneas de las que el flujo admite · Invalid · NO transitorio"
   - "eventos.not_confirmable · confirmar una compra que ya no está viva · Conflict · NO transitorio"
-  - "eventos.purchase_not_found · la compra no existe · NO transitorio"
+  - "eventos.purchase_not_found · la compra no existe, o es de otro sujeto · NO transitorio"
+  # ADR 0140 F3 — lo que pone la puerta, leído antes que cualquier otra regla
+  - "eventos.sujeto_requerido · abrir, consultar, confirmar o cancelar sin X-Synergos-Sujeto · Invalid · NO transitorio"
+  - "eventos.sujeto_invalido · un sujeto que no es <kind>:<id> · Invalid · NO transitorio"
+  - "eventos.negocio_requerido · abrir sin la comisión del sitio (X-Synergos-Negocio) · Invalid · NO transitorio"
+  - "eventos.negocio_invalido · una configuración de negocio que no se lee · Invalid · NO transitorio"
+  - "eventos.contacto_invalido · un contacto del aviso que no se lee · Invalid · NO transitorio"
+  # ADR 0140 F3 — la oferta (POST /v1/ofertas), revisada entera antes de escribir nada
+  - "eventos.bad_event · comprar o publicar la oferta sin evento · Invalid · NO transitorio"
+  - "eventos.bad_offer · una oferta sin moneda, sin inicio o sin localidades · Invalid · NO transitorio"
+  - "eventos.bad_price · una localidad sin precio o con uno negativo · Invalid · NO transitorio"
+  - "eventos.bad_max_per_order · un tope por compra que no es positivo · Invalid · NO transitorio"
+  - "eventos.bad_capacity · un aforo negativo o ausente, o butacas sin nombre o repetidas · Invalid · NO transitorio"
+  - "eventos.bad_sale_window · una venta que abre después de cerrar o de empezar el evento · Invalid · NO transitorio"
+  - "eventos.store_busy · otra publicación de la oferta en curso · Unavailable · transitorio"
 ---
 
 # Eventos — el spec del vertical que ya existe

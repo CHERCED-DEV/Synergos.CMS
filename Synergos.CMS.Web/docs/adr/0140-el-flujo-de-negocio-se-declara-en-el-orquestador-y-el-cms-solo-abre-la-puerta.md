@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; ver «Avance del piloto». Faltan la puerta (F3) y el front (F4)
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4); ver «Avance del piloto». Faltan la verificación en vivo de la F3, el front (F4) y el retiro de la ruta vieja, que va después
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -160,6 +160,12 @@ una sola y genérica:
 `POST|GET /api/flujos/{flujo}/{operación}` → autentica la sesión del miembro → emite el token de
 identidad (`IIdentityTokenIssuer`, que ya existe sobre `Api.Identity`) → reenvía al orquestador dueño
 del flujo con la llave → devuelve **su** respuesta sin reinterpretarla.
+
+> **Corregido en la F3 (2026-10-08, decidido por el arquitecto):** la puerta **no** emite ni reenvía
+> el token. Declara el sujeto en `X-Synergos-Sujeto`, desde la sesión: ningún orquestador lee el
+> token, y leerlo pondría la llave HMAC de `Api.Identity` en cada `Bff.*`. Se reabre cuando una
+> capacidad necesite saber **cómo** se identificó la persona. Y la tabla no sale de la configuración:
+> sale del contrato de cada orquestador (`x-synergos-flujo`). Ver «Avance del piloto — F3».
 
 - **Cero código por vertical** en la puerta: la tabla `flujo → orquestador` sale de la configuración
   (derivable de los orquestadores que el compose ya descubre).
@@ -509,6 +515,130 @@ verde (44/44, y `TicketingSagaPersistidaTests` 2/2), y las tres suites en verde 
   rojo imprime la versión; se fija el parche si pasa); Linux sin medir; los gates de
   `Arquitectura.Tests` ejecutan código del CMS sobre el runtime 10 (al CMS en su runtime lo prueba
   `CMS.Tests`); los 400/415 del framework no traen `Rechazo`.
+
+## Avance del piloto — F3 hecha (2026-10-08)
+
+**La puerta existe, genérica, y abre `eventos.compra`**: `GET|POST /api/flujos/{flujo}/{operacion}`
+arma su tabla de los contratos de los orquestadores que el CMS lleva incrustados, pone de su parte
+quién pide (la sesión del miembro), el negocio del sitio y el contacto del aviso, y devuelve la
+respuesta del orquestador sin reinterpretarla. El artefacto —asistentes, entradas, QR— se queda en el
+CMS, en sus propias rutas. La ruta vieja (`/api/eventos/checkout|confirm`) sigue intacta: el retiro
+es un paso de cierre que va DESPUÉS de la F4. Plan y mediciones previas:
+`_informes/75-adr-0140-f3-plan.json`.
+
+Commits CMS (rama `lego/integracion`): `33ba1c89` (los tres avisos de ImageSharp, uno por uno),
+`9cb59324` (la orden de un invitado ya no se deriva de lo que compra), `b29e16ab` (`al_fallar: seguir` y
+lo efímero por fase), `a2fa0322` (`omitir_si_cero`), `f9b0577a` (la carpeta de recogida: el aviso se
+verifica abriendo el `.eml`), `22652510` (`notifications.avisar`), `89216df7` (la compra avisa al
+comprador), `c7c99fc2` (lo que pone la puerta va en cabeceras, y la compra es de quien la abrió),
+`f8f8fde4` (el precio con vigencia y tope), `3d3186fd` (`Bff.Eventos` publica la oferta), `471de27a`
+(el CMS la publica), `cbb76993` (la puerta, sin flujos), `57256ba6` (el artefacto), `8d34283f` (se
+abre `eventos.compra`) y el de esta sección. UI: `a8f072d` (el generador sabe de la puerta) y `8ce8633`
+(el tipo con las cuatro operaciones, par del paso 14).
+
+**Cómo se verificó**
+- Cada paso con build en 0 avisos y las tres suites en verde (4404 tests en el árbol del CMS al
+  cerrar; 843 en `tools` del UI). El oráculo de la F1 —`TicketingCompensationTests`,
+  `ReintentoTrasDeshacerTests`, `ComisionDeServicioTests`— y `TicketingSagaPersistidaTests` no se
+  tocaron: 46/46 en cada paso.
+- La compra de verdad corre en `Servicios.Tests` contra el `Program` de `Bff.Eventos` y Pricing,
+  Inventory, Payments y Notifications reales en el arnés: el cobro, la entrega, el `.eml`, el fichero
+  de la saga y el log se miran donde quedan. La puerta y el artefacto, en `CMS.Tests` contra el
+  contrato COMITEADO de `Bff.Eventos` —la tabla sale del mismo JSON—, sin referenciar el otro árbol.
+- `humo-portada` (puerto 5210) en verde con la validación de la puerta al arrancar, antes y después
+  de abrir el flujo.
+- **Sin medir en vivo**: la verificación con procesos reales y el navegador (paso 16 del plan) la
+  hace otro. Las cifras de esta sección son de las suites.
+
+**Lo que la F3 decidió, y entra en la decisión**
+1. **La tabla sale del contrato, no de la configuración.** El orquestador marca cada endpoint que
+   expone con `.EnLaPuerta(flujo, operacion)`; el contrato lo publica como `x-synergos-flujo`; el CMS
+   incrusta los `Synergos.Bff.*.json` y lo no marcado no existe (el mismo 404 que un flujo
+   inventado). El destino va por convención (`Synergos.Bff.X` → `Synergos:X:BaseUrl`); en
+   `Synergos:Puerta:Flujos:<clave>` sólo va lo de cada flujo (`Acceso`, `SujetoKind`, `Negocio`,
+   `Aviso`), validado al arrancar contra la tabla y las secciones de negocio.
+2. **Lo que pone la puerta viaja en cabeceras declaradas** (`x-synergos-puerta`):
+   `X-Synergos-Sujeto` (el `Kind` del flujo y el `MemberKey`), `X-Synergos-Negocio` (sólo los campos
+   declarados de la sección del sitio) y `X-Synergos-Contacto` (sólo donde la operación lo declara).
+   El cuerpo del navegador pasa byte a byte, y del navegador no viaja ninguna otra cabecera. La
+   `Idempotency-Key` se reemite atada al sujeto (`pta-` + SHA-256, 44 caracteres).
+3. **La compra es de quien la abrió, y lo comprueba el orquestador** (`ISagaConDueno` en
+   `Bff.Core`): una saga ajena es el mismo 404 que una que no existe, y abrir con la llave de otro
+   abre otra.
+4. **El calendario de venta y el tope por compra se mudan a la vigencia y el tope del precio**
+   (`Api.Pricing`), y el orquestador publica la oferta —precio, ventana `[abre, min(cierra,
+   empieza))`, impuesto 0, aforo declarado con ajustes relativos y llave— que el CMS le manda al
+   publicar un `eventPage`, al crear un evento de organizador o a mano.
+5. **El aviso es un paso** (`notifications.avisar`, `al_fallar: seguir`): un aviso que no sale no
+   devuelve la plata; el contacto es una entrada efímera de `cerrar` y no se guarda en la saga.
+6. **El artefacto se queda en el CMS y fuera de la puerta**: asistentes antes de cerrar y entradas
+   al leer una compra `Completed` del miembro; sin asistentes, el comprador es portador de todas; lo
+   confirmado no toca la red.
+7. **Una sola plomería de pagos**: la puerta que abre un flujo hacia un orquestador con destino cuenta
+   como «la plata la mueve `Api.Payments`»; con llaves de Wompi elegibles del lado del CMS, no arranca.
+
+**Corrección de la decisión 4 (decidido por el arquitecto, 2026-10-08)**: en la F3 la puerta **no**
+emite ni reenvía el token de identidad. Declara el sujeto en `X-Synergos-Sujeto`: ningún orquestador
+lee el token, y leerlo pondría la llave HMAC de `Api.Identity` en cada `Bff.*`. **Se reabre** el día
+que una capacidad detrás de un orquestador necesite saber **cómo** se identificó la persona y no sólo
+quién es (CLAUDE.md §11). Eventos sigue en la lista de los que nombran al sujeto por la palabra de
+quien llama, que ahora es el CMS con sesión.
+
+**Premisas de esta ADR que la F3 corrigió**
+- «Devuelve su respuesta sin reinterpretarla» junto con «se retira el motor» dejaba la compra cobrada
+  y sin entradas: la respuesta del orquestador no trae entradas. El artefacto se quedó en el CMS.
+- «Se retira el motor en proceso» en la F3: no aguanta sin la F4 (el cliente actual lee mal las
+  respuestas del orquestador) ni sin la oferta publicada (nadie publicaba precio ni aforo). El retiro
+  va después de la F4.
+- «Emite el token y reenvía»: ver la corrección de arriba.
+- «La tabla flujo → orquestador sale de la configuración»: sale del contrato y de la convención.
+- «Cero código por vertical» chocaba con el calendario de venta, que sólo aplicaba el CMS: se mudó al
+  precio, no a la puerta.
+- «El aviso pasa a ser un paso» habría devuelto la plata: hacían falta `al_fallar: seguir` y lo
+  efímero, que la F1 había diferido; y el aviso le llegaba al primer asistente, no al comprador.
+- Lo gratis no pasaba por el flujo declarado (`payments.zero_amount`): `omitir_si_cero`.
+- La correlación se partía en dos con un UUID con guiones: el CMS la limpia ahora con la regla de
+  `Synergos.Shared` (`CorrelacionUnaSolaTests`).
+- «El consumidor CMS de `Bff.Eventos` lo reemplaza la puerta»: no del todo; el artefacto y la ruta
+  vieja leen una compra, y lo cruza `ConsumidorCmsDeBffEventosTests`.
+- «Cada paso con las tres suites en verde» exigía antes resolver los tres avisos altos de
+  `SixLabors.ImageSharp` 3.1.12 (la última 3.x; el parche es 4.1.2): se suprimen uno por uno, con su
+  razón, y no `NoWarn NU1903`.
+
+**Mutantes** (cada uno aplicado por líneas, visto en el diff, rojo y restaurado; el detalle, en el
+mensaje de cada commit): `al_fallar` tratado como abortar; lo efímero guardado en la saga; la llave
+del aviso con un `Guid`; enviar sin dirección; quitar `al_fallar` del paso (devuelve la plata);
+`omitir_si_cero` ignorado; el contacto en un log; la ruta vieja mandando contacto; sin comprobar el
+dueño; el sujeto opcional; el comprador otra vez del cuerpo; sin negocio, comisión 0; el diente 4 sin
+mirar el sujeto de la puerta; la vigencia con el hasta incluido o ignorada y el tope por línea; la
+ventana sin `min(cierra, empieza)`, impuesto 1900, declarar sin buscar, el ajuste por el aforo nuevo y
+sin terminar el ajuste a medias; el publicador que lanza o publica al arrancar; la puerta que copia
+las cabeceras del navegador, que nombra un flujo, con techo de 30 s, sin normalizar la correlación,
+con el `.dockerignore` sin los contratos, el 401 crudo, las páginas de estado encendidas, sin mismo
+origen o sin 415 (en la puerta y en el artefacto), la llave del navegador tal cual; emitir sin mirar
+`Completed`, sin exigir dueño, sin asistentes ninguna entrada, reconciliar lo confirmado, leer
+`holds`; marcar `RetryTicketPurchase`; la plomería sin la condición de la puerta. Todos rojos; los
+que resultaron equivalentes en un test se anotaron y se reforzó el test.
+
+**Lo que queda, dicho**
+- **Paso 16, la verificación en vivo**: con los procesos reales, `Synergos:Eventos:BaseUrl`, la
+  oferta republicada y el navegador del miembro (mismo origen real, `SameSite` de la cookie). La hace
+  otro.
+- **La F4, en el UI**: el cliente generado y `<synergos-flujo>` sobre abrir, asistentes, cerrar y
+  entradas; pedir el login antes de pagar (la compra por la puerta es de miembros); traducir por
+  `code` (ADR 0136); una página que sirva el enlace del aviso (`Aviso.Ruta`).
+- **El retiro (paso 19)**, sólo después de la F4 en `lego/integracion` y la CDN republicada:
+  checkout y confirm salen de `EventosController`, y se borran el motor en proceso de la compra y la
+  mitad de compra de `HttpEventTicketingService`. Con el retiro, un clon limpio deja de vender
+  entradas sin levantar servicios.
+- **El token de identidad (paso 18)**: descartado en la F3; se reabre con el disparador de arriba.
+- **El oráculo del molde (G-8) pierde dos ficheros**: el publicador de la oferta
+  (`IEventOfferPublisher`, `HttpEventOfferPublisher`) no lo predice el doc 12. Es un hallazgo para el
+  molde, y la línea base se movió con él (`tools/spec-valida.baseline.json`: 23 → 26 rutas, 92,3 %).
+- **El issue público para evaluar `SixLabors.ImageSharp` 4 bajo Umbraco 13** quedó redactado y sin
+  abrir: abrir algo público lo decide una persona.
+- **Hasta el retiro conviven dos destinatarios del aviso**: la ruta vieja avisa desde el CMS y la
+  puerta desde el orquestador; nunca para la misma compra.
 
 ## Relación con otras ADRs
 
