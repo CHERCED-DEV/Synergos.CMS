@@ -29,9 +29,6 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
     /// <summary>Nombre del <c>HttpClient</c> con nombre que el composer registra.</summary>
     public const string ClientName = "alquiler-bff";
 
-    /// <summary>La llave compartida servicio↔servicio.</summary>
-    public const string ApiKeyHeader = "X-Synergos-Key";
-
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly IHttpClientFactory _factory;

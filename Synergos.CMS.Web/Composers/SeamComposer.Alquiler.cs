@@ -69,25 +69,13 @@ public sealed partial class SeamComposer
         // UN interruptor para UN flujo, que es la forma orquestada: el ORDEN entre apartar la
         // ventana y retener la garantía es precisamente lo que el orquestador aporta
         // (`the_switch_count_tells_the_form`). El default es el motor en proceso.
-        if (string.Equals(builder.Config["Synergos:Alquiler:Mode"], "Bff", StringComparison.OrdinalIgnoreCase))
+        if (Interruptor.Encendido(builder.Config, "Synergos:Alquiler:Mode", "Bff", new AlquilerSettings().Mode))
         {
-            var aBase = builder.Config["Synergos:Alquiler:BaseUrl"];
-            var aKey = builder.Config["Synergos:Alquiler:ApiKey"];
-            var aTimeout = int.TryParse(builder.Config["Synergos:Alquiler:TimeoutSeconds"], out var at) && at > 0
-                ? at
-                : 30;
-
-            services.AddHttpClient(HttpEquipmentRentalService.ClientName, http =>
-            {
-                var url = string.IsNullOrWhiteSpace(aBase) ? "http://127.0.0.1:5305/" : aBase;
-                http.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-                http.Timeout = TimeSpan.FromSeconds(aTimeout);
-                if (!string.IsNullOrWhiteSpace(aKey))
-                {
-                    http.DefaultRequestHeaders.Add(HttpEquipmentRentalService.ApiKeyHeader, aKey);
-                }
-            })
-            .AddHttpMessageHandler<CorrelationForwardingHandler>();
+            // La pieza pone base, llave compartida, timeout, correlación, telemetría y reintento
+            // (ClienteDelArbolDeServicios): ningún composer los vuelve a escribir a mano.
+            services.AddClienteDelArbolDeServicios(
+                HttpEquipmentRentalService.ClientName,
+                DestinoDelArbol.De(builder.Config.GetSection("Synergos:Alquiler"), "http://127.0.0.1:5305/", 30));
 
             services.AddSingleton<IEquipmentRentalService>(sp => new HttpEquipmentRentalService(
                 sp.GetRequiredService<IHttpClientFactory>(),
