@@ -21,6 +21,8 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="End">Hasta cuándo.</param>
 /// <param name="RentalTotal">Lo que se cobró por el alquiler.</param>
 /// <param name="DepositHeld">Lo que se retuvo. Es la cifra que alguien va a discutir.</param>
+/// <param name="Currency">La moneda de los importes (ISO 4217). Va dentro de lo sellado: una cifra sin
+/// moneda no se puede discutir.</param>
 /// <param name="IssuedUtc">Cuándo se emitió.</param>
 /// <param name="Seal">El sello, o vacío si el sellador no estaba disponible.</param>
 public sealed record RentalAgreement(
@@ -33,5 +35,6 @@ public sealed record RentalAgreement(
     DateOnly End,
     decimal RentalTotal,
     decimal DepositHeld,
+    string Currency,
     DateTimeOffset IssuedUtc,
     string Seal);

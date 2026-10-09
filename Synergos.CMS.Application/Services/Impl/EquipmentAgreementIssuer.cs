@@ -46,7 +46,7 @@ public sealed class EquipmentAgreementIssuer
         ArgumentNullException.ThrowIfNull(rental);
 
         var subject = new AgreementSubject(
-            rental.RentalId, rental.RenterId, rental.EquipmentId, rental.DepositHeld);
+            rental.RentalId, rental.RenterId, rental.EquipmentId, rental.DepositHeld, rental.Quote.Currency);
 
         var agreement = new RentalAgreement(
             RentalId: rental.RentalId,
@@ -58,6 +58,7 @@ public sealed class EquipmentAgreementIssuer
             End: rental.End,
             RentalTotal: rental.Quote.RentalTotal,
             DepositHeld: rental.DepositHeld,
+            Currency: rental.Quote.Currency,
             IssuedUtc: _clock.GetUtcNow(),
             Seal: _signer?.Seal(subject) ?? string.Empty);
 
@@ -78,6 +79,7 @@ public sealed class EquipmentAgreementIssuer
         }
 
         return _signer.Matches(agreement.Seal, new AgreementSubject(
-            agreement.RentalId, agreement.RenterId, agreement.EquipmentId, agreement.DepositHeld));
+            agreement.RentalId, agreement.RenterId, agreement.EquipmentId, agreement.DepositHeld,
+            agreement.Currency));
     }
 }

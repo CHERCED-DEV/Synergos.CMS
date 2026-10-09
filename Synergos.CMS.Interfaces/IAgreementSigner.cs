@@ -10,8 +10,9 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="RenterId">El seudónimo de quien lo firmó.</param>
 /// <param name="EquipmentId">Qué equipo salió.</param>
 /// <param name="DepositHeld">Cuánto se retuvo. Es la cifra que alguien va a discutir.</param>
+/// <param name="Currency">En qué moneda: «400000» sin ella no es una cifra que se pueda discutir (#204).</param>
 public sealed record AgreementSubject(
-    string RentalId, string RenterId, string EquipmentId, decimal DepositHeld);
+    string RentalId, string RenterId, string EquipmentId, decimal DepositHeld, string Currency);
 
 /// <summary>
 /// Sella un contrato de alquiler para que alguien de FUERA pueda comprobarlo sin creernos.

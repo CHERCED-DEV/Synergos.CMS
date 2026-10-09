@@ -68,8 +68,8 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
             return null;
         }
 
-        var dias = Dias(request);
-        return dias <= 0 ? null : Cotizar(equipo, request.Quantity, dias);
+        var dias = ReglasDeAlquiler.Dias(request);
+        return dias <= 0 ? null : ReglasDeAlquiler.Cotizar(equipo, request.Quantity, dias);
     }
 
     /// <inheritdoc />
@@ -103,31 +103,10 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
                 return Rechazo("equipment_not_found", $"No existe el equipo '{request.EquipmentId}'.");
             }
 
-            var dias = Dias(request);
-            if (dias <= 0)
+            // Las reglas del catálogo, las mismas que aplica el camino del orquestador (#204).
+            if (ReglasDeAlquiler.Revisar(equipo, request, _maxRentalDays) is { } no)
             {
-                return Rechazo("bad_window",
-                    "La devolución tiene que ser posterior al retiro: del 1 al 2 es un día.");
-            }
-
-            if (_maxRentalDays > 0 && dias > _maxRentalDays)
-            {
-                // Distinto de window_out_of_bounds a propósito: el remedio no es elegir otras
-                // fechas, es que este despliegue no puede retener una garantía tanto tiempo.
-                return Rechazo("window_too_long",
-                    $"Este despliegue no alquila más de {_maxRentalDays} días: una autorización "
-                    + "de garantía no dura más, y al devolver no quedaría nada que liberar.");
-            }
-
-            if (dias < equipo.MinDays || dias > equipo.MaxDays)
-            {
-                return Rechazo("window_out_of_bounds",
-                    $"'{equipo.Name}' se alquila entre {equipo.MinDays} y {equipo.MaxDays} días.");
-            }
-
-            if (request.Quantity < 1)
-            {
-                return Rechazo("bad_quantity", "Hay que alquilar al menos una unidad.");
+                return Rechazo(no.Codigo, no.Motivo);
             }
 
             var libres = await LibresAsync(equipo, request, cancellationToken).ConfigureAwait(false);
@@ -139,7 +118,7 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
                         $"Quedan {libres} unidades de '{equipo.Name}' en esas fechas.");
             }
 
-            var quote = Cotizar(equipo, request.Quantity, dias);
+            var quote = ReglasDeAlquiler.Cotizar(equipo, request.Quantity, ReglasDeAlquiler.Dias(request));
             var alquiler = new Rental(
                 RentalId: NuevoId(),
                 EquipmentId: equipo.Id,
@@ -249,39 +228,6 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
             _gate.Release();
         }
     }
-
-    /// <summary>
-    /// El valor del día que aplica para una duración: el tramo más alto que la cubre, o la
-    /// tarifa base.
-    /// </summary>
-    /// <remarks>
-    /// Los tramos llegan ya ordenados y sin repetidos de <c>EquipmentContentRules</c>, así que
-    /// acá no hay desempate que tomar — que es justo lo que el #131 pide evitar.
-    /// </remarks>
-    internal static decimal ValorDelDia(RentalEquipment equipo, int dias)
-    {
-        var tramo = equipo.Rates
-            .Where(r => r.MinDays <= dias)
-            .OrderByDescending(r => r.MinDays)
-            .FirstOrDefault();
-
-        return tramo?.PerDay ?? equipo.DailyRate;
-    }
-
-    private static RentalQuote Cotizar(RentalEquipment equipo, int cantidad, int dias)
-    {
-        var porDia = ValorDelDia(equipo, dias);
-        return new RentalQuote(
-            EquipmentId: equipo.Id,
-            Quantity: cantidad,
-            Days: dias,
-            PerDay: porDia,
-            RentalTotal: porDia * dias * cantidad,
-            Deposit: equipo.Deposit * cantidad);
-    }
-
-    private static int Dias(RentalRequest request)
-        => request.End.DayNumber - request.Start.DayNumber;
 
     /// <summary>Cuántas unidades quedan libres en la ventana pedida.</summary>
     /// <remarks>

@@ -76,7 +76,10 @@ public sealed class StubEquipmentRentalServiceTests
                 new EquipmentRate("semana", "Semana", 7, 30_000m, ""),
                 new EquipmentRate("mes", "Mes", 28, 24_000m, ""),
             },
-            Specs: Array.Empty<EquipmentSpec>());
+            Specs: Array.Empty<EquipmentSpec>(),
+            // Una moneda que ningún respaldo produciría: si la cotización la pierde y alguien la
+            // rellena con «COP», el test lo ve (#204).
+            Currency: "USD");
 
     private static StubEquipmentRentalService Motor(
         out AlmacenEnMemoria almacen, RentalEquipment? equipo = null, int maxRentalDays = 30)
@@ -95,6 +98,20 @@ public sealed class StubEquipmentRentalServiceTests
     }
 
     // ── La tarifa ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task La_cotizacion_y_el_alquiler_llevan_la_moneda_del_CATALOGO()
+    {
+        // El catálogo de prueba está en USD a propósito: una moneda que ningún respaldo pone. Si
+        // la cotización la perdiera y alguien la rellenara con el peso, esto se pondría rojo (#204).
+        var motor = Motor(out _);
+
+        var q = await motor.QuoteAsync(Pedido(dias: 3));
+        var r = await motor.ReserveAsync(Pedido(dias: 3), "llave-moneda");
+
+        Assert.Equal("USD", q!.Currency);
+        Assert.Equal("USD", r.Rental!.Quote.Currency);
+    }
 
     [Fact]
     public async Task Tres_dias_cobran_la_tarifa_BASE_porque_ningun_tramo_los_cubre()

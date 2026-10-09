@@ -392,13 +392,13 @@ public sealed record SettleRequest(decimal? Amount, string? IdempotencyKey);
 /// <param name="Units">Cuántas unidades hay.</param>
 public sealed record EquipmentCardDto(
     string EquipmentId, string Name, string Category, string Summary,
-    string? CoverUrl, decimal DailyRate, decimal Deposit, int Units)
+    string? CoverUrl, decimal DailyRate, decimal Deposit, int Units, string Currency)
 {
     /// <summary>Proyecta un equipo a su tarjeta.</summary>
     /// <param name="e">El equipo.</param>
     /// <returns>La tarjeta.</returns>
     public static EquipmentCardDto From(RentalEquipment e)
-        => new(e.Id, e.Name, e.Category, e.Summary, e.CoverUrl, e.DailyRate, e.Deposit, e.Units);
+        => new(e.Id, e.Name, e.Category, e.Summary, e.CoverUrl, e.DailyRate, e.Deposit, e.Units, e.Currency);
 }
 
 /// <summary>La ficha completa de un equipo.</summary>
@@ -423,7 +423,7 @@ public sealed record EquipmentDetailDto(
     string? CoverUrl, IReadOnlyList<string> GalleryUrls, decimal DailyRate, decimal Deposit,
     int Units, int MinDays, int MaxDays,
     IReadOnlyList<string> Includes, IReadOnlyList<string> Requirements,
-    IReadOnlyList<RateDto> Rates, IReadOnlyList<SpecDto> Specs)
+    IReadOnlyList<RateDto> Rates, IReadOnlyList<SpecDto> Specs, string Currency)
 {
     /// <summary>Proyecta un equipo a su ficha.</summary>
     /// <param name="e">El equipo.</param>
@@ -432,7 +432,8 @@ public sealed record EquipmentDetailDto(
         => new(e.Id, e.Name, e.Category, e.Summary, e.Description, e.CoverUrl, e.GalleryUrls,
             e.DailyRate, e.Deposit, e.Units, e.MinDays, e.MaxDays, e.Includes, e.Requirements,
             e.Rates.Select(r => new RateDto(r.Code, r.Label, r.MinDays, r.PerDay, r.Description)).ToList(),
-            e.Specs.Select(s => new SpecDto(s.Label, s.Value)).ToList());
+            e.Specs.Select(s => new SpecDto(s.Label, s.Value)).ToList(),
+            e.Currency);
 }
 
 /// <summary>Un tramo de tarifa.</summary>
@@ -456,13 +457,14 @@ public sealed record SpecDto(string Label, string Value);
 /// <param name="RentalTotal">Lo que se cobra.</param>
 /// <param name="Deposit">Lo que se RETIENE. No se suma al total.</param>
 public sealed record QuoteDto(
-    string EquipmentId, int Quantity, int Days, decimal PerDay, decimal RentalTotal, decimal Deposit)
+    string EquipmentId, int Quantity, int Days, decimal PerDay, decimal RentalTotal, decimal Deposit,
+    string Currency)
 {
     /// <summary>Proyecta una cotización.</summary>
     /// <param name="q">La cotización.</param>
     /// <returns>El DTO.</returns>
     public static QuoteDto From(RentalQuote q)
-        => new(q.EquipmentId, q.Quantity, q.Days, q.PerDay, q.RentalTotal, q.Deposit);
+        => new(q.EquipmentId, q.Quantity, q.Days, q.PerDay, q.RentalTotal, q.Deposit, q.Currency);
 }
 
 /// <summary>Un alquiler tal como lo lee el otro árbol.</summary>
@@ -514,7 +516,7 @@ public sealed record RentalDto(
 /// </param>
 public sealed record AgreementDto(
     string RentalId, string EquipmentName, int Quantity, DateOnly Start, DateOnly End,
-    decimal RentalTotal, decimal DepositHeld, DateTimeOffset IssuedUtc, string Seal, bool Verified)
+    decimal RentalTotal, decimal DepositHeld, string Currency, DateTimeOffset IssuedUtc, string Seal, bool Verified)
 {
     /// <summary>Proyecta un comprobante.</summary>
     /// <param name="a">El comprobante.</param>
@@ -522,5 +524,5 @@ public sealed record AgreementDto(
     /// <returns>El DTO.</returns>
     public static AgreementDto From(RentalAgreement a, bool comprobado)
         => new(a.RentalId, a.EquipmentName, a.Quantity, a.Start, a.End,
-            a.RentalTotal, a.DepositHeld, a.IssuedUtc, a.Seal, comprobado);
+            a.RentalTotal, a.DepositHeld, a.Currency, a.IssuedUtc, a.Seal, comprobado);
 }

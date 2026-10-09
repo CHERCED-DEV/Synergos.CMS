@@ -13,6 +13,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubEquipmentCatalogProvider : IEquipmentCatalogProvider
 {
+    /// <summary>La moneda de la demo: los importes de abajo están escritos en pesos.</summary>
+    private const string Moneda = "COP";
+
     private static readonly IReadOnlyList<RentalEquipment> Semilla = new[]
     {
         new RentalEquipment(
@@ -40,7 +43,8 @@ public sealed class StubEquipmentCatalogProvider : IEquipmentCatalogProvider
             {
                 new EquipmentSpec("Altura útil", "2,0 m"),
                 new EquipmentSpec("Carga máxima", "250 kg"),
-            }),
+            },
+            Currency: Moneda),
         new RentalEquipment(
             Id: "planta-electrica-5kva",
             Name: "Planta eléctrica 5 kVA",
@@ -63,7 +67,8 @@ public sealed class StubEquipmentCatalogProvider : IEquipmentCatalogProvider
                 new EquipmentSpec("Potencia", "5 kVA"),
                 new EquipmentSpec("Combustible", "Gasolina corriente"),
                 new EquipmentSpec("Peso", "78 kg"),
-            }),
+            },
+            Currency: Moneda),
         new RentalEquipment(
             Id: "kit-sonido-500w",
             Name: "Kit de sonido 500 W",
@@ -80,7 +85,8 @@ public sealed class StubEquipmentCatalogProvider : IEquipmentCatalogProvider
             Includes: new[] { "Dos trípodes", "Cableado", "Dos micrófonos alámbricos" },
             Requirements: Array.Empty<string>(),
             Rates: Array.Empty<EquipmentRate>(),
-            Specs: new[] { new EquipmentSpec("Potencia total", "500 W") }),
+            Specs: new[] { new EquipmentSpec("Potencia total", "500 W") },
+            Currency: Moneda),
     };
 
     /// <inheritdoc />

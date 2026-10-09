@@ -65,5 +65,5 @@ public sealed class HmacAgreementSigner : IAgreementSigner
     /// </remarks>
     private static string Payload(AgreementSubject s)
         => string.Join('\u001f', s.RentalId, s.RenterId, s.EquipmentId,
-            s.DepositHeld.ToString("0.####", CultureInfo.InvariantCulture));
+            s.DepositHeld.ToString("0.####", CultureInfo.InvariantCulture), s.Currency);
 }

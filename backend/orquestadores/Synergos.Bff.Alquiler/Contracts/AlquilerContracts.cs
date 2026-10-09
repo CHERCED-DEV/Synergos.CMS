@@ -44,6 +44,11 @@ public sealed record SettleRentalRequest(MoneyPayload? Amount);
 /// <param name="RenterId">Quién alquila.</param>
 /// <param name="State">En qué punto está, como lo lee el CMS.</param>
 /// <param name="RentalTotal">Lo que se cobró.</param>
+/// <param name="Deposit">
+/// La garantía que se retuvo al reservar. Distinta de <paramref name="DepositHeld"/>, que es lo que
+/// SIGUE retenido: cerrado el alquiler aquélla no cambia y ésta vale cero, y sin la primera el CMS
+/// tendría que adivinar con el catálogo de hoy cuánto se retuvo en su día (#204).
+/// </param>
 /// <param name="DepositHeld">
 /// Cuánto sigue retenido: el monto mientras el equipo está fuera, cero una vez cerrado y
 /// <b>nulo cuando no se sabe</b> — la compensación quedó colgada y puede que la garantía siga
@@ -60,6 +65,7 @@ public sealed record RentalResponse(
     string RenterId,
     string State,
     MoneyPayload RentalTotal,
+    MoneyPayload Deposit,
     decimal? DepositHeld,
     decimal DamageCharged)
 {
@@ -76,6 +82,7 @@ public sealed record RentalResponse(
             s.Renter.Id,
             Estado(s),
             new MoneyPayload(s.RentalTotal.Amount, s.RentalTotal.Currency),
+            new MoneyPayload(s.Deposit.Amount, s.Deposit.Currency),
             Retenido(s),
             s.DamageCharged.Amount);
 

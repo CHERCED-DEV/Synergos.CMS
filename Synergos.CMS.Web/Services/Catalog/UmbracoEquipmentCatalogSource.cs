@@ -38,6 +38,14 @@ public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipme
     private const string EquipmentPageAlias = "equipmentPage";
     private const string SiteRootAlias = "siteRoot";
 
+    /// <summary>
+    /// Moneda de las tarifas y la garantía. Constante y no una propiedad de schema, por lo mismo
+    /// que en Eventos, Realty y Academy: un deploy es un origen, y dejarla escribir al editor
+    /// garantiza «cop»/«COP »/«pesos» en el mismo catálogo. El día que haya un segundo país sube a
+    /// configuración, no a un campo por equipo (#204).
+    /// </summary>
+    private const string Currency = "COP";
+
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _catalog;
     private readonly IOptionsMonitor<AlquilerSettings> _alquiler;
@@ -186,7 +194,8 @@ public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipme
             Includes: ReadLines(node, "equipmentIncludes"),
             Requirements: ReadLines(node, "equipmentRequirements"),
             Rates: tarifas.Value,
-            Specs: ReadSpecs(node));
+            Specs: ReadSpecs(node),
+            Currency: Currency);
     }
 
     private static IReadOnlyList<string> ReadLines(IPublishedContent node, string alias)

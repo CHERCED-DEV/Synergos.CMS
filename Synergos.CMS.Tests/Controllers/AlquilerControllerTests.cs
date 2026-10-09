@@ -74,7 +74,7 @@ public sealed class AlquilerControllerTests
         public int Cierres { get; private set; }
 
         public Task<RentalQuote?> QuoteAsync(RentalRequest r, CancellationToken c = default)
-            => Task.FromResult<RentalQuote?>(new RentalQuote(r.EquipmentId, 1, 3, 40_000m, 120_000m, 250_000m));
+            => Task.FromResult<RentalQuote?>(new RentalQuote(r.EquipmentId, 1, 3, 40_000m, 120_000m, 250_000m, "COP"));
 
         public Task<RentalResult> ReserveAsync(RentalRequest r, string k, CancellationToken c = default)
             => Task.FromResult(_resultado);
@@ -101,7 +101,7 @@ public sealed class AlquilerControllerTests
 
     private static Rental Alquiler() => new(
         "ALQ-1", "andamio", 1, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 4), Miembro.ToString("N"),
-        RentalState.Reserved, new RentalQuote("andamio", 1, 3, 40_000m, 120_000m, 250_000m),
+        RentalState.Reserved, new RentalQuote("andamio", 1, 3, 40_000m, 120_000m, 250_000m, "COP"),
         250_000m, 0m);
 
     private static AlquilerController Borde(

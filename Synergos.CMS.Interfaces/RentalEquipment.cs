@@ -31,6 +31,10 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="Requirements">Lo que tiene que cumplir quien lo alquila.</param>
 /// <param name="Rates">Tramos de descuento por duración, ordenados por <c>MinDays</c>.</param>
 /// <param name="Specs">Las filas de la ficha técnica.</param>
+/// <param name="Currency">
+/// La moneda de las tarifas y la garantía (ISO 4217). La pone la fuente del catálogo y viaja con
+/// cada importe hasta la UI, que la pinta sin suponerla (CMS#196, #204).
+/// </param>
 public sealed record RentalEquipment(
     string Id,
     string Name,
@@ -47,7 +51,8 @@ public sealed record RentalEquipment(
     IReadOnlyList<string> Includes,
     IReadOnlyList<string> Requirements,
     IReadOnlyList<EquipmentRate> Rates,
-    IReadOnlyList<EquipmentSpec> Specs);
+    IReadOnlyList<EquipmentSpec> Specs,
+    string Currency);
 
 /// <summary>Un tramo de tarifa: a partir de cuántos días aplica y cuánto vale el día ahí.</summary>
 /// <param name="Code">Identificador corto dentro del equipo.</param>

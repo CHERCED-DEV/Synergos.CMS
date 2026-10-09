@@ -24,8 +24,10 @@ public sealed record RentalRequest(
 /// <param name="PerDay">El valor del día que aplicó, ya resuelto contra los tramos.</param>
 /// <param name="RentalTotal">Lo que se cobra: <c>PerDay × Days × Quantity</c>.</param>
 /// <param name="Deposit">Lo que se retiene y se devuelve: <c>garantía × Quantity</c>.</param>
+/// <param name="Currency">La moneda de los tres importes, la del catálogo (ISO 4217).</param>
 public sealed record RentalQuote(
-    string EquipmentId, int Quantity, int Days, decimal PerDay, decimal RentalTotal, decimal Deposit);
+    string EquipmentId, int Quantity, int Days, decimal PerDay, decimal RentalTotal, decimal Deposit,
+    string Currency);
 
 /// <summary>En qué estado está un alquiler.</summary>
 /// <remarks>

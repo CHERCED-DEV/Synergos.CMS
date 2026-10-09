@@ -84,6 +84,7 @@ public sealed partial class SeamComposer
 
             services.AddSingleton<IEquipmentRentalService>(sp => new HttpEquipmentRentalService(
                 sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IEquipmentCatalogProvider>(),
                 sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
                 sp.GetRequiredService<ILogger<HttpEquipmentRentalService>>()));
         }
