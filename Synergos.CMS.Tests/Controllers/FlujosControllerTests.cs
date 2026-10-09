@@ -269,6 +269,43 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Empty(_orquestador.Pedidos);
     }
 
+    [Theory]
+    [InlineData("POST", "cerrar", "id=..")]
+    [InlineData("POST", "cancelar", "id=.")]
+    [InlineData("GET", "consultar", "id=%2E%2E")]
+    [InlineData("POST", "cerrar", "id=%2e")]
+    public async Task Un_parametro_de_ruta_que_es_un_segmento_de_punto_es_400_y_no_sale(string metodo, string operacion, string consulta)
+    {
+        // Escapado no cambia, y resuelto contra la dirección del orquestador movería la petición a una ruta
+        // que la tabla no marcó (cerrar con id=.. llegaba como POST /v1/confirm).
+        var r = await Pedir(metodo, operacion, consulta);
+
+        Assert.Equal((400, "puerta.parametro_invalido"), (r.Estado, r.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task Un_valor_con_puntos_que_no_es_un_segmento_de_punto_sale_en_su_ruta()
+    {
+        // El control: lo que se rechaza son «.» y «..» enteros, no cualquier punto.
+        var r = await Pedir("POST", "cerrar", "id=s.1..a");
+
+        Assert.Equal(200, r.Estado);
+        Assert.Equal("/v1/ticket-purchases/s.1..a/confirm", Assert.Single(_orquestador.Pedidos).Ruta);
+    }
+
+    [Fact]
+    public async Task El_reenvio_tampoco_pone_un_segmento_de_punto_en_la_ruta_aunque_se_lo_pasen()
+    {
+        // La red de abajo: quien arme los parámetros sin pasar por la puerta no sale a otra ruta.
+        var reenvio = new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance);
+        var cerrar = TablaDeLaCompra().Buscar(Flujo, "cerrar")!;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => reenvio.EnviarAsync(
+            cerrar, new Dictionary<string, string> { ["id"] = ".." }, null, new Dictionary<string, string>(), default));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
     [Fact]
     public async Task Sin_llave_es_400_y_sin_el_parametro_de_la_ruta_tambien()
     {

@@ -148,7 +148,15 @@ public sealed class ReenvioDeLaPuerta
         }
     }
 
+    /// <summary>
+    /// Si un valor es un segmento de punto («.» o «..»): <see cref="Uri.EscapeDataString"/> no lo escapa, y al
+    /// resolver la ruta relativa contra la dirección del orquestador, se lo come y sube de nivel.
+    /// </summary>
+    public static bool EsSegmentoDePunto(string valor) => valor is "." or "..";
+
     /// <summary>La ruta del orquestador con sus parámetros puestos, y su consulta con los demás.</summary>
+    /// <exception cref="ArgumentException">Si un parámetro de ruta es un segmento de punto: quien llama ya
+    /// tenía que haberlo rechazado (<c>puerta.parametro_invalido</c>), y salir así sería pedir otra ruta.</exception>
     private static string Ruta(OperacionDeLaPuerta op, IReadOnlyDictionary<string, string> parametros)
     {
         var ruta = op.Ruta;
@@ -156,6 +164,10 @@ public sealed class ReenvioDeLaPuerta
         foreach (var p in op.Parametros)
         {
             if (!parametros.TryGetValue(p.Nombre, out var valor)) continue;
+            if (p.EnLaRuta && EsSegmentoDePunto(valor))
+            {
+                throw new ArgumentException($"«{p.Nombre}» es un segmento de punto y no se pone en la ruta.", nameof(parametros));
+            }
             if (p.EnLaRuta) ruta = ruta.Replace("{" + p.Nombre + "}", Uri.EscapeDataString(valor), StringComparison.Ordinal);
             else consulta.Add($"{Uri.EscapeDataString(p.Nombre)}={Uri.EscapeDataString(valor)}");
         }

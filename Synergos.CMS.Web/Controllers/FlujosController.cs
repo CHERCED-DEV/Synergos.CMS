@@ -30,7 +30,8 @@ namespace Synergos.CMS.Web.Controllers;
 ///   <item>401 <c>puerta.sesion_requerida</c>.</item>
 ///   <item>403 <c>puerta.origen_no_permitido</c>, 415 <c>puerta.tipo_no_soportado</c> y 413
 ///   <c>puerta.cuerpo_demasiado_grande</c> (<see cref="FiltroMismoOrigenJson"/>).</item>
-///   <item>400 <c>puerta.llave_requerida</c> y 400 <c>puerta.parametro_requerido</c>.</item>
+///   <item>400 <c>puerta.llave_requerida</c>, 400 <c>puerta.parametro_requerido</c> y 400
+///   <c>puerta.parametro_invalido</c> (un parámetro de ruta que es «.» o «..»).</item>
 /// </list>
 /// <para>Y después lo que contesta el orquestador (<see cref="ReenvioDeLaPuerta"/>): sus 2xx y sus
 /// rechazos tal cual; 502 <c>puerta.llave_rechazada</c>, 502 <c>puerta.respuesta_invalida</c>, 503
@@ -134,12 +135,25 @@ public sealed class FlujosController : ControllerBase
         foreach (var p in op.Parametros)
         {
             var valor = Request.Query[p.Nombre].ToString();
-            if (!string.IsNullOrEmpty(valor)) parametros[p.Nombre] = valor;
-            else if (p.Requerido || p.EnLaRuta)
+            if (string.IsNullOrEmpty(valor))
             {
-                return Fallo(new FalloDeLaPuerta(StatusCodes.Status400BadRequest, "puerta.parametro_requerido",
-                    $"Hace falta «{p.Nombre}» en la consulta."));
+                if (p.Requerido || p.EnLaRuta)
+                {
+                    return Fallo(new FalloDeLaPuerta(StatusCodes.Status400BadRequest, "puerta.parametro_requerido",
+                        $"Hace falta «{p.Nombre}» en la consulta."));
+                }
+                continue;
             }
+
+            // Un valor que va EN LA RUTA no puede ser un segmento de punto: escaparlo no lo cambia, y al
+            // resolverlo contra la dirección del orquestador movería la petición a otra ruta que la tabla
+            // no marcó. La consulta ya llega decodificada, así que «%2E%2E» también cae acá.
+            if (p.EnLaRuta && ReenvioDeLaPuerta.EsSegmentoDePunto(valor))
+            {
+                return Fallo(new FalloDeLaPuerta(StatusCodes.Status400BadRequest, "puerta.parametro_invalido",
+                    $"«{p.Nombre}» no es un valor válido."));
+            }
+            parametros[p.Nombre] = valor;
         }
 
         if (op.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto)) cabeceras[LoQuePoneLaPuerta.CabeceraDelSujeto] = sujeto;

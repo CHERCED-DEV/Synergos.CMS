@@ -390,6 +390,12 @@ public sealed class ArtefactoDeEventos
     private async Task<(PurchaseDto? Compra, ResultadoDelArtefacto? Fallo)> LeerAsync(
         string compraId, (string Kind, string Id) sujeto, CancellationToken ct)
     {
+        // Un segmento de punto no es una compra: escaparlo no lo cambia y movería la lectura a otra ruta.
+        if (Puerta.ReenvioDeLaPuerta.EsSegmentoDePunto(compraId))
+        {
+            return (null, new ResultadoDelArtefacto(StatusCodes.Status404NotFound, "eventos.purchase_not_found", "La compra no existe."));
+        }
+
         using var req = new HttpRequestMessage(HttpMethod.Get, $"v1/ticket-purchases/{Uri.EscapeDataString(compraId)}");
         req.Headers.TryAddWithoutValidation(Cabecera, $"{sujeto.Kind}:{sujeto.Id}");
         try

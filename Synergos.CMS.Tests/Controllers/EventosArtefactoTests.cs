@@ -260,6 +260,16 @@ public sealed class EventosArtefactoTests : IDisposable
         Assert.Equal(EventOrderStatus.Confirmed, Assert.Single(await _ledger.LoadAllAsync()).Status);
     }
 
+    [Theory]
+    [InlineData("..")]
+    [InlineData(".")]
+    public async Task Un_segmento_de_punto_no_es_una_compra_y_no_sale_a_la_red(string id)
+    {
+        Assert.Equal((404, "eventos.purchase_not_found"), Fallo(await Controlador().Entradas(id, default)));
+        Assert.Equal((404, "eventos.purchase_not_found"), Fallo(await Controlador(DosAsistentes).AnotarAsistentes(id, default)));
+        Assert.Equal(0, _orquestador.Llamadas);
+    }
+
     [Fact]
     public async Task Sin_sesion_es_401_y_de_otro_origen_o_sin_JSON_no_se_anota()
     {
