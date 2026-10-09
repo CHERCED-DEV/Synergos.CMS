@@ -149,7 +149,16 @@ public sealed class TicketingFlow
         // NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
         // donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
         // allá de sus sagas, y entonces sería una capacidad mal cortada.
-        return await _flujo.EjecutarFaseAsync(Cerrar, sagaId, EventosFlowBinding.EntradaDeCerrar(contacto), ct);
+        var cerrada = await _flujo.EjecutarFaseAsync(Cerrar, sagaId, EventosFlowBinding.EntradaDeCerrar(contacto), ct);
+
+        // Otro «cerrar» de la misma compra terminó entre la guarda de arriba y el turno de éste: es
+        // el doble clic, y contesta lo mismo que si hubiera llegado después.
+        if (cerrada.Rejection?.Code == FlowRunner<TicketingSaga>.NoEnCurso
+            && _sagas.Find(sagaId) is { Status: SagaStatus.Completed } hecha)
+        {
+            return Result.Ok(hecha);
+        }
+        return cerrada;
     }
 
     /// <summary>Cancela una compra todavía sin confirmar.</summary>

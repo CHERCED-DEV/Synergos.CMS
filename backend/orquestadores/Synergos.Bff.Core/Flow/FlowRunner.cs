@@ -43,12 +43,31 @@ namespace Synergos.Bff.Core.Flow;
 ///   fachada antes del primer paso, y vive sólo en el contexto de esa llamada.</item>
 ///   <item>Al terminar la última fase, la saga queda <c>Completed</c> y lo que estaba armado,
 ///   hecho: el barrido no tiene nada que intentar.</item>
+///   <item><b>Una saga, un turno.</b> Cada fase corre con el MISMO arriendo con el que se deshace
+///   una saga (<see cref="ISagaLease"/>, #34), tomado antes de leerla y soltado al terminar. Así
+///   ninguna fase se intercala con otra fase de la misma saga ni con su compensación —la del
+///   barrido, la de abandono o la que pide quien compra—: sin turno, una fase escribía su copia en
+///   memoria encima de lo que la otra decidió, y un cierre terminaba <c>Completed</c> sobre una
+///   saga ya devuelta. Quien no consigue el turno recibe <see cref="Ocupada"/>, transitorio y sin
+///   tocar nada; el arriendo vence solo, así que un proceso muerto a media fase no deja la saga
+///   trabada.</item>
 /// </list>
 /// </remarks>
 public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 {
     /// <summary>El código con el que se rechaza continuar una saga que ya no está en curso.</summary>
     public const string NoEnCurso = "flow.not_running";
+
+    /// <summary>
+    /// El código con el que se rechaza una fase mientras otra operación tiene el turno de la saga.
+    /// </summary>
+    /// <remarks>
+    /// <b>Transitorio (<c>Unavailable</c>) y no un conflicto</b>, como <c>compensation_in_flight</c>:
+    /// no es que la fase no se pueda hacer, es que hay otra en curso. Quien lo recibe vuelve —el doble
+    /// clic, el reintento tras un 504— y entonces encuentra la saga como la dejó la otra: completada
+    /// (y la fachada contesta idempotente), deshecha, o en curso para seguir.
+    /// </remarks>
+    public const string Ocupada = "flow.busy";
 
     private readonly SagaEngine<TSaga> _motor;
     private readonly IRegistroDePasos _pasos;
@@ -121,7 +140,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// cuenta con lo que el binding declara efímero para esa fase.</param>
     /// <param name="ct">Cancelación.</param>
     /// <returns>La saga como quedó, o el rechazo ORIGINAL del paso que falló; <see cref="NoEnCurso"/>
-    /// si una fase que continúa encuentra la saga en otro estado que <c>Running</c>.</returns>
+    /// si una fase que continúa encuentra la saga en otro estado que <c>Running</c>;
+    /// <see cref="Ocupada"/> si otra operación tiene el turno de la saga, o si una fase que abre la
+    /// encuentra ya escrita por otra llamada con la misma llave.</returns>
     /// <exception cref="InvalidOperationException">Si la fase no existe, o si una fase que continúa
     /// no encuentra la saga: eso lo tiene que haber resuelto quien llama, con sus propios códigos de
     /// rechazo.</exception>
@@ -142,9 +163,17 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                 $"La fachada de «{_flujo.Clave}» declara que pone {string.Join(", ", sinPoner)} en «{fase}» y no lo pone.");
         }
 
-        // La que abre NO relee: la llave ya la resolvió quien llama con SagaEngine.Abrir, y la
-        // saga nace nueva aunque una llamada simultánea con la misma llave ya hubiera escrito — el
-        // flujo imperativo hacía lo mismo, y las llaves de cada paso son las que evitan duplicar.
+        // El turno ANTES de leer: lo que se lee sin él puede haberlo cambiado otra operación cuando
+        // esta escriba. Se suelta al salir, también si un paso lanza.
+        using var turno = _motor.TomarTurno(sagaId);
+        if (turno is null) return Result.Rejected<TSaga>(SinTurno(fase, sagaId));
+
+        // La que abre no continúa nada: la llave ya la resolvió quien llama con SagaEngine.Abrir, y
+        // la saga nace nueva. Si ya está escrita, otra llamada con la misma llave la abrió mientras
+        // ésta esperaba su turno: abrirla otra vez pisaría lo que la otra dejó —quizá ya cerrado—, y
+        // el reintento la resuelve con Abrir como cualquier llave usada.
+        if (abre && _motor.Find(sagaId) is not null) return Result.Rejected<TSaga>(SinTurno(fase, sagaId));
+
         var saga = abre ? null : _motor.Find(sagaId)
             ?? throw new InvalidOperationException($"La fase «{fase}» continúa la saga {sagaId} y no existe.");
 
@@ -174,8 +203,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // Una fase que abre y no reserva nada —o que saltó antes de reservar— igual deja su saga.
         if (corrida.Saga is null) Sembrar(corrida);
 
-        return Result.Ok(Terminar(corrida, ultima: ReferenceEquals(definicion, _flujo.Fases[^1])));
+        return Terminar(corrida, fase, ultima: ReferenceEquals(definicion, _flujo.Fases[^1]));
     }
+
+    /// <summary>Lo que contesta una fase que no consiguió el turno de su saga.</summary>
+    private static Rejection SinTurno(string fase, string sagaId)
+        => Rejection.Unavailable(Ocupada,
+            $"Otra operación sobre {sagaId} está en curso y «{fase}» no se intercala con ella. "
+            + "Vuelve a intentarlo en un momento: repetirla no duplica nada.");
 
     /// <summary>Lo que la fase que abre tiene al empezar: la entrada que puso la fachada.</summary>
     /// <exception cref="InvalidOperationException">Si la fachada no pone todo lo que el binding declara
@@ -379,13 +414,26 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         _motor.Put(saga);
     }
 
-    private TSaga Terminar(Corrida corrida, bool ultima)
+    private Result<TSaga> Terminar(Corrida corrida, string fase, bool ultima)
     {
         var saga = corrida.Saga!;
         if (!ultima)
         {
             if (corrida.SinGuardar) Guardar(corrida, saga);
-            return corrida.Saga!;
+            return Result.Ok(corrida.Saga!);
+        }
+
+        // Completar es la escritura que no se puede deshacer, y se hace contra el DISCO, no contra la
+        // copia de esta corrida: si el turno venció mientras un paso tardaba más que el arriendo y
+        // otro deshizo la saga, escribir Completed encima dejaría entradas emitibles sobre un cobro
+        // devuelto. Lo que otro decidió gana, y se grita.
+        if (_motor.Find(corrida.SagaId) is { Status: not SagaStatus.Running } enDisco)
+        {
+            _log.LogError(
+                "El flujo {Flujo} terminó «{Fase}» sobre la saga {Saga} y la encontró {Estado}: no se completa. Su turno venció antes de terminar.",
+                _flujo.Clave, fase, corrida.SagaId, enDisco.Status);
+            return Result.Rejected<TSaga>(Rejection.Conflict(NoEnCurso,
+                $"La fase «{fase}» terminó sobre {corrida.SagaId} y la saga ya está {enDisco.Status}."));
         }
 
         // Salió: ya no hay nada que deshacer. Lo armado se marca hecho para que el barrido no lo
@@ -400,7 +448,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             .WithStatus(SagaStatus.Completed)
             .WithCompensations(saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList()),
             null));
-        return corrida.Saga!;
+        return Result.Ok(corrida.Saga!);
     }
 
     /// <summary>Anota el fallo, deshace lo que ya se hizo y devuelve el rechazo original.</summary>
@@ -415,7 +463,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 
         _log.LogWarning("El flujo {Flujo} deshace la saga {Saga} ({Motivo}): {Error}", _flujo.Clave, saga.Id, motivo, rechazo);
         _motor.Put(_binding.ConError(saga, rechazo.ToString()));
-        await _motor.CompensateAsync(saga.Id, motivo, ct);
+
+        // Con el turno que ya tiene esta fase: el arriendo no es reentrante, y pedirlo otra vez
+        // dejaría la compensación en línea esperándose a sí misma hasta que la hiciera el barrido.
+        await _motor.CompensarConTurnoAsync(saga.Id, motivo, ct);
         return Result.Rejected<TSaga>(rechazo);
     }
 }

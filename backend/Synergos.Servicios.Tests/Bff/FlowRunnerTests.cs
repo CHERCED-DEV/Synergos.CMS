@@ -205,7 +205,7 @@ public sealed class FlowRunnerTests
 
     private sealed class Banco
     {
-        public Banco(string definicion = Definicion, BindingDePrueba? binding = null)
+        public Banco(string definicion = Definicion, BindingDePrueba? binding = null, ISagaLease? arriendo = null)
         {
             Sagas = new Almacen(Bitacora);
             var vocabulario = new SagaVocabulary("prueba", "la prueba");
@@ -213,7 +213,7 @@ public sealed class FlowRunnerTests
                 Sagas,
                 new Compensator<SagaDePrueba>(new Deshacer(Bitacora), Reloj, NullLogger<Compensator<SagaDePrueba>>.Instance),
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
-                ArriendoDePrueba.Nuevo(), vocabulario, Reloj, NullLogger<SagaEngine<SagaDePrueba>>.Instance);
+                arriendo ?? ArriendoDePrueba.Nuevo(), vocabulario, Reloj, NullLogger<SagaEngine<SagaDePrueba>>.Instance);
             Flujo = FlujoDef.Leer(definicion);
             Binding = binding ?? new BindingDePrueba();
             Registro = new RegistroDePasos(new IPaso[]
@@ -247,6 +247,7 @@ public sealed class FlowRunnerTests
                 Paso("t.confirmar", 1, 0, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue(), e => e.Lee<string>(0)),
                 Paso("t.avisar", 1, 0, LlaveRequerida.Ninguna, _ =>
                 {
+                    AlAvisar?.Invoke();
                     if (AvisarLanza is { } excepcion) throw excepcion;
                     return SalidaDePaso.Sigue();
                 }, e => e.Lee<string?>(0) ?? "-"),
@@ -259,6 +260,9 @@ public sealed class FlowRunnerTests
 
         /// <summary>Si el aviso, en vez de rechazar, lanza.</summary>
         public Exception? AvisarLanza { get; set; }
+
+        /// <summary>Lo que pasa MIENTRAS se avisa: la ventana en la que otra operación llega a la misma saga.</summary>
+        public Action? AlAvisar { get; set; }
 
         public List<string> Bitacora { get; } = new();
 
@@ -884,5 +888,88 @@ public sealed class FlowRunnerTests
         Assert.True(cerrada.IsOk);
         Assert.Contains("paso t.autorizar", banco.Pasos);
         Assert.Contains("paso t.capturar cobro-1", banco.Pasos);
+    }
+
+    // ── Una saga, un turno (ADR 0140 F3) ────────────────────────────────────
+
+    [Fact]
+    public async Task Una_fase_no_se_intercala_con_otra_fase_ni_con_la_compensacion_de_su_saga()
+    {
+        // Lo que la verificación de la F3 midió en Eventos, sin dominio: a media fase —ya capturado y
+        // consumido— llegan una compensación y otra fase de la misma saga. Sin turno, la compensación
+        // devolvía todo y la fase escribía Completed encima.
+        var banco = ConAvisoAlFinal();
+        await banco.Abrir("a");
+        Result<SagaDePrueba>? deshacer = null, otraFase = null;
+        banco.AlAvisar = () =>
+        {
+            deshacer = banco.Motor.CompensateAsync("s1", "cancelada", CancellationToken.None).GetAwaiter().GetResult();
+            otraFase = banco.Cerrar("otra").GetAwaiter().GetResult();
+        };
+
+        var r = await banco.Cerrar("nota");
+
+        Assert.True(r.IsOk);
+        Assert.Equal(SagaStatus.Completed, banco.Sagas.Find("s1")!.Status);
+        Assert.Empty(banco.Deshechos);
+        Assert.Equal("prueba.compensation_in_flight", deshacer!.Value.Rejection!.Code);
+        Assert.True(deshacer.Value.Rejection.IsTransient);
+        Assert.Equal(FlowRunner<SagaDePrueba>.Ocupada, otraFase!.Value.Rejection!.Code);
+        Assert.True(otraFase.Value.Rejection.IsTransient);
+        Assert.Single(banco.Pasos, p => p.StartsWith("paso t.capturar", StringComparison.Ordinal));
+
+        // El turno se suelta al terminar: lo que llega después ya no está «en curso», sino tarde.
+        var tarde = await banco.Motor.CompensateAsync("s1", "tarde", CancellationToken.None);
+        Assert.Equal("prueba.already_completed", tarde.Rejection!.Code);
+    }
+
+    [Fact]
+    public async Task Una_fase_que_abre_no_pisa_la_saga_que_otra_llamada_con_la_misma_llave_ya_abrio()
+    {
+        // Dos «abrir» con la misma llave resolvieron Abrir antes de que ninguno escribiera; el que
+        // consigue el turno después encuentra la saga escrita y no la reemplaza: quizá ya está cerrada.
+        var banco = new Banco();
+        await banco.Abrir("a");
+        await banco.Cerrar();
+        banco.Bitacora.Clear();
+
+        var r = await banco.Abrir("b");
+
+        Assert.Equal(FlowRunner<SagaDePrueba>.Ocupada, r.Rejection!.Code);
+        Assert.Empty(banco.Bitacora);
+        Assert.Equal(SagaStatus.Completed, banco.Sagas.Find("s1")!.Status);
+    }
+
+    [Fact]
+    public async Task Si_el_turno_vence_a_media_fase_y_otro_deshace_la_saga_completar_no_la_pisa()
+    {
+        // El arriendo dura más que cualquier fase; ésta es la red para la que tarde más: el barrido le
+        // roba el turno vencido y deshace, y la fase que vuelve NO escribe Completed sobre lo deshecho.
+        var reloj = new RelojQueAvanza();
+        var banco = new Banco(ConAviso, new BindingDePrueba { Efimera = NotaEnCerrar },
+            ArriendoDePrueba.Sobre(Path.Combine(Path.GetTempPath(), "syn-turno-" + Guid.NewGuid().ToString("n")), reloj, segundos: 30));
+        await banco.Abrir("a");
+        Result<SagaDePrueba>? deshacer = null;
+        banco.AlAvisar = () =>
+        {
+            reloj.Avanzar(TimeSpan.FromSeconds(31));
+            deshacer = banco.Motor.CompensateAsync("s1", "abandonada", CancellationToken.None).GetAwaiter().GetResult();
+        };
+
+        var r = await banco.Cerrar("nota");
+
+        Assert.True(deshacer!.Value.IsOk);                      // el turno vencido se lo llevó el barrido
+        Assert.Equal(FlowRunner<SagaDePrueba>.NoEnCurso, r.Rejection!.Code);
+        Assert.Equal(SagaStatus.Compensated, banco.Sagas.Find("s1")!.Status);
+        Assert.Contains(banco.Log.Lineas, l => l.Contains("no se completa", StringComparison.Ordinal));
+    }
+
+    private sealed class RelojQueAvanza : TimeProvider
+    {
+        private DateTimeOffset _ahora = DateTimeOffset.UtcNow;
+
+        public void Avanzar(TimeSpan cuanto) => _ahora += cuanto;
+
+        public override DateTimeOffset GetUtcNow() => _ahora;
     }
 }

@@ -187,7 +187,32 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     }
 
     /// <summary>
-    /// Que alguien más la está deshaciendo AHORA. Transitorio, no un no rotundo (#34).
+    /// El turno de una saga: el mismo arriendo que la compensación, para que una fase del flujo no
+    /// se intercale con ella ni con otra fase (ADR 0140 F3). <c>null</c> si lo tiene otro.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es el mismo y no uno aparte</b>, y ésa es toda la exclusión: un cierre que va por la mitad y
+    /// una cancelación —o el barrido de abandono— piden el MISMO fichero, así que el segundo recibe un
+    /// transitorio sin tocar nada. Dos arriendos distintos protegerían cada camino de sí mismo y no del
+    /// otro, que es justo el caso. Vence como el de la compensación: un proceso muerto a media fase no
+    /// deja la saga trabada más que lo que dura el arriendo.
+    /// </remarks>
+    internal IDisposable? TomarTurno(string sagaId) => _arriendos.TryAcquire(sagaId);
+
+    /// <summary>
+    /// Deshace una saga cuyo turno YA tiene quien llama: la fase que falla a mitad.
+    /// </summary>
+    /// <remarks>
+    /// El arriendo no es reentrante (ver <see cref="CompensarAsync"/>): una fase que lo tiene y
+    /// pidiera <see cref="CompensateAsync"/> recibiría «en curso» de sí misma, y lo que había que
+    /// devolver en el acto esperaría al barrido de abandono.
+    /// </remarks>
+    internal Task<Result<TSaga>> CompensarConTurnoAsync(string sagaId, string reason, CancellationToken ct)
+        => CompensarAsync(sagaId, reason, ct);
+
+    /// <summary>
+    /// Que alguien más tiene la saga AHORA —otra compensación, o una fase del flujo—. Transitorio,
+    /// no un no rotundo (#34).
     /// </summary>
     /// <remarks>
     /// <b>Unavailable y no Conflict</b>, igual que el <c>retry_in_flight</c> de
@@ -198,9 +223,9 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     private Rejection EnCurso(string sagaId)
     {
-        _log.LogDebug("La saga {Saga} ya la está deshaciendo alguien; esta vuelta la deja pasar.", sagaId);
+        _log.LogDebug("La saga {Saga} la tiene otra operación; esta vuelta la deja pasar.", sagaId);
         return Rejection.Unavailable($"{_vocabulary.Origin}.compensation_in_flight",
-            $"Otro barrido está deshaciendo {_vocabulary.Noun}. Se reintenta en la siguiente vuelta.");
+            $"Hay otra operación en curso sobre {_vocabulary.Noun}. Se reintenta en un momento.");
     }
 
     /// <summary>

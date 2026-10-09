@@ -58,6 +58,9 @@ internal sealed class CompraDeEventosReal : IDisposable
 
     public HttpClient Orquestador { get; }
 
+    /// <summary>El contenedor del orquestador: el motor y el barrido que corren de verdad dentro de él.</summary>
+    public IServiceProvider Servicios => _fabrica.Services;
+
     public LogQueGuarda Log { get; } = new();
 
     public string Buzon => Path.Combine(_raiz, "buzon");
