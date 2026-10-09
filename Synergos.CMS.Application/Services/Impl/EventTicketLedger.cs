@@ -86,6 +86,131 @@ public sealed class EventTicketLedger
         catch (JsonException) { return null; }   // archivo corrupto → como si no existiera
     }
 
+    // ── Una saga, una orden (ADR 0140 F3) ───────────────────────────────────
+
+    /// <summary>
+    /// Los cerrojos de las sagas: 64, fijos, y una saga cae siempre en el mismo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué hacen falta.</b> Anotar y confirmar la orden de una saga son leer el registro,
+    /// decidir y escribir. Sin exclusión, dos peticiones a la vez —el doble render que pide las entradas
+    /// dos veces, dos checkouts con los mismos datos, «mis entradas» reconciliando mientras alguien
+    /// confirma— leían las dos «no hay orden» y escribían dos, o confirmaban la gemela que la otra ya
+    /// había dejado atrás. Dos órdenes confirmadas de una saga son las mismas butacas dos veces.</para>
+    ///
+    /// <para><b>De proceso, y alcanza</b>: el almacén de estas órdenes es de una sola instancia
+    /// (<c>FileSystemJsonEntityStore</c> lo dice), así que todo el que escribe pasa por acá. Estáticos
+    /// para que dos registros sobre el mismo almacén no se crean dueños de la misma saga a la vez. Un
+    /// número fijo y no uno por saga: un diccionario de cerrojos crece con cada compra para siempre, y
+    /// compartir uno entre dos sagas sólo las pone en fila.</para>
+    /// </remarks>
+    private static readonly SemaphoreSlim[] Cerrojos =
+        Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    private static SemaphoreSlim CerrojoDe(string sagaId)
+        => Cerrojos[(int)((uint)StringComparer.Ordinal.GetHashCode(sagaId) % (uint)Cerrojos.Length)];
+
+    /// <summary>
+    /// La orden de una saga tal como la ve el registro: la confirmada si la hay; si no, la pendiente más
+    /// antigua. Nula si ninguna orden la nombra.
+    /// </summary>
+    private static PersistedEventOrder? DeLaSaga(IEnumerable<PersistedEventOrder> todas, string sagaId)
+    {
+        var suyas = todas
+            .Where(o => string.Equals(o.PaymentSessionId, sagaId, StringComparison.Ordinal))
+            .OrderBy(o => o.CreatedAt)
+            .ToList();
+        return suyas.FirstOrDefault(o => o.Status == EventOrderStatus.Confirmed) ?? suyas.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Anota la orden PENDIENTE de una saga, bajo su cerrojo: <paramref name="anotar"/> recibe la que ya hay
+    /// (o nula) y devuelve la que se guarda, o nula para no guardar nada.
+    /// </summary>
+    /// <remarks>
+    /// <b>Una saga tiene una orden</b>: si ya hay una, la que se guarda tiene que ser ESA —su
+    /// <c>OrderRef</c>—, y si ya está confirmada no se toca ni se llama a <paramref name="anotar"/>: una
+    /// orden confirmada no vuelve a pendiente.
+    /// </remarks>
+    /// <returns>La orden guardada, o nula si no se guardó nada.</returns>
+    /// <exception cref="InvalidOperationException">Si <paramref name="anotar"/> devuelve una orden de otra
+    /// saga, o una segunda orden para una saga que ya tiene la suya.</exception>
+    public async Task<PersistedEventOrder?> AnotarPendienteAsync(
+        string sagaId, Func<PersistedEventOrder?, PersistedEventOrder?> anotar, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sagaId);
+        ArgumentNullException.ThrowIfNull(anotar);
+
+        var cerrojo = CerrojoDe(sagaId);
+        await cerrojo.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var actual = DeLaSaga(await LoadAllAsync(cancellationToken).ConfigureAwait(false), sagaId);
+            if (actual is { Status: EventOrderStatus.Confirmed }) return null;
+
+            if (anotar(actual) is not { } nueva) return null;
+            if (!string.Equals(nueva.PaymentSessionId, sagaId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Se quiso anotar bajo la saga {sagaId} una orden de {nueva.PaymentSessionId}.");
+            }
+            if (actual is not null && !string.Equals(nueva.OrderRef, actual.OrderRef, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"La saga {sagaId} ya tiene su orden: no se anota una segunda.");
+            }
+
+            var pendiente = nueva with { Status = EventOrderStatus.Pending };
+            await SaveAsync(pendiente, cancellationToken).ConfigureAwait(false);
+            return pendiente;
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
+    /// <summary>
+    /// Confirma LA orden de una saga, bajo su cerrojo: si ya hay una confirmada la devuelve tal cual; si no,
+    /// <paramref name="confirmar"/> recibe la pendiente que haya (o nula) y devuelve la que se confirma.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Una saga emite sus entradas una vez</b>, y la regla vive acá y no en cada camino que confirma:
+    /// la ruta vieja, el artefacto de la puerta y la reconciliación de «mis entradas» pasan por este método,
+    /// así que ninguno se la puede saltar. Quien llama compara el <c>OrderRef</c> devuelto con el suyo: si
+    /// es otro, su saga ya se confirmó con otra orden y la suya no emite nada.</para>
+    ///
+    /// <para>Lo confirmado se devuelve SIN reescribir: una transferencia o un check-in hechos entre medias
+    /// no se pisan con una copia vieja.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si <paramref name="confirmar"/> devuelve una orden de otra saga.</exception>
+    public async Task<PersistedEventOrder> ConfirmarAsync(
+        string sagaId, Func<PersistedEventOrder?, PersistedEventOrder> confirmar, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sagaId);
+        ArgumentNullException.ThrowIfNull(confirmar);
+
+        var cerrojo = CerrojoDe(sagaId);
+        await cerrojo.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var actual = DeLaSaga(await LoadAllAsync(cancellationToken).ConfigureAwait(false), sagaId);
+            if (actual is { Status: EventOrderStatus.Confirmed }) return actual;
+
+            var orden = confirmar(actual);
+            if (!string.Equals(orden.PaymentSessionId, sagaId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Se quiso confirmar bajo la saga {sagaId} una orden de {orden.PaymentSessionId}.");
+            }
+
+            var confirmada = orden with { Status = EventOrderStatus.Confirmed };
+            await SaveAsync(confirmada, cancellationToken).ConfigureAwait(false);
+            return confirmada;
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
     /// <summary>Todas las compras. Un fichero ilegible se salta, no tumba la lista.</summary>
     public async Task<List<PersistedEventOrder>> LoadAllAsync(CancellationToken cancellationToken = default)
     {

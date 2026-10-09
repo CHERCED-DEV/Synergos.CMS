@@ -153,7 +153,7 @@ public sealed class EventosWiringTests
     {
         var anotar = Cuerpo(CodigoDelArtefacto(), "public async Task<ResultadoDelArtefacto> AnotarAsistentesAsync");
         var enCurso = anotar.IndexOf("\"Running\"", StringComparison.Ordinal);
-        var guardar = anotar.IndexOf("_ledger.SaveAsync(", StringComparison.Ordinal);
+        var guardar = anotar.IndexOf("_ledger.AnotarPendienteAsync(", StringComparison.Ordinal);
         Assert.True(enCurso >= 0 && guardar > enCurso, "Los asistentes se anotan sólo sobre una compra en curso.");
         Assert.Contains("Emparejar(", anotar, StringComparison.Ordinal);
 
@@ -162,8 +162,31 @@ public sealed class EventosWiringTests
         var confirmar = codigo.IndexOf("public async Task<EventConfirmationResult> ConfirmAsync", StringComparison.Ordinal);
         Assert.True(comprar >= 0 && confirmar > comprar, "Cambió la forma del cliente: revisar este gate.");
         var cuerpoDeComprar = codigo[comprar..confirmar];
-        Assert.Contains("_ledger.SaveAsync(", cuerpoDeComprar, StringComparison.Ordinal);
+        Assert.Contains("_ledger.AnotarPendienteAsync(", cuerpoDeComprar, StringComparison.Ordinal);
         Assert.Contains("new PersistedEventOrder(", cuerpoDeComprar, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Una saga, una orden (ADR 0140 F3): ningún camino que anota o confirma la orden de una compra del
+    /// orquestador la escribe por su cuenta; pasa por el registro, que lo hace bajo el cerrojo de la saga.
+    /// </summary>
+    /// <remarks>
+    /// Lo prueban con peticiones a la vez <c>UnaSagaUnaOrdenTests</c>; esto vigila que un camino nuevo
+    /// —o uno viejo reescrito— no vuelva a leer, decidir y escribir sin el cerrojo, que es la forma en
+    /// que dos peticiones simultáneas dejaban dos órdenes confirmadas de la misma compra.
+    /// </remarks>
+    [Fact]
+    public void Ningun_camino_escribe_la_orden_de_una_saga_saltandose_el_registro()
+    {
+        Assert.DoesNotContain("_ledger.SaveAsync(", CodigoDelArtefacto(), StringComparison.Ordinal);
+
+        var codigo = CodigoDelCliente();
+        var comprar = codigo.IndexOf("public async Task<EventCheckoutResult> CheckoutAsync", StringComparison.Ordinal);
+        var avisar = codigo.IndexOf("private Task AvisarAsync", StringComparison.Ordinal);
+        Assert.True(comprar >= 0 && avisar > comprar, "Cambió la forma del cliente: revisar este gate.");
+        var comprarYConfirmar = codigo[comprar..avisar];
+        Assert.DoesNotContain("_ledger.SaveAsync(", comprarYConfirmar, StringComparison.Ordinal);
+        Assert.Contains("_ledger.ConfirmarAsync(", comprarYConfirmar, StringComparison.Ordinal);
     }
 
     /// <summary>El stub sigue siendo el default: un clon limpio vende entradas sin levantar nada.</summary>

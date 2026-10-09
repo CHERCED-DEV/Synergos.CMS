@@ -207,16 +207,18 @@ public sealed class ArtefactoDeEventos
                 $"La compra apartó {apartadas} entradas y llegaron {asistentes.Count} asistentes.");
         }
 
-        var previa = await OrdenDeAsync(compra.Id, sujeto, ct).ConfigureAwait(false);
-        if (previa is { Status: EventOrderStatus.Confirmed })
+        // Volver a anotar reemplaza la lista: mientras no se cierre, el comprador puede corregirla. La
+        // orden es UNA por saga y el registro la anota bajo el cerrojo de la saga: dos anotaciones a la
+        // vez dejan la última lista, no dos órdenes, y una orden ya confirmada no vuelve a pendiente.
+        var unidades = Emparejar(compra, asistentes);
+        var orden = await _ledger.AnotarPendienteAsync(compra.Id,
+            actual => actual is not null && !DelComprador(actual, sujeto) ? null : Orden(compra, sujeto, correo, nombre, unidades, actual),
+            ct).ConfigureAwait(false);
+        if (orden is null)
         {
             return new ResultadoDelArtefacto(StatusCodes.Status409Conflict, "eventos.compra_ya_cerrada",
                 "Las entradas ya se emitieron.", "Completed");
         }
-
-        // Volver a anotar reemplaza la lista: mientras no se cierre, el comprador puede corregirla.
-        var orden = Orden(compra, sujeto, correo, nombre, Emparejar(compra, asistentes), previa);
-        await _ledger.SaveAsync(orden, ct).ConfigureAwait(false);
         return new ResultadoDelArtefacto(StatusCodes.Status200OK, Anotados: orden.Units.Count);
     }
 
@@ -247,10 +249,19 @@ public sealed class ArtefactoDeEventos
                 compra.LastError ?? "La compra no se completó: no hay entradas que emitir.", compra.Status);
         }
 
-        // Sin asistentes anotados, el comprador es el portador de todas: nunca hay cobro sin entradas.
-        var orden = previa ?? Orden(compra, sujeto, correo, nombre, Emparejar(compra, Portador(compra, correo, nombre)), null);
-        var confirmada = orden with { Status = EventOrderStatus.Confirmed };
-        await _ledger.SaveAsync(confirmada, ct).ConfigureAwait(false);
+        // Sin asistentes anotados, el comprador es el portador de todas: nunca hay cobro sin entradas. Lo
+        // anotado se relee bajo el cerrojo de la saga, así que dos peticiones a la vez confirman UNA orden
+        // —la que haya, con sus asistentes— y la segunda recibe esa misma.
+        var confirmada = await _ledger.ConfirmarAsync(compra.Id,
+            actual => actual is not null && DelComprador(actual, sujeto)
+                ? actual
+                : Orden(compra, sujeto, correo, nombre, Emparejar(compra, Portador(compra, correo, nombre)), null),
+            ct).ConfigureAwait(false);
+        if (!DelComprador(confirmada, sujeto))
+        {
+            return new ResultadoDelArtefacto(StatusCodes.Status409Conflict, "eventos.compra_ya_cerrada",
+                "Esta compra ya emitió sus entradas con otra orden.", "Completed");
+        }
         return new ResultadoDelArtefacto(StatusCodes.Status200OK, Entradas: _ledger.ConfirmationOf(confirmada));
     }
 
@@ -277,7 +288,14 @@ public sealed class ArtefactoDeEventos
             var (compra, _) = await LeerAsync(orden.PaymentSessionId, (orden.BuyerKind!, orden.BuyerId!), ct).ConfigureAwait(false);
             if (compra is not null && string.Equals(compra.Status, "Completed", StringComparison.Ordinal))
             {
-                await _ledger.SaveAsync(orden with { Status = EventOrderStatus.Confirmed }, ct).ConfigureAwait(false);
+                // Por el registro, que confirma UNA orden por saga: la gemela de una saga ya confirmada no
+                // emite las mismas butacas otra vez.
+                var confirmada = await _ledger.ConfirmarAsync(orden.PaymentSessionId,
+                    actual => actual is not null && actual.OrderRef == orden.OrderRef ? actual : orden, ct).ConfigureAwait(false);
+                if (!string.Equals(confirmada.OrderRef, orden.OrderRef, StringComparison.Ordinal))
+                {
+                    _log.LogWarning("La orden {Orden} es gemela de la que ya confirmó su compra: no se confirma.", orden.OrderRef);
+                }
             }
         }
     }
@@ -291,9 +309,11 @@ public sealed class ArtefactoDeEventos
     /// <summary>La orden de este lado de una saga y un comprador: nunca por la saga sola.</summary>
     private async Task<PersistedEventOrder?> OrdenDeAsync(string compraId, (string Kind, string Id) sujeto, CancellationToken ct)
         => (await _ledger.LoadAllAsync(ct).ConfigureAwait(false)).FirstOrDefault(o =>
-            string.Equals(o.PaymentSessionId, compraId, StringComparison.Ordinal)
-            && string.Equals(o.BuyerKind, sujeto.Kind, StringComparison.Ordinal)
-            && string.Equals(o.BuyerId, sujeto.Id, StringComparison.Ordinal));
+            string.Equals(o.PaymentSessionId, compraId, StringComparison.Ordinal) && DelComprador(o, sujeto));
+
+    private static bool DelComprador(PersistedEventOrder orden, (string Kind, string Id) sujeto)
+        => string.Equals(orden.BuyerKind, sujeto.Kind, StringComparison.Ordinal)
+           && string.Equals(orden.BuyerId, sujeto.Id, StringComparison.Ordinal);
 
     private PersistedEventOrder Orden(
         PurchaseDto compra, (string Kind, string Id) sujeto, string? correo, string? nombre,

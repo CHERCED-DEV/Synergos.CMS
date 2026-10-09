@@ -161,18 +161,6 @@ public sealed class HttpEventTicketingService : IEventTicketingService
         var compra = await ComprarAsync(eventId, sujeto, lineas, comision, key, cancellationToken)
             .ConfigureAwait(false);
 
-        // La misma llave devuelve la misma saga, y eso es lo que impide cobrar dos veces. Pero si
-        // esa saga ya tiene orden de este lado, la anotó OTRO checkout: devolverla sería entregarle
-        // a quien repite los datos una compra que no hizo, y reescribirla, cambiarle el portador a
-        // las entradas. Se rechaza sin nombrarla y sin tocarla.
-        if (await OrdenDeLaSagaAsync(compra.Id, cancellationToken).ConfigureAwait(false) is not null)
-        {
-            _log.LogWarning("Un checkout cayó sobre la saga {Saga}, que ya tiene orden: se rechaza.", compra.Id);
-            throw new ArgumentException(
-                "Ya hay una compra con estos mismos datos. Si la empezaste tú, termínala desde donde la "
-                + "empezaste; si ya la confirmaste, tus entradas están en «Mis entradas».");
-        }
-
         // La orden que sale al navegador NO es la saga. La saga se deriva de lo que se compra y lo
         // que se compra no es secreto; la orden es la credencial de quien compró como invitado,
         // la misma forma inadivinable que la del motor en proceso.
@@ -201,15 +189,23 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             BuyerEmail = comprador.Email.Trim(),
         };
 
-        await _ledger.SaveAsync(orden, cancellationToken).ConfigureAwait(false);
+        // La misma llave devuelve la misma saga, y eso es lo que impide cobrar dos veces. Pero si
+        // esa saga ya tiene orden de este lado, la anotó OTRO checkout: devolverla sería entregarle
+        // a quien repite los datos una compra que no hizo, y reescribirla, cambiarle el portador a
+        // las entradas. Se rechaza sin nombrarla y sin tocarla — y la comprobación y la escritura
+        // son UNA, bajo el cerrojo de la saga en el registro: dos checkouts simultáneos ya no anotan
+        // dos órdenes.
+        if (await _ledger.AnotarPendienteAsync(compra.Id, actual => actual is null ? orden : null, cancellationToken)
+                .ConfigureAwait(false) is null)
+        {
+            _log.LogWarning("Un checkout cayó sobre la saga {Saga}, que ya tiene orden: se rechaza.", compra.Id);
+            throw new ArgumentException(
+                "Ya hay una compra con estos mismos datos. Si la empezaste tú, termínala desde donde la "
+                + "empezaste; si ya la confirmaste, tus entradas están en «Mis entradas».");
+        }
 
         return new EventCheckoutResult(orderRef, orderRef, compra.Total.Amount, compra.Total.Currency);
     }
-
-    /// <summary>La orden de este lado que nombra a la saga, si alguna la nombra.</summary>
-    private async Task<PersistedEventOrder?> OrdenDeLaSagaAsync(string sagaId, CancellationToken ct)
-        => (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
-            .FirstOrDefault(o => string.Equals(o.PaymentSessionId, sagaId, StringComparison.Ordinal));
 
     private async Task<PurchaseDto> ComprarAsync(
         string eventId, string sujeto,
@@ -267,17 +263,6 @@ public sealed class HttpEventTicketingService : IEventTicketingService
             return _ledger.ConfirmationOf(orden);
         }
 
-        // Una saga emite sus entradas UNA vez. Dos checkouts simultáneos pueden anotar dos órdenes
-        // antes de que ninguno vea la del otro, y confirmar la segunda emitiría las mismas butacas
-        // otra vez, con otros portadores.
-        if ((await _ledger.LoadAllAsync(cancellationToken).ConfigureAwait(false)).Any(o =>
-                o.Status == EventOrderStatus.Confirmed
-                && !string.Equals(o.OrderRef, orden.OrderRef, StringComparison.Ordinal)
-                && string.Equals(o.PaymentSessionId, orden.PaymentSessionId, StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException("Esta compra ya se confirmó con otra orden.");
-        }
-
         // El orquestador confirma sólo a quien compró (ADR 0140 F3). Una orden anotada antes de
         // guardar el comprador no tiene con qué decirlo: no se puede confirmar, y se dice.
         if (string.IsNullOrWhiteSpace(orden.BuyerKind) || string.IsNullOrWhiteSpace(orden.BuyerId))
@@ -303,8 +288,15 @@ public sealed class HttpEventTicketingService : IEventTicketingService
                 compra.LastError ?? "No pudimos confirmar tus entradas. Si se te cobró, se devolverá.");
         }
 
-        var confirmada = orden with { Status = EventOrderStatus.Confirmed };
-        await _ledger.SaveAsync(confirmada, cancellationToken).ConfigureAwait(false);
+        // Una saga emite sus entradas UNA vez. Una orden gemela de la misma saga —de antes de que el
+        // registro anotara una sola por saga— no se confirma si la otra ya lo hizo: emitiría las mismas
+        // butacas otra vez, con otros portadores. La regla es del registro (ConfirmarAsync), y es la
+        // misma para el artefacto de la puerta y para «mis entradas».
+        var confirmada = await _ledger.ConfirmarAsync(orden.PaymentSessionId, _ => orden, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(confirmada.OrderRef, orden.OrderRef, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Esta compra ya se confirmó con otra orden.");
+        }
 
         // Best-effort: un correo caído JAMÁS puede tumbar una compra ya pagada y persistida.
         await AvisarAsync(confirmada, cancellationToken).ConfigureAwait(false);
