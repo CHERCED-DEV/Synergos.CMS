@@ -3,7 +3,7 @@ namespace Synergos.CMS.Interfaces;
 /// <summary>Cómo terminó publicar la oferta de un evento.</summary>
 public enum EventOfferOutcome
 {
-    /// <summary>El orquestador la publicó: el evento se puede vender por él.</summary>
+    /// <summary>El orquestador la aplicó: publicada, el evento se vende por él; retirada, ya no.</summary>
     Published,
 
     /// <summary>No hay orquestador configurado: no se intentó, y no es un fallo.</summary>
@@ -32,7 +32,19 @@ public enum EventOfferOutcome
 public interface IEventOfferPublisher
 {
     /// <summary>Publica la oferta del evento tal como lo sirve el catálogo.</summary>
+    /// <remarks>
+    /// La oferta es el estado ENTERO del evento: una localidad que ya no viene deja de venderse, y un
+    /// evento sin localidades se retira como con <see cref="RetireAsync"/>.
+    /// </remarks>
     /// <param name="evento">El evento, con sus localidades y su mapa de butacas.</param>
     /// <param name="cancellationToken">Cancelación de quien llama.</param>
     Task<EventOfferOutcome> PublishAsync(EventDetail evento, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retira la oferta de un evento: ninguna de sus localidades se vende más por el orquestador. Es lo que
+    /// pasa al despublicarlo o borrarlo, y cuando el catálogo deja de servirlo.
+    /// </summary>
+    /// <param name="eventId">El identificador del evento (su slug).</param>
+    /// <param name="cancellationToken">Cancelación de quien llama.</param>
+    Task<EventOfferOutcome> RetireAsync(string eventId, CancellationToken cancellationToken = default);
 }

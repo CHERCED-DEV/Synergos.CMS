@@ -18,14 +18,18 @@ namespace Synergos.CMS.Web.Notifications;
 /// <para><b>Lee el evento por el catálogo y no del contenido que llega</b>: así la oferta sale de la
 /// MISMA proyección que pinta la ficha —con las fechas ya en la zona del sitio y las reglas de
 /// <c>EventContentRules</c>—, y no de una segunda lectura de las propiedades que se desviaría. Un
-/// evento que el catálogo omite (sin slug, sin título) no tiene ficha, y tampoco oferta.</para>
+/// evento que el catálogo omite (sin título, mal formado) no tiene ficha, y tampoco oferta: la que
+/// tuviera publicada se RETIRA, para que no se siga vendiendo por la puerta lo que la ficha ya no
+/// muestra.</para>
 ///
 /// <para><b>Nunca tumba el publicar</b>: el contenido ya se guardó cuando esto corre. Lo que falle
 /// queda en el log, y se repara republicando.</para>
 /// </remarks>
 public sealed class OfertaDeEventoAlPublicar : INotificationAsyncHandler<ContentPublishedNotification>
 {
-    private const string EventPageAlias = "eventPage";
+    internal const string EventPageAlias = "eventPage";
+
+    internal const string PropiedadDelSlug = "eventSlug";
 
     private readonly IEventCatalogProvider _catalogo;
     private readonly IEventOfferPublisher _ofertas;
@@ -51,12 +55,12 @@ public sealed class OfertaDeEventoAlPublicar : INotificationAsyncHandler<Content
         var eventos = notification.PublishedEntities
             .Where(c => string.Equals(c.ContentType.Alias, EventPageAlias, StringComparison.Ordinal))
             .ToList();
-        if (eventos.Count == 0 || !DelContenido()) return;
+        if (eventos.Count == 0 || !DelContenido(_fuentes)) return;
 
         foreach (var contenido in eventos)
         {
             // El slug no varía por cultura (Variations=Nothing): es la identidad del evento.
-            var slug = contenido.GetValue<string>("eventSlug")?.Trim();
+            var slug = contenido.GetValue<string>(PropiedadDelSlug)?.Trim();
             if (string.IsNullOrEmpty(slug)) continue;
 
             try
@@ -65,8 +69,9 @@ public sealed class OfertaDeEventoAlPublicar : INotificationAsyncHandler<Content
                 if (evento is null)
                 {
                     _log.LogWarning(
-                        "Se publicó el evento {Slug} y el catálogo no lo sirve: no se publica su oferta. Ver el log del catálogo.",
+                        "Se publicó el evento {Slug} y el catálogo no lo sirve: se retira su oferta. Ver el log del catálogo.",
                         slug);
+                    await _ofertas.RetireAsync(slug, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -79,7 +84,8 @@ public sealed class OfertaDeEventoAlPublicar : INotificationAsyncHandler<Content
         }
     }
 
-    private bool DelContenido()
-        => _fuentes.CurrentValue.Sources.TryGetValue(UmbracoEventCatalogSource.Vertical, out var fuente)
+    /// <summary>Si los eventos salen del contenido: sólo entonces un <c>eventPage</c> se vende.</summary>
+    internal static bool DelContenido(IOptionsMonitor<CatalogSettings> fuentes)
+        => fuentes.CurrentValue.Sources.TryGetValue(UmbracoEventCatalogSource.Vertical, out var fuente)
            && string.Equals(fuente, "cms", StringComparison.OrdinalIgnoreCase);
 }

@@ -48,6 +48,19 @@ public sealed record OfertaPublicada(string EventId, IReadOnlyList<LocalidadPubl
 /// <param name="Llave">La llave con que salió ese ajuste: repetirlo con ella no lo aplica dos veces.</param>
 public sealed record AforoPublicado(string Pozo, int? Declarado, int? Hacia = null, string? Llave = null);
 
+/// <summary>Un pozo que este orquestador publicó: de qué localidad, y de qué butaca si la tiene.</summary>
+public sealed record PozoRegistrado(string Localidad, string? Butaca);
+
+/// <summary>
+/// Lo que este orquestador publicó de un evento la última vez: sus localidades y sus pozos (ADR 0140 F3).
+/// </summary>
+/// <remarks>
+/// Es el rastro de sus propios pasos, como <see cref="AforoPublicado"/>: sin él no sabría qué dejar de
+/// vender cuando una localidad o una butaca sale de la oferta, o cuando el evento se retira entero.
+/// </remarks>
+public sealed record OfertaRegistrada(
+    string EventId, string Currency, IReadOnlyList<string> Localidades, IReadOnlyList<PozoRegistrado> Pozos);
+
 /// <summary>
 /// Publica la oferta de un evento en las capacidades: el precio de cada localidad en <c>Api.Pricing</c> y
 /// sus pozos de aforo en <c>Api.Inventory</c> (ADR 0140 F3).
@@ -82,8 +95,22 @@ public sealed record AforoPublicado(string Pozo, int? Declarado, int? Hacia = nu
 /// del editor y el republicar del administrador pueden coincidir, y dos que leen el mismo declarado suman
 /// el mismo relativo dos veces.</para>
 ///
-/// <para><b>Lo que NO hace:</b> borrar. Una localidad o una butaca que deja de estar en la oferta conserva
-/// su precio y su pozo; dejarla sin venta es bajar su aforo a cero, que sí se ajusta.</para>
+/// <para><b>La oferta es el estado ENTERO del evento</b> (ADR 0140 F3): lo que una publicación no trae deja
+/// de venderse. Una localidad que sale de la oferta —borrada, con aforo cero, o que el contenido omite
+/// por mal formada— se RETIRA: su precio deja de valer (vigencia hasta ahora), así que cotizar, que va
+/// primero, la rechaza sin apartar nada. Una butaca que sale, o un pozo de cupo general que pasa a
+/// butacas, se AGOTA: su aforo baja a lo vendido y apartado. Y un evento despublicado o borrado se
+/// retira entero (<see cref="RetirarAsync"/>). No se borra nada: el precio y el pozo siguen ahí, con su
+/// historia, y republicar los vuelve a poner a la venta.</para>
+///
+/// <para><b>El aforo nunca baja de lo vendido y apartado.</b> Bajarlo por debajo lo rechazaba
+/// <c>Api.Inventory</c> y la publicación quedaba a medias. Ahora se recorta a lo comprometido, se
+/// anota como declarado lo que de verdad quedó y el log lo dice: un aforo de 2 con 7 vendidas queda en
+/// 7, y subirlo después a 12 deja 5 libres.</para>
+///
+/// <para><b>Cada localidad es independiente</b>: una que falla —una capacidad caída— no impide publicar
+/// las demás. La publicación sigue, y al final contesta el rechazo de la primera que falló con la lista
+/// de las que no se publicaron; republicar termina el resto sin duplicar nada.</para>
 /// </remarks>
 public sealed class OfertaDeEventos : IDisposable
 {
@@ -104,15 +131,20 @@ public sealed class OfertaDeEventos : IDisposable
 
     private readonly EventosCapabilities _capacidades;
     private readonly JsonCollectionStore<AforoPublicado> _publicados;
+    private readonly JsonCollectionStore<OfertaRegistrada> _ofertas;
     private readonly StoreWriteGate _turno;
+    private readonly TimeProvider _reloj;
     private readonly ILogger<OfertaDeEventos> _log;
 
-    public OfertaDeEventos(EventosCapabilities capacidades, IOptions<SagaStorageOptions> almacen, ILogger<OfertaDeEventos> log)
+    public OfertaDeEventos(
+        EventosCapabilities capacidades, IOptions<SagaStorageOptions> almacen, TimeProvider reloj, ILogger<OfertaDeEventos> log)
     {
         _capacidades = capacidades;
         var raiz = Path.Combine(almacen.Value.Root, "ofertas");
         _publicados = new JsonCollectionStore<AforoPublicado>(raiz, "aforos", a => a.Pozo);
+        _ofertas = new JsonCollectionStore<OfertaRegistrada>(raiz, "eventos", o => o.EventId);
         _turno = new StoreWriteGate(raiz, Prefijo);
+        _reloj = reloj;
         _log = log;
     }
 
@@ -123,10 +155,13 @@ public sealed class OfertaDeEventos : IDisposable
     /// <param name="oferta">Lo que llegó.</param>
     /// <param name="llave">La llave de la publicación: de ella salen las del precio y las de cada ajuste.</param>
     /// <param name="ct">Cancelación.</param>
+    /// <returns>Lo publicado; o, si alguna localidad no se pudo publicar, el rechazo de la primera que
+    /// falló con la lista de todas las que faltan. Las demás quedan publicadas igual.</returns>
     public async Task<Result<OfertaPublicada>> PublicarAsync(OfertaDeEvento oferta, IdempotencyKey llave, CancellationToken ct)
     {
-        // Todo se comprueba ANTES de escribir nada: una oferta con la tercera localidad mal no deja las
-        // dos primeras publicadas y el resto a medias.
+        // La FORMA se comprueba antes de escribir nada: una oferta con la tercera localidad mal no deja
+        // las dos primeras publicadas y el resto a medias. Lo que la capacidad rechace después ya no es
+        // de forma, y cada localidad sigue por su lado.
         var motivo = Revisar(oferta);
         if (motivo is not null) return Result.Rejected<OfertaPublicada>(motivo);
 
@@ -134,34 +169,132 @@ public sealed class OfertaDeEventos : IDisposable
         if (turno is null) return Result.Rejected<OfertaPublicada>(_turno.Ocupado);
 
         var evento = oferta.EventId!;
+        var moneda = oferta.Currency!;
         var inicio = oferta.StartsAtUtc!.Value;
         var publicadas = new List<LocalidadPublicada>(oferta.Tiers!.Count);
+        var fallos = new List<(string Que, Rejection Motivo)>();
+        var pozosVivos = new List<PozoRegistrado>();
 
         foreach (var l in oferta.Tiers!)
         {
             var (desde, hasta) = Vigencia(l, inicio);
-            var monto = Money.Of(l.Price!.Value, oferta.Currency!);
+            var monto = Money.Of(l.Price!.Value, moneda);
             var sujeto = AforoSubject.PriceOf(evento, l.Code!);
+            var pozos = Pozos(l);
+            pozosVivos.AddRange(pozos.Select(p => p.Pozo));
 
             var precio = await _capacidades.SetPriceAsync(sujeto, monto, ImpuestoEnPuntosBasicos, desde, hasta, l.MaxPerOrder,
                 Derivada(llave.Value, "precio", sujeto.ToString(), monto.ToString(), desde?.ToString("O"), hasta.ToString("O"),
                     l.MaxPerOrder?.ToString(CultureInfo.InvariantCulture)), ct);
-            if (!precio.IsOk) return Result.Rejected<OfertaPublicada>(precio.Rejection!);
+            if (!precio.IsOk)
+            {
+                fallos.Add((l.Code!, precio.Rejection!));
+                continue;
+            }
 
-            var pozos = Pozos(evento, l);
+            var declarado = 0;
+            Rejection? fallo = null;
             foreach (var (pozo, aforo) in pozos)
             {
-                var asegurado = await AsegurarAsync(pozo, aforo, llave, ct);
-                if (!asegurado.IsOk) return Result.Rejected<OfertaPublicada>(asegurado.Rejection!);
+                var asegurado = await AsegurarAsync(evento, pozo, aforo, llave, crear: true, ct);
+                if (asegurado.IsOk) declarado += asegurado.Value;
+                else fallo ??= asegurado.Rejection;
+            }
+            if (fallo is not null)
+            {
+                fallos.Add((l.Code!, fallo));
+                continue;
             }
 
             var p = precio.Value;
             publicadas.Add(new LocalidadPublicada(
                 l.Code!, Money.Of(p.Amount.Amount, p.Amount.Currency), p.ValidFrom, p.ValidTo, p.MaxPerQuote,
-                pozos.Sum(x => x.Aforo), pozos.Count));
+                declarado, pozos.Count));
         }
 
-        return Result.Ok(new OfertaPublicada(evento, publicadas));
+        // Lo que la publicación anterior traía y ésta no, deja de venderse.
+        var actuales = oferta.Tiers!.Select(l => l.Code!).ToList();
+        var pendientes = await RetirarLoQueFaltaAsync(evento, actuales, pozosVivos, llave, fallos, ct);
+        _ofertas.Put(new OfertaRegistrada(evento, moneda,
+            actuales.Concat(pendientes.Localidades).Distinct(StringComparer.Ordinal).ToList(),
+            pozosVivos.Concat(pendientes.Pozos).Distinct().ToList()));
+
+        return fallos.Count == 0
+            ? Result.Ok(new OfertaPublicada(evento, publicadas))
+            : Result.Rejected<OfertaPublicada>(Juntar(evento, fallos));
+    }
+
+    /// <summary>
+    /// Retira la oferta entera de un evento: ninguna de sus localidades se vende más (el evento se despublicó
+    /// o se borró). Repetirlo no hace daño; un evento que nunca se publicó no tiene nada que retirar.
+    /// </summary>
+    public async Task<Result<OfertaPublicada>> RetirarAsync(string? eventId, IdempotencyKey llave, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(eventId)) return Result.Rejected<OfertaPublicada>(Invalido("bad_event", "Hace falta eventId."));
+
+        using var turno = await _turno.TryEnterAsync(ct);
+        if (turno is null) return Result.Rejected<OfertaPublicada>(_turno.Ocupado);
+
+        var fallos = new List<(string Que, Rejection Motivo)>();
+        var pendientes = await RetirarLoQueFaltaAsync(eventId, [], [], llave, fallos, ct);
+        if (_ofertas.Find(eventId) is { } previa)
+        {
+            _ofertas.Put(previa with { Localidades = pendientes.Localidades, Pozos = pendientes.Pozos });
+        }
+
+        return fallos.Count == 0
+            ? Result.Ok(new OfertaPublicada(eventId, []))
+            : Result.Rejected<OfertaPublicada>(Juntar(eventId, fallos));
+    }
+
+    /// <summary>
+    /// Deja de vender lo que la oferta registrada del evento traía y la nueva no: retira el precio de cada
+    /// localidad que falta y agota cada pozo que falta. Devuelve lo que no se pudo retirar, que se queda
+    /// registrado para que la próxima publicación lo vuelva a intentar.
+    /// </summary>
+    private async Task<(List<string> Localidades, List<PozoRegistrado> Pozos)> RetirarLoQueFaltaAsync(
+        string evento, IReadOnlyCollection<string> localidades, IReadOnlyCollection<PozoRegistrado> pozos,
+        IdempotencyKey llave, List<(string Que, Rejection Motivo)> fallos, CancellationToken ct)
+    {
+        var quedan = (Localidades: new List<string>(), Pozos: new List<PozoRegistrado>());
+        if (_ofertas.Find(evento) is not { } previa) return quedan;
+
+        var ahora = _reloj.GetUtcNow();
+        foreach (var codigo in previa.Localidades.Where(c => !localidades.Contains(c, StringComparer.Ordinal)))
+        {
+            var sujeto = AforoSubject.PriceOf(evento, codigo);
+            var retirado = await _capacidades.SetPriceAsync(sujeto, Money.Of(0m, previa.Currency), ImpuestoEnPuntosBasicos,
+                null, ahora, null, Derivada(llave.Value, "retirar", sujeto.ToString(), ahora.ToString("O")), ct);
+            if (retirado.IsOk)
+            {
+                _log.LogInformation("La localidad {Sujeto} salió de la oferta: su precio deja de valer.", sujeto);
+                continue;
+            }
+            fallos.Add((codigo, retirado.Rejection!));
+            quedan.Localidades.Add(codigo);
+        }
+
+        foreach (var pozo in previa.Pozos.Where(p => !pozos.Contains(p)))
+        {
+            var agotado = await AsegurarAsync(evento, pozo, 0, llave, crear: false, ct);
+            if (agotado.IsOk) continue;
+            fallos.Add((pozo.Butaca is null ? pozo.Localidad : $"{pozo.Localidad}/{pozo.Butaca}", agotado.Rejection!));
+            quedan.Pozos.Add(pozo);
+        }
+
+        return quedan;
+    }
+
+    /// <summary>El rechazo de la primera parte que falló, con la lista de todas las que faltan.</summary>
+    private static Rejection Juntar(string evento, List<(string Que, Rejection Motivo)> fallos)
+    {
+        var primero = fallos[0].Motivo;
+        return primero with
+        {
+            Message = $"{primero.Message} De la oferta de {evento} no quedó al día: "
+                      + string.Join(", ", fallos.Select(f => $"{f.Que} ({f.Motivo.Code})").Distinct(StringComparer.Ordinal))
+                      + ". Lo demás sí; republicar termina lo que falta sin duplicar nada.",
+        };
     }
 
     /// <summary>La vigencia del precio: desde que abre, hasta lo PRIMERO entre el cierre y el inicio.</summary>
@@ -173,14 +306,20 @@ public sealed class OfertaDeEventos : IDisposable
         => (l.SaleOpensUtc, l.SaleClosesUtc is { } cierra && cierra < inicio ? cierra : inicio);
 
     /// <summary>Los pozos de una localidad con su aforo: uno de cupo general, o uno de 1 por butaca.</summary>
-    private static List<(Ref Pozo, int Aforo)> Pozos(string evento, LocalidadOfertada l)
+    private static List<(PozoRegistrado Pozo, int Aforo)> Pozos(LocalidadOfertada l)
         => l.Seats is { Count: > 0 } butacas
-            ? butacas.Select(b => (AforoSubject.For(evento, l.Code!, b), 1)).ToList()
-            : [(AforoSubject.For(evento, l.Code!, null), l.Capacity!.Value)];
+            ? butacas.Select(b => (new PozoRegistrado(l.Code!, b), 1)).ToList()
+            : [(new PozoRegistrado(l.Code!, null), l.Capacity!.Value)];
 
-    /// <summary>Deja el pozo con <paramref name="aforo"/> declarado: lo declara, lo ajusta o no hace nada.</summary>
-    private async Task<Result<int>> AsegurarAsync(Ref pozo, int aforo, IdempotencyKey publicacion, CancellationToken ct)
+    /// <summary>
+    /// Deja el pozo con <paramref name="aforo"/> declarado —o con lo vendido y apartado, si es más—: lo
+    /// declara, lo ajusta o no hace nada. Devuelve el aforo que quedó declarado.
+    /// </summary>
+    /// <param name="crear">Si el pozo se declara cuando no existe. Agotar uno que no existe no crea nada.</param>
+    private async Task<Result<int>> AsegurarAsync(
+        string evento, PozoRegistrado registrado, int aforo, IdempotencyKey publicacion, bool crear, CancellationToken ct)
     {
+        var pozo = AforoSubject.For(evento, registrado.Localidad, registrado.Butaca);
         var clave = pozo.ToString();
         var registro = _publicados.Find(clave);
 
@@ -197,8 +336,10 @@ public sealed class OfertaDeEventos : IDisposable
 
         var item = await _capacidades.FindAforoAsync(pozo, ct);
         if (!item.IsOk && item.Rejection!.Code != NoExiste) return Result.Rejected<int>(item.Rejection);
+        if (!item.IsOk && !crear) return Result.Ok(0);
 
         int? desde;
+        var hacia = aforo;
         if (!item.IsOk)
         {
             desde = null;
@@ -213,26 +354,33 @@ public sealed class OfertaDeEventos : IDisposable
             _publicados.Put(new AforoPublicado(clave, aforo));
             return Result.Ok(aforo);
         }
-        else if (declarado == aforo)
-        {
-            return Result.Ok(aforo);
-        }
         else
         {
+            // Nunca por debajo de lo comprometido: lo declarado menos lo que queda libre es lo vendido más lo
+            // apartado, y Api.Inventory rechaza bajar de ahí. Se recorta y se dice.
+            var comprometido = declarado - item.Value.Available;
+            if (aforo < comprometido)
+            {
+                _log.LogWarning(
+                    "El pozo {Pozo} no baja a {Aforo}: tiene {Comprometido} vendidas o apartadas, y queda declarado en {Comprometido}.",
+                    clave, aforo, comprometido, comprometido);
+                hacia = comprometido;
+            }
+            if (declarado == hacia) return Result.Ok(hacia);
             desde = declarado;
         }
 
         var llave = desde is null
-            ? Derivada("declarar", clave, aforo.ToString(CultureInfo.InvariantCulture))
+            ? Derivada("declarar", clave, hacia.ToString(CultureInfo.InvariantCulture))
             : Derivada(publicacion.Value, "ajustar", clave, desde.Value.ToString(CultureInfo.InvariantCulture),
-                aforo.ToString(CultureInfo.InvariantCulture));
+                hacia.ToString(CultureInfo.InvariantCulture));
 
-        _publicados.Put(new AforoPublicado(clave, desde, aforo, llave.Value));
-        var r = await AplicarAsync(pozo, desde, aforo, llave, ct);
+        _publicados.Put(new AforoPublicado(clave, desde, hacia, llave.Value));
+        var r = await AplicarAsync(pozo, desde, hacia, llave, ct);
         if (r.IsOk)
         {
-            _publicados.Put(new AforoPublicado(clave, aforo));
-            return Result.Ok(aforo);
+            _publicados.Put(new AforoPublicado(clave, hacia));
+            return Result.Ok(hacia);
         }
 
         if (!r.Rejection!.IsTransient) _publicados.Put(new AforoPublicado(clave, desde));

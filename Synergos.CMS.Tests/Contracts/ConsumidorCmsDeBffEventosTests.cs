@@ -63,6 +63,31 @@ public sealed class ConsumidorCmsDeBffEventosTests
     }
 
     /// <summary>
+    /// El retiro de la oferta (al despublicar o borrar un evento) existe en el orquestador con la ruta y la
+    /// llave que manda el CMS: si no existiera, un evento despublicado se seguiría vendiendo por la puerta.
+    /// </summary>
+    [Fact]
+    public async Task Lo_que_manda_el_retiro_de_la_oferta_existe_en_RetireEventOffer()
+    {
+        var orquestador = new HttpEventOfferPublisherTests.OrquestadorFalso();
+        var publicador = new HttpEventOfferPublisher(
+            new HttpEventOfferPublisherTests.Fabrica(orquestador),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpEventOfferPublisher>.Instance, hayDestino: true);
+
+        await publicador.RetireAsync("evt-oferta");
+
+        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        Assert.Equal("/v1/ofertas/evt-oferta/retirar", ruta);
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/ofertas/{eventId}/retirar").GetProperty("post");
+        Assert.Equal("RetireEventOffer", op.GetProperty("operationId").GetString());
+        var cabecera = op.GetProperty("parameters").EnumerateArray()
+            .Single(p => p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "Idempotency-Key");
+        Assert.True(llave!.Length <= cabecera.GetProperty("schema").GetProperty("maxLength").GetInt32());
+        Assert.False(op.TryGetProperty("requestBody", out _));
+        Assert.Equal("", cuerpo);
+    }
+
+    /// <summary>
     /// Lo que LEEN el artefacto de la puerta y la ruta vieja de una compra (ADR 0140 F3) existe en la
     /// respuesta de <c>GetTicketPurchase</c>, y la cabecera del sujeto que mandan está declarada.
     /// </summary>

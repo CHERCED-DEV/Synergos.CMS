@@ -189,6 +189,27 @@ public sealed class EventosWiringTests
         Assert.Contains("_ledger.ConfirmarAsync(", comprarYConfirmar, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La oferta de un evento se publica al publicarlo y se RETIRA al despublicarlo, mandarlo a la papelera
+    /// o borrarlo (ADR 0140 F3): la puerta vende contra lo publicado en el orquestador, no contra la ficha.
+    /// </summary>
+    /// <remarks>
+    /// Lo que hace cada manejador lo prueban <c>OfertaDeEventoAlPublicarTests</c> y
+    /// <c>OfertaDeEventoAlRetirarTests</c>; esto vigila que estén enchufados, que es lo que un test del
+    /// manejador suelto no ve: sin el registro, un evento despublicado se sigue vendiendo hasta que empiece.
+    /// </remarks>
+    [Fact]
+    public void La_oferta_se_retira_al_despublicar_mandar_a_la_papelera_o_borrar_un_evento()
+    {
+        var composer = Composer();
+
+        Assert.Contains("AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEventoAlPublicar>()", composer, StringComparison.Ordinal);
+        foreach (var notificacion in new[] { "ContentUnpublishedNotification", "ContentMovedToRecycleBinNotification", "ContentDeletedNotification" })
+        {
+            Assert.Contains($"AddNotificationAsyncHandler<{notificacion}, OfertaDeEventoAlRetirar>()", composer, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>El stub sigue siendo el default: un clon limpio vende entradas sin levantar nada.</summary>
     [Fact]
     public void El_default_es_el_motor_en_proceso()

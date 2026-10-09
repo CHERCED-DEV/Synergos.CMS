@@ -66,13 +66,15 @@ public sealed class OfertaDeEventoAlPublicarTests
     }
 
     [Fact]
-    public async Task Un_evento_que_el_catalogo_no_sirve_no_tiene_oferta()
+    public async Task Un_evento_que_el_catalogo_no_sirve_no_tiene_oferta_y_la_que_tuviera_se_retira()
     {
         _catalogo.GetEventAsync("sin-ficha", Arg.Any<CancellationToken>()).Returns((EventDetail?)null);
 
         await Montar("cms").HandleAsync(Publicados(Nodo("eventPage", "sin-ficha"), Nodo("eventPage", null)), default);
 
         await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
+        await _ofertas.Received(1).RetireAsync("sin-ficha", Arg.Any<CancellationToken>());
+        await _ofertas.Received(1).RetireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

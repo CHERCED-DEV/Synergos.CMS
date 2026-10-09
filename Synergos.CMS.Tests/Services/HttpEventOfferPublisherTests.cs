@@ -178,6 +178,41 @@ public sealed class HttpEventOfferPublisherTests
         var (publicador, orquestador, _) = Montar(hayDestino: false);
 
         Assert.Equal(EventOfferOutcome.NoDestination, await publicador.PublishAsync(Evento()));
+        Assert.Equal(EventOfferOutcome.NoDestination, await publicador.RetireAsync("evt-oferta"));
         Assert.Empty(orquestador.Llamadas);
+    }
+
+    [Fact]
+    public async Task Retirar_manda_el_retiro_del_evento_con_su_propia_llave_y_sin_cuerpo()
+    {
+        var (publicador, orquestador, _) = Montar();
+
+        Assert.Equal(EventOfferOutcome.Published, await publicador.RetireAsync("evt-oferta"));
+        await publicador.RetireAsync("evt-oferta");
+
+        Assert.All(orquestador.Llamadas, l => Assert.Equal("/v1/ofertas/evt-oferta/retirar", l.Ruta));
+        Assert.All(orquestador.Llamadas, l => Assert.Equal("", l.Cuerpo));
+        Assert.Equal(2, orquestador.Llamadas.Select(l => l.Llave).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task Un_evento_sin_localidades_retira_su_oferta_en_vez_de_mandar_una_vacia()
+    {
+        // El orquestador rechaza una oferta sin localidades: sin esto, la que tuviera antes se seguiría vendiendo.
+        var (publicador, orquestador, _) = Montar();
+
+        await publicador.PublishAsync(Evento() with { Tiers = [] });
+
+        Assert.Equal("/v1/ofertas/evt-oferta/retirar", Assert.Single(orquestador.Llamadas).Ruta);
+    }
+
+    [Fact]
+    public async Task Un_retiro_rechazado_o_sin_respuesta_no_lanza()
+    {
+        var (publicador, orquestador, log) = Montar();
+        orquestador.Responde = () => throw new HttpRequestException("Connection refused");
+
+        Assert.Equal(EventOfferOutcome.Failed, await publicador.RetireAsync("evt-oferta"));
+        Assert.Contains(log.Lineas, l => l.Nivel == LogLevel.Warning && l.Texto.Contains("retirar", StringComparison.Ordinal));
     }
 }

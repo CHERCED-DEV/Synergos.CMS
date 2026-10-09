@@ -217,6 +217,149 @@ public sealed class OfertaDeEventosTests
         Assert.Equal(15, await Existencias(compra, "evt-1/GEN"));
     }
 
+    // ── La oferta es el estado ENTERO del evento (ADR 0140 F3, endurecimiento) ─
+
+    /// <summary>Una oferta de dos localidades, GEN y VIP, a la venta desde ayer y para dentro de un mes.</summary>
+    private static object DosLocalidades(string evento, int aforoGen = 10, decimal precioVip = 100_000m, bool conVip = true)
+    {
+        var abre = DateTimeOffset.UtcNow.AddDays(-1);
+        var gen = new { code = "GEN", price = 50_000m, maxPerOrder = (int?)10, capacity = aforoGen, seats = (string[]?)null, saleOpensUtc = abre };
+        var vip = new { code = "VIP", price = precioVip, maxPerOrder = (int?)10, capacity = 5, seats = (string[]?)null, saleOpensUtc = abre };
+        return new
+        {
+            eventId = evento,
+            currency = "COP",
+            startsAtUtc = DateTimeOffset.UtcNow.AddDays(30),
+            tiers = conVip ? new[] { gen, vip } : new[] { gen },
+        };
+    }
+
+    private static async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(
+        CompraDeEventosReal compra, string evento, string localidad, int cuantas, string llave, string? butaca = null)
+        => await compra.Abrir(Ana, CompraDeEventosReal.Negocio(0m), llave,
+            new { eventId = evento, lines = new[] { new { tier = localidad, seat = butaca, quantity = cuantas } } });
+
+    private static async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Retirar(CompraDeEventosReal compra, string evento, string llave)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/ofertas/{evento}/retirar");
+        peticion.Headers.Add("Idempotency-Key", llave);
+        using var r = await compra.Orquestador.SendAsync(peticion);
+        var texto = await r.Content.ReadAsStringAsync();
+        return (r.StatusCode, string.IsNullOrWhiteSpace(texto) ? default : JsonDocument.Parse(texto).RootElement.Clone());
+    }
+
+    [Fact]
+    public async Task Una_localidad_que_sale_de_la_oferta_deja_de_venderse_sin_apartar_nada_y_vuelve_al_republicarla()
+    {
+        // Es la localidad que el editor borra, o le pone aforo cero: el contenido la omite y ya no llega.
+        var anota = default(QueAnota);
+        using var compra = new CompraDeEventosReal(envolver: f => anota = new QueAnota(f));
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r1"), "oferta-r1a")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r1", conVip: false), "oferta-r1b")).Estado);
+        var apartadosAntes = anota!.Pedidos.Count(p => p.EndsWith("/holds", StringComparison.Ordinal));
+
+        var (vip, rechazo) = await Abrir(compra, "evt-r1", "VIP", 2, "compra-r1-vip");
+
+        Assert.NotEqual(HttpStatusCode.Created, vip);
+        Assert.Equal("pricing.price_not_in_effect", rechazo.GetProperty("code").GetString());
+        Assert.Equal(apartadosAntes, anota.Pedidos.Count(p => p.EndsWith("/holds", StringComparison.Ordinal)));
+        Assert.Equal(HttpStatusCode.Created, (await Abrir(compra, "evt-r1", "GEN", 1, "compra-r1-gen")).Estado);
+
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r1"), "oferta-r1c")).Estado);
+        Assert.Equal(HttpStatusCode.Created, (await Abrir(compra, "evt-r1", "VIP", 2, "compra-r1-vip-otra")).Estado);
+    }
+
+    [Fact]
+    public async Task Retirar_un_evento_deja_de_vender_todas_sus_localidades_y_republicar_lo_vuelve_a_poner_a_la_venta()
+    {
+        using var compra = new CompraDeEventosReal();
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r2"), "oferta-r2a")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Comprar(compra, "evt-r2", 3, "compra-r2")).Estado);
+
+        Assert.Equal(HttpStatusCode.OK, (await Retirar(compra, "evt-r2", "retiro-r2a")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Retirar(compra, "evt-r2", "retiro-r2b")).Estado);   // repetirlo no hace daño
+
+        foreach (var localidad in new[] { "GEN", "VIP" })
+        {
+            var (estado, rechazo) = await Abrir(compra, "evt-r2", localidad, 1, $"compra-r2-{localidad}");
+            Assert.NotEqual(HttpStatusCode.Created, estado);
+            Assert.Equal("pricing.price_not_in_effect", rechazo.GetProperty("code").GetString());
+        }
+        Assert.Equal(0, await Existencias(compra, "evt-r2/GEN"));   // y su aforo, agotado a lo vendido
+
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r2"), "oferta-r2b")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Comprar(compra, "evt-r2", 1, "compra-r2-de-nuevo")).Estado);
+        Assert.Equal(6, await Existencias(compra, "evt-r2/GEN"));
+        Assert.Equal(HttpStatusCode.OK, (await Retirar(compra, "evt-nunca-publicado", "retiro-r2c")).Estado);
+    }
+
+    [Fact]
+    public async Task Una_butaca_que_sale_del_mapa_se_agota_y_no_se_vende()
+    {
+        using var compra = new CompraDeEventosReal();
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, Oferta("evt-r3", butacas: ["A-1", "A-2", "A-3"]), "oferta-r3a")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, Oferta("evt-r3", butacas: ["A-1", "A-3"]), "oferta-r3b")).Estado);
+
+        var (estado, _) = await Abrir(compra, "evt-r3", "GEN", 1, "compra-r3", butaca: "A-2");
+
+        Assert.NotEqual(HttpStatusCode.Created, estado);
+        Assert.Equal(0, await Existencias(compra, "evt-r3/GEN/A-2"));
+        Assert.Equal(HttpStatusCode.OK, (await Comprar(compra, "evt-r3", 1, "compra-r3-a1", butaca: "A-1")).Estado);
+    }
+
+    [Fact]
+    public async Task Bajar_el_aforo_por_debajo_de_lo_vendido_lo_deja_en_lo_vendido_y_publica_las_demas_localidades()
+    {
+        using var compra = new CompraDeEventosReal();
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r4", aforoGen: 10), "oferta-r4a")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Comprar(compra, "evt-r4", 7, "compra-r4")).Estado);
+
+        var (estado, publicada) = await Publicar(compra, DosLocalidades("evt-r4", aforoGen: 2, precioVip: 200_000m), "oferta-r4b");
+
+        Assert.True(estado == HttpStatusCode.OK, $"publicar: {(int)estado} {publicada}");
+        Assert.Equal(7, publicada.GetProperty("tiers").EnumerateArray().Single(t => t.GetProperty("code").GetString() == "GEN")
+            .GetProperty("capacity").GetInt32());
+        Assert.Equal(0, await Existencias(compra, "evt-r4/GEN"));
+        var (vip, abierta) = await Abrir(compra, "evt-r4", "VIP", 1, "compra-r4-vip");
+        Assert.Equal(HttpStatusCode.Created, vip);
+        Assert.Equal(200_000m, abierta.GetProperty("total").GetProperty("amount").GetDecimal());
+
+        // Lo declarado quedó en lo vendido: subirlo después a 12 deja 5 libres, no 10.
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r4", aforoGen: 12, precioVip: 200_000m), "oferta-r4c")).Estado);
+        Assert.Equal(5, await Existencias(compra, "evt-r4/GEN"));
+    }
+
+    [Fact]
+    public async Task Bajar_el_aforo_con_apartados_vivos_no_baja_de_lo_apartado()
+    {
+        using var compra = new CompraDeEventosReal();
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, Oferta("evt-r5", aforo: 10), "oferta-r5a")).Estado);
+        Assert.Equal(HttpStatusCode.Created, (await Abrir(compra, "evt-r5", "GEN", 3, "compra-r5-abierta")).Estado);
+
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, Oferta("evt-r5", aforo: 2), "oferta-r5b")).Estado);
+
+        Assert.Equal(3, await Existencias(compra, "evt-r5/GEN"));
+        Assert.NotEqual(HttpStatusCode.Created, (await Abrir(compra, "evt-r5", "GEN", 1, "compra-r5-otra")).Estado);
+    }
+
+    [Fact]
+    public async Task Una_localidad_que_falla_no_impide_publicar_las_demas_y_republicar_termina_lo_que_falta()
+    {
+        // La respuesta del primer precio se pierde: para el orquestador, Pricing no contestó por GEN.
+        var anota = default(QueAnota);
+        using var compra = new CompraDeEventosReal(envolver: f => anota = new QueAnota(f, pierdeLaPrimera: "/v1/prices"));
+
+        var (estado, rechazo) = await Publicar(compra, DosLocalidades("evt-r6"), "oferta-r6a");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, estado);
+        Assert.Contains("GEN", rechazo.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Created, (await Abrir(compra, "evt-r6", "VIP", 1, "compra-r6-vip")).Estado);
+
+        Assert.Equal(HttpStatusCode.OK, (await Publicar(compra, DosLocalidades("evt-r6"), "oferta-r6b")).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await Comprar(compra, "evt-r6", 1, "compra-r6-gen")).Estado);
+        Assert.Equal(9, await Existencias(compra, "evt-r6/GEN"));
+    }
+
     public static TheoryData<string, string> Incompletas() => new()
     {
         { """{"currency":"COP","startsAtUtc":"2030-01-01T00:00:00Z","tiers":[{"code":"GEN","price":1,"capacity":1}]}""", "eventos.bad_event" },

@@ -115,6 +115,15 @@ public static class EventosEndpoints
             return (await ofertas.PublicarAsync(oferta, key, ct)).Map(EventOfferResponse.From).ToHttp();
         }).WithName("PublishEventOffer").ConLlaveDeIdempotencia();
 
+        // Retirar la oferta de un evento que se despublicó o se borró: ninguna localidad se vende más. Lo
+        // llama el CMS, como publicarla; sin marca de la puerta.
+        app.MapPost("/v1/ofertas/{eventId}/retirar", async Task<Results<Ok<EventOfferResponse>, ProblemHttpResult>> (
+            string eventId, HttpRequest http, OfertaDeEventos ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+            return (await ofertas.RetirarAsync(eventId, key, ct)).Map(EventOfferResponse.From).ToHttp();
+        }).WithName("RetireEventOffer").ConLlaveDeIdempotencia();
+
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, «se rinde a los ocho intentos» sería «se abandona», y arreglar una devolución
         // colgada exigiría tocarla a mano en la capacidad, por fuera del rastro de la saga.

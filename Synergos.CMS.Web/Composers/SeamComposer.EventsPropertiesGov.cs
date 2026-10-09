@@ -186,6 +186,12 @@ public sealed partial class SeamComposer
         // un evento de organizador y a mano (POST /api/eventos/oferta/republicar).
         builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEventoAlPublicar>();
 
+        // Y se RETIRA al despublicar, mandar a la papelera o borrar un eventPage (o el nodo que lo contiene):
+        // la puerta vende contra lo publicado en el orquestador, no contra la ficha.
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeEventoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeEventoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeEventoAlRetirar>();
+
         services.AddSingleton<IEventManagementService>(sp =>
             new StubEventManagementService(
                 sp.GetRequiredService<EventTicketLedger>(),

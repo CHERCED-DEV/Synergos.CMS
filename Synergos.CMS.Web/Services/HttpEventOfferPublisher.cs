@@ -48,17 +48,37 @@ public sealed class HttpEventOfferPublisher : IEventOfferPublisher
         _hayDestino = hayDestino;
     }
 
-    public async Task<EventOfferOutcome> PublishAsync(EventDetail evento, CancellationToken cancellationToken = default)
+    public Task<EventOfferOutcome> PublishAsync(EventDetail evento, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(evento);
 
+        // Sin localidades no hay nada que vender: lo que se hubiera publicado antes se retira entero (el
+        // orquestador exige al menos una localidad en una oferta).
+        if (evento.Tiers.Count == 0) return RetireAsync(evento.Summary.Id, cancellationToken);
+
+        return EnviarAsync(evento.Summary.Id, "publicar", () => new HttpRequestMessage(HttpMethod.Post, "v1/ofertas")
+        {
+            Content = JsonContent.Create(Oferta(evento)),
+        }, cancellationToken);
+    }
+
+    public Task<EventOfferOutcome> RetireAsync(string eventId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
+        return EnviarAsync(eventId, "retirar", () => new HttpRequestMessage(
+            HttpMethod.Post, $"v1/ofertas/{Uri.EscapeDataString(eventId)}/retirar"), cancellationToken);
+    }
+
+    private async Task<EventOfferOutcome> EnviarAsync(
+        string evento, string que, Func<HttpRequestMessage> peticion, CancellationToken cancellationToken)
+    {
         if (!_hayDestino)
         {
-            _log.LogDebug("La oferta de {Evento} no se publica: no hay orquestador de Eventos configurado.", evento.Summary.Id);
+            _log.LogDebug("La oferta de {Evento} no se {Que}: no hay orquestador de Eventos configurado.", evento, que);
             return EventOfferOutcome.NoDestination;
         }
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, "v1/ofertas") { Content = JsonContent.Create(Oferta(evento)) };
+        using var req = peticion();
         // Una llave por publicación: los reintentos de la cadena repiten ESTA petición, y una
         // publicación nueva —otro publicar, o republicar— es otra llave, que el orquestador espera.
         req.Headers.Add("Idempotency-Key", "oferta-" + Guid.NewGuid().ToString("n"));
@@ -68,20 +88,20 @@ public sealed class HttpEventOfferPublisher : IEventOfferPublisher
             using var res = await _clients.CreateClient(ClientName).SendAsync(req, cancellationToken).ConfigureAwait(false);
             if (res.IsSuccessStatusCode)
             {
-                _log.LogInformation("Oferta de {Evento} publicada en el orquestador.", evento.Summary.Id);
+                _log.LogInformation("Oferta de {Evento}: {Que} en el orquestador, hecho.", evento, que);
                 return EventOfferOutcome.Published;
             }
 
             var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, cancellationToken).ConfigureAwait(false);
             _log.LogWarning(
-                "El orquestador no publicó la oferta de {Evento}: {Estado} {Codigo} {Detalle}. Se repara republicando.",
-                evento.Summary.Id, (int)res.StatusCode, rechazo?.Codigo, rechazo?.Detalle);
+                "El orquestador no pudo {Que} la oferta de {Evento}: {Estado} {Codigo} {Detalle}. Se repara republicando.",
+                que, evento, (int)res.StatusCode, rechazo?.Codigo, rechazo?.Detalle);
             return EventOfferOutcome.Failed;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            _log.LogWarning(ex, "El orquestador de Eventos no respondió al publicar la oferta de {Evento}. Se repara republicando.",
-                evento.Summary.Id);
+            _log.LogWarning(ex, "El orquestador de Eventos no respondió al {Que} la oferta de {Evento}. Se repara republicando.",
+                que, evento);
             return EventOfferOutcome.Failed;
         }
     }
