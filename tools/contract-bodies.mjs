@@ -194,10 +194,14 @@ function mandadoPorLaUi(app, ui = UI) {
          * La ruta de una variable: su última asignación `\`${apiBase}/x\`` hacia atrás.
          *
          * Heurístico, y funciona porque el estilo de estos clientes es consistente — `const url`
-         * justo encima de la llamada. Se limita a 30 líneas para no cruzar de método.
+         * justo encima de la llamada. No sale del MÉTODO: las 30 líneas solas no lo impedían, y
+         * una ruta que llega como parámetro (`settle(url, …)`) se resolvía con el `const url`
+         * del método de arriba. Alquiler lo midió dos veces (CMS#147 y CMS#204): G-7 acusó a
+         * `POST /rentals` de mandar `amount`, que era el cuerpo de devolver, y ese cuerpo no se
+         * cruzaba con el suyo. Sin ruta propia, la llamada se declara (`sinRuta`).
          */
         const resolverRuta = (variable, desde) => {
-            for (let j = desde; j >= Math.max(0, desde - 30); j--) {
+            for (let j = desde; j >= Math.max(inicioDelMetodo(desde), desde - 30); j--) {
                 const m = lineas[j].match(
                     new RegExp(`\\b${variable}\\s*=\\s*\`\\$\\{apiBase\\}/([^\`?]*)\``));
                 if (m) return forma(m[1].replace(/\$\{[^}]*\}/g, '{x}'));
@@ -459,6 +463,10 @@ function autoprueba() {
         '    const url = `${apiBase}/favorite`;',
         "    return fetch(url, { method: 'POST', body: JSON.stringify({ listingId }) });",
         '  }',
+        '',
+        '  private async settle(url: string, amount: number): Promise<unknown> {',
+        '    return this.postJson(url, { amount });',
+        '  }',
         '}',
         '',
     ];
@@ -484,7 +492,12 @@ function autoprueba() {
         // ADR 0137 cambió la firma a `postJson(apiBase, url, body)` y el gate se quedó en 2 claves
         // en 1 ruta sin decir nada: `tags` y `ping` son esa firma, con la ruta en variable y en línea.
         caso('una llamada con la ruta ilegible se DECLARA, no se calla', lf.sinRuta.join(' '),
-            `fixture:fixture-api.client.ts:${cliente.findIndex((l) => l.includes('postJson(apiBase, target')) + 1}`);
+            ['postJson(apiBase, target', 'postJson(url, { amount })']
+                .map((t) => `fixture:fixture-api.client.ts:${cliente.findIndex((l) => l.includes(t)) + 1}`)
+                .join(' '));
+        // `settle` recibe la ruta por parámetro, justo debajo de `favorite`: tomarla de ahí le
+        // sumaba `amount` a `favorite` (10 claves en 6 rutas), que es el defecto de CMS#204.
+        caso('una ruta en parámetro NO se toma del método de arriba', plano(lf).includes('amount'), false);
         caso('el MISMO fixture en CRLF da la misma cifra (daba 1 clave en 1 ruta)', cifra(crlf), cifra(lf));
         caso('…y las mismas claves por ruta', plano(crlf), plano(lf));
     } finally {
