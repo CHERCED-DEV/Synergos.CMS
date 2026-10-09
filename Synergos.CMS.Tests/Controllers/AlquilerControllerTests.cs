@@ -43,8 +43,13 @@ public sealed class AlquilerControllerTests
     private sealed class PuertaDeMiembro : IMemberAccessGate
     {
         private readonly Guid? _key;
+        private readonly bool _personal;
 
-        public PuertaDeMiembro(Guid? key) => _key = key;
+        public PuertaDeMiembro(Guid? key, bool personal = false)
+        {
+            _key = key;
+            _personal = personal;
+        }
 
         public bool IsAuthenticated => _key is not null;
 
@@ -56,7 +61,7 @@ public sealed class AlquilerControllerTests
 
         public IReadOnlyCollection<string> CurrentMemberRoles => Array.Empty<string>();
 
-        public bool HasAnyRole(string? allowedRolesCsv) => false;
+        public bool HasAnyRole(string? allowedRolesCsv) => _personal;
     }
 
     private sealed class RentalServiceFalso : IEquipmentRentalService
@@ -65,6 +70,9 @@ public sealed class AlquilerControllerTests
 
         public RentalServiceFalso(RentalResult resultado) => _resultado = resultado;
 
+        /// <summary>Cuántas veces se intentó cerrar: una puerta que niega no llega al seam.</summary>
+        public int Cierres { get; private set; }
+
         public Task<RentalQuote?> QuoteAsync(RentalRequest r, CancellationToken c = default)
             => Task.FromResult<RentalQuote?>(new RentalQuote(r.EquipmentId, 1, 3, 40_000m, 120_000m, 250_000m));
 
@@ -72,10 +80,16 @@ public sealed class AlquilerControllerTests
             => Task.FromResult(_resultado);
 
         public Task<RentalResult?> ReturnAsync(string id, decimal m, string k, CancellationToken c = default)
-            => Task.FromResult<RentalResult?>(_resultado);
+        {
+            Cierres++;
+            return Task.FromResult<RentalResult?>(_resultado);
+        }
 
         public Task<RentalResult?> CancelAsync(string id, decimal m, string k, CancellationToken c = default)
-            => Task.FromResult<RentalResult?>(_resultado);
+        {
+            Cierres++;
+            return Task.FromResult<RentalResult?>(_resultado);
+        }
     }
 
     private sealed class RelojFijo : TimeProvider
@@ -107,6 +121,33 @@ public sealed class AlquilerControllerTests
             new PuertaDeMiembro(conSesion ? Miembro : null),
             NullLogger<AlquilerController>.Instance);
     }
+
+    private static readonly Guid Otro = Guid.Parse("99999999-8888-7777-6666-555555555555");
+
+    /// <summary>
+    /// Un borde que comparte el registro con otro: así el contrato lo emite el DUEÑO y el cierre
+    /// lo intenta quien sea. Con un registro por borde, «no consta» y «no es tuyo» dan lo mismo.
+    /// </summary>
+    private static AlquilerController BordeSobre(
+        EquipmentAgreementLedger ledger, RentalServiceFalso seam, IMemberAccessGate puerta)
+        => new(
+            new StubEquipmentCatalogProvider(),
+            seam,
+            new EquipmentAgreementIssuer(ledger, null, new RelojFijo()),
+            ledger,
+            puerta,
+            NullLogger<AlquilerController>.Instance);
+
+    /// <summary>El dueño reserva (y así queda su contrato en el registro); devuelve el registro.</summary>
+    private static async Task<EquipmentAgreementLedger> ReservadoPorElDueno(RentalServiceFalso seam)
+    {
+        var ledger = new EquipmentAgreementLedger(new AlmacenEnMemoria());
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro)).Reserve(Pedido(), CancellationToken.None);
+        Assert.NotNull(await ledger.GetAsync("ALQ-1"));
+        return ledger;
+    }
+
+    private static SettleRequest TodaLaGarantia() => new(250_000m, "cierre-1");
 
     private static ReserveRequest Pedido()
         => new("andamio-multidireccional-2m", 1, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 4), "k1");
@@ -213,5 +254,66 @@ public sealed class AlquilerControllerTests
         var res = await borde.EquipmentDetail("no-existe", CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(res.Result);
+    }
+
+    // ── Quién puede cerrar un alquiler (IDOR) ───────────────────────────────
+
+    [Fact]
+    public async Task Sin_sesion_NO_se_cierra_un_alquiler()
+    {
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+
+        var res = await BordeSobre(ledger, seam, new PuertaDeMiembro(null))
+            .Return("ALQ-1", TodaLaGarantia(), CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(res.Result);
+        Assert.Equal(0, seam.Cierres);
+    }
+
+    [Fact]
+    public async Task Otro_miembro_NO_devuelve_el_alquiler_ajeno_ni_cobra_su_garantia()
+    {
+        // El caso entero: devolver con el monto de la garantía es capturarla. Lo intenta un
+        // miembro CON sesión, que es lo que un guard de «¿está logueado?» dejaba pasar.
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+
+        var devolver = await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro))
+            .Return("ALQ-1", TodaLaGarantia(), CancellationToken.None);
+        var cancelar = await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro))
+            .Cancel("ALQ-1", TodaLaGarantia(), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(devolver.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(cancelar.Result).StatusCode);
+        Assert.Equal(0, seam.Cierres);
+    }
+
+    [Fact]
+    public async Task El_dueno_SI_cierra_su_alquiler()
+    {
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+
+        var res = await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro))
+            .Return("ALQ-1", new SettleRequest(0m, "cierre-1"), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(res.Result);
+        Assert.Equal(1, seam.Cierres);
+    }
+
+    [Fact]
+    public async Task El_personal_SI_cierra_un_alquiler_ajeno()
+    {
+        // Quien recibe el equipo es el personal, y es quien calcula el daño (spec §«lo que no
+        // hace»): negarle el cierre por no ser el dueño dejaría la devolución sin nadie que la haga.
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+
+        var res = await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro, personal: true))
+            .Return("ALQ-1", new SettleRequest(40_000m, "cierre-1"), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(res.Result);
+        Assert.Equal(1, seam.Cierres);
     }
 }

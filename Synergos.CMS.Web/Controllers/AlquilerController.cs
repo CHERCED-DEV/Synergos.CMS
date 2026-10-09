@@ -192,6 +192,11 @@ public sealed class AlquilerController : ControllerBase
     private async Task<ActionResult<RentalDto>> CerrarAsync(
         string rentalId, SettleRequest? body, string quePasaba, CancellationToken ct)
     {
+        if (await NegarSiNoEsSuyo(rentalId, quePasaba, ct).ConfigureAwait(false) is { } negado)
+        {
+            return negado;
+        }
+
         var monto = body?.Amount ?? 0m;
         var llave = body?.IdempotencyKey;
         if (string.IsNullOrWhiteSpace(llave))
@@ -217,6 +222,56 @@ public sealed class AlquilerController : ControllerBase
         var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
         return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
     }
+
+    /// <summary>
+    /// Devolver o cancelar lo hace quien alquiló o el personal — nadie más.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin esto, cualquiera que supiera un <c>rentalId</c> cerraba el alquiler
+    /// ajeno</b>, anónimo, y el cuerpo lleva el MONTO que se cobra de la garantía: devolver con
+    /// el monto entero era capturar la garantía de otra persona. Es la clase IDOR que T2 cerró en
+    /// los otros siete controllers (ADR 0112), y el piloto 2 la reabrió porque nadie le preguntó
+    /// a este borde quién llama.</para>
+    ///
+    /// <para><b>El dueño se lee del CONTRATO que este mismo borde emitió al reservar</b>, no de
+    /// algo que mande el cliente: el cuerpo no trae quién es, y un campo así sería la
+    /// fabricación escrita en la firma. Un alquiler sin contrato en este CMS no consta: 404.</para>
+    ///
+    /// <para><b>El personal es <c>admin</c></b>, el único rol de staff sembrado, como en la tienda
+    /// (<c>ShopCatalogController.RequireShopStaff</c>). Quién FIJA el daño —el spec dice «quien
+    /// recibe el equipo» y la app deja que el inquilino declare cero— es una pregunta de producto
+    /// que esto NO contesta: sólo impide que la conteste un tercero.</para>
+    /// </remarks>
+    private async Task<ActionResult?> NegarSiNoEsSuyo(
+        string rentalId, string quePasaba, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Unauthorized(new RejectionDto("alquiler.session_required",
+                $"Hay que iniciar sesión para {quePasaba} un alquiler."));
+        }
+
+        if (_gate.HasAnyRole(PersonalCsv))
+        {
+            return null;
+        }
+
+        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        if (contrato is null)
+        {
+            return NotFound();
+        }
+
+        // 403 directo y no Forbid(), por lo mismo que la tienda: Forbid() pasa por el esquema de
+        // autenticación de Umbraco y contesta otra cosa.
+        return string.Equals(contrato.RenterId, QuienAlquila(), StringComparison.Ordinal)
+            ? null
+            : StatusCode(StatusCodes.Status403Forbidden, new RejectionDto("alquiler.not_yours",
+                "Ese alquiler no es tuyo."));
+    }
+
+    /// <summary>El rol que puede cerrar cualquier alquiler.</summary>
+    private const string PersonalCsv = "admin";
 
     /// <summary>
     /// Un rechazo del eje 2 sale con el código que dio quien decidió, y su transitoriedad manda
