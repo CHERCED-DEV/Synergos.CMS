@@ -260,6 +260,10 @@
               }
             }
           }
+        },
+        "x-synergos-flujo": {
+          "flujo": "eventos.compra",
+          "operacion": "abrir"
         }
       }
     },
@@ -359,6 +363,10 @@
               }
             }
           }
+        },
+        "x-synergos-flujo": {
+          "flujo": "eventos.compra",
+          "operacion": "consultar"
         }
       }
     },
@@ -458,6 +466,10 @@
               }
             }
           }
+        },
+        "x-synergos-flujo": {
+          "flujo": "eventos.compra",
+          "operacion": "cancelar"
         }
       }
     },
@@ -565,6 +577,10 @@
               }
             }
           }
+        },
+        "x-synergos-flujo": {
+          "flujo": "eventos.compra",
+          "operacion": "cerrar"
         }
       }
     },

@@ -75,6 +75,27 @@ public sealed class PaymentEngineCoexistenceTests
     }
 
     [Fact]
+    public void La_puerta_con_un_flujo_hacia_un_orquestador_con_destino_cuenta_igual()
+    {
+        // ADR 0140 F3: por la puerta se compra contra el orquestador, que cobra con Api.Payments. Con
+        // llaves de Wompi de este lado, las dos plomerías podrían cobrar.
+        var malo = Assert.Throws<InvalidOperationException>(() => SeamComposer.ExigirUnaSolaPlomeria(Config(
+            ("Synergos:Puerta:Flujos:eventos.compra:Acceso", "Miembro"), ("Synergos:Eventos:BaseUrl", "http://bff-eventos:8080"),
+            (Publica, "pub_prod_real"), (Integridad, "prod_integrity"), (Proveedor, "Wompi"))));
+
+        Assert.Contains("Synergos:Puerta:Flujos", malo.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void La_puerta_sin_destino_no_llega_a_nadie_y_no_choca()
+    {
+        // Es el clon limpio con el flujo de appsettings.json: abierto, pero sin orquestador al que llegar.
+        SeamComposer.ExigirUnaSolaPlomeria(Config(
+            ("Synergos:Puerta:Flujos:eventos.compra:Acceso", "Miembro"),
+            (Publica, "pub_prod_real"), (Integridad, "prod_integrity"), (Proveedor, "Wompi")));
+    }
+
+    [Fact]
     public void El_camino_sin_servicios_sigue_intacto()
     {
         // Es el que permite levantar el repo entero sin levantar nada más. Si esto fallara, el

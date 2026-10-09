@@ -3,6 +3,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -212,6 +213,23 @@ public sealed partial class SeamComposer
     /// <c>null</c> y acá no se cobra nada—, y además que algo pueda elegirlo, o sea el proveedor
     /// único puesto en <c>wompi</c> o el router encendido, que lo admite como miembro.</para>
     /// </remarks>
+    /// <summary>
+    /// Si la puerta abre algún flujo hacia un orquestador con destino (<c>Synergos:X:BaseUrl</c>): por
+    /// ahí la plata la mueve <c>Api.Payments</c>.
+    /// </summary>
+    internal static bool PuertaQueCobra(IConfiguration config)
+    {
+        var flujos = config.GetSection(PuertaSettings.Seccion).GetSection("Flujos").GetChildren().Select(f => f.Key).ToList();
+        if (flujos.Count == 0) return false;
+
+        var tabla = TablaDeLaPuerta.Incrustada();
+        return flujos
+            .SelectMany(f => tabla.DelFlujo(f))
+            .Select(o => o.Orquestador)
+            .Distinct(StringComparer.Ordinal)
+            .Any(o => !string.IsNullOrWhiteSpace(config.GetSection("Synergos").GetSection(o)["BaseUrl"]));
+    }
+
     internal static void ExigirUnaSolaPlomeria(IConfiguration config)
     {
         var tiendaCableada = Interruptor.Encendido(config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode);
@@ -222,7 +240,13 @@ public sealed partial class SeamComposer
         // es el mismo defecto de `Provider=Wompi` sirviendo el stub, sólo que al revés.
         var seamCableado = Interruptor.Encendido(config, "Synergos:Payments:Mode", "Api", new PaymentsSettings().Mode);
 
-        if (!tiendaCableada && !seamCableado) return;
+        // Y la PUERTA de los flujos (ADR 0140 F3) cuenta igual cuando abre un flujo hacia un orquestador
+        // con destino: por ahí se compra contra el orquestador, que cobra con Api.Payments. Es la misma
+        // decisión del #57 aplicada a la ruta nueva: mientras convivan, dos plomerías podrían cobrar.
+        // Sin destino, la puerta no llega a nadie y no cobra.
+        var puertaQueCobra = PuertaQueCobra(config);
+
+        if (!tiendaCableada && !seamCableado && !puertaQueCobra) return;
 
         var tieneLlaves = !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiPublicKey"])
             && !string.IsNullOrWhiteSpace(config["Synergos:Payments:WompiIntegritySecret"]);
@@ -234,8 +258,9 @@ public sealed partial class SeamComposer
         if (!loPuedeElegir) return;
 
         throw new InvalidOperationException(
-            "La plata la mueve Api.Payments en este despliegue —Synergos:Tienda:Mode=Bff, o "
-            + "Synergos:Payments:Mode=Api— y ADEMÁS tiene "
+            "La plata la mueve Api.Payments en este despliegue —Synergos:Tienda:Mode=Bff, "
+            + "Synergos:Payments:Mode=Api, o un flujo de Synergos:Puerta:Flujos hacia un orquestador con "
+            + "destino— y ADEMÁS tiene "
             + "ADEMÁS llaves reales de Wompi del lado del CMS "
             + "(Synergos:Payments:WompiPublicKey + WompiIntegritySecret, con "
             + "Synergos:Payments:Provider=Wompi o Routing:Enabled=true). Las dos mitades cobrarían, "

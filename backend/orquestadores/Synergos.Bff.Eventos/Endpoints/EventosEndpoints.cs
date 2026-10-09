@@ -15,12 +15,24 @@ namespace Synergos.Bff.Eventos.Endpoints;
 /// el que el UI convierte en tipos. Lo que pone la puerta del CMS (quién compra, la comisión, el
 /// contacto del aviso) viaja en cabeceras declaradas con <c>.ConCabeceraDeLaPuerta</c> y se lee ANTES
 /// que cualquier otra regla (ADR 0140 F3); el cuerpo es sólo lo del navegador. Consultar, confirmar y
-/// cancelar exigen el sujeto y una compra de otro no existe para él.
+/// cancelar exigen el sujeto y una compra de otro no existe para él. Las cuatro van marcadas con
+/// <c>.EnLaPuerta</c>: es lo que el CMS abre al navegador, por <c>/api/flujos/eventos.compra/…</c>.
 /// </remarks>
 public static class EventosEndpoints
 {
     /// <summary>Prefijo de los códigos de rechazo propios del BFF.</summary>
     public const string CodePrefix = "eventos";
+
+    /// <summary>
+    /// La compra en la puerta del CMS (ADR 0140 F3): la clave de su definición, así la puerta y
+    /// <c>flujos/eventos.compra.json</c> no pueden nombrar dos flujos distintos.
+    /// </summary>
+    /// <remarks>
+    /// Se exponen abrir, consultar, cerrar y cancelar, y nada más. Reintentar, la vista de
+    /// compensaciones y la oferta son de operación y del CMS, no del navegador: sin marca no existen
+    /// para la puerta (lo vigila <c>LoQueExponeLaPuertaTests</c>).
+    /// </remarks>
+    private static string Flujo => EventosFlujos.Compra.Clave;
 
     public static IEndpointRouteBuilder MapEventosEndpoints(this IEndpointRouteBuilder app)
     {
@@ -48,14 +60,16 @@ public static class EventosEndpoints
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
         }).WithName("BuyTickets").ConLlaveDeSaga()
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
-          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true)
+          .EnLaPuerta(Flujo, "abrir");
 
         app.MapGet("/v1/ticket-purchases/{id}", Results<Ok<TicketPurchaseResponse>, ProblemHttpResult> (
             string id, HttpRequest http, TicketingFlow flow) =>
         {
             if (Sujeto(http, out var dueno) is { } sinSujeto) return sinSujeto;
             return flow.Get(id, dueno!).Map(TicketPurchaseResponse.From).ToHttp();
-        }).WithName("GetTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
+        }).WithName("GetTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .EnLaPuerta(Flujo, "consultar");
 
         // Confirmar NO recibe cuerpo, al revés que en Tienda: allá hacía falta la dirección de
         // entrega antes de capturar. Una entrada no se despacha, así que no hay nada que validar
@@ -76,14 +90,16 @@ public static class EventosEndpoints
             return (await flow.ConfirmAsync(id, dueno, aviso, ct)).Map(TicketPurchaseResponse.From).ToHttp();
         }).WithName("ConfirmTicketPurchase")
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
-          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto)
+          .EnLaPuerta(Flujo, "cerrar");
 
         app.MapPost("/v1/ticket-purchases/{id}/cancel", async Task<Results<Ok<TicketPurchaseResponse>, ProblemHttpResult>> (
             string id, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
         {
             if (Sujeto(http, out var dueno) is { } sinSujeto) return sinSujeto;
             return (await flow.CancelAsync(id, dueno!, ct)).Map(TicketPurchaseResponse.From).ToHttp();
-        }).WithName("CancelTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
+        }).WithName("CancelTicketPurchase").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .EnLaPuerta(Flujo, "cancelar");
 
         // La oferta de un evento: el precio de cada localidad y sus pozos de aforo (ADR 0140 F3). La
         // llama el CMS al publicar, no un navegador, así que no lleva marca de la puerta ni cabeceras
