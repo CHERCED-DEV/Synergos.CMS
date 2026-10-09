@@ -112,10 +112,13 @@ public sealed class EventosWiringTests
         Assert.True(confirmado >= 0 && leer > confirmado,
             "Las entradas ya emitidas se buscan en el registro ANTES de leer la compra en el orquestador.");
 
+        // Reconciliar elige lo PENDIENTE y le pasa cada orden a ReconciliarUnaAsync, que es la que lee.
         var reconciliar = Cuerpo(artefacto, "public async Task ReconciliarAsync");
         Assert.True(reconciliar.IndexOf("EventOrderStatus.Pending", StringComparison.Ordinal) is var p && p >= 0
-                    && p < reconciliar.IndexOf("LeerAsync(", StringComparison.Ordinal),
+                    && p < reconciliar.IndexOf("ReconciliarUnaAsync(", StringComparison.Ordinal),
             "Reconciliar mira sólo lo PENDIENTE: lo confirmado no sale a la red.");
+        Assert.DoesNotContain("LeerAsync(", reconciliar, StringComparison.Ordinal);
+        Assert.Contains("LeerAsync(", Cuerpo(artefacto, "private async Task ReconciliarUnaAsync"), StringComparison.Ordinal);
     }
 
     private static string CodigoDelArtefacto()

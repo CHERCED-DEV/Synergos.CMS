@@ -211,6 +211,33 @@ public sealed class EventTicketLedger
         }
     }
 
+    /// <summary>
+    /// Descarta una orden PENDIENTE cuya compra no se completará, bajo el cerrojo de su saga: una que entre
+    /// medias se confirmó no se toca. <c>true</c> si se descartó.
+    /// </summary>
+    public async Task<bool> DescartarAsync(string sagaId, string orderRef, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sagaId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(orderRef);
+
+        var cerrojo = CerrojoDe(sagaId);
+        await cerrojo.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (await LoadAsync(orderRef, cancellationToken).ConfigureAwait(false) is not { Status: EventOrderStatus.Pending } orden
+                || !string.Equals(orden.PaymentSessionId, sagaId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            await SaveAsync(orden with { Status = EventOrderStatus.Discarded }, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
     /// <summary>Todas las compras. Un fichero ilegible se salta, no tumba la lista.</summary>
     public async Task<List<PersistedEventOrder>> LoadAllAsync(CancellationToken cancellationToken = default)
     {
@@ -476,7 +503,25 @@ public sealed class EventTicketLedger
 }
 
 /// <summary>Estado de una compra de tickets. Serializado como número en el store.</summary>
-public enum EventOrderStatus { Pending, Confirmed }
+/// <remarks>
+/// <see cref="Discarded"/> va al final a propósito: lo ya guardado son 0 y 1, y una versión anterior
+/// que lea un 2 no lo toma ni por pendiente ni por confirmada, que es lo que significa.
+/// </remarks>
+public enum EventOrderStatus
+{
+    /// <summary>Anotada, sin entradas emitidas todavía.</summary>
+    Pending,
+
+    /// <summary>Con sus entradas emitidas.</summary>
+    Confirmed,
+
+    /// <summary>
+    /// Su compra del orquestador no se completó ni se completará —deshecha, inexistente, o gemela de otra
+    /// orden que ya confirmó la saga—: la reconciliación de «mis entradas» y la consola no la vuelve a
+    /// mirar (ADR 0140 F3). Quien la confirme a propósito todavía puede, contra el orquestador.
+    /// </summary>
+    Discarded,
+}
 
 /// <summary>
 /// La forma SERIALIZADA de una unidad de ticket. Guarda MÁS que el <see cref="EventTicket"/>

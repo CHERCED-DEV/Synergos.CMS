@@ -160,11 +160,13 @@ public sealed class ArtefactoDeEventos
     private readonly ILogger<ArtefactoDeEventos> _log;
     private readonly bool _hayDestino;
     private readonly Func<DateTimeOffset> _ahora;
+    private readonly TimeSpan _presupuesto;
 
     /// <param name="hayDestino">Si el despliegue dice dónde vive el orquestador.</param>
+    /// <param name="presupuesto">El techo de una reconciliación; por defecto <see cref="PresupuestoDeReconciliacion"/>.</param>
     public ArtefactoDeEventos(
         IHttpClientFactory clientes, EventTicketLedger ledger, IOptionsMonitor<PuertaSettings> puerta,
-        ILogger<ArtefactoDeEventos> log, bool hayDestino, Func<DateTimeOffset>? ahora = null)
+        ILogger<ArtefactoDeEventos> log, bool hayDestino, Func<DateTimeOffset>? ahora = null, TimeSpan? presupuesto = null)
     {
         _clientes = clientes;
         _ledger = ledger;
@@ -172,6 +174,7 @@ public sealed class ArtefactoDeEventos
         _log = log;
         _hayDestino = hayDestino;
         _ahora = ahora ?? (() => DateTimeOffset.UtcNow);
+        _presupuesto = presupuesto ?? PresupuestoDeReconciliacion;
     }
 
     /// <summary>El <c>Kind</c> con que la puerta nombra al comprador, o nulo si el flujo no está abierto.</summary>
@@ -265,13 +268,30 @@ public sealed class ArtefactoDeEventos
         return new ResultadoDelArtefacto(StatusCodes.Status200OK, Entradas: _ledger.ConfirmationOf(confirmada));
     }
 
+    /// <summary>Cuántas órdenes pendientes mira, como mucho, una reconciliación: las más recientes primero.</summary>
+    public const int TopeDeReconciliacion = 10;
+
+    /// <summary>Cuánto puede tardar, como mucho, una reconciliación entera: la espera de quien lee la lista.</summary>
+    public static readonly TimeSpan PresupuestoDeReconciliacion = TimeSpan.FromSeconds(3);
+
     /// <summary>
     /// Confirma de este lado las compras PENDIENTES que <paramref name="lasQueTocan"/> elige y que el
-    /// orquestador ya completó. Lo confirmado no se mira: no toca la red.
+    /// orquestador ya completó, y descarta las que no se completarán. Lo confirmado no se mira: no toca la red.
     /// </summary>
     /// <remarks>
-    /// Es lo que cubre al comprador que cerró la compra y no volvió a pedir sus entradas: «mis entradas»
-    /// y la consola del organizador las ven igual. Un orquestador caído deja el log y no tumba la lista.
+    /// <para>Es lo que cubre al comprador que cerró la compra y no volvió a pedir sus entradas: «mis entradas»
+    /// y la consola del organizador las ven igual.</para>
+    ///
+    /// <para><b>Corre en la ruta de LECTURA, y por eso tiene techo</b> (ADR 0140 F3): mira como mucho
+    /// <see cref="TopeDeReconciliacion"/> órdenes, de a varias a la vez, y deja de esperar al orquestador a
+    /// los <see cref="PresupuestoDeReconciliacion"/>: lo que falte se mira en la próxima lectura. Antes las
+    /// consultaba en serie con el techo de diez segundos de cada una, y con el orquestador colgado la lista
+    /// no llegaba nunca, aunque las entradas confirmadas estaban en el registro.</para>
+    ///
+    /// <para><b>Lo que no se completará deja de mirarse</b>: una compra deshecha (<c>Compensated</c>,
+    /// <c>CompensationFailed</c>), una que el orquestador no tiene para ese comprador (404), o la gemela de
+    /// una orden que ya confirmó su saga, quedan <see cref="EventOrderStatus.Discarded"/>. Sin eso se
+    /// volvían a consultar en cada carga, para siempre.</para>
     /// </remarks>
     public async Task ReconciliarAsync(Func<PersistedEventOrder, bool> lasQueTocan, CancellationToken ct)
     {
@@ -281,22 +301,47 @@ public sealed class ArtefactoDeEventos
             .Where(o => o.Status == EventOrderStatus.Pending
                         && !string.IsNullOrWhiteSpace(o.BuyerKind) && !string.IsNullOrWhiteSpace(o.BuyerId))
             .Where(lasQueTocan)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(TopeDeReconciliacion)
             .ToList();
+        if (pendientes.Count == 0) return;
 
-        foreach (var orden in pendientes)
+        using var presupuesto = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        presupuesto.CancelAfter(_presupuesto);
+        try
         {
-            var (compra, _) = await LeerAsync(orden.PaymentSessionId, (orden.BuyerKind!, orden.BuyerId!), ct).ConfigureAwait(false);
-            if (compra is not null && string.Equals(compra.Status, "Completed", StringComparison.Ordinal))
+            await Parallel.ForEachAsync(pendientes,
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = presupuesto.Token },
+                async (orden, t) => await ReconciliarUnaAsync(orden, t).ConfigureAwait(false)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _log.LogWarning(
+                "La reconciliación de compras pendientes llegó a su techo de {Techo}: lo que falta se mira en la próxima lectura.",
+                _presupuesto);
+        }
+    }
+
+    private async Task ReconciliarUnaAsync(PersistedEventOrder orden, CancellationToken ct)
+    {
+        var (compra, fallo) = await LeerAsync(orden.PaymentSessionId, (orden.BuyerKind!, orden.BuyerId!), ct).ConfigureAwait(false);
+        if (compra is { Status: "Completed" })
+        {
+            // Por el registro, que confirma UNA orden por saga: la gemela de una saga ya confirmada no
+            // emite las mismas butacas otra vez, y no se vuelve a mirar.
+            var confirmada = await _ledger.ConfirmarAsync(orden.PaymentSessionId,
+                actual => actual is not null && actual.OrderRef == orden.OrderRef ? actual : orden, ct).ConfigureAwait(false);
+            if (!string.Equals(confirmada.OrderRef, orden.OrderRef, StringComparison.Ordinal))
             {
-                // Por el registro, que confirma UNA orden por saga: la gemela de una saga ya confirmada no
-                // emite las mismas butacas otra vez.
-                var confirmada = await _ledger.ConfirmarAsync(orden.PaymentSessionId,
-                    actual => actual is not null && actual.OrderRef == orden.OrderRef ? actual : orden, ct).ConfigureAwait(false);
-                if (!string.Equals(confirmada.OrderRef, orden.OrderRef, StringComparison.Ordinal))
-                {
-                    _log.LogWarning("La orden {Orden} es gemela de la que ya confirmó su compra: no se confirma.", orden.OrderRef);
-                }
+                _log.LogWarning("La orden {Orden} es gemela de la que ya confirmó su compra: se descarta.", orden.OrderRef);
+                await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
             }
+            return;
+        }
+
+        if (compra is { Status: "Compensated" or "CompensationFailed" } || fallo is { Codigo: "eventos.purchase_not_found" })
+        {
+            await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
         }
     }
 

@@ -51,9 +51,12 @@ namespace Synergos.CMS.Web.Services;
 /// la orden que él mismo anotó y una saga emite sus entradas una sola vez. Lo fijan
 /// <c>OrdenDelInvitadoEnEventosTests</c>.</para>
 ///
-/// <para><b>Con el orquestador apagado, el vertical sigue sirviendo.</b> «Mis entradas»,
-/// transferir y la puerta no lo tocan —salen del registro—; solo comprar y confirmar fallan, con
-/// el motivo puesto. Un BFF caído no puede dejar a nadie fuera de un concierto que ya pagó.</para>
+/// <para><b>Con el orquestador apagado, el vertical sigue sirviendo.</b> Transferir y la puerta no lo
+/// tocan —salen del registro—, y «mis entradas» sale del registro también: lo único que pregunta al
+/// orquestador es la reconciliación de las compras pendientes del miembro por la puerta, con techo de
+/// tiempo (<c>ArtefactoDeEventos.PresupuestoDeReconciliacion</c>), así que caído o colgado no la tumba.
+/// Sólo comprar y confirmar fallan, con el motivo puesto. Un BFF caído no puede dejar a nadie fuera de
+/// un concierto que ya pagó.</para>
 /// </remarks>
 public sealed class HttpEventTicketingService : IEventTicketingService
 {

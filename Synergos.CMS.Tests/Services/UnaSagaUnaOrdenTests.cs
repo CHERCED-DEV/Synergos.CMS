@@ -189,7 +189,7 @@ public sealed class UnaSagaUnaOrdenTests
 
         await Artefacto(registro, orquestador).ReconciliarAsync(_ => true, default);
 
-        Assert.Equal(EventOrderStatus.Pending, (await registro.LoadAsync("evord_b"))!.Status);
+        Assert.Equal(EventOrderStatus.Discarded, (await registro.LoadAsync("evord_b"))!.Status);   // y no se vuelve a mirar
         Assert.Equal(["ana@ejemplo.co"], (await registro.ConfirmedAttendeesAsync("evt-1")).Select(a => a.Email));
     }
 

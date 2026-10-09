@@ -424,13 +424,14 @@ public sealed class EventosController : ControllerBase
         if (denied is not null) { return denied; }
 
         // Las compras PENDIENTES de quien pide que el orquestador ya cerró: si cerró y no volvió a
-        // pedir sus entradas, las ve igual. Lo confirmado no toca la red.
-        if (_artefacto is not null)
+        // pedir sus entradas, las ve igual. Lo confirmado no toca la red. Sólo las SUYAS, por su
+        // MemberKey —que es el sujeto con que la puerta abrió la compra—, y no por el correo: un correo
+        // lo escribe cualquiera en un checkout anónimo, y cada orden ajena con el suyo sería una consulta
+        // al orquestador más en cada carga de su lista.
+        if (_artefacto is not null && _gate.CurrentMemberKey is { } clave && clave != Guid.Empty)
         {
-            var miembro = _gate.CurrentMemberKey?.ToString("n");
-            await _artefacto.ReconciliarAsync(o =>
-                string.Equals(o.BuyerEmail, email, StringComparison.OrdinalIgnoreCase)
-                || (miembro is not null && string.Equals(o.BuyerId, miembro, StringComparison.Ordinal)), cancellationToken);
+            var miembro = clave.ToString("n");
+            await _artefacto.ReconciliarAsync(o => string.Equals(o.BuyerId, miembro, StringComparison.Ordinal), cancellationToken);
         }
 
         var tickets = await _ticketing.GetTicketsAsync(email, cancellationToken);
