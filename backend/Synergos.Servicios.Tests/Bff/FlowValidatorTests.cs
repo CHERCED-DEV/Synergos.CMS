@@ -385,6 +385,25 @@ public sealed class FlowValidatorTests
         Assert.Contains(tapa, e => e.Contains("la efímera «total» en «cerrar», y la fase ya empieza con ese nombre", StringComparison.Ordinal));
     }
 
+    // Los dos de la F1 que 89216df7 borró sin decirlo (restaurados en el endurecimiento de la F3): sin
+    // ellos, quitar la regla de la ranura de reservas o la del catálogo vacío dejaba la suite en verde.
+
+    [Fact]
+    public void Una_saga_sin_la_ranura_que_el_flujo_usa_no_pasa()
+    {
+        var errores = FlowValidator.Validar(EventosFlujos.Compra, Registro, Contrato with { Saga = typeof(object) });
+
+        Assert.Contains(errores, e => e.Contains(nameof(IHoldLedger), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Un_catalogo_vacio_no_pasa()
+    {
+        var resultado = new FlowDefinitionValidator(Registro).Validate(null, new FlowCatalog());
+
+        Assert.True(resultado.Failed);
+    }
+
     // ── El arranque de verdad ───────────────────────────────────────────────
 
     /// <summary>
