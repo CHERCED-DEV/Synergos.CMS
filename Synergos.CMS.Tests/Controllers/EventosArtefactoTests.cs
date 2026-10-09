@@ -260,6 +260,27 @@ public sealed class EventosArtefactoTests : IDisposable
         Assert.Equal(EventOrderStatus.Confirmed, Assert.Single(await _ledger.LoadAllAsync()).Status);
     }
 
+    [Fact]
+    public async Task Lo_que_lleva_el_QR_o_los_asistentes_sale_sin_cache_tambien_el_rechazo()
+    {
+        // El QR firmado es la credencial de entrada al recinto: ni el navegador ni una caché intermedia lo guardan.
+        var enCurso = Controlador();
+        Problema(await enCurso.Entradas(Compra, default));
+        var anotar = Controlador(DosAsistentes);
+        await anotar.AnotarAsistentes(Compra, default);
+        _orquestador.Sagas[Compra] = _orquestador.Sagas[Compra] with { Estado = "Completed" };
+        var entradas = Controlador();
+        Entradas(await entradas.Entradas(Compra, default));
+        var mias = Controlador();
+        await mias.Tickets(default);
+        _ticketing.ConfirmAsync("evord_ajena", Arg.Any<CancellationToken>()).Returns<EventConfirmationResult>(_ => throw new ArgumentException("no"));
+        var vieja = Controlador();
+        await vieja.Confirm(new EventosController.ConfirmRequest("evord_ajena"), default);
+
+        Assert.All(new[] { enCurso, anotar, entradas, mias, vieja },
+            c => Assert.Equal("no-store", c.HttpContext.Response.Headers.CacheControl.ToString()));
+    }
+
     [Theory]
     [InlineData("..")]
     [InlineData(".")]

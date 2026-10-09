@@ -30,8 +30,39 @@ public sealed class DefaultMemberAccessGate : IMemberAccessGate
     public bool IsAuthenticated =>
         _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true;
 
-    public string? CurrentMemberDisplayName =>
-        _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+    /// <summary>
+    /// El NOMBRE del miembro —el de su ficha—, o nulo si no tiene uno. Nunca su correo.
+    /// </summary>
+    /// <remarks>
+    /// <b>No es <c>Identity.Name</c></b>: en un miembro de Umbraco eso es el login, y el registro lo llena
+    /// con el correo. Leído como nombre, el aviso de una compra decía «Hola ana@…» y la entrada salía con
+    /// el correo impreso como portador (ADR 0140 F3). Se toma el nombre del miembro por su Id, igual que
+    /// <see cref="CurrentMemberKey"/>; y si no hay, el login sólo cuando no es un correo.
+    /// </remarks>
+    public string? CurrentMemberDisplayName
+    {
+        get
+        {
+            var http = _httpContextAccessor.HttpContext;
+            if (http?.User?.Identity is not { IsAuthenticated: true } identidad) return null;
+
+            if (Miembro(http)?.Name is { } nombre && !string.IsNullOrWhiteSpace(nombre) && !EsCorreo(nombre))
+            {
+                return nombre.Trim();
+            }
+            return string.IsNullOrWhiteSpace(identidad.Name) || EsCorreo(identidad.Name) ? null : identidad.Name;
+        }
+    }
+
+    private static bool EsCorreo(string valor) => valor.Contains('@', StringComparison.Ordinal);
+
+    /// <summary>El miembro de la sesión por el Id de su claim, o nulo.</summary>
+    private static Umbraco.Cms.Core.Models.IMember? Miembro(HttpContext http)
+    {
+        var raw = http.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(raw, out var memberId)) return null;
+        return (http.RequestServices?.GetService(typeof(IMemberService)) as IMemberService)?.GetById(memberId);
+    }
 
     public string? CurrentMemberEmail =>
         _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value;

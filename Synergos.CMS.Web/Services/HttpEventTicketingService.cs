@@ -254,8 +254,10 @@ public sealed class HttpEventTicketingService : IEventTicketingService
     public async Task<EventConfirmationResult> ConfirmAsync(
         string orderRef, CancellationToken cancellationToken = default)
     {
-        var orden = await _ledger.LoadAsync(orderRef, cancellationToken).ConfigureAwait(false)
-            ?? throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
+        // Una compra por la puerta es del miembro con sesión, y esta ruta es anónima: para ella no existe.
+        var orden = await _ledger.LoadAsync(orderRef, cancellationToken).ConfigureAwait(false) is { ViaGate: false } suya
+            ? suya
+            : throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
 
         // Idempotente, y sin salir a la red: si ya está confirmada, las entradas son las mismas.
         // Se re-emite el aviso porque el libro del dispatcher deduplica, y eso rescata el caso en

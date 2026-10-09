@@ -312,6 +312,7 @@ public sealed class EventosController : ControllerBase
     [HttpPost("confirm")]
     public async Task<IActionResult> Confirm([FromBody] ConfirmRequest? request, CancellationToken cancellationToken)
     {
+        SinCache();
         if (request is null || string.IsNullOrWhiteSpace(request.OrderRef))
         {
             return BadRequest(new { error = "orderRef es requerido." });
@@ -420,6 +421,7 @@ public sealed class EventosController : ControllerBase
     [HttpGet("tickets")]
     public async Task<IActionResult> Tickets(CancellationToken cancellationToken)
     {
+        SinCache();
         var (denied, email) = RequireMemberEmail();
         if (denied is not null) { return denied; }
 
@@ -447,6 +449,7 @@ public sealed class EventosController : ControllerBase
         [FromBody] TransferRequest? request,
         CancellationToken cancellationToken)
     {
+        SinCache();
         // Transferir es REGALAR la entrada: sin esta guarda, conocer el id bastaba para
         // quitársela a su dueño (y de paso rotarle el QR, dejándolo fuera del evento).
         var (denied, email) = RequireMemberEmail();
@@ -559,6 +562,7 @@ public sealed class EventosController : ControllerBase
     [HttpPost("compras/{id}/asistentes")]
     public async Task<IActionResult> AnotarAsistentes(string id, CancellationToken cancellationToken)
     {
+        SinCache();
         if (Miembro() is { } sinSesion) return sinSesion;
         if (FiltroMismoOrigenJson.Origen(Request) is { } ajeno) return Problema(ajeno);
         if (FiltroMismoOrigenJson.Tipo(Request) is { } tipo) return Problema(tipo);
@@ -582,6 +586,7 @@ public sealed class EventosController : ControllerBase
     [HttpGet("compras/{id}/entradas")]
     public async Task<IActionResult> Entradas(string id, CancellationToken cancellationToken)
     {
+        SinCache();
         if (Miembro() is { } sinSesion) return sinSesion;
         if (_artefacto is null) return Problema(SinArtefacto);
 
@@ -596,6 +601,16 @@ public sealed class EventosController : ControllerBase
     }
 
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Que nadie guarde la respuesta: lleva el QR firmado —la credencial de entrada al recinto— o los datos
+    /// de quien va a sentarse. Lo mismo que la puerta pone en todas las suyas (ADR 0140 F3). También el
+    /// rechazo: sale por la misma ruta, y una caché no distingue.
+    /// </summary>
+    private void SinCache()
+    {
+        if (HttpContext is { } http) http.Response.Headers.CacheControl = "no-store";
+    }
 
     private static readonly ResultadoDelArtefacto SinArtefacto = new(
         StatusCodes.Status503ServiceUnavailable, "eventos.artefacto_no_disponible", "La compra por la puerta no está abierta en este sitio.");

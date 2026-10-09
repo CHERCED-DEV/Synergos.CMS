@@ -616,4 +616,12 @@ public sealed record PersistedEventOrder(
 
     /// <inheritdoc cref="BuyerName"/>
     public string? BuyerEmail { get; init; }
+
+    /// <summary>
+    /// Si la compra se hizo por la puerta de los flujos (ADR 0140 F3): su artefacto es del miembro con
+    /// sesión, y la ruta vieja ANÓNIMA —que toma la orden como credencial de quien compró como invitado—
+    /// no la confirma ni la entrega, aunque alguien conozca su referencia.
+    /// </summary>
+    /// <remarks>Opcional y fuera de la lista posicional, como <see cref="BuyerKind"/>: lo ya escrito se sigue leyendo.</remarks>
+    public bool ViaGate { get; init; }
 }

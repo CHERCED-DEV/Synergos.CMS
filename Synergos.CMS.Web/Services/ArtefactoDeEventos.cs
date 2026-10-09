@@ -374,15 +374,16 @@ public sealed class ArtefactoDeEventos
         {
             BuyerKind = sujeto.Kind,
             BuyerId = sujeto.Id,
-            BuyerName = nombre?.Trim(),
+            BuyerName = string.IsNullOrWhiteSpace(nombre) ? null : nombre.Trim(),
             BuyerEmail = correo?.Trim(),
+            ViaGate = true,
         };
 
     /// <summary>El comprador repetido tantas veces como entradas apartadas: el portador de todas.</summary>
     private static List<EventAttendeeInfo> Portador(PurchaseDto compra, string? correo, string? nombre)
     {
-        var quien = new EventAttendeeInfo(
-            string.IsNullOrWhiteSpace(nombre) ? correo ?? string.Empty : nombre.Trim(), correo ?? string.Empty, null);
+        // Sin nombre, la entrada va sin nombre: el correo no es el nombre de nadie, y sale impreso en ella.
+        var quien = new EventAttendeeInfo(nombre?.Trim() ?? string.Empty, correo ?? string.Empty, null);
         return Enumerable.Repeat(quien, (compra.Held ?? []).Sum(h => Math.Max(1, h.Quantity))).ToList();
     }
 

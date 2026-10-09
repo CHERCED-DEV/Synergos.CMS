@@ -325,7 +325,10 @@ public sealed class StubEventTicketingService : IEventTicketingService
     public async Task<EventConfirmationResult> ConfirmAsync(string orderRef, CancellationToken cancellationToken = default)
     {
         var order = await _ledger.LoadAsync(orderRef, cancellationToken);
-        if (order is null)
+
+        // Una compra por la puerta (ADR 0140 F3) es del miembro con sesión, y esta ruta es anónima: para ella
+        // no existe, aunque alguien conozca su referencia. Ni se confirma ni se re-avisa.
+        if (order is null || order.ViaGate)
         {
             throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
         }
