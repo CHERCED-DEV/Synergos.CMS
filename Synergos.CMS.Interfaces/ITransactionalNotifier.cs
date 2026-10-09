@@ -24,6 +24,19 @@ public static class NotificationTypes
 }
 
 /// <summary>
+/// Las variantes de copy de un MISMO hecho (<see cref="NotificationEvent.Variant"/>). Igual de
+/// abiertas que los tipos: una variante sin copy cae al copy de su tipo.
+/// </summary>
+public static class NotificationVariants
+{
+    /// <summary>
+    /// Entradas confirmadas a quien las compró y no va al evento (#107): no son «tus entradas,
+    /// llévalas contigo», son las que tiene que repartir.
+    /// </summary>
+    public const string EventBuyerNotAttending = "events.buyer-not-attending";
+}
+
+/// <summary>
 /// Un hecho de negocio transaccional que merece avisarle al SUJETO (comprador, viajero,
 /// asistente, alumno, ciudadano). Genérico por diseño — un solo evento polimórfico para
 /// los 6 hechos, en vez de un record y un notifier por dominio (regla de oro del doc 25:
@@ -34,6 +47,9 @@ public static class NotificationTypes
 /// transporte. Es lo que impide el doble recibo: <c>ConfirmAsync</c> es idempotente y se
 /// ejecuta MÁS DE UNA VEZ por diseño (el cliente vuelve del redirect y llama /confirm
 /// mientras el PSP postea el webhook — ambos confirman la misma orden).
+///
+/// <para><see cref="Variant"/> elige el copy, NO el hecho: no entra en la clave, así que dos
+/// emisiones del mismo hecho con variantes distintas siguen siendo un solo aviso.</para>
 /// </remarks>
 public sealed record NotificationEvent(
     string Type,
@@ -47,7 +63,8 @@ public sealed record NotificationEvent(
     IReadOnlyList<NotificationLine>? Lines = null,
     IReadOnlyDictionary<string, string>? Data = null,
     string? ActionPath = null,
-    string? DedupeKey = null)
+    string? DedupeKey = null,
+    string? Variant = null)
 {
     /// <summary>
     /// La clave del hecho. Default <c>{Type}:{SubjectId}</c>; se sobreescribe con

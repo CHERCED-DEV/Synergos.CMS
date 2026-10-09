@@ -39,7 +39,7 @@ public sealed class EmailTransactionalNotifier : ITransactionalNotifierChannel
     public async Task DispatchAsync(NotificationEvent notification, CancellationToken cancellationToken = default)
     {
         var settings = _settings.CurrentValue;
-        var copy = TransactionalEmailCopy.For(notification.Type, out var isFallback);
+        var copy = TransactionalEmailCopy.For(notification.Type, notification.Variant, out var isFallback);
         if (isFallback)
         {
             _logger.LogWarning(

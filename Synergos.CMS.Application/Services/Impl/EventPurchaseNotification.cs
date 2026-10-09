@@ -84,8 +84,22 @@ public static class EventPurchaseNotification
                     Currency: u.Currency,
                     Detail: u.Seat ?? EventTicketIssuer.TicketIdOf(u.ReservationId)))
                 .ToList(),
-            ActionPath: $"/eventos/entradas/{order.OrderRef}");
+            ActionPath: $"/eventos/entradas/{order.OrderRef}",
+            Variant: Asiste(order, toEmail) ? null : NotificationVariants.EventBuyerNotAttending);
     }
+
+    /// <summary>
+    /// Si quien recibe el aviso tiene una de las entradas a su nombre.
+    /// </summary>
+    /// <remarks>
+    /// Decide el texto, no el destinatario: «estas son tus entradas, llévalas contigo» sólo es
+    /// cierto si va. Se mira el asistente ORIGINAL (<c>AttendeeEmail</c>) y no el portador, así
+    /// que una re-emisión después de transferir dice lo mismo que la primera. Por correo y sin
+    /// distinguir mayúsculas: es la misma persona aunque lo escriba distinto en dos campos.
+    /// </remarks>
+    private static bool Asiste(PersistedEventOrder order, string correo)
+        => order.Units.Any(u => string.Equals(
+            u.AttendeeEmail?.Trim(), correo.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// A quién va el aviso: el comprador guardado; sin él, el primer asistente.

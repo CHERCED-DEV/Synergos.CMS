@@ -19,6 +19,10 @@ public sealed record TransactionalCopy(
 /// Un <c>Type</c> sin copy NO revienta ni queda mudo: cae al <see cref="Fallback"/>
 /// genérico y el canal loguea un warning. Así un vertical nuevo notifica desde el día 1 y
 /// el copy fino llega después.
+///
+/// <para>Un mismo hecho puede necesitar dos textos (<see cref="NotificationEvent.Variant"/>): las
+/// entradas confirmadas no se le cuentan igual a quien va que a quien las compró para otros. La
+/// variante se busca primero y, si no tiene copy, cae al de su tipo — nunca al genérico.</para>
 /// </remarks>
 public static class TransactionalEmailCopy
 {
@@ -75,6 +79,35 @@ public static class TransactionalEmailCopy
                 CodeLabel: "Radicado",
                 ActionLabel: "Ver la decisión"),
         };
+
+    /// <summary>Copy por variante de un hecho, con la clave <c>{Type}|{Variant}</c>.</summary>
+    private static readonly IReadOnlyDictionary<string, TransactionalCopy> _variants =
+        new Dictionary<string, TransactionalCopy>(StringComparer.OrdinalIgnoreCase)
+        {
+            [Clave(NotificationTypes.EventTicketsConfirmed, NotificationVariants.EventBuyerNotAttending)] = new(
+                Subject: "Las entradas que compraste están listas",
+                Heading: "¡Tu compra está confirmada!",
+                Intro: "Estas son las entradas que compraste. Compártelas con las personas que van a asistir: cada una necesita la suya para entrar el día del evento.",
+                CodeLabel: "Número de orden",
+                ActionLabel: "Ver las entradas"),
+        };
+
+    private static string Clave(string type, string variant) => $"{type}|{variant}";
+
+    /// <summary>
+    /// Copy de la variante del tipo; sin variante o sin copy para ella, el del tipo.
+    /// </summary>
+    public static TransactionalCopy For(string type, string? variant, out bool isFallback)
+    {
+        if (!string.IsNullOrWhiteSpace(type)
+            && !string.IsNullOrWhiteSpace(variant)
+            && _variants.TryGetValue(Clave(type, variant), out var copy))
+        {
+            isFallback = false;
+            return copy;
+        }
+        return For(type, out isFallback);
+    }
 
     /// <summary>Copy del tipo, o <see cref="Fallback"/> si no hay. <paramref name="isFallback"/> avisa al canal para loguear.</summary>
     public static TransactionalCopy For(string type, out bool isFallback)

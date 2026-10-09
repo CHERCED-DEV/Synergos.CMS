@@ -204,6 +204,7 @@ public sealed class AvisoDeCompraDeEventosTests
         Assert.Equal("regala@ejemplo.co", aviso.ToEmail);
         Assert.Equal("Quien Regala", aviso.ToName);
         Assert.Equal(2, aviso.Lines!.Count);
+        Assert.Equal(NotificationVariants.EventBuyerNotAttending, aviso.Variant);
         Assert.DoesNotContain(motor.Red?.Cable ?? new List<string>(),
             linea => linea.Contains("regala@ejemplo.co", StringComparison.OrdinalIgnoreCase));
     }
@@ -227,6 +228,30 @@ public sealed class AvisoDeCompraDeEventosTests
         var aviso = Assert.Single(buzon.Recibidos);
         Assert.Equal("ana@ejemplo.co", aviso.ToEmail);
         Assert.Equal("Ana Asistente", aviso.ToName);
+        Assert.Null(aviso.Variant);
+    }
+
+    /// <summary>
+    /// filter: un comprador que también va recibe el texto de siempre, aunque no sea el primero de
+    /// la lista y escriba su correo con otras mayúsculas.
+    /// </summary>
+    /// <remarks>
+    /// La variante es para quien compra SIN ir. Comparar a ciegas con el primer asistente le
+    /// diría «compártelas» a quien va en el segundo puesto; comparar distinguiendo mayúsculas, a
+    /// quien escribió <c>Beto@</c> en un campo y <c>beto@</c> en el otro.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Modos))]
+    public async Task Un_comprador_que_tambien_va_recibe_el_texto_de_siempre(string modo)
+    {
+        var buzon = new Buzon();
+        var motor = Nuevo(modo, buzon);
+
+        await ComprarYConfirmarAsync(motor, new EventBuyerInfo("Beto Asistente", "Beto@Ejemplo.co"));
+
+        var aviso = Assert.Single(buzon.Recibidos);
+        Assert.Equal("Beto@Ejemplo.co", aviso.ToEmail);
+        Assert.Null(aviso.Variant);
     }
 
     /// <summary>
