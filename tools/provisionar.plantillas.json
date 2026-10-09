@@ -10,10 +10,10 @@
     "body": "<p>Una compensación de <b>{origen}</b> se rindió tras agotar sus reintentos y <b>necesita a una persona</b>: hasta que alguien la atienda, lo que quedó a medias —un cobro sin devolver, un cupo o unas existencias sin soltar— sigue así.</p><ul><li>Saga: <code>{saga}</code></li><li>Iniciada: {desde}</li><li>Quedó pendiente: {pendientes}</li></ul><p>El detalle está en <code>GET /v1/compensations</code> del orquestador de {origen}. Arreglada la causa, el reintento manual de la saga rearma los intentos; si vuelve a colgarse, llega otro aviso.</p>"
   },
   {
-    "_": "El aviso al comprador de entradas (ADR 0140 F3): lo manda el paso notifications.avisar al final de «cerrar» en eventos.compra, al comprador de la sesión y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDelAvisoTests los cruza en los dos sentidos. El enlace lleva a la compra, donde están las entradas con su QR: el correo no las lleva.",
+    "_": "El aviso al comprador de entradas (ADR 0140 F3): lo manda el paso notifications.avisar al final de «cerrar» en eventos.compra, al comprador de la sesión y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDelAvisoTests los cruza en los dos sentidos. El enlace lleva a la compra, donde están las entradas con su QR: el correo no las lleva. Quien compra no tiene por qué ir (#107) y el orquestador no sabe quién va —los asistentes viven en el CMS—, así que el texto vale para los dos: no dice «tus entradas», pide repartirlas, y «Mis entradas» —que muestra las del PORTADOR, no las del comprador— sólo se promete para la que sea suya.",
     "key": "eventos.entradas.confirmadas",
     "channel": "Email",
-    "subject": "Tus entradas están listas · compra {numero}",
-    "body": "<p>Hola {nombre}:</p><p>Tu compra <b>{numero}</b> en {sitio} quedó confirmada. Total cobrado: <b>{total}</b>.</p><p>Tus entradas, con su código QR, están en <a href=\"{enlace}\">{enlace}</a>. También aparecen en «Mis entradas» cuando inicias sesión.</p>"
+    "subject": "Las entradas de tu compra {numero} están listas",
+    "body": "<p>Hola {nombre}:</p><p>Tu compra <b>{numero}</b> en {sitio} quedó confirmada. Total cobrado: <b>{total}</b>.</p><p>Las entradas, con su código QR, están en <a href=\"{enlace}\">{enlace}</a>. Cada asistente necesita la suya para entrar el día del evento: si compraste para otras personas, compártele a cada una la suya.</p><p>Si una de ellas es tuya, también aparece en «Mis entradas» cuando inicias sesión.</p>"
   }
 ]

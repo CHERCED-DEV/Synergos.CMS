@@ -376,4 +376,44 @@ public sealed class PlantillaDelAvisoTests
         Assert.True(sinLeer.Count == 0,
             $"El paso manda {string.Join(", ", sinLeer.Select(k => "{" + k + "}"))} y la plantilla «{clave}» no lo usa.");
     }
+
+    /// <summary>
+    /// El correo de las entradas vale también para quien compró sin ir: no le dice «tus entradas»,
+    /// le pide repartirlas y no le promete verlas en «Mis entradas».
+    /// </summary>
+    /// <remarks>
+    /// <para>El aviso va a quien abrió la compra, que no tiene por qué ir (#107), y el orquestador no
+    /// puede elegir el texto: los asistentes viven en el CMS. Así que es UN texto para los dos
+    /// casos. «Mis entradas» muestra las del PORTADOR (<c>EventTicketLedger.TicketsOfAsync</c>): a
+    /// quien compró para otros le sale vacío, y prometérselo sin condición era mentirle.</para>
+    ///
+    /// <para>Se juzga el correo como sale —la plantilla del fichero rellenada por la regla de la
+    /// capacidad con lo que manda el paso—, frase a frase.</para>
+    /// </remarks>
+    [Fact]
+    public async Task La_plantilla_de_las_entradas_vale_para_quien_compra_sin_ir()
+    {
+        const string clave = "eventos.entradas.confirmadas";
+        var puerto = new PuertoQueApunta();
+        var definicion = new PasoDef("avisar", "notifications.avisar", new[] { "comprador", "contacto", "total" },
+            Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null, clave);
+        var contexto = new FlowContext()
+            .Set("comprador", Ref.Create("eventos.comprador", "m1"))
+            .Set("contacto", new Contacto("regala@ejemplo.co", "Quien Regala", "https://sitio/compra?id=s-1", "Teatro"))
+            .Set("total", Money.Of(10_000m, "COP"));
+        await new PasoAvisar(puerto).EjecutarAsync(
+            new EntradaDePaso("s-1", Ref.Create("eventos.compra", "s-1"), definicion, contexto, null, null), CancellationToken.None);
+
+        var relleno = NotificationRules.Fill(ComoLaGuardaLaCapacidad(LaQuePide(clave)), puerto.Valores!);
+        Assert.True(relleno.IsOk, relleno.Rejection?.Message);
+        var (asunto, cuerpo) = relleno.Value;
+        var texto = Regex.Replace(cuerpo, "<[^>]+>", " ");
+        var frases = Regex.Split(texto, @"(?<=[.:!?])\s+").Select(f => f.Trim()).Where(f => f.Length > 0).ToList();
+
+        Assert.DoesNotContain("tus entradas", asunto + " " + texto, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(frases, f => f.Contains("compárte", StringComparison.OrdinalIgnoreCase));
+        Assert.All(frases.Where(f => f.Contains("«Mis entradas»", StringComparison.Ordinal)), f =>
+            Assert.True(f.StartsWith("Si ", StringComparison.Ordinal),
+                $"«{f}» promete «Mis entradas» sin condición, y ahí sólo están las del portador."));
+    }
 }
