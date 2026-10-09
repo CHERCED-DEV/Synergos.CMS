@@ -1,6 +1,6 @@
 # DOM events contract — `<synergos-*>` ↔ host
 
-- **Contract version:** v1
+- **Contract version:** v2 — suma el protocolo `synergos:` del coordinador de flujos (ADR 0140 F4, ver al final)
 - **Owner:** Synergos.UI (emits) — CMS subscribes opt-in.
 
 ## Premisa
@@ -113,7 +113,9 @@ namespace `syn:` solo aplica a eventos custom de business logic.
 
 ## Versioning
 
-- v1 (este doc): canon inicial cap-220.
+- v1: canon inicial cap-220.
+- v2 (2026-10-09, ADR 0140 F4): el protocolo `synergos:` de `<synergos-flujo>` (sección siguiente). Es
+  aditivo: los eventos `syn:` de arriba no cambian.
 - Adición de evento nuevo: minor bump (sin breaking).
 - Cambio de payload existente: major bump + nuevo doc + ADR.
 
@@ -149,6 +151,44 @@ Para verificar contract compliance, el UI puede shippear un
 - Bubbles + composed flags.
 
 Hasta entonces, manual smoke test en demo page `/dev/element-grid`.
+
+## v2 — El protocolo `synergos:` del coordinador de flujos (ADR 0140 F4)
+
+Un coordinador sin render, `<synergos-flujo flujo="…">` (`display: contents`), envuelve a los elementos
+que participan de un flujo de negocio y lleva sus pedidos a la puerta del CMS
+(`/api/flujos/{flujo}/{operacion}`). Lo coloca el CMS —hoy la vista del bloque de Eventos, con la
+clave del flujo escrita por el servidor— y lo DEFINE cada participante al cargar su bundle
+(`definirCoordinador()`, idempotente: la primera definición gana). El prefijo es `synergos:`, el de las
+ADR 0138 y 0140, no el `syn:` de v1: en este protocolo hablan elementos entre sí, no un elemento con el
+host, y v1 no tenía ningún emisor.
+
+| Evento | Quién lo despacha, y dónde | `detail` |
+|---|---|---|
+| `synergos:register` | el participante, desde sí mismo; `bubbles`, `composed` | `{ protocolo, flujo, responder? }` — el coordinador más cercano del mismo flujo llama `responder` de forma SÍNCRONA y corta la propagación |
+| `synergos:submit-request` | el participante, desde sí mismo; `bubbles`, `composed` | `{ protocolo, flujo, solicitud, operacion, consulta?, cuerpo?, llave? }` — lo atiende el ancestro más cercano del MISMO flujo, que lo marca `atendida` al vuelo y corta la propagación |
+| `synergos:submit-result` | el coordinador, EN el solicitante (no burbujea) | `{ protocolo, solicitud, operacion, outcome: 'success' \| 'failure', resultado }` — `resultado` es `{ ok: true, valor, estado, correlacion }` o `{ ok: false, rechazo: { code, status, transient, detail, origen, extra }, correlacion }` |
+| `synergos:flujo-ocupado` | el coordinador, en cada participante registrado | `{ ocupado }` — sólo en los bordes; el coordinador refleja lo mismo en `aria-busy` |
+| `synergos:flujo-presente` | el coordinador, en `document`, al conectarse | `{ protocolo, flujo }` — el re-anuncio para un participante que esperó a un coordinador definido tarde |
+
+Reglas:
+
+- **El atributo es una CLAVE de flujo, nunca una ruta**: el DOM no es frontera de confianza, y una clave
+  que la tabla generada de la puerta no conoce no sale a la red (`cliente.flujo_desconocido`).
+- **`protocolo`** viaja en cada pedido (hoy `1`). Uno distinto se rechaza sin tocar la red
+  (`cliente.protocolo_distinto`): con dos bundles en la página gana la primera definición, y un cambio
+  incompatible sube el número para convivir con el viejo.
+- **Single-flight**: dos pedidos IDÉNTICOS en vuelo (operación, consulta, llave y cuerpo) son una llamada.
+- **Sin coordinador**, el pedido contesta al instante `cliente.sin_coordinador`; no se cuelga.
+- **Lo que el coordinador NO decide**: el orden de las operaciones (lo secuencia el participante y lo hace
+  cumplir el servidor), la `Idempotency-Key` (la pone el participante: la de la intención), reintentar una
+  escritura, traducir ni navegar. Los rechazos se leen por `code` y `transient`, nunca por `title`.
+- **Declarados y sin construir**: `synergos:ready` y `synergos:navigate`. No tienen productor mientras
+  redirigir-al-pago sea del #183; se construyen en el piloto de la ADR 0138 (dos funcionalidades, un botón
+  y un participante Preact), con el orden y «todos listos».
+
+Lo vigila `vitals/core/src/flujos/flujos.spec.ts` del UI (jsdom): ancestro del mismo flujo, anidados,
+flujo desconocido, protocolo distinto, single-flight y `aria-busy`, el coordinador que llega tarde, y
+que importar el módulo no defina la etiqueta.
 
 ## References
 

@@ -140,8 +140,13 @@
     **puerta** genérica `GET|POST /api/flujos/{flujo}/{operacion}` abre `eventos.compra` con la sesión
     del miembro: la tabla sale de los contratos incrustados (`x-synergos-flujo`, que el orquestador
     pone con `.EnLaPuerta`), lo que pone el CMS viaja en cabeceras declaradas, la compra es de quien la
-    abrió y el artefacto (asistentes, entradas, QR) se queda en el CMS—; faltan su verificación en
-    vivo, el front (F4) y, después de la F4, el retiro de checkout/confirm.
+    abrió y el artefacto (asistentes, entradas, QR) se queda en el CMS—, verificada en vivo y
+    endurecida, y la F4 —el front: `<synergos-eventos>` pide la compra al `<synergos-flujo>` que la
+    vista del bloque de Eventos le pone alrededor (no es un colocable tipado: con un participante no
+    hace falta; lo cruza `CoordinadorDelFlujoEnLasVistasTests`), traduce los rechazos por `code` con la
+    sección `Events.Purchase`, pide la sesión antes de pagar y nunca vuelve a la ruta vieja—; faltan la
+    verificación de la F4 en el navegador sobre la CDN piloto, el import de `Events.Purchase.*` a la
+    base real y, después, el retiro de checkout/confirm.
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
@@ -3105,6 +3110,11 @@ SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --f
 # BaseUrl, lo incrustado es lo del disco) y CorrelacionUnaSolaTests (la correlación del CMS se limpia
 # como la de Shared). Y del orquestador: UnaSagaUnTurnoTests (Servicios: ninguna fase se intercala con
 # otra ni con la compensación de su saga, contra el Program real y las capacidades reales).
+# Y del front (ADR 0140 F4): CoordinadorDelFlujoEnLasVistasTests (CMS: cada flujo="…" que una vista
+# coloca en un <synergos-flujo> lo expone la puerta, está abierto en Synergos:Puerta:Flujos y lleva
+# display:contents, y la funcionalidad de Eventos se pinta dentro de su coordinador). G-6 y G-7 se
+# movieron antes que el UI: contract-bodies.piso.json bajó a 17/44 con su razón (checkout y confirm se
+# fueron a la puerta tipada; AnotarAsistentes deserializa a mano y G-7 no lo liga).
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila

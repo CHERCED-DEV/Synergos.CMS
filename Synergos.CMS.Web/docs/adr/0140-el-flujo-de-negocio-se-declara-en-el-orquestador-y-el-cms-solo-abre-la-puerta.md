@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4); ver «Avance del piloto». Faltan la verificación en vivo de la F3, el front (F4) y el retiro de la ruta vieja, que va después
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Faltan la verificación de la F4 en el navegador sobre la CDN piloto y el retiro de la ruta vieja, que va después
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -214,6 +214,13 @@ que hace de capa media entre los elementos y el flujo.
   —que cualquiera edita desde las herramientas del navegador— es frontera de confianza: ni una URL,
   ni un mapeo, ni un precio. Por eso el atributo es una **clave de flujo**, nunca una ruta.
 - Lo coloca el CMS como colocable tipado (ADR 0135): el editor elige el flujo de una lista declarada.
+
+  > **Corregido en la F4 (2026-10-09):** en el piloto lo coloca el CMS desde la VISTA del bloque de
+  > Eventos, con la clave escrita por el servidor y un gate que la cruza con la tabla de la puerta. No
+  > existe un colocable contenedor (0 de 52 records lo son; el emisor sólo saca hojas), y con un solo
+  > participante no ejercitaría nada. El colocable tipado llega cuando una página componga dos o más
+  > participantes o haya un segundo flujo. Ver «Avance del piloto — F4».
+
 - Los middlewares del front —correlación, reintento sólo de lecturas, errores normalizados y
   traducidos (ADR 0136), telemetría— son una cadena de interceptores en `vitals/core`, sin framework.
 
@@ -728,12 +735,142 @@ El UI no cambia: el contrato publicado sumó `RetireEventOffer`, que no lleva ma
 - **Un miembro sin nombre en su ficha** recibe «Hola :» en el aviso: el nombre va vacío antes que ser
   su correo.
 
+## Avance del piloto — F4 hecha (2026-10-09)
+
+**La compra de Eventos va por la puerta desde el front.** `<synergos-eventos>` ya no llama a
+`/api/eventos/checkout|confirm`: abre y cierra la compra pidiéndosela al `<synergos-flujo>` que lo
+envuelve, que la lleva a `/api/flujos/eventos.compra/{abrir,cerrar}` con el cliente generado; los
+asistentes y las entradas van al artefacto del CMS. El CMS sigue sirviendo la ruta vieja para el bundle
+publicado y las pestañas abiertas, hasta el retiro. Plan y mediciones previas:
+`_informes/77-adr-0140-f4-plan.json`.
+
+Commits UI (rama `lego/integracion`): `b63cd0b` (el typecheck de `vitals/core` en `npm test`),
+`df356bd` (el generador emite la tabla de ejecución y deja de prometer un `title` falso), `e2eb0a9` (el
+cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierra), `bec077d` (`confirm`
+recibe el instrumento y el dominio escribe EL aviso de SH-3), `d0283a4` (el contrato con
+`Events.Purchase`), `b6e2225` (la recarga no miente), `d9fc125` (fuera el cupón), `1e28a06` (la sesión
+antes de pagar), `821630d` (la compra por la puerta) y `084ebc2` (el enlace del aviso abre la compra).
+CMS: `89331334` (la sección `Events.Purchase`), `904a27d2` (el CMS coloca el coordinador), `fce31414`
+(G-6 y G-7 antes que el UI), `6406b5ee` (`Aviso.Ruta`) y el de esta sección.
+
+**Cómo se verificó**
+- Cada paso con su repo en verde: en el UI, `npm test` completo —6 tramos desde el primero, que sumó
+  `test:tipos-vitals`— y, cuando el paso lo tocaba, `contratos:http:check`, `contratos:synhost:check`,
+  `gate:rutas` con el CMS hermano y `contracts:validate` hasta su último tramo (`cms:sync:check`, que ya
+  fallaba por deriva ajena); en el CMS, build en 0 avisos y las tres suites. Y en cada paso del UI, G-6
+  y G-7 del CMS contra ese árbol. Al cerrar: UI **847 + 107 + 2.035 + 11**; CMS **3107 / 878 / 501 =
+  4486**.
+- G-6 y G-7 se movieron ANTES que el UI (paso 11) y se midieron contra los dos árboles: el de antes
+  (sólo avisos: «+2 cruzando», «la cobertura subió») y el de después, en verde.
+- `compilan-las-vistas` (401 vistas) y `humo-portada` (5210) con el envoltorio y con la ruta nueva del
+  aviso; el bundle de eventos construido pesa **413.683 B** (71.119 gz) bajo su techo de 420 KB, y
+  exportar el módulo de flujos desde `vitals/core` deja `sg-core.js`, `sg-shared.js` y el bundle de
+  antes idénticos byte a byte: no hace falta `publish-runtime`.
+- **Sin medir en vivo**: publicar en la CDN piloto y recorrer la compra en el navegador en los temas
+  (paso 15 del plan) lo hace la verificación. Las cifras de esta sección son de las suites.
+
+**Lo que la F4 decidió, y entra en la decisión**
+1. **El CMS coloca `<synergos-flujo>` desde la vista del bloque** (`elementSynEventos.cshtml`, con
+   `style="display:contents"` para no mover el layout antes de que el bundle defina la etiqueta), y
+   `CoordinadorDelFlujoEnLasVistasTests` cruza cada `flujo="…"` con la tabla de la puerta y con
+   `Synergos:Puerta:Flujos`. Es la premisa corregida de la decisión 6; su disparador, dos o más
+   participantes en una página o un segundo flujo.
+2. **El coordinador vive en `vitals/core`, sin framework, y lo define cada participante al cargar**
+   (`definirCoordinador()`, idempotente): como bundle propio llegaba tarde y el pedido se perdía. Es la
+   excepción escrita a la obligación 8 de la plataforma. Protocolo v1 con prefijo `synergos:`, en
+   `dom-events.md` v2.
+3. **El cliente mínimo lo emite el generador**: `OPERACIONES_DE_LA_PUERTA` (método, llave y consulta),
+   cruzada con el mapa por `satisfies`, y el cliente genérico se tipa con las dos. Una tabla a mano era
+   la segunda copia de la regla 23 y dejaba en verde una operación que gana un parámetro.
+4. **Se decide por `code` y `transient`, nunca por `title` ni por el estado**: el `Rechazo` del fichero
+   de la puerta ensancha `title` a `string` (la puerta pone la frase HTTP).
+5. **SH-3 se conserva**: `pay` = abrir (llave = `sessionId`, la de la intención) → el total del servidor →
+   asistentes; `confirm(session, instrument)` = cerrar → entradas. Si cerrar falla sin ser transitorio,
+   la saga ya se deshizo y el pago de la sesión se marca `failed`: el siguiente clic reabre con la MISMA
+   llave. El host viaja en el instrumento porque hay UNA estrategia por página.
+6. **La sesión se pide antes de pagar** (con el CMS delante y sin miembro), y un 401 a mitad lleva al
+   mismo panel: la compra por la puerta es de miembros, también lo gratis.
+7. **Se traduce por `code`** con la sección `Events.Purchase` (20 claves, es-CO y en-US): UNA tabla
+   literal en la funcionalidad, con la clase como respaldo; `vitals/core` sólo clasifica.
+8. **El enlace del aviso va a `/eventos/?compra={id}`** y el elemento lo abre leyendo la consulta; un
+   despliegue con dominios lo sobrescribe con `/?compra={id}`.
+9. **El transporte**: correlación de 32 hex, reintento SÓLO de lecturas transitorias, telemetría como
+   evento DOM opt-in, `redirect: 'manual'`, techo de 35 s, y no lanza: una negativa no es una caída.
+10. **El UI nunca vuelve a la ruta vieja**, ni ante un 503 de la puerta: sin coordinador o sin puerta, la
+    compra dice que no está disponible.
+
+**Premisas que la F4 corrigió**
+- «La F4 se hace sin tocar el CMS» (frontera del plan de la F3): falso en seis puntos —la sección de
+  diccionario, G-6, G-7 (44/17 contra un piso de 49/19, medido), `Aviso.Ruta`, el envoltorio y
+  `dom-events.md`—.
+- «Lo coloca el CMS como colocable tipado»: ver la decisión 1.
+- «Los elementos no llaman a ninguna API»: las lecturas de contenido y el artefacto siguen siendo del
+  elemento; por el coordinador pasan sólo las operaciones del flujo.
+- «El coordinador devuelve `synergos:navigate`»: no en la F4; sin redirigir-al-pago (#183) nadie lo produce.
+- La 0138 hace que el disparador pida y cada participante conteste; acá el participante pide y el
+  coordinador contesta. Quedó escrito en las dos.
+- «El carrito se pierde al volver del login»: falso, vive en la sesión. Lo que se perdía eran los
+  asistentes, lo gratis/pagado y el `eventId`, que salían de la ficha.
+- «Hay que inventar una llave por intención»: ya existía, `SessionData.sessionId`.
+- «El paso de pago elige tarjeta o PSE»: era decorativo, el método no viajaba. Se quitó, con el cupón
+  (que restaba en el navegador un descuento que nadie aplicaba) y los campos del comprador.
+- «El registro gratis anónimo sigue funcionando»: no; `Acceso=Miembro` es por flujo.
+- «Declarar claves de más no es un error» (paso 6): `gate:diccionario` rechaza una sección declarada que
+  el elemento no pide, así que el paso 6 usó ya las dos claves del registro gratis.
+- «Una clave sin es-CO pone rojo `usync-audit`»: no lo vigila nadie (medido; las 669 hojas tienen las
+  dos culturas hoy).
+- «El panel de sesión con `role=status`»: `gate:regiones-vivas` rechaza una región viva que nace dentro
+  de un bloque condicional; lleva su encabezado, como el panel del organizador.
+
+**Líneas escritas a mano retiradas en el UI**: del cliente de eventos salen 147 (`checkout`, `confirm`,
+`normalizeCheckout`, `applyPromo` y su normalizador) y entran 56 (asistentes y entradas sobre el
+transporte); del modelo, 56 (comprador, contrato del checkout y cupón); del componente, el cupón y el
+método de pago. La tabla de la puerta y su tipo no se escriben: los genera el contrato.
+
+**Mutantes** (cada uno aplicado por líneas, visto en el diff, rojo y restaurado; el detalle, en el
+mensaje de cada commit): `rootDir` de vuelta y un TS2322 inyectado; la tabla generada sin consulta y
+`title` otra vez enum; la tabla y el mapa desacordados; los renombres de la regla 24 (`total`, `abrir`,
+`eventos.compra`, la llave, la consulta de `cerrar`, `abrir` que gana un parámetro), con sus dos
+controles verdes; reintentar POST, sin single-flight, la correlación dentro del reintento, sin
+`stopPropagation`, `await body.cancel()`, el code leído de `title`, la clase por estado, `redirect:
+'error'`, sin techo y techo de 30 s; el asistente sin el instrumento, sin `mensajeDeFallo` y con dos
+alertas; la sección sin sus ficheros y un GUID repetido; el flujo mal escrito, sin envoltorio, cerrado en
+`appsettings` y sin `display:contents`; la recarga con `isFreeEvent`, el `eventId` y los asistentes de
+antes; el cupón de vuelta en `SIN_BORDE` y sin llamador; el panel sin `hasHost()`, sin
+`isAuthenticated()` y sin precarga; la llave con `Date.now()`, sin marcar `failed`, la ruta vieja sin
+coordinador, el motivo por estado, `confirm` sin el host y el componente que no mira el coordinador;
+`Aviso.Ruta` sin barra (el CMS no arranca); el enlace leído del hash y su 401 como un error más. Todos
+rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se reescribieron.
+
+**Lo que queda, dicho**
+- **La verificación en el navegador** (paso 15): publicar `eventos` en la CDN piloto con `publish.mjs
+  --cdn` (nunca `build-cdn`, nunca `C:\LOCAL_CDN`) y recorrer la compra pagada, la gratis, los rechazos
+  provocados, el `.eml` y los temas, con la sesión inyectada como cookie. Hasta entonces no están medidos
+  `SameSite` y `Sec-Fetch-Site` en un navegador real, `aria-busy` y `display:contents` sobre el custom
+  element, ni los temas.
+- **El import de `Events.Purchase.*` a la base real** es del arquitecto (pregunta 1 del plan): sin él,
+  los mensajes salen por su respaldo es-CO.
+- **El merge a master del UI** despliega el CDN público con un eventos que sólo vende por la puerta
+  (pregunta 2 del plan): es del arquitecto.
+- **El retiro** (pasos 19-20 del plan de la F3), después de republicar las CDN que lea cada CMS. M1 tiene
+  que buscar la FORMA de la llamada: el bundle nuevo todavía trae `` `${…}/checkout` ``, que es la ruta
+  por hash del propio elemento, no la API.
+- **El índice §11.2** (repo `synergos`) no se tocó desde esta tarea: el checkout principal lo usan otros.
+- G-7 no ve el cuerpo de los asistentes (el artefacto deserializa a mano); un renombre de `attendees`
+  falla en voz alta en ejecución (`eventos.asistentes_no_cuadran`) y lo cubre el spec de la compra.
+- Ningún gate vigila que cada hoja del diccionario tenga es-CO y en-US.
+- `/account/register` no acepta `returnUrl`; cambiar la selección después de abrir deja la saga anterior
+  apartada hasta el barrido de abandono; y la `SessionStore` vence a los 30 min, así que un login más
+  largo vuelve a un carrito vacío.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la
   misma página de compra.
 - **0135** — el mismo patrón (fuente C# → contrato comiteado → tipo generado → gate en los dos
-  repos), llevado de los elementos a las costuras HTTP. `<synergos-flujo>` es un colocable con record.
+  repos), llevado de los elementos a las costuras HTTP. `<synergos-flujo>` será un colocable con record
+  cuando una página componga dos participantes o haya un segundo flujo; en el piloto lo coloca la vista
+  del bloque (F4).
 - **0137** — la puerta y los orquestadores leen su configuración del despliegue, no del editor.
 - **0116** — el motor de pagos sigue siendo la costura de pagos; esta ADR sólo transporta su
   «requiere acción» hasta el front.
