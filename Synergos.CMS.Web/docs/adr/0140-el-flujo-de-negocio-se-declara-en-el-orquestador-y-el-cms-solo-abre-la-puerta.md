@@ -744,14 +744,14 @@ asistentes y las entradas van al artefacto del CMS. El CMS sigue sirviendo la ru
 publicado y las pestañas abiertas, hasta el retiro. Plan y mediciones previas:
 `_informes/77-adr-0140-f4-plan.json`.
 
-Commits UI (rama `lego/integracion`): `b63cd0b` (el typecheck de `vitals/core` en `npm test`),
-`df356bd` (el generador emite la tabla de ejecución y deja de prometer un `title` falso), `e2eb0a9` (el
-cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierra), `bec077d` (`confirm`
-recibe el instrumento y el dominio escribe EL aviso de SH-3), `d0283a4` (el contrato con
-`Events.Purchase`), `b6e2225` (la recarga no miente), `d9fc125` (fuera el cupón), `1e28a06` (la sesión
-antes de pagar), `821630d` (la compra por la puerta) y `084ebc2` (el enlace del aviso abre la compra).
-CMS: `89331334` (la sección `Events.Purchase`), `904a27d2` (el CMS coloca el coordinador), `fce31414`
-(G-6 y G-7 antes que el UI), `6406b5ee` (`Aviso.Ruta`) y el de esta sección.
+Commits UI (rama `lego/integracion`): `3f17074` (el typecheck de `vitals/core` en `npm test`),
+`cc9f900` (el generador emite la tabla de ejecución y deja de prometer un `title` falso), `c8f41b6` (el
+cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierra), `5251ccb` (`confirm`
+recibe el instrumento y el dominio escribe EL aviso de SH-3), `6e00b3d` (el contrato con
+`Events.Purchase`), `373f5f1` (la recarga no miente), `b258ece` (fuera el cupón), `d327f84` (la sesión
+antes de pagar), `d3005d9` (la compra por la puerta) y `de37db1` (el enlace del aviso abre la compra).
+CMS: `cf3ce915` (la sección `Events.Purchase`), `2c136b4e` (el CMS coloca el coordinador), `0addf388`
+(G-6 y G-7 antes que el UI), `46a50fb0` (`Aviso.Ruta`) y el de esta sección.
 
 **Cómo se verificó**
 - Cada paso con su repo en verde: en el UI, `npm test` completo —6 tramos desde el primero, que sumó
@@ -762,6 +762,14 @@ CMS: `89331334` (la sección `Events.Purchase`), `904a27d2` (el CMS coloca el co
   4486**.
 - G-6 y G-7 se movieron ANTES que el UI (paso 11) y se midieron contra los dos árboles: el de antes
   (sólo avisos: «+2 cruzando», «la cobertura subió») y el de después, en verde.
+- **Rebasada** sobre `origin/claude/adoring-franklin-ustp2q` en los dos repos —el alquiler (#147) y
+  G-7 acotada al método (#204)—; los hashes de arriba son los rebasados. Sobre el resultado: CMS build en
+  0 avisos y **3170 / 897 / 520 = 4587**; UI `npm test` 6 de 6 (**847 + 107 + 2.061 + 11**) y
+  `contracts:validate` entero, con `cms:sync:check` in sync; G-6 ✓ 537 claves en 9 verticales y G-7 ✓
+  **55 claves en 21 rutas**, que es su piso: el del alquiler (60 en 23) menos las mismas 2 rutas y 5
+  claves de checkout y confirm, sin ninguna ruta ilegible bajo la regla nueva. La línea base de G-6
+  pierde además `detail`, que G-6 lee de los `*.model.ts` desde el #147 y era del cupón que se fue.
+  `compilan-las-vistas`: las 403 compilan.
 - `compilan-las-vistas` (401 vistas) y `humo-portada` (5210) con el envoltorio y con la ruta nueva del
   aviso; el bundle de eventos construido pesa **413.683 B** (71.119 gz) bajo su techo de 420 KB, y
   exportar el módulo de flujos desde `vitals/core` deja `sg-core.js`, `sg-shared.js` y el bundle de
@@ -801,7 +809,7 @@ CMS: `89331334` (la sección `Events.Purchase`), `904a27d2` (el CMS coloca el co
 
 **Premisas que la F4 corrigió**
 - «La F4 se hace sin tocar el CMS» (frontera del plan de la F3): falso en seis puntos —la sección de
-  diccionario, G-6, G-7 (44/17 contra un piso de 49/19, medido), `Aviso.Ruta`, el envoltorio y
+  diccionario, G-6, G-7 (44/17 contra un piso de 49/19, medido; 55/21 contra 60/23 tras rebasar sobre el alquiler), `Aviso.Ruta`, el envoltorio y
   `dom-events.md`—.
 - «Lo coloca el CMS como colocable tipado»: ver la decisión 1.
 - «Los elementos no llaman a ninguna API»: las lecturas de contenido y el artefacto siguen siendo del
