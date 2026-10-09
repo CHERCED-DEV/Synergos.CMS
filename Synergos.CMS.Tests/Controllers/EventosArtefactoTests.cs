@@ -62,10 +62,14 @@ public sealed class EventosArtefactoTests : IDisposable
 
         public bool Caido { get; set; }
 
+        /// <summary>Si contesta un estado de error sin rechazo que leer, como un proxy.</summary>
+        public HttpStatusCode? SinRechazo { get; set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             Llamadas++;
             if (Caido) throw new HttpRequestException("Connection refused");
+            if (SinRechazo is { } estado) return Task.FromResult(new HttpResponseMessage(estado));
 
             var id = Uri.UnescapeDataString(r.RequestUri!.AbsolutePath.Split('/').Last());
             var sujeto = r.Headers.TryGetValues("X-Synergos-Sujeto", out var v) ? v.Single() : null;
@@ -101,18 +105,21 @@ public sealed class EventosArtefactoTests : IDisposable
             => new(cable, disposeHandler: false) { BaseAddress = new Uri("http://bff-eventos.local/") };
     }
 
-    private EventosController Controlador(string? cuerpo = null, string tipo = "application/json", bool mismoOrigen = true)
+    private EventosController Controlador(
+        string? cuerpo = null, string tipo = "application/json", bool mismoOrigen = true, bool hayDestino = true, bool abierto = true)
     {
         var puerta = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         puerta.CurrentValue.Returns(new PuertaSettings
         {
-            Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal)
-            {
-                [ArtefactoDeEventos.Flujo] = new() { Acceso = AccesoDeLaPuerta.Miembro, SujetoKind = "eventos.comprador" },
-            },
+            Flujos = abierto
+                ? new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal)
+                {
+                    [ArtefactoDeEventos.Flujo] = new() { Acceso = AccesoDeLaPuerta.Miembro, SujetoKind = "eventos.comprador" },
+                }
+                : new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal),
         });
         var artefacto = new ArtefactoDeEventos(
-            new Fabrica(_orquestador), _ledger, puerta, NullLogger<ArtefactoDeEventos>.Instance, hayDestino: true);
+            new Fabrica(_orquestador), _ledger, puerta, NullLogger<ArtefactoDeEventos>.Instance, hayDestino: hayDestino);
 
         var http = new DefaultHttpContext();
         http.Request.Scheme = "https";
@@ -258,6 +265,47 @@ public sealed class EventosArtefactoTests : IDisposable
 
         Assert.Equal("luisa@ejemplo.co", Assert.Single(mias.Tickets).HolderEmail);
         Assert.Equal(EventOrderStatus.Confirmed, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    // ── Las ramas de fallo ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task Sin_destino_o_con_el_flujo_cerrado_el_artefacto_no_esta_disponible_y_no_sale_a_la_red(bool hayDestino, bool abierto)
+    {
+        var (estado, codigo, cuerpo) = Problema(await Controlador(hayDestino: hayDestino, abierto: abierto).Entradas(Compra, default));
+        var anotar = Fallo(await Controlador(DosAsistentes, hayDestino: hayDestino, abierto: abierto).AnotarAsistentes(Compra, default));
+
+        Assert.Equal((503, "eventos.artefacto_no_disponible"), (estado, codigo));
+        Assert.False(cuerpo.GetProperty("transient").GetBoolean());
+        Assert.Equal((503, "eventos.artefacto_no_disponible"), anotar);
+        Assert.Equal(0, _orquestador.Llamadas);
+    }
+
+    [Fact]
+    public async Task Con_el_orquestador_caido_y_la_compra_sin_confirmar_es_503_transitorio_y_no_se_emite_nada()
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Caido = true;
+
+        var (estado, codigo, cuerpo) = Problema(await Controlador().Entradas(Compra, default));
+
+        Assert.Equal((503, "eventos.orquestador_no_disponible"), (estado, codigo));
+        Assert.True(cuerpo.GetProperty("transient").GetBoolean());
+        Assert.Equal(EventOrderStatus.Pending, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Un_error_del_orquestador_sin_rechazo_que_leer_es_502()
+    {
+        _orquestador.SinRechazo = HttpStatusCode.InternalServerError;
+
+        var (estado, codigo, cuerpo) = Problema(await Controlador().Entradas(Compra, default));
+
+        Assert.Equal((502, "eventos.respuesta_invalida"), (estado, codigo));
+        Assert.False(cuerpo.GetProperty("transient").GetBoolean());
+        Assert.Empty(await _ledger.LoadAllAsync());
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -183,8 +184,9 @@ public sealed class HttpEventTicketingServiceTests
     /// La comisión que el carrito muestra viaja al orquestador, que es quien la autoriza (#194).
     /// </summary>
     /// <remarks>
-    /// Antes no viajaba nada: la sumaba sólo el navegador. Se afirma sobre el CUERPO que sale, que
-    /// es lo que el orquestador lee, y con un valor que no es el de por defecto.
+    /// Antes no viajaba nada: la sumaba sólo el navegador. Desde la ADR 0140 F3 viaja en la cabecera de
+    /// la puerta (<c>X-Synergos-Negocio</c>), que es lo que el orquestador lee, y se afirma ahí, con un
+    /// valor que no es el de por defecto; el cuerpo, que es lo del navegador, no la lleva.
     /// </remarks>
     [Fact]
     public async Task Comprar_manda_al_orquestador_la_comision_del_sitio()
@@ -285,8 +287,14 @@ public sealed class HttpEventTicketingServiceTests
         var (svc, _) = Nuevo(orq);
         await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
+        // Lo que sale es EXACTAMENTE el evento y sus líneas —localidad, butaca, cantidad—: ni precio, ni
+        // monto, ni comisión, ni comprador. Un campo de más lo ignoraría el orquestador en silencio, y uno
+        // que sí leyera sería cualquiera comprando la VIP al precio de la general.
         Assert.Equal(1, orq.Veces("POST", "/v1/ticket-purchases"));
-        Assert.All(orq.Llamadas, l => Assert.NotNull(l.Key ?? "x"));
+        using var cuerpo = JsonDocument.Parse(Assert.Single(orq.Cuerpos));
+        Assert.Equal(["eventId", "lines"], cuerpo.RootElement.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        Assert.All(cuerpo.RootElement.GetProperty("lines").EnumerateArray(), l =>
+            Assert.Equal(["quantity", "seat", "tier"], l.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal)));
     }
 
     [Fact] // la llave es determinista: dos veces lo mismo es un reintento, no una segunda compra.
@@ -389,6 +397,10 @@ public sealed class HttpEventTicketingServiceTests
         var compra = await svc.CheckoutAsync("evt-1", DosGenerales, Dos);
 
         Assert.Equal("tp-1", (await registro.LoadAsync(compra.OrderRef))?.PaymentSessionId);
+        // Y pregunta COMO el comprador: el orquestador de verdad contesta 400 a una consulta sin sujeto
+        // (eventos.sujeto_requerido), y sin él esta pregunta diría «no existe» de una compra que sí.
+        Assert.Equal($"eventos.comprador:{HttpEventTicketingService.BuyerId(Dos[0])}",
+            orq.Cabecera($"/v1/ticket-purchases/{key}", "X-Synergos-Sujeto"));
     }
 
     /// <summary>Y si de verdad no existía, se falla. Nunca «compra exitosa».</summary>

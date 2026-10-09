@@ -88,4 +88,20 @@ public sealed class OfertaDeEventoAlPublicarTests
 
         await _ofertas.Received(1).PublishAsync(evento, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Un_publicador_que_LANZA_tampoco_tumba_el_publicar_ni_a_los_demas_eventos()
+    {
+        // La otra mitad del nombre de arriba: el publicador promete no lanzar por el orquestador, pero una
+        // excepción de otro tipo —armar el cuerpo, un bug— tiene que quedarse en el log igual.
+        var roto = HttpEventOfferPublisherTests.Evento() with { Summary = HttpEventOfferPublisherTests.Evento().Summary with { Id = "roto" } };
+        var bueno = HttpEventOfferPublisherTests.Evento();
+        _catalogo.GetEventAsync("roto", Arg.Any<CancellationToken>()).Returns(roto);
+        _catalogo.GetEventAsync("bueno", Arg.Any<CancellationToken>()).Returns(bueno);
+        _ofertas.PublishAsync(roto, Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("al armar el cuerpo"));
+
+        await Montar("cms").HandleAsync(Publicados(Nodo("eventPage", "roto"), Nodo("eventPage", "bueno")), default);
+
+        await _ofertas.Received(1).PublishAsync(bueno, Arg.Any<CancellationToken>());
+    }
 }

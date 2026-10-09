@@ -1,4 +1,7 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Middlewares;
@@ -70,6 +73,45 @@ public sealed class PuertaGenericaTests
         // Igual o mayor, el TimeoutMiddleware corta antes y el 504 sale sin código de la puerta.
         Assert.True(ReenvioDeLaPuerta.Techo < TimeoutMiddleware.DefaultTimeout,
             $"La puerta espera {ReenvioDeLaPuerta.Techo.TotalSeconds} s y el CMS corta a los {TimeoutMiddleware.DefaultTimeout.TotalSeconds} s.");
+    }
+
+    /// <summary>
+    /// Y el cliente que de verdad compone el CMS no espera más que ese techo, aunque la sección del
+    /// orquestador diga más: lo que lo hace efectivo es el recorte del composer, no la constante.
+    /// </summary>
+    [Fact]
+    public void El_cliente_de_la_puerta_que_se_compone_no_espera_mas_que_su_techo()
+    {
+        var servicios = ComposicionDelCms.Componer(new Dictionary<string, string?>
+        {
+            ["Synergos:Eventos:BaseUrl"] = "http://bff-eventos:8080/",
+            ["Synergos:Eventos:TimeoutSeconds"] = "60",
+        });
+        using var proveedor = servicios.BuildServiceProvider();
+        var opciones = proveedor.GetRequiredService<IOptionsMonitor<HttpClientFactoryOptions>>()
+            .Get(ReenvioDeLaPuerta.Cliente("Eventos"));
+        using var cliente = new HttpClient();
+        foreach (var configurar in opciones.HttpClientActions) configurar(cliente);
+
+        Assert.Equal(new Uri("http://bff-eventos:8080/"), cliente.BaseAddress);   // la mutación entró: es SU cliente
+        Assert.True(cliente.Timeout <= ReenvioDeLaPuerta.Techo,
+            $"El cliente de la puerta espera {cliente.Timeout.TotalSeconds} s y su techo es {ReenvioDeLaPuerta.Techo.TotalSeconds} s.");
+    }
+
+    /// <summary>
+    /// Sin <c>Synergos:Eventos:BaseUrl</c> la puerta no tiene adónde llevar un flujo de Eventos —el clon limpio,
+    /// que abre el flujo en appsettings—; con ella, sí. Es lo que convierte ese caso en 503
+    /// <c>puerta.flujo_no_disponible</c> y no en un cliente sin dirección.
+    /// </summary>
+    [Fact]
+    public void Sin_BaseUrl_la_puerta_no_tiene_destino_y_con_ella_si()
+    {
+        static DestinosDeLaPuerta Destinos(Dictionary<string, string?> config)
+            => Assert.IsType<DestinosDeLaPuerta>(Assert.Single(ComposicionDelCms.Componer(config),
+                d => d.ServiceType == typeof(DestinosDeLaPuerta)).ImplementationInstance);
+
+        Assert.False(Destinos([]).Tiene("Eventos"));
+        Assert.True(Destinos(new Dictionary<string, string?> { ["Synergos:Eventos:BaseUrl"] = "http://bff-eventos:8080/" }).Tiene("Eventos"));
     }
 
     [Fact]

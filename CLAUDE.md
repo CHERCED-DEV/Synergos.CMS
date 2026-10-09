@@ -36,14 +36,14 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **4461 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **4484 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 3084 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 3105 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 878 | Core, Shared, las 20 `Api.*` y los 5 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 499 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 501 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -181,7 +181,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4461**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4484**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -3077,13 +3077,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (4461 tests) — la solución integradora las lanza juntas:
+# Las tres suites (4484 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3084
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3105
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 878
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 499
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 501
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
 # de Bff.Eventos, Api.Pricing, Api.Inventory y Api.Payments. Se GENERA del host real en
@@ -3093,11 +3093,16 @@ SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --f
 # Y si cambia lo que un orquestador expone en la PUERTA (.EnLaPuerta, una cabecera de la puerta), el
 # documento lo incrusta Synergos.CMS.Web: se recompila, y en el UI `npm run contratos:http` (su par).
 # Gates de la puerta (ADR 0140 F3): LoQueExponeLaPuertaTests (Servicios: ni retry ni compensations
-# se abren, toda operación marcada exige el sujeto), FlujosControllerTests y
-# ConsumidorCmsDeBffEventosTests (CMS: los códigos puerta.* en su orden, lo que viaja y lo que no, y
-# lo que el CMS manda y lee de Bff.Eventos contra su contrato), PuertaGenericaTests (la puerta no
-# nombra flujos ni verticales, su techo de 25 s, lo incrustado es lo del disco) y
-# CorrelacionUnaSolaTests (la correlación del CMS se limpia como la de Shared).
+# se abren, toda operación marcada exige el sujeto), FlujosControllerTests (CMS: los códigos puerta.*
+# en su orden —cuando fallan dos cosas contesta la primera—, lo que viaja y lo que no),
+# TablaDeLaPuertaTests (cada regla con la que la tabla no arranca), ConsumidorCmsDeBffEventosTests
+# (contra el contrato de Bff.Eventos: lo que manda el publicador de la oferta, al publicar y al
+# retirar, y lo que se lee de una compra; el cuerpo que la ruta vieja manda a BuyTickets NO se cruza,
+# deuda heredada de antes de la F2 que se va con su retiro), PuertaGenericaTests (la puerta no nombra
+# flujos ni verticales, su techo de 25 s y el recorte del cliente que se compone, el destino sólo con
+# BaseUrl, lo incrustado es lo del disco) y CorrelacionUnaSolaTests (la correlación del CMS se limpia
+# como la de Shared). Y del orquestador: UnaSagaUnTurnoTests (Servicios: ninguna fase se intercala con
+# otra ni con la compensación de su saga, contra el Program real y las capacidades reales).
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
 > `ProjectReference` **por RUTA**, no por pertenencia a la solución, así que compila
@@ -3570,7 +3575,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (138 endpoints, 248 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4461 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`. 4484 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

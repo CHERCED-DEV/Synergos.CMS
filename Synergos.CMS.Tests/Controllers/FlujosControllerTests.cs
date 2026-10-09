@@ -115,7 +115,7 @@ public sealed class FlujosControllerTests : IDisposable
 
     private async Task<Respuesta> Pedir(
         string metodo, string operacion, string? consulta = null, string? cuerpo = null, string? tipo = "application/json",
-        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true)
+        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true, bool porTrozos = false)
     {
         var http = new DefaultHttpContext();
         http.Request.Method = metodo;
@@ -125,8 +125,8 @@ public sealed class FlujosControllerTests : IDisposable
         if (cuerpo is not null)
         {
             var bytes = Encoding.UTF8.GetBytes(cuerpo);
-            http.Request.Body = new MemoryStream(bytes);
-            http.Request.ContentLength = bytes.Length;
+            http.Request.Body = porTrozos ? new PorTrozos(bytes) : new MemoryStream(bytes);
+            http.Request.ContentLength = porTrozos ? null : bytes.Length;
             http.Request.ContentType = tipo;
         }
         if (mismoOrigen) http.Request.Headers["Sec-Fetch-Site"] = "same-origin";
@@ -158,6 +158,23 @@ public sealed class FlujosControllerTests : IDisposable
     }
 
     private static readonly string Compra = """{"eventId":"evt-1","lines":[{"tier":"GEN","quantity":2}]}""";
+
+    /// <summary>Un cuerpo por trozos: no dice su largo ni deja buscar, como uno con Transfer-Encoding: chunked.</summary>
+    private sealed class PorTrozos(byte[] bytes) : Stream
+    {
+        private readonly MemoryStream _dentro = new(bytes);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => _dentro.Read(buffer, offset, Math.Min(count, 4096));
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 
     private static Action<IHeaderDictionary> Llave(string llave = "k1") => h => h["Idempotency-Key"] = llave;
 
@@ -203,15 +220,55 @@ public sealed class FlujosControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task Un_flujo_sin_abrir_o_sin_destino_es_503_y_no_toca_la_red()
+    public async Task Un_flujo_sin_abrir_es_503_y_no_toca_la_red()
     {
         _ajustes.Flujos.Clear();
         var sinAbrir = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave());
+
         Assert.Equal((503, "puerta.flujo_no_disponible"), (sinAbrir.Estado, sinAbrir.Codigo));
         Assert.False(sinAbrir.Json.GetProperty("transient").GetBoolean());
+        Assert.Empty(_orquestador.Pedidos);
+    }
 
+    [Fact]
+    public async Task Un_flujo_abierto_cuyo_orquestador_no_tiene_destino_es_503_y_no_toca_la_red()
+    {
+        // Es el clon limpio: appsettings abre eventos.compra y no trae Synergos:Eventos:BaseUrl. El flujo
+        // SÍ está abierto acá —lo que falta es el destino—, así que el 503 sale de esa mitad de la regla.
         _conDestino = false;
-        Assert.Equal(503, (await Pedir("GET", "consultar", "id=s-1")).Estado);
+        var r = await Pedir("GET", "consultar", "id=s-1");
+
+        Assert.Equal((503, "puerta.flujo_no_disponible"), (r.Estado, r.Codigo));
+        Assert.False(r.Json.GetProperty("transient").GetBoolean());
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    /// <summary>
+    /// El ORDEN de los códigos es el contrato (FlujosController): cuando fallan dos cosas, contesta la primera.
+    /// </summary>
+    [Fact]
+    public async Task Cuando_fallan_dos_cosas_contesta_la_primera_del_orden()
+    {
+        (int, string?) C(Respuesta r) => (r.Estado, r.Codigo);
+        Sesion(null);
+
+        // 404 antes que 401: sin sesión y algo que no existe no enseña que hace falta sesión.
+        Assert.Equal((404, "puerta.operacion_desconocida"), C(await Pedir("POST", "abrir", flujo: "nada.inventado", cuerpo: Compra, cabeceras: Llave())));
+        // 405 antes que 401.
+        Assert.Equal((405, "puerta.metodo_no_permitido"), C(await Pedir("GET", "abrir")));
+        // 503 antes que 401: un flujo que no está abierto no pide iniciar sesión.
+        _conDestino = false;
+        Assert.Equal((503, "puerta.flujo_no_disponible"), C(await Pedir("GET", "consultar", "id=s-1")));
+        _conDestino = true;
+        // 401 antes que 403: sin sesión y de otro origen.
+        Assert.Equal((401, "puerta.sesion_requerida"), C(await Pedir("POST", "abrir", cuerpo: Compra, mismoOrigen: false, cabeceras: Llave())));
+
+        Sesion(Ana);
+        // 403 antes que 415: de otro origen y sin JSON.
+        Assert.Equal((403, "puerta.origen_no_permitido"),
+            C(await Pedir("POST", "abrir", cuerpo: Compra, tipo: "text/plain", mismoOrigen: false, cabeceras: Llave())));
+        // 415 antes que 400: sin JSON y sin llave.
+        Assert.Equal((415, "puerta.tipo_no_soportado"), C(await Pedir("POST", "abrir", cuerpo: Compra, tipo: "text/plain")));
         Assert.Empty(_orquestador.Pedidos);
     }
 
@@ -267,6 +324,18 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal((415, "puerta.tipo_no_soportado"), (texto.Estado, texto.Codigo));
         Assert.Equal((413, "puerta.cuerpo_demasiado_grande"), (grande.Estado, grande.Codigo));
         Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task Un_cuerpo_por_trozos_que_no_declara_su_largo_y_pasa_de_64_KB_tambien_es_413()
+    {
+        // Sin Content-Length el techo lo pone lo que de verdad llega: sin contar, se leería entero en memoria.
+        var grande = await Pedir("POST", "abrir", cuerpo: "{\"x\":\"" + new string('a', 64 * 1024) + "\"}", cabeceras: Llave(), porTrozos: true);
+        var justo = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave(), porTrozos: true);
+
+        Assert.Equal((413, "puerta.cuerpo_demasiado_grande"), (grande.Estado, grande.Codigo));
+        Assert.Equal(200, justo.Estado);   // el control: por trozos y chico, pasa
+        Assert.Equal(Compra, Encoding.UTF8.GetString(Assert.Single(_orquestador.Pedidos).Cuerpo));
     }
 
     [Theory]
