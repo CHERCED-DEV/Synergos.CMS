@@ -50,9 +50,16 @@ public sealed class NegocioDelFlujoSettings
 }
 
 /// <summary>A dónde lleva el enlace del aviso.</summary>
+/// <remarks>
+/// La ruta es de una PÁGINA que exista y que sepa abrir la compra: la de Eventos lee <c>compra</c> de su
+/// consulta y enseña sus entradas (ADR 0140 F4). Depende de dónde está montado el siteRoot: sin
+/// dominios es <c>/eventos/?compra={id}</c>, el valor base; un despliegue con dominios, donde Eventos es la
+/// raíz de su sitio, la sobrescribe por entorno con <c>/?compra={id}</c>. Era
+/// <c>/eventos/compra?compra={id}</c>, una página que no existe: la verificación de la F3 midió un 404.
+/// </remarks>
 public sealed class AvisoDelFlujoSettings
 {
-    /// <summary>Ruta del sitio, con los parámetros de la operación entre llaves: <c>/eventos/compra?compra={id}</c>.</summary>
+    /// <summary>Ruta del sitio, con los parámetros de la operación entre llaves: <c>/eventos/?compra={id}</c>.</summary>
     public string? Ruta { get; init; }
 }
 
