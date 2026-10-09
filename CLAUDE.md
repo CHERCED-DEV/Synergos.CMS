@@ -3113,7 +3113,7 @@ SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --f
 # Y del front (ADR 0140 F4): CoordinadorDelFlujoEnLasVistasTests (CMS: cada flujo="…" que una vista
 # coloca en un <synergos-flujo> lo expone la puerta, está abierto en Synergos:Puerta:Flujos y lleva
 # display:contents, y la funcionalidad de Eventos se pinta dentro de su coordinador). G-6 y G-7 se
-# movieron antes que el UI: contract-bodies.piso.json bajó a 17/44 con su razón (checkout y confirm se
+# movieron antes que el UI: contract-bodies.piso.json bajó a 21/55 con su razón (checkout y confirm se
 # fueron a la puerta tipada; AnotarAsistentes deserializa a mano y G-7 no lo liga).
 
 > **Y ojo con lo que este comando NO ve** (#133). `dotnet build` resuelve un
