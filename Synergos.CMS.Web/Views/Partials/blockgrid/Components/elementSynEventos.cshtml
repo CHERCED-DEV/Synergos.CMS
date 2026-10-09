@@ -1,2 +1,13 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Eventos", Model.Content)
+@*
+    <synergos-flujo> envuelve la funcionalidad de Eventos (ADR 0140, decisión 6 · F4): el coordinador
+    sin render de la compra, que la lleva a la puerta. La CLAVE del flujo la pone el servidor y no el
+    bundle —nada en el DOM es frontera de confianza, y el atributo es una clave, nunca una ruta—, y
+    CoordinadorDelFlujoEnLasVistasTests la cruza con la tabla de la puerta y con Synergos:Puerta:Flujos.
+    No es un colocable tipado: con un solo participante en la página no aporta nada, y lo será cuando
+    una página componga dos o haya un segundo flujo. El style en línea es para antes de que el bundle
+    defina la etiqueta: un elemento desconocido es inline y cambiaría el layout del ítem del BlockGrid.
+*@
+<synergos-flujo flujo="eventos.compra" style="display:contents">
+    @await Html.PartialAsync("SynHost/Eventos", Model.Content)
+</synergos-flujo>
