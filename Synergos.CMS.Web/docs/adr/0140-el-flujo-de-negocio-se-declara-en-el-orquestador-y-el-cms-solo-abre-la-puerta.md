@@ -640,6 +640,94 @@ que resultaron equivalentes en un test se anotaron y se reforzó el test.
 - **Hasta el retiro conviven dos destinatarios del aviso**: la ruta vieja avisa desde el CMS y la
   puerta desde el orquestador; nunca para la misma compra.
 
+## Endurecimiento de la F3 (2026-10-09)
+
+**La verificación de la F3** (`_informes/76-adr-0140-f3-verificacion.json`) corrió 17 escenarios en
+vivo —procesos reales en 5871-5875, el CMS sobre la copia piloto, el `.eml` abierto— con tres defectos
+bajos, y dejó 21 hallazgos confirmados por un escéptico, varios del mismo defecto visto por dos
+revisores. Se arreglaron todos, agrupados por defecto, un commit por arreglo, cada uno con su test y
+sus mutantes (en el mensaje de cada commit). Commits CMS (`lego/integracion`): `37e83ca7` (una saga, un
+turno), `f4aee49a` (una saga, una orden), `3d07321b` (la oferta es el estado entero del evento),
+`4b7818dd` (la reconciliación con techo), `e796d6e1` (los dos gates de la F1), `dc02fd83` (segmentos de
+punto en la puerta), `47044789` (sin caché, el nombre, la ruta vieja) y `218e9d38` (los huecos de test).
+El UI no cambia: el contrato publicado sumó `RetireEventOffer`, que no lleva marca de la puerta, y el
+`--check` de `contrato-http.mjs` sigue al día.
+
+**Lo que se decidió, y entra en la decisión**
+1. **Una saga, un turno** (`Bff.Core`, sin sustantivos de dominio). Cada fase del intérprete toma el
+   MISMO arriendo con el que se deshace una saga (`ISagaLease`, #34) antes de leerla, y lo suelta al
+   salir. Ninguna fase se intercala con otra fase de la misma saga ni con su compensación —la que pide
+   quien compra, la del barrido, la de abandono—. Sin turno, «cerrar» escribía `Completed` encima de
+   una compra que «cancelar» ya había devuelto: entradas emitibles sobre un cobro devuelto. Quien no
+   consigue el turno recibe un transitorio sin tocar nada: `flow.busy` una fase (503,
+   `transient:true`, como `compensation_in_flight` y `retry_in_flight`) y `compensation_in_flight`
+   una compensación. Se eligió el rechazo inmediato y no la espera, para no colgar una petición del
+   navegador detrás de otra; el doble clic o el reintento tras un 504 vuelven y encuentran la saga
+   como la dejó la otra, y «cerrar» contesta idempotente si la otra la completó. Vale con una réplica
+   y con varias, y vence solo, así que un proceso muerto a media fase no deja la saga trabada más que
+   el arriendo (300 s por defecto, más que cualquier fase). La fase que falla deshace con el turno que
+   ya tiene; la que abre no pisa una saga que otra llamada con la misma llave escribió; y completar
+   relee el disco y no escribe `Completed` sobre una saga que ya no está `Running` (la red para un
+   turno que venció).
+2. **Una saga, una orden** (`EventTicketLedger.AnotarPendienteAsync`/`ConfirmarAsync`, bajo un
+   cerrojo por saga; el almacén de órdenes es de una instancia). Una saga tiene UNA orden y emite sus
+   entradas una vez, y la regla vive en el registro: la ruta vieja, el artefacto y la reconciliación
+   pasan por él. La guarda de `9cb59324`, que sólo tenía la ruta vieja, se mudó allí.
+3. **La oferta es el estado entero del evento.** Lo que una publicación no trae deja de venderse: la
+   localidad que falta, con el precio vigente hasta ahora (cotizar la rechaza sin apartar nada); el
+   pozo que falta, agotado a lo vendido y apartado. `POST /v1/ofertas/{eventId}/retirar` retira el
+   evento entero, y el CMS lo llama al despublicar, mandar a la papelera o borrar un `eventPage` —o el
+   nodo que lo contiene—, y cuando el catálogo deja de servirlo. El aforo nunca baja de lo
+   comprometido: se recorta, se anota lo que de verdad quedó y se dice en el log. Cada localidad es
+   independiente: una que falla no impide las demás, y republicar termina lo que faltó (no «todas o
+   ninguna»: Pricing e Inventory no comparten transacción, y deshacer lo escrito sería otra escritura
+   que también puede fallar).
+4. **La reconciliación de «mis entradas» y de la consola corre en la ruta de lectura, y por eso tiene
+   techo**: como mucho 10 órdenes, las más recientes, de a cuatro, y 3 s en total. Lo que no se
+   completará queda `Discarded` y no se vuelve a mirar (deshecha, inexistente para ese comprador, o
+   gemela de una ya confirmada); colgado o caído no descarta nada. «Mis entradas» reconcilia sólo las
+   órdenes del miembro por su `MemberKey`, no por un correo que cualquiera escribe.
+5. **La puerta rechaza un parámetro de ruta que es «.» o «..»** (`puerta.parametro_invalido`, también
+   codificado) antes de armar la URL, y el reenvío se niega a ponerlo aunque se lo pasen.
+6. **El QR no se guarda en caché** (`no-store` en las entradas, los asistentes, «mis entradas»,
+   confirmar y transferir); **el nombre del miembro es el de su ficha y nunca su correo**
+   (`DefaultMemberAccessGate`); y **la ruta vieja anónima no confirma, no entrega y no re-avisa una
+   compra hecha por la puerta** (`PersistedEventOrder.ViaGate`). Con eso vale lo que decía la sección
+   anterior: dos destinatarios del aviso, nunca para la misma compra.
+
+**Cómo se verificó**
+- Antes del primer arreglo, la base (`c61ebffe`) en verde: build en 0 avisos, 3051 / 863 / 497.
+- Tras cada arreglo, build en 0 avisos y las tres suites completas en verde. Al cerrar: **3105 / 878 /
+  501 = 4484**. El oráculo de la F1 (`TicketingCompensationTests`, `ReintentoTrasDeshacerTests`,
+  `ComisionDeServicioTests`, `TicketingSagaPersistidaTests`) no se tocó y está en verde.
+- La exclusión, contra el `Program` real de `Bff.Eventos` y las capacidades reales
+  (`UnaSagaUnTurnoTests`): una compuerta detiene UNA llamada del orquestador a una capacidad y la
+  segunda petición sale mientras la primera está parada ahí. Con el código de antes, tres casos
+  terminan `Completed` con el cobro devuelto y el aforo repuesto, y uno `Compensating` con el cobro
+  capturado; con el arreglo, siempre `Completed` con el cobro capturado y el aforo consumido, o
+  `Compensated` sin nada cobrado.
+- Cada mutante compilado y comprobado que entró antes de leer el resultado (dos «verdes» de una
+  mutante que no compilaba se descartaron y se repitieron). Todos en rojo.
+- **No se volvió a medir en vivo**: los escenarios de la verificación se reprodujeron en las suites con
+  procesos reales del arnés.
+
+**Lo que queda, dicho**
+- **Cambiar el slug de un evento publicado** declara la oferta nueva y no retira la del slug viejo,
+  que se sigue vendiendo por la puerta hasta que empiece. Hace falta comparar el slug publicado con el
+  editado al publicar (el estado entre `Publishing` y `Published`); queda para cuando se toque el
+  publicar del editor.
+- **Las órdenes de la puerta anotadas antes de `47044789`** no llevan `ViaGate`: la ruta vieja todavía
+  las entrega si alguien conoce su referencia interna (aleatoria, de 128 bits, que ninguna respuesta
+  expone). Sólo existen en la copia piloto, y se van con el retiro.
+- **El cerrojo del registro es de proceso**: correcto mientras el almacén de órdenes sea de una
+  instancia, que es lo que dice `FileSystemJsonEntityStore`. Un CMS con réplicas necesitaría una
+  creación atómica en el almacén.
+- **El turno dura lo que el arriendo** (`CompensationLeaseSeconds`, piso de 30 s): una fase que tarde
+  más pierde la exclusión en sus escrituras intermedias; completar relee y no pisa lo deshecho, que es
+  la escritura que importa.
+- **Un miembro sin nombre en su ficha** recibe «Hola :» en el aviso: el nombre va vacío antes que ser
+  su correo.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la
