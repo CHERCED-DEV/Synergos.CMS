@@ -129,6 +129,19 @@ Una página con **dos funcionalidades que envían y un botón colocable** (ola 5
 4. El comportamiento ante un envío que falla, el que se decida, con su test.
 5. La convención de nombres elegida y `dom-events.md` en su nueva versión.
 
+> **Lo que ya construyó la F4 de la ADR 0140 (2026-10-09), y lo que no.** El front de la compra de
+> Eventos necesitaba un coordinador por ancestro y lo construyó como un SUBCONJUNTO de este
+> protocolo: `<synergos-flujo>` en `vitals/core/src/flujos/coordinador.ts` (UI), sin framework y
+> definido por cada participante al cargar. Eligió el prefijo **`synergos:`** —el que usan esta ADR y
+> el disco; `dom-events.md` v1 pedía `syn:` y nadie lo emitía— y subió el contrato a v2: `register`
+> síncrono, `submit-request` atendido por el ancestro más cercano del mismo flujo, `submit-result`
+> en el solicitante, un indicador de ocupado y el número de protocolo en cada pedido. Con UNA
+> diferencia de dirección, escrita: acá el disparador emite `submit-request` y cada participante
+> contesta; en la 0140 el participante pide y el coordinador contesta, porque el coordinador es quien
+> habla con la puerta. **No construyó** el orden declarado, «todos listos», `ready` ni `navigate`
+> (declarados en v2 sin productor) ni el participante Preact en una página: este piloto sigue siendo
+> el de dos funcionalidades y un botón, y cuando llegue partirá de ese módulo en vez de escribir otro.
+
 ## Relación con otras ADRs
 
 - **0083** — el protocolo es un contrato más de `docs/contracts/`; cero código compartido.
