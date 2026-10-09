@@ -3,7 +3,7 @@
 # Synergos — la imagen de UN servicio del árbol de capacidades/orquestadores.
 #
 # ─────────────────────────────────────────────────────────────────────────────
-# ES UN SOLO FICHERO PARA LAS 24, Y ESO ES LA DECISIÓN.
+# ES UN SOLO FICHERO PARA LAS 25, Y ESO ES LA DECISIÓN.
 #
 # La tentación era escribir un Dockerfile por servicio. Sería el mismo error
 # que `ApiMoldTests` existe para evitar: veinte servicios con veinte formas de
@@ -16,8 +16,8 @@
 #     --build-arg PROJECT=Synergos.Api.Booking \
 #     --build-arg PROJECT_DIR=backend/capacidades/Synergos.Api.Booking .
 #
-# Lo que hace uniforme esto es el molde (doc 08 §4): las 24 referencian Core y
-# Shared, las 24 exponen /health, las 24 arrancan con `dotnet <Proyecto>.dll`.
+# Lo que hace uniforme esto es el molde (doc 08 §4): las 25 referencian Core y
+# Shared, las 25 exponen /health, las 25 arrancan con `dotnet <Proyecto>.dll`.
 # Si algún día una no cumple, este fichero deja de servirle — y ese es
 # exactamente el aviso que se quiere.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ WORKDIR /src
 # `TreatWarningsAsErrors` esa política decide si la imagen se construye. Medido sacándolo del
 # árbol —la condición exacta del contenedor—: las veinte capacidades y los cuatro orquestadores
 # fallan con 12 errores CA1848 y 4 CA1873, los cuatro sitios en `Synergos.Shared`
-# (`Correlation.cs`, `SharedKeyAuth.cs`), que es el proyecto que las 24 compilan. O sea que las
+# (`Correlation.cs`, `SharedKeyAuth.cs`), que es el proyecto que las 25 compilan. O sea que las
 # 24 imágenes llevaban en rojo por esto ADEMÁS de por los crefs, y limpiar los crefs solo habría
 # dejado el rojo puesto apuntando a un fichero que nadie tocó.
 # Hay gate (`PoliticaDeBuildEnLaImagenTests`).
@@ -91,7 +91,7 @@ RUN dotnet publish ${PROJECT_DIR}/${PROJECT}.csproj \
 # hace en la etapa de SDK, así que una imagen aspnet:8.0 con ensamblados
 # net10.0 se construye igual y no arranca (su runtimeconfig pide el framework
 # 10.0). Sin Docker en local, eso sólo lo vería el job `arranca` de images.yml,
-# que prueba 2 de las 24.
+# que prueba 2 de las 25.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ARG PROJECT
 ARG PROJECT_DIR
@@ -130,7 +130,7 @@ ENV SYNERGOS_ASSEMBLY=${PROJECT}.dll \
 EXPOSE 8080
 
 # `/health` está garantizado por el molde: `ApiMoldTests` falla si una
-# capacidad no lo expone. Por eso este healthcheck sirve para las 24 sin
+# capacidad no lo expone. Por eso este healthcheck sirve para las 25 sin
 # excepciones — y con `--fail`, porque acá un 503 SÍ significa que algo anda mal
 # (a diferencia del CMS, donde /_health está rojo por diseño mientras no haya
 # CDN local).

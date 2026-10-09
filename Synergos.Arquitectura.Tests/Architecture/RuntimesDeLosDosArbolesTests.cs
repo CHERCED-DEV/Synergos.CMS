@@ -17,7 +17,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// <c>PoliticaDeBuildEnLaImagenTests</c> leen <c>Dockerfile.service</c> pero no ese dato. Una
 /// imagen <c>aspnet:8.0</c> con ensamblados net10.0 se construye igual (el publish se hace en la
 /// etapa del SDK) y no arranca; sin Docker en local, sólo lo vería el job <c>arranca</c> de
-/// <c>images.yml</c>, que prueba 2 de las 24.</para>
+/// <c>images.yml</c>, que prueba 2 de las 25.</para>
 ///
 /// <para><b>Sólo lee el disco</b>: los csproj y los dos Dockerfile. Los proyectos se descubren
 /// (<see cref="Proyectos"/>) y no se nombran, salvo <c>Synergos.CMS.Web</c>, que es la referencia
@@ -118,7 +118,7 @@ public sealed class RuntimesDeLosDosArbolesTests
     /// Una pieza que referencia el núcleo no puede bajar de runtime sin que lo diga NU1201; lo que
     /// el compilador no ve es que baje el que no referencia nada (<c>Synergos.Core</c> en net8.0
     /// compila todo en verde, medido) o que alguien añada un multi-target. Un único TFM es además
-    /// lo que permite que <c>Dockerfile.service</c> siga siendo UNO para las 24.
+    /// lo que permite que <c>Dockerfile.service</c> siga siendo UNO para las 25.
     /// </remarks>
     [Fact]
     public void Todo_csproj_del_backend_declara_el_mismo_TargetFramework()

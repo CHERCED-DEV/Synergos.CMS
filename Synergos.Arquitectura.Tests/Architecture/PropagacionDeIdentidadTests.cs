@@ -85,7 +85,7 @@ public sealed class PropagacionDeIdentidadTests
     private static readonly string[] Orquestadores =
     {
         "Synergos.Bff.Core", "Synergos.Bff.Pasos", "Synergos.Bff.Tienda", "Synergos.Bff.Salud",
-        "Synergos.Bff.Eventos", "Synergos.Bff.Viajes",
+        "Synergos.Bff.Eventos", "Synergos.Bff.Viajes", "Synergos.Bff.Alquiler",
     };
 
     private static string RepoRoot()
@@ -256,8 +256,8 @@ public sealed class PropagacionDeIdentidadTests
 
         // Que el gate haya MIRADO algo. Sin esto, un cambio en cómo se declara una saga lo
         // dejaría contando cero ficheros y pasando en verde para siempre.
-        Assert.True(vistas == 4,
-            $"Se esperaban 4 records de saga (Tienda, Salud, Eventos, Viajes) y se vieron {vistas}. "
+        Assert.True(vistas == 5,
+            $"Se esperaban 5 records de saga (Tienda, Salud, Eventos, Viajes, Alquiler) y se vieron {vistas}. "
             + "Si nació un orquestador, súmalo; si cambió cómo se declara una saga, este gate dejó "
             + "de mirar y hay que arreglarlo — contar cero y pasar en verde es el peor resultado.");
 
@@ -339,16 +339,20 @@ public sealed class PropagacionDeIdentidadTests
     ///
     /// <para><b>Por qué los tres siguen así, y no es olvido.</b> Tienda pudo anclarse porque
     /// tiene una canasta: un registro de <c>Api.Cart</c> con dueño verificado, anterior a la
-    /// compra. Salud, Eventos y Viajes no tienen ninguno — se entra al flujo nombrando al
-    /// paciente, al comprador o al viajero, y no hay registro previo que citar. Darles uno es
+    /// compra. Salud, Eventos, Viajes y Alquiler no tienen ninguno — se entra al flujo nombrando
+    /// al paciente, al comprador, al viajero o a quien alquila, y no hay registro previo que citar. Darles uno es
     /// trabajo de verdad (¿dónde vive el «carrito» de una cita?), no un cableado, y por eso está
     /// nombrado en vez de dado por hecho.</para>
     /// </remarks>
     [Fact]
     public void La_lista_de_los_que_nombran_por_su_palabra_es_exacta()
     {
-        // Los que todavía no pueden derivar, con su razón — ver el <remarks>.
-        string[] esperados = { "Synergos.Bff.Salud", "Synergos.Bff.Eventos", "Synergos.Bff.Viajes" };
+        // Los que todavía no pueden derivar, con su razón — ver el <remarks>. Alquiler (#147) entró
+        // con la misma: se reserva nombrando a quien alquila y no hay registro previo que citar.
+        string[] esperados =
+        {
+            "Synergos.Bff.Salud", "Synergos.Bff.Eventos", "Synergos.Bff.Viajes", "Synergos.Bff.Alquiler",
+        };
 
         var medidos = new List<string>();
 

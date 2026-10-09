@@ -29,7 +29,7 @@ namespace Synergos.CMS.Tests.Architecture;
 /// rompían únicamente los crefs. Las veinte capacidades y los cuatro orquestadores, en cambio,
 /// <b>no compilan</b>: <b>12 errores CA1848 y 4 CA1873</b>, los cuatro sitios en
 /// <c>Synergos.Shared</c> (<c>Correlation.cs</c> y <c>SharedKeyAuth.cs</c>), que es justo el
-/// proyecto que las <b>24</b> imágenes de servicio compilan. O sea que limpiar los crefs habría
+/// proyecto que las <b>25</b> imágenes de servicio compilan. O sea que limpiar los crefs habría
 /// desbloqueado una imagen y dejado las otras veinticuatro en rojo, con el diagnóstico apuntando a
 /// un fichero que nadie había tocado. El <c>COPY</c> no es prevención acá: es la mitad que
 /// faltaba.</para>
@@ -216,7 +216,7 @@ public sealed class PoliticaDeBuildEnLaImagenTests
         Assert.True(
             dockerfiles.Count >= 2,
             $"Se descubrieron {dockerfiles.Count} Dockerfiles que compilan .NET y hay al menos " +
-            "dos (el del web y el parametrizado de los 24 servicios). Si el descubrimiento se " +
+            "dos (el del web y el parametrizado de los 25 servicios). Si el descubrimiento se " +
             "rompió, los asserts de abajo pasan sin mirar nada.");
 
         Assert.True(
