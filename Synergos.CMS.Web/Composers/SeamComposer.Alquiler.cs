@@ -29,6 +29,11 @@ public sealed partial class SeamComposer
         services.Configure<AlquilerSettings>(builder.Config.GetSection("Synergos:Alquiler"));
         services.Configure<AgreementSettings>(builder.Config.GetSection("Synergos:Alquiler:Agreement"));
 
+        // La configuración de negocio del alquiler (ADR 0137): dónde vive su API, por sitio. La lee el
+        // resolver del elemento; el editor ya no la ve.
+        services.AddSeccionDeNegocio<AlquilerFeatureSettings, NegocioDeAlquiler>(
+            builder.Config.GetSection("Synergos:Features:Alquiler"));
+
         // ── EJE 1 · el catálogo (forma A del doc 13 §5.bis) ─────────────────────────
         //
         // La colección es PROPIA y de sólo lectura, así que la fuente REEMPLAZA al seed en vez

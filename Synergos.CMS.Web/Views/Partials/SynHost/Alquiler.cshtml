@@ -1,30 +1,19 @@
+@*
+    SynHost renderer — <synergos-alquiler>. El alquiler de equipos: catálogo, reserva con garantía retenida y contrato sellado.
+
+    Host tonto (ADR 0135): el resolver arma el record que viaja (AlquilerProps) con lo que escribe
+    el editor y dónde vive la API para el sitio de la petición (Synergos:Features:Alquiler, ADR 0137).
+    Es una FUNCIONALIDAD (ADR 0134): no recibe JSON libre del editor.
+
+    Quién alquila NO viaja: la bandeja de `GET /rentals` la resuelve el servidor desde la cookie de
+    sesión, y sin sesión el borde contesta 401 y la app ofrece entrar.
+*@
+@using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.AlquilerProps> Resolutor
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
-    // apiBase: default /api/alquiler si el editor no lo pone (NO obligatorio).
-    var apiBase = Model.Value<string>("apiBase");
-    if (string.IsNullOrWhiteSpace(apiBase)) { apiBase = "/api/alquiler"; }
-
-    // config: JSON opcional; el emitter lo fusiona sobre los props base. Vacío o malformado,
-    // el componente resuelve sus defaults.
-    var config = Model.Value<string>("config");
-
-    // Acá NO viaja quién alquila, y no es un olvido: la bandeja de `GET /rentals` la resuelve
-    // el servidor desde la cookie de sesión, que llega sola porque la app se monta en esta misma
-    // página. Sin sesión el borde contesta 401 y la app ofrece entrar — que es distinto de
-    // enseñar una bandeja vacía, porque «no tenés alquileres» dicho a quien no entró es una
-    // afirmación que nadie hizo.
-    var props = new Dictionary<string, object?>(StringComparer.Ordinal)
-    {
-        ["apiBase"] = apiBase,
-        ["heading"] = Model.Value<string>("heading"),
-        ["subheading"] = Model.Value<string>("subheading"),
-        ["category"] = Model.Value<string>("category"),
-    };
-
-    // El alias DEBE ser el `name` kebab del registry —"alquiler"—: el emitter resuelve el bundle
-    // por ahí, y un camelCase no casaría y la página saldría con el tag y sin hidratar.
-    var request = new Synergos.CMS.Interfaces.SynHostEmitRequest("alquiler", props, config, System.Globalization.CultureInfo.CurrentUICulture);
-    var result = await Emitter.EmitAsync(request);
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, System.Globalization.CultureInfo.CurrentUICulture));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

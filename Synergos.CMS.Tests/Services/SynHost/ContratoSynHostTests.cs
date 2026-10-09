@@ -111,6 +111,14 @@ public sealed class ContratoSynHostTests
                 ("heading", "Tu negocio, en un solo panel"),
                 ("subheading", "Ventas, publicaciones, mensajes y devoluciones"),
             },
+            // La familia es una DECISIÓN del editor (qué equipos muestra el bloque); la API es de
+            // negocio y la moneda llega con cada precio (#147).
+            ["alquiler"] = new (string, object?)[]
+            {
+                ("heading", "Alquiler de equipos"),
+                ("subheading", "Por días, con la garantía retenida y no cobrada"),
+                ("category", "andamios"),
+            },
             ["storefront"] = new (string, object?)[]
             {
                 ("heading", "Compra en nuestra tienda online"),

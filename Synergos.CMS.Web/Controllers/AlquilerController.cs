@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
@@ -92,7 +94,7 @@ public sealed class AlquilerController : ControllerBase
     {
         if (!TryLeer(body?.EquipmentId, body?.Quantity, body?.Start, body?.End, out var pedido, out var porQue))
         {
-            return BadRequest(new RejectionDto("alquiler.bad_request", porQue));
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.bad_request", porQue);
         }
 
         var quote = await _rentals.QuoteAsync(pedido, ct).ConfigureAwait(false);
@@ -108,13 +110,13 @@ public sealed class AlquilerController : ControllerBase
     {
         if (!TryLeer(body?.EquipmentId, body?.Quantity, body?.Start, body?.End, out var pedido, out var porQue))
         {
-            return BadRequest(new RejectionDto("alquiler.bad_request", porQue));
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.bad_request", porQue);
         }
 
         if (string.IsNullOrWhiteSpace(body!.IdempotencyKey))
         {
-            return BadRequest(new RejectionDto("alquiler.idempotency_key_required",
-                "Reservar retiene plata: sin llave, un reintento la retiene dos veces."));
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Reservar retiene plata: sin llave, un reintento la retiene dos veces.");
         }
 
         var resultado = await _rentals
@@ -168,8 +170,8 @@ public sealed class AlquilerController : ControllerBase
         {
             // Sin sesión no hay bandeja que servir, y NO se devuelve `[]`: la lista vacía diría
             // «todavía ninguno» sobre alguien que ni siquiera se identificó.
-            return Unauthorized(new RejectionDto("alquiler.session_required",
-                "Hay que iniciar sesión para ver los alquileres."));
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                "Hay que iniciar sesión para ver los alquileres.");
         }
 
         var contratos = await _ledger.ListForAsync(quien, ct).ConfigureAwait(false);
@@ -201,8 +203,8 @@ public sealed class AlquilerController : ControllerBase
         var llave = body?.IdempotencyKey;
         if (string.IsNullOrWhiteSpace(llave))
         {
-            return BadRequest(new RejectionDto("alquiler.idempotency_key_required",
-                "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces."));
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces.");
         }
 
         var resultado = quePasaba == "devolver"
@@ -222,6 +224,31 @@ public sealed class AlquilerController : ControllerBase
         var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
         return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
     }
+
+    /// <summary>
+    /// Un «no» de este borde como problem+json, con <c>code</c> y <c>transient</c>: la misma forma que
+    /// la puerta de Eventos (ADR 0140) y la que el cliente del UI ya lee (<c>code</c>, <c>detail</c>).
+    /// </summary>
+    /// <remarks>
+    /// Un objeto anónimo y no un record con <c>Code</c> y <c>Detail</c>: ese tipo es la forma de un
+    /// LECTOR de problem+json, y en el CMS hay uno solo (<c>RechazoDelArbolDeServicios</c>, #178).
+    /// </remarks>
+    private static ContentResult Problema(int estado, string codigo, string mensaje, bool transitorio = false) => new()
+    {
+        StatusCode = estado,
+        ContentType = "application/problem+json",
+        Content = JsonSerializer.Serialize(new
+        {
+            type = "about:blank",
+            title = ReasonPhrases.GetReasonPhrase(estado),
+            status = estado,
+            detail = mensaje,
+            code = codigo,
+            transient = transitorio,
+        }, LecturaWeb),
+    };
+
+    private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
     /// <summary>
     /// Devolver o cancelar lo hace quien alquiló o el personal — nadie más.
@@ -247,8 +274,8 @@ public sealed class AlquilerController : ControllerBase
     {
         if (!_gate.IsAuthenticated)
         {
-            return Unauthorized(new RejectionDto("alquiler.session_required",
-                $"Hay que iniciar sesión para {quePasaba} un alquiler."));
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                $"Hay que iniciar sesión para {quePasaba} un alquiler.");
         }
 
         if (_gate.HasAnyRole(PersonalCsv))
@@ -266,8 +293,8 @@ public sealed class AlquilerController : ControllerBase
         // autenticación de Umbraco y contesta otra cosa.
         return string.Equals(contrato.RenterId, QuienAlquila(), StringComparison.Ordinal)
             ? null
-            : StatusCode(StatusCodes.Status403Forbidden, new RejectionDto("alquiler.not_yours",
-                "Ese alquiler no es tuyo."));
+            : Problema(StatusCodes.Status403Forbidden, "alquiler.not_yours",
+                "Ese alquiler no es tuyo.");
     }
 
     /// <summary>El rol que puede cerrar cualquier alquiler.</summary>
@@ -284,11 +311,12 @@ public sealed class AlquilerController : ControllerBase
     private ActionResult<RentalDto> Rechazar(RentalResult resultado, string quePasaba)
     {
         _log.LogWarning("Alquiler: no se pudo {Que}: {Codigo}.", quePasaba, resultado.RejectionCode);
-        var dto = new RejectionDto(resultado.RejectionCode ?? "alquiler.rejected", resultado.Reason);
-
-        return resultado.Outcome == RentalOutcome.Unavailable
-            ? StatusCode(StatusCodes.Status503ServiceUnavailable, dto)
-            : Conflict(dto);
+        var unavailable = resultado.Outcome == RentalOutcome.Unavailable;
+        return Problema(
+            unavailable ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status409Conflict,
+            resultado.RejectionCode ?? "alquiler.rejected",
+            resultado.Reason ?? string.Empty,
+            transitorio: unavailable);
     }
 
     /// <summary>
@@ -352,10 +380,6 @@ public sealed record ReserveRequest(
 /// <param name="IdempotencyKey">Obligatoria: cobrar de la garantía es relativo.</param>
 public sealed record SettleRequest(decimal? Amount, string? IdempotencyKey);
 
-/// <summary>Un rechazo, tal como lo lee el otro árbol.</summary>
-/// <param name="Code">El código; es contrato.</param>
-/// <param name="Detail">Qué decirle a quien está delante.</param>
-public sealed record RejectionDto(string Code, string? Detail);
 
 /// <summary>La tarjeta de un equipo en el listado.</summary>
 /// <param name="EquipmentId">Su slug.</param>

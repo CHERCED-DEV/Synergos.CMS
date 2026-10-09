@@ -68,6 +68,45 @@
       }
     },
     {
+      "nombre": "alquiler",
+      "tipo": "funcionalidad",
+      "record": "AlquilerProps",
+      "diccionario": [],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "category",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Alquiler de equipos",
+        "subheading": "Por días, con la garantía retenida y no cobrada",
+        "category": "andamios",
+        "apiBase": "/api/alquiler"
+      }
+    },
+    {
       "nombre": "app-launcher",
       "tipo": "funcionalidad",
       "record": "AppLauncherProps",

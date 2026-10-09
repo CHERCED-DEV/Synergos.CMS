@@ -149,6 +149,18 @@ public sealed class AlquilerControllerTests
 
     private static SettleRequest TodaLaGarantia() => new(250_000m, "cierre-1");
 
+    /// <summary>Lee el problem+json que el borde emite: estado, código y si es transitorio.</summary>
+    private static (int Estado, string? Codigo, bool Transitorio) Problema(IActionResult? resultado)
+    {
+        var contenido = Assert.IsType<ContentResult>(resultado);
+        Assert.Equal("application/problem+json", contenido.ContentType);
+        using var json = System.Text.Json.JsonDocument.Parse(contenido.Content!);
+        var raiz = json.RootElement;
+        return (contenido.StatusCode ?? 0,
+            raiz.TryGetProperty("code", out var c) ? c.GetString() : null,
+            raiz.TryGetProperty("transient", out var t) && t.GetBoolean());
+    }
+
     private static ReserveRequest Pedido()
         => new("andamio-multidireccional-2m", 1, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 4), "k1");
 
@@ -202,8 +214,10 @@ public sealed class AlquilerControllerTests
 
         var res = await borde.Reserve(Pedido(), CancellationToken.None);
 
-        var obj = Assert.IsType<ObjectResult>(res.Result);
-        Assert.Equal(StatusCodes.Status503ServiceUnavailable, obj.StatusCode);
+        var p = Problema(res.Result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, p.Estado);
+        Assert.Equal("alquiler.store_busy", p.Codigo);
+        Assert.True(p.Transitorio);
     }
 
     [Fact]
@@ -215,8 +229,10 @@ public sealed class AlquilerControllerTests
 
         var res = await borde.Reserve(Pedido(), CancellationToken.None);
 
-        var dto = Assert.IsType<RejectionDto>(Assert.IsType<ConflictObjectResult>(res.Result).Value);
-        Assert.Equal("alquiler.no_units", dto.Code);
+        var p = Problema(res.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, p.Estado);
+        Assert.Equal("alquiler.no_units", p.Codigo);
+        Assert.False(p.Transitorio);
     }
 
     [Fact]
@@ -228,8 +244,9 @@ public sealed class AlquilerControllerTests
 
         var res = await borde.Mine(CancellationToken.None);
 
-        var dto = Assert.IsType<RejectionDto>(Assert.IsType<UnauthorizedObjectResult>(res.Result).Value);
-        Assert.Equal("alquiler.session_required", dto.Code);
+        var p = Problema(res.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, p.Estado);
+        Assert.Equal("alquiler.session_required", p.Codigo);
     }
 
     [Fact]
@@ -267,7 +284,7 @@ public sealed class AlquilerControllerTests
         var res = await BordeSobre(ledger, seam, new PuertaDeMiembro(null))
             .Return("ALQ-1", TodaLaGarantia(), CancellationToken.None);
 
-        Assert.IsType<UnauthorizedObjectResult>(res.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, Problema(res.Result).Estado);
         Assert.Equal(0, seam.Cierres);
     }
 
@@ -284,8 +301,8 @@ public sealed class AlquilerControllerTests
         var cancelar = await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro))
             .Cancel("ALQ-1", TodaLaGarantia(), CancellationToken.None);
 
-        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(devolver.Result).StatusCode);
-        Assert.Equal(StatusCodes.Status403Forbidden, Assert.IsType<ObjectResult>(cancelar.Result).StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, Problema(devolver.Result).Estado);
+        Assert.Equal(StatusCodes.Status403Forbidden, Problema(cancelar.Result).Estado);
         Assert.Equal(0, seam.Cierres);
     }
 
