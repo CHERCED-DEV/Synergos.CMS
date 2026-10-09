@@ -19,8 +19,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Su microcopia sale del diccionario, sección <c>Events.Sale</c></b> (ADR 0136, #195): lo
 /// que dice una localidad fuera de su ventana de venta —«Aún no está a la venta», «Venta cerrada»—,
 /// que el CMS decide con <c>saleOpensAt</c>/<c>saleClosesAt</c>/<c>onSale</c>.</para>
+///
+/// <para><b>Y de la sección <c>Events.Purchase</c></b> (ADR 0140 F4, #201): lo que dice la compra por
+/// la puerta —pedir la sesión, un rechazo traducido por su <c>code</c>, la compra que quedó apartada—.
+/// El elemento decide por <c>code</c> y nunca por <c>title</c>, que la puerta llena con la frase HTTP;
+/// sólo se traducen los códigos que la persona puede provocar, más uno genérico por clase.</para>
 /// </remarks>
-[ElementoSynHost("eventos", TipoDeColocable.Funcionalidad, Diccionario = ["Events.Sale"])]
+[ElementoSynHost("eventos", TipoDeColocable.Funcionalidad, Diccionario = ["Events.Sale", "Events.Purchase"])]
 public sealed record EventosProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,

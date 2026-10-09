@@ -220,7 +220,7 @@ Synergos.CMS/
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
 │       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (263 archivos)
 │       ├── DataTypes/           142 archivos (72 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
-│       ├── Dictionary/          i18n es-CO + en-US (766 keys)
+│       ├── Dictionary/          i18n es-CO + en-US (786 keys)
 │       ├── Languages/           es-CO (default) + en-US
 │       ├── MediaTypes/          synImage + synDocument + synIcon + los stock de Umbraco
 │       ├── MemberTypes/         member
@@ -330,7 +330,7 @@ Synergos.CMS/
 |---------------------------------|------------------------------------------------------------|
 | "¿Por qué se tomó esta decisión?" | `Synergos.CMS.Web/docs/adr/NNNN-*.md` — índice en `docs/adr/README.md` |
 | "¿Qué DocTypes existen?"         | `uSync/v9/ContentTypes/`                                   |
-| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (766 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
+| "¿Qué Dictionary keys hay?"      | `uSync/v9/Dictionary/` (786 archivos .config — alias PascalCase, filename lowercase por convención uSync) |
 | "¿Qué compositions y para qué?"  | `uSync/v9/ContentTypes/compdom*.config` + `compcontent*.config` |
 | "¿Hay compositions reservadas sin consumers?"  | Sí. Marker `[Bloqueado externamente - ...]` o `[Disponible — sin consumers actuales]` al inicio de `<Description>`. NO son orphans; son scaffolding tracked. Cap-260 audit (Cap-270 Batch C) las reconoce. |
 | "¿Cómo se acopla con el UI?"     | `Synergos.CMS.Web/docs/contracts/` — los 5 contratos. Es la ÚNICA superficie de acople. |
