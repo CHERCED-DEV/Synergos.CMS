@@ -187,8 +187,12 @@ Reglas:
   y un participante Preact), con el orden y «todos listos».
 
 Lo vigila `vitals/core/src/flujos/flujos.spec.ts` del UI (jsdom): ancestro del mismo flujo, anidados,
-flujo desconocido, protocolo distinto, single-flight y `aria-busy`, el coordinador que llega tarde, y
-que importar el módulo no defina la etiqueta.
+flujo desconocido (con un pedido del MISMO flujo que el atributo, que es el que llega a la guarda),
+protocolo distinto, single-flight y `aria-busy`, el coordinador que llega tarde, que importar el módulo no
+defina la etiqueta, y los nombres de esta tabla escritos en crudo —un participante que habla con las
+cadenas, sin la constante, es atendido—. Que cada participante DEFINA el coordinador al cargar, antes de
+registrarse, lo vigila `tools/lib/coordinador-de-los-participantes.mjs` del UI (ADR 0140, endurecimiento
+de la F4).
 
 ## References
 
