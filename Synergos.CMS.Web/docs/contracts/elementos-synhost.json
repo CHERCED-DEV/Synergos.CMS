@@ -1155,6 +1155,7 @@
         "Events.Purchase.FreeReceived",
         "Events.Purchase.HoldExpired",
         "Events.Purchase.InProgress",
+        "Events.Purchase.LinkSignIn",
         "Events.Purchase.NotCompleted",
         "Events.Purchase.NotFound",
         "Events.Purchase.NotOnSale",
