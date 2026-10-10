@@ -42,7 +42,10 @@ severidad:
 
 1. **El import termina** (resumen presente; un proceso que muere antes es fallo).
 2. **Cero líneas `[ERR]`** — un import que "termina" con errores adentro es el peor resultado:
-   se ve verde y dejó huecos.
+   se ve verde y dejó huecos. **Y cero `Import Failed` de uSync** (#205): uSync atrapa la
+   excepción de un ítem y la deja en WRN, así que contar sólo `[ERR]` daba verde con el ítem
+   afuera (medido: con un tipo de contenido inexistente y una cultura inexistente salía
+   «N/N ítems, 0 errores» — el ítem que falla también cuenta como procesado).
 3. **`processed >= archivos .config trackeados`.** No es heurística: la medición de referencia
    es exacta (880 archivos = 880 ítems). Si uSync se salta una carpeta entera —el modo de falla
    que de verdad importa— este número se desploma.
@@ -60,6 +63,7 @@ El camino negativo está probado, no supuesto: un XML corrupto dispara **las dos
 | `DevSeed` | apagado | La reconstrucción demuestra que el **repo** reproduce el entorno; un seeder maquillaría el resultado |
 | Temp storage | `EnvironmentTemp` + TMPDIR propio | Dos Umbraco en la misma máquina no se pelean por los índices Examine |
 | Puerto | `:0` | El gate no hace ni un request HTTP; nunca colisiona con un CMS corriendo |
+| Tareas de fondo | poda de `umbracoCacheInstruction` cada 1 día, keepalive y mantenimiento SQLite apagados | #205: con `Cache=Shared`, la poda (al minuto del arranque y cada minuto) y el import se trancaban ~580 s y a veces el ítem no entraba; el keepalive pinguea un puerto en el que el gate no escucha |
 
 ### Dos matices del veredicto que costaron una iteración cada uno
 
