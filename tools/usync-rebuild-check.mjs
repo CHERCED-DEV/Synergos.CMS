@@ -13,7 +13,10 @@
  * Qué es "limpio y completo", en orden de severidad:
  *   1. El proceso arranca y el import TERMINA (resumen presente).
  *   2. Cero líneas [ERR] en el log — un import que "termina" con errores
- *      adentro es el peor resultado: parece verde y dejó huecos.
+ *      adentro es el peor resultado: parece verde y dejó huecos. Y cero ítems
+ *      que uSync dé por fallidos: uSync atrapa la excepción de UN ítem y la
+ *      deja en WRN («Import Failed»), así que contar sólo ERR la dejaba pasar
+ *      (#205).
  *   3. `processed >= archivos .config TRACKEADOS`. No es una heurística: en
  *      la medición de referencia los dos números fueron IGUALES — el conteo se
  *      hace en cada corrida y no se escribe acá, porque una cifra en un
@@ -37,6 +40,11 @@
  *     el entorno; un seeder maquillaría el resultado.
  *   - Temp storage aislado (EnvironmentTemp + TMPDIR propio) — dos Umbraco
  *     en la misma máquina no se pelean por los índices Examine.
+ *   - Las tareas de fondo que chocan con el import, apagadas (#205). El gate
+ *     arranca la aplicación ENTERA, y con ella sus tareas periódicas: en una
+ *     base que se tira al terminar no tienen nada que hacer, y sí pueden
+ *     trabar el import. Cuáles y por qué, junto a cada variable. No se filtra
+ *     ningún ERR: se quita lo que lo provoca.
  *
  * Desde el ADR 0129 el gate TAMBIÉN cubre el contenido y los nodos de media:
  * antes Content/ estaba en .gitignore y esta cabecera decía que quedaba fuera
@@ -153,10 +161,23 @@ const child = spawn('dotnet', [DLL], {
     'Umbraco__CMS__Unattended__UnattendedUserPassword': 'humo-de-usar-y-tirar-Aa1!',
     Umbraco__CMS__Hosting__LocalTempStorageLocation: 'EnvironmentTemp',
     TMPDIR: tmp, TEMP: tmp, TMP: tmp,
+    // #205 — la CAUSA del rojo desde el 2026-10-02. InstructionProcessJob arranca al minuto y, en
+    // la misma transacción, lee y PODA umbracoCacheInstruction; el import inserta en esa tabla en
+    // cada publicación. Con Cache=Shared se bloquean el uno al otro y cada lado reintenta ~580 s
+    // (11 × 30 s + el backoff de Umbraco) antes de rendirse — y a veces el que se rinde es el
+    // import, y el ítem no entra. En una base desechable no hay nada que podar.
+    Umbraco__CMS__Global__DatabaseServerMessenger__TimeBetweenPruneOperations: '1.00:00:00',
+    // A los 3 min el keepalive pinguea la UmbracoApplicationUrl del perfil Docker (:8080) y el gate
+    // escucha en el puerto 0: «Keep alive failed» seguro en cuanto el import dure más que eso.
+    Umbraco__CMS__KeepAlive__DisableKeepAliveTask: 'true',
+    // wal_checkpoint(TRUNCATE) a los 120 s frena a los escritores mientras espera a los lectores:
+    // contención en medio del import, para compactar una base que se borra al terminar.
+    Synergos__SqliteMaintenance__Enabled: 'false',
   },
 });
 
 const errLines = [];
+const failedItems = [];
 let summary = null;
 let settled = false;
 let buffered = '';
@@ -164,6 +185,10 @@ let buffered = '';
 const SUMMARY_RE = /uSync Import: (\d+) handlers, processed (\d+) items, (\d+) changes in (\d+)ms/;
 const DONE_RE = /uSync: Startup Complete/;
 const ERR_RE = /\[\d{2}:\d{2}:\d{2} ERR\]/;
+// uSync no escribe como ERR el fallo de UN ítem: lo atrapa y lo deja en WRN (`SyncHandlerRoot` de
+// uSync 13: «<Handler>: Import Failed : …» y «Second Import Failed: …»). Se cuenta con el nivel que
+// traiga. En dos rojos de #205 era la única línea que decía que el ítem no había entrado.
+const USYNC_FAIL_RE = /^\[\d{2}:\d{2}:\d{2} [A-Z]{3}\] (?:\S+: Import Failed :|Second Import Failed:)/;
 
 function settle(verdictFn) {
   if (settled) return;
@@ -199,6 +224,7 @@ function onLine(line) {
   // reconstrucción perfecta según el timing del kill — un gate intermitente
   // es peor que no tener gate. El log completo los conserva igual.
   if (!settled && ERR_RE.test(line)) errLines.push(line);
+  if (!settled && USYNC_FAIL_RE.test(line)) failedItems.push(line);
   const m = line.match(SUMMARY_RE);
   if (m) summary = { handlers: +m[1], processed: +m[2], changes: +m[3], ms: +m[4] };
   if (DONE_RE.test(line) && summary) settle(verdict);
@@ -237,6 +263,11 @@ function verdict() {
   if (errLines.length > 0) {
     fail(`${errLines.length} línea(s) [ERR] durante el import:`);
     for (const l of errLines.slice(0, 5)) console.error('   ' + l);
+  }
+
+  if (failedItems.length > 0) {
+    fail(`${failedItems.length} ítem(s) que uSync no pudo importar:`);
+    for (const l of failedItems.slice(0, 5)) console.error('   ' + l.slice(0, 240));
   }
 
   if (summary.processed < EXPECTED) {
