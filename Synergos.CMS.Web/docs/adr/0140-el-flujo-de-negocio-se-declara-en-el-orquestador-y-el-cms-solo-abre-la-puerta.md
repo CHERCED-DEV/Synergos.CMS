@@ -744,12 +744,12 @@ asistentes y las entradas van al artefacto del CMS. El CMS sigue sirviendo la ru
 publicado y las pestañas abiertas, hasta el retiro. Plan y mediciones previas:
 `_informes/77-adr-0140-f4-plan.json`.
 
-Commits UI (rama `lego/integracion`): `3f17074` (el typecheck de `vitals/core` en `npm test`),
-`cc9f900` (el generador emite la tabla de ejecución y deja de prometer un `title` falso), `c8f41b6` (el
-cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierra), `5251ccb` (`confirm`
-recibe el instrumento y el dominio escribe EL aviso de SH-3), `6e00b3d` (el contrato con
-`Events.Purchase`), `373f5f1` (la recarga no miente), `b258ece` (fuera el cupón), `d327f84` (la sesión
-antes de pagar), `d3005d9` (la compra por la puerta) y `de37db1` (el enlace del aviso abre la compra).
+Commits UI (rama `lego/integracion`): `66e3a42` (el typecheck de `vitals/core` en `npm test`),
+`be9abd8` (el generador emite la tabla de ejecución y deja de prometer un `title` falso), `64d4c45` (el
+cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierra), `2f415a6` (`confirm`
+recibe el instrumento y el dominio escribe EL aviso de SH-3), `595b7ec` (el contrato con
+`Events.Purchase`), `8def0f9` (la recarga no miente), `4199329` (fuera el cupón), `ab91644` (la sesión
+antes de pagar), `1f92757` (la compra por la puerta) y `12d869b` (el enlace del aviso abre la compra).
 CMS: `cf3ce915` (la sección `Events.Purchase`), `2c136b4e` (el CMS coloca el coordinador), `0addf388`
 (G-6 y G-7 antes que el UI), `46a50fb0` (`Aviso.Ruta`) y el de esta sección.
 
@@ -877,12 +877,12 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
 —procesos reales en 5871-5875, el CMS sobre la copia piloto, `eventos` 0.1.12 en la CDN piloto,
 Chromium— y dejó siete defectos, uno alto, más siete hallazgos de revisión confirmados por un escéptico.
 Se arreglaron en orden de severidad, un commit por arreglo, cada uno con su test y su mutante fiel (en
-el mensaje de cada commit). Commits UI (`lego/integracion`): `649e0e0` (la tinta del aviso de rechazo),
-`aa3019f` (el QR y la butaca de Eventos), `7bbbf85` (`?compra=` se consume), `cf07b56` (los ids sin
-`randomUUID`), `f28db82` (cerrar pregunta a la saga), `4b903b6` (el coordinador de cada participante),
-`d4a3085` (el protocolo en crudo), `125d5c3` (G-15), `6924e05` (el foco tras pagar), `9dd4d17` (el
-registro gratis) y `75e661f` (el enlace sin sesión). CMS: `7b2f2523` (el parámetro del aviso),
-`ade17285` y `8abfd51f` (tres claves de `Events.Purchase`) y el de esta sección.
+el mensaje de cada commit). Commits UI (`lego/integracion`): `5b9d6c3` (la tinta del aviso de rechazo),
+`db8c38d` (el QR y la butaca de Eventos), `a0ff38c` (`?compra=` se consume), `f5e8bb4` (los ids sin
+`randomUUID`), `0bda010` (cerrar pregunta a la saga), `d4730e9` (el coordinador de cada participante),
+`47f819a` (el protocolo en crudo), `4b9f104` (G-15), `e77ebd8` (el foco tras pagar), `c4ec404` (el
+registro gratis) y `a5dee91` (el enlace sin sesión). CMS: `255ff855` (el parámetro del aviso),
+`ea3ef4be` y `6c7d9c49` (tres claves de `Events.Purchase`) y el de esta sección.
 
 **Lo que se decidió, y entra en la decisión**
 1. **Un lavado no es tinta, tampoco por un alias.** El aviso de rechazo del asistente —desde la decisión 5
@@ -933,6 +933,13 @@ registro gratis) y `75e661f` (el enlace sin sesión). CMS: `7b2f2523` (el parám
   `usync-audit` 0/0, build en 0 avisos y las tres suites; y G-6 y G-7 contra el UI en cada paso. Al
   cerrar: UI **873 + 113 + 2.072 + 11** (874 con el CDN construido); CMS **3171 / 897 / 520 = 4588**;
   G-6 ✓ 537 claves en 9 verticales; G-7 ✓ 55 claves en 21 rutas (su piso, sin moverse); G-15 ✓ 1 enlace.
+- **Rebasada otra vez**, el UI, sobre `origin/claude/adoring-franklin-ustp2q` (`6af9486`, UI#96:
+  `<synergos-alquiler>` pide su catálogo al montarse); la del CMS no se movió de `51dd8c4a`. Los hashes
+  de esta sección y los de la F4 son los rebasados. Sobre el resultado: UI `npm test` 6 de 6
+  (**874 + 113 + 2.073 + 11**, con el CDN construido: 2.073 son los 2.072 de arriba más el caso de
+  UI#96) y `contracts:validate` entero, con `cms:sync:check` in sync y G-15 ✓ 1 enlace;
+  `contratos:http:check` y `contratos:synhost:check` al día; G-6 ✓ 537/9 y G-7 ✓ 55/21; CMS build en
+  0 avisos y **3171 / 897 / 520 = 4588**.
 - El contraste, por dos métodos: el resolutor de `syn-tokens.css` en las ocho rutas de render (peligro
   ≥ 5,04, aviso ≥ 4,79, éxito ≥ 5,70, contra 1,14) y Chromium con los estilos calculados de las hojas
   compiladas sobre el CSS del CMS en los siete `data-theme`. `audit-themes` sigue en 0 fallos.
