@@ -871,6 +871,94 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
   apartada hasta el barrido de abandono; y la `SessionStore` vence a los 30 min, así que un login más
   largo vuelve a un carrito vacío.
 
+## Endurecimiento de la F4 (2026-10-09)
+
+**La verificación de la F4** (`_informes/78-adr-0140-f4-verificacion.json`) recorrió la compra en vivo
+—procesos reales en 5871-5875, el CMS sobre la copia piloto, `eventos` 0.1.12 en la CDN piloto,
+Chromium— y dejó siete defectos, uno alto, más siete hallazgos de revisión confirmados por un escéptico.
+Se arreglaron en orden de severidad, un commit por arreglo, cada uno con su test y su mutante fiel (en
+el mensaje de cada commit). Commits UI (`lego/integracion`): `649e0e0` (la tinta del aviso de rechazo),
+`aa3019f` (el QR y la butaca de Eventos), `7bbbf85` (`?compra=` se consume), `cf07b56` (los ids sin
+`randomUUID`), `f28db82` (cerrar pregunta a la saga), `4b903b6` (el coordinador de cada participante),
+`d4a3085` (el protocolo en crudo), `125d5c3` (G-15), `6924e05` (el foco tras pagar), `9dd4d17` (el
+registro gratis) y `75e661f` (el enlace sin sesión). CMS: `7b2f2523` (el parámetro del aviso),
+`ade17285` y `8abfd51f` (tres claves de `Events.Purchase`) y el de esta sección.
+
+**Lo que se decidió, y entra en la decisión**
+1. **Un lavado no es tinta, tampoco por un alias.** El aviso de rechazo del asistente —desde la decisión 5
+   el ÚNICO mensaje de cada rechazo— pintaba `color: var(--shw-danger)` con `--shw-danger` = el
+   `-surface` de peligro: 1,14 a 1,19:1 en los siete temas, una franja rojiza vacía. Los tres shells de
+   la compra (asistente, carrito y acuse) usan el `-text` de su familia —en Chromium sobre el CSS del
+   CMS: 5,47 a 10,94 el aviso, 4,81 el reloj urgente en `light`, 6,20 el tick— y `tinta-de-lavado` sigue
+   los alias de la hoja, con un censo de 13 heredados que sólo baja.
+2. **Una etiqueta cruda trae su bundle.** El QR de las entradas no se dibujaba: `eventos` pinta
+   `<synergos-qr-code>` (y `syn-credential-wallet`, que importa) y sólo declaraba `countdown-clock`.
+   Declara `qr-code` y `seat-map`, y el gate `etiquetas-crudas` cruza lo que cada elemento pinta —en sus
+   plantillas y por las clases de librería que usa— con sus `dependencies`, en los dos sentidos, con un
+   censo de 9 heredados de otros verticales que sólo baja.
+3. **`?compra=` se usa una vez.** Se lee en `ngOnInit` y sale de la URL con `history.replaceState`; sólo
+   el panel del enlace sin sesión lo devuelve al `returnUrl`. Antes, un F5 o la vuelta del login en medio
+   de OTRA compra de esa pestaña decía «¡Compra confirmada!» de la vieja.
+4. **Los ids del flujo salen de `crypto.getRandomValues`**: `randomUUID` es `[SecureContext]` y en
+   http://synergos.local:5000 la compra lanzaba antes de salir a la red. El coordinador contesta
+   `cliente.fallo_interno` también cuando el envío lanza: un pedido nunca se cuelga.
+5. **Corrige la decisión 5 de la F4: «no transitorio» no es «se deshizo».** Ante un `cerrar` no
+   transitorio, la estrategia pregunta a la saga (`consultar`) antes de decidir: `Compensated` marca el
+   pago `failed` y el siguiente clic reabre con la misma llave; `Completed` sigue a las entradas; otro
+   estado, o sin respuesta, no afirma nada y dice lo que quedó apartado. Un 502
+   `puerta.respuesta_invalida` o un 2xx con el cuerpo cortado llegaban con la captura hecha y decían «no
+   se te cobró nada» en bucle. Y `pay`, si `abrir` devuelve la saga `Completed`, no anota (sería 409 en
+   cada clic): acepta con su referencia y `confirm` cierra, idempotente.
+6. **La decisión 2 de la F4 tiene guardián**: el gate `coordinador-de-los-participantes` deriva de
+   `vitals/core/src/flujos` la API con la que se habla al coordinador y exige que la entrada de cada
+   elemento que la importa llame `definirCoordinador()` antes de registrarse. Borrar esa línea de
+   `main.ts` dejaba todo en verde.
+7. **El protocolo `synergos:` se fija en crudo** contra la tabla de `dom-events.md` v2, y la guarda
+   `cliente.flujo_desconocido` se ejecuta con un pedido del mismo flujo que el atributo. Renombrar un
+   evento o quitar la guarda dejaba 27/27 en verde.
+8. **El parámetro del enlace del aviso se cruza (G-15)**: `AVISOS_DE_LOS_FLUJOS`
+   (`vitals/core/src/flujos/avisos.ts`, de donde `eventos` lee `?compra=`) contra `Aviso:Ruta` del
+   `appsettings.json` del CMS, en `contracts:validate` y en `design-gates-ui.yml`; del lado del CMS lo fija
+   `CoordinadorDelFlujoEnLasVistasTests`. El validador de la puerta acepta cualquier ruta del sitio.
+9. **Lo que se dice**: tras pagar, SH-11 (`enfocar`) lleva la vista y el foco a su encabezado; el registro
+   gratis dice «Continuar al registro» y «Registro confirmado» y no avisa de un cobro; y el enlace abierto
+   sin haber entrado pide la sesión «para ver tu compra» —«Tu sesión terminó» queda para la que venció—.
+   Tres claves nuevas en `Events.Purchase` (`FreeContinue`, `FreeReceived`, `LinkSignIn`): 23 en la
+   sección, 789 en el diccionario.
+
+**Cómo se verificó**
+- Antes del primer arreglo, la base en verde: UI `npm test` 6 de 6 (847 + 107 + 2.061 + 11) y
+  `contracts:validate` con `cms-sync` in sync; G-6 537/9 y G-7 55/21.
+- Tras cada arreglo, en el UI `npm test` 6 de 6 y `contracts:validate` entero; en el CMS, cuando se tocó,
+  `usync-audit` 0/0, build en 0 avisos y las tres suites; y G-6 y G-7 contra el UI en cada paso. Al
+  cerrar: UI **873 + 113 + 2.072 + 11** (874 con el CDN construido); CMS **3171 / 897 / 520 = 4588**;
+  G-6 ✓ 537 claves en 9 verticales; G-7 ✓ 55 claves en 21 rutas (su piso, sin moverse); G-15 ✓ 1 enlace.
+- El contraste, por dos métodos: el resolutor de `syn-tokens.css` en las ocho rutas de render (peligro
+  ≥ 5,04, aviso ≥ 4,79, éxito ≥ 5,70, contra 1,14) y Chromium con los estilos calculados de las hojas
+  compiladas sobre el CSS del CMS en los siete `data-theme`. `audit-themes` sigue en 0 fallos.
+- Cada mutante, aplicado por líneas y visto en el diff antes de leer el resultado; todos en rojo (el
+  control de lo pagado en el registro gratis, en verde, como debe).
+- **Sin medir en vivo otra vez**: publicar el `eventos` endurecido en la CDN piloto y recorrer la compra
+  en el navegador (el QR dibujado, el aviso legible, el foco, el enlace) es de la próxima verificación.
+
+**Lo que queda, dicho**
+- **Diferidos, heredados y fuera de la F4**: la consola del organizador abre en un `EVT-1` de ejemplo con
+  datos falsos (`loadManage` sin evento propio: es la cara del organizador, no la compra); y crear un
+  evento deja tildes en el slug y en el código de localidad (`charla-íntima-f4`, `ÚNIC`): se arregla en
+  el alta de eventos del CMS, y cambiar cómo se deriva el código cambia la clave de precio de lo ya
+  publicado, así que va con su ticket y su migración.
+- **Los censos que sólo bajan**: 13 alias de lavado como tinta (consola, autoría, formularios, reseñas,
+  form-stepper, pax-selector, seller y las comillas de los testimonios) y 9 etiquetas crudas sin declarar
+  en academy, blogs, gov, storefront y travel-shell. Declararlas cambia los `<script>` de otras páginas:
+  se mide en cada una.
+- **G-15 no ve los `appsettings.<Entorno>.json`** ni una variable de entorno que sobrescriba la ruta.
+- **Un 2xx con el cuerpo cortado sigue siendo `cliente.respuesta_ilegible`** (no transitorio) en el
+  transporte: la compra ya no se equivoca porque pregunta a la saga, pero una lectura así no se reintenta.
+- **La confirmación que abre el enlace del aviso no sabe si la compra fue gratis**: dice «Pago recibido»
+  como antes.
+- **El import de las 23 claves de `Events.Purchase` a la base real** es del arquitecto; sin él, salen los
+  respaldos es-CO.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la
