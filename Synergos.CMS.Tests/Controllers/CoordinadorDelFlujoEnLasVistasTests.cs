@@ -16,6 +16,12 @@ namespace Synergos.CMS.Tests.Controllers;
 /// build: renombrar el flujo en el orquestador, o cerrarlo en <c>Synergos:Puerta:Flujos</c>, dejaría la
 /// compra diciendo «no disponible» en cada página con el SSR en verde.</para>
 ///
+/// <para><b>Y el enlace del aviso.</b> El correo de la compra lleva <c>Aviso:Ruta</c> de este mismo
+/// <c>appsettings.json</c>, y el participante abre la compra leyendo <c>?compra=</c>. El validador de la
+/// puerta acepta cualquier ruta del sitio, así que un <c>/?id={id}</c> arrancaba y el enlace abría la
+/// cartelera sin decir nada. Acá se fija el nombre; el cruce con lo que lee el UI
+/// (<c>AVISOS_DE_LOS_FLUJOS</c>) es <c>gate:avisos</c> (G-15), del lado del UI.</para>
+///
 /// <para><b>Lo que NO mira</b>: que el bundle defina la etiqueta ni que el participante la encuentre por
 /// ancestro (eso es del UI y del navegador), ni los <c>appsettings.&lt;Entorno&gt;.json</c>: la base es lo
 /// que reciben todos los entornos.</para>
@@ -29,6 +35,9 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     private static readonly Regex Comentarios = new(@"@\*.*?\*@|<!--.*?-->", RegexOptions.CultureInvariant | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
     private const string FlujoDeEventos = "eventos.compra";
+
+    /// <summary>Lo que lee el participante (<c>AVISOS_DE_LOS_FLUJOS</c> en <c>vitals/core/src/flujos/avisos.ts</c> del UI).</summary>
+    private const string ParametroDelAviso = "compra={id}";
 
     [Fact]
     public void Cada_flujo_que_coloca_una_vista_lo_expone_la_puerta_y_esta_abierto_en_el_sitio()
@@ -101,6 +110,20 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             + string.Join(", ", fuera) + ". Sin coordinador arriba, su compra dice «no disponible» y no toca la red.");
     }
 
+    [Fact]
+    public void El_enlace_del_aviso_de_la_compra_trae_el_parametro_que_lee_el_participante()
+    {
+        var ruta = RutaDelAviso(FlujoDeEventos);
+        Assert.False(string.IsNullOrWhiteSpace(ruta),
+            $"{FlujoDeEventos} no declara Aviso:Ruta en appsettings.json: el correo de la compra no lleva enlace.");
+
+        var consulta = ruta!.Contains('?', StringComparison.Ordinal) ? ruta[(ruta.IndexOf('?', StringComparison.Ordinal) + 1)..] : string.Empty;
+        Assert.True(consulta.Split('&').Contains(ParametroDelAviso, StringComparer.Ordinal),
+            $"Aviso:Ruta de {FlujoDeEventos} es «{ruta}» y el participante abre la compra con ?{ParametroDelAviso}: "
+            + "el enlace del correo abriría la página sin abrir la compra. Si el nombre cambia, cambia también "
+            + "AVISOS_DE_LOS_FLUJOS del UI (gate:avisos, G-15).");
+    }
+
     /// <summary>Las vistas, sin sus comentarios de Razor ni de HTML: lo que se nombra en un comentario no se coloca.</summary>
     private static IReadOnlyList<(string Ruta, string Texto)> Vistas()
     {
@@ -118,6 +141,19 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
         var flujos = doc.RootElement.GetProperty("Synergos").GetProperty("Puerta").GetProperty("Flujos");
         return flujos.EnumerateObject().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static string? RutaDelAviso(string flujo)
+    {
+        using var doc = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "appsettings.json")),
+            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        var flujos = doc.RootElement.GetProperty("Synergos").GetProperty("Puerta").GetProperty("Flujos");
+        return flujos.TryGetProperty(flujo, out var config)
+            && config.TryGetProperty("Aviso", out var aviso)
+            && aviso.TryGetProperty("Ruta", out var ruta)
+            ? ruta.GetString()
+            : null;
     }
 
     private static string RepoRoot()
