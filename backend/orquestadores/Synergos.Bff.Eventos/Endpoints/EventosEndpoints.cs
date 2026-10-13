@@ -43,14 +43,24 @@ public static class EventosEndpoints
         // Por eso acepta una llave más corta que la de una capacidad: de ella cuelgan las de cada
         // paso, y una que no cupiera rompería a mitad de la saga (ConLlaveDeSaga).
         app.MapPost("/v1/ticket-purchases", async Task<Results<Created<TicketPurchaseResponse>, ProblemHttpResult>> (
-            BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
+            BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, IntentosDeCodigo intentos, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
             if (Sujeto(http, out var buyer) is { } sinSujeto) return sinSujeto;
             if (Negocio(http, out var negocio) is { } sinNegocio) return sinNegocio;
             if (Pedido(req, out var lineas) is { } malPedido) return malPedido;
 
+            // Con código, el tope de códigos que no sirven (ADR 0140, el cupón endurecido): antes de
+            // cotizar contra Pricing, así que tampoco se aparta ni se autoriza nada. Una llave cuya saga
+            // se devolvería tal cual no vuelve a cotizar: no se corta.
+            var conCodigo = !string.IsNullOrWhiteSpace(req.PromotionCode);
+            if (conCodigo && !flow.DevolveriaLaMisma(key.Value, buyer!) && intentos.Revisar(buyer!) is { } demasiados)
+            {
+                return demasiados.ToProblem();
+            }
+
             var r = await flow.BuyAsync(req.EventId!, buyer!, lineas!, negocio!.FeePercent!.Value, req.PromotionCode, key.Value, ct);
+            if (conCodigo) intentos.Anotar(buyer!, r.Rejection);
 
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
         }).WithName("BuyTickets").ConLlaveDeSaga()
@@ -62,15 +72,23 @@ public static class EventosEndpoints
         // apartar —revisar, cotizar contra Pricing con el código, sumar la comisión—, con los MISMOS pasos
         // y la MISMA definición que abrir. Recibe el mismo cuerpo que abrir, así lo que se ve es lo que se
         // compraría; no lleva llave porque no crea nada, y lo que contesta no se guarda en ningún sitio.
+        // No lleva llave ni cuesta nada, y por eso mismo contesta distinto a un código que no existe, a
+        // uno vencido y a uno que vale: con código, cuenta para el tope de códigos que no sirven
+        // (IntentosDeCodigo), que la corta antes de llamar a Pricing.
         app.MapPost("/v1/ticket-quotes", async Task<Results<Ok<TicketQuoteResponse>, ProblemHttpResult>> (
-            BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
+            BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, IntentosDeCodigo intentos, CancellationToken ct) =>
         {
             if (Sujeto(http, out var buyer) is { } sinSujeto) return sinSujeto;
             if (Negocio(http, out var negocio) is { } sinNegocio) return sinNegocio;
             if (Pedido(req, out var lineas) is { } malPedido) return malPedido;
 
-            return (await flow.CotizarAsync(req.EventId!, buyer!, lineas!, negocio!.FeePercent!.Value, req.PromotionCode, ct))
-                .Map(c => TicketQuoteResponse.From(req.EventId!, c)).ToHttp();
+            var conCodigo = !string.IsNullOrWhiteSpace(req.PromotionCode);
+            if (conCodigo && intentos.Revisar(buyer!) is { } demasiados) return demasiados.ToProblem();
+
+            var r = await flow.CotizarAsync(req.EventId!, buyer!, lineas!, negocio!.FeePercent!.Value, req.PromotionCode, ct);
+            if (conCodigo) intentos.Anotar(buyer!, r.Rejection);
+
+            return r.Map(c => TicketQuoteResponse.From(req.EventId!, c)).ToHttp();
         }).WithName("QuoteTickets")
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true)

@@ -1099,6 +1099,36 @@ hace lo mismo en las suites.
   Un cupón de un solo uso o por miembro es una regla de la capacidad que no existe.
 - **El índice §11.2** (repo `synergos`) no se tocó: el checkout principal lo usan otros.
 
+## El cupón endurecido (2026-10-13)
+
+La verificación en vivo del cupón y su revisión (`_informes/79-adr-0140-cupon.json`) dejaron tres
+hallazgos confirmados y cuatro defectos vistos en el navegador. Esta sección dice cómo quedó cada
+uno; nada de lo anterior se borra.
+
+**El tope de códigos que no sirven (hallazgo de severidad baja: «cotizar» como oráculo).**
+«cotizar» no pide llave, no aparta nada y contesta distinto a un código que no existe (404
+`pricing.promotion_not_found`), a uno vencido (410 `pricing.promotion_expired`) y a uno que vale
+(200 con su descuento): un miembro podía mandarla en bucle y enumerar qué códigos existen y cuánto
+descuentan. «abrir» con un código que no sirve rechaza igual antes de apartar, con una llave que
+inventa el navegador: el mismo oráculo. Se decidió **un tope por comprador y ventana en
+`Bff.Eventos`** (`IntentosDeCodigo`), y no en la puerta: la puerta no sabe de ningún vertical ni lee
+cuerpos (`PuertaGenericaTests`), y sólo el orquestador ve a la vez el sujeto, el código y lo que
+contestó Pricing.
+- Cuenta los rechazos de Pricing por el código (`pricing.promotion_*`) de cada sujeto, en «cotizar»
+  y en «abrir»; un código que vale no cuenta.
+- Agotado el tope, toda cotización o apertura CON código de ese sujeto contesta 503
+  `eventos.demasiados_codigos`, **transitorio** (con esperar basta), ANTES de llamar a Pricing: no se
+  aparta ni se autoriza nada, y el corte no dice si el código existe.
+- Sin código se compra igual, y una apertura cuya llave devuelve su saga viva no se corta (no
+  vuelve a cotizar, así que no es oráculo): **la semántica de los pagos no cambia** (#183).
+- `Eventos:Cupon:FallosPorVentana` (10) y `Eventos:Cupon:Ventana` (`00:15:00`) los ajusta el
+  despliegue. Es memoria del proceso y por réplica, a propósito: un freno contra el bucle de un
+  miembro, no una cuenta de usos. **Diferido, con su razón**: un tope de usos por código o por
+  miembro es una regla de `Api.Pricing` que no existe, y uno general por miembro para todas las
+  operaciones de la puerta sería de la puerta y de todos los flujos, no del cupón.
+- El UI traduce el corte con `Events.Purchase.PromoTooMany` (`syn-promo-code` gana el motivo
+  `too-many-attempts`), y un «abrir» cortado suelta la llave retenida: no dejó saga.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la

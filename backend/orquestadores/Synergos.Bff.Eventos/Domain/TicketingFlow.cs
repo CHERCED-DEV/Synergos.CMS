@@ -140,6 +140,13 @@ public sealed class TicketingFlow
             Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct);
     }
 
+    /// <summary>
+    /// Si abrir con esta llave devolvería una compra de <paramref name="buyer"/> que ya existe, sin
+    /// cotizar otra vez: la misma regla que <see cref="BuyAsync(string, Ref, IReadOnlyList{TicketLine}, decimal, string?, string, CancellationToken)"/>,
+    /// sin escribir nada.
+    /// </summary>
+    public bool DevolveriaLaMisma(string sagaId, Ref buyer) => _sagas.Abrir(sagaId, buyer).Reusar is not null;
+
     /// <summary>Captura el cobro y consume el aforo, sin avisar a nadie.</summary>
     public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
         => ConfirmAsync(sagaId, null, ct);

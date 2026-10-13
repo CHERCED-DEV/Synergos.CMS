@@ -29,7 +29,11 @@ internal sealed class CompraDeEventosReal : IDisposable
     private readonly string _raiz = Path.Combine(Path.GetTempPath(), "compra-eventos-" + Guid.NewGuid().ToString("N"));
     private readonly WebApplicationFactory<TicketPurchaseResponse> _fabrica;
 
-    public CompraDeEventosReal(bool conRecogida = false, decimal precio = 100_000m, Func<IHttpClientFactory, IHttpClientFactory>? envolver = null)
+    /// <param name="ajustes">Configuración del despliegue del orquestador, encima de la de siempre (p. ej.
+    /// el tope de códigos que no sirven, <c>Eventos:Cupon:*</c>).</param>
+    public CompraDeEventosReal(
+        bool conRecogida = false, decimal precio = 100_000m, Func<IHttpClientFactory, IHttpClientFactory>? envolver = null,
+        IReadOnlyDictionary<string, string>? ajustes = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
@@ -44,6 +48,10 @@ internal sealed class CompraDeEventosReal : IDisposable
         {
             b.UseSetting("eventos:Storage:Root", Sagas);
             b.UseSetting("Eventos:ApiKey", Llave);
+            foreach (var (clave, valor) in ajustes ?? new Dictionary<string, string>())
+            {
+                b.UseSetting(clave, valor);
+            }
             b.ConfigureTestServices(s =>
             {
                 s.AddSingleton(fabrica);

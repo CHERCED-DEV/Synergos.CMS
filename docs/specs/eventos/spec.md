@@ -45,6 +45,8 @@ rechazos:                                 # leídos de Bff.Eventos/Domain/, no i
   - "eventos.bad_capacity · un aforo negativo o ausente, o butacas sin nombre o repetidas · Invalid · NO transitorio"
   - "eventos.bad_sale_window · una venta que abre después de cerrar o de empezar el evento · Invalid · NO transitorio"
   - "eventos.store_busy · otra publicación de la oferta en curso · Unavailable · transitorio"
+  # ADR 0140, el cupón endurecido — el tope de códigos de promoción que no sirven, por comprador
+  - "eventos.demasiados_codigos · cotizar o abrir CON código tras agotar el tope de códigos que no sirven (Eventos:Cupon:*) · Unavailable · transitorio"
 ---
 
 # Eventos — el spec del vertical que ya existe

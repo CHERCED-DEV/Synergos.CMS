@@ -1167,6 +1167,7 @@
         "Events.Purchase.PromoLocked",
         "Events.Purchase.PromoNotApplicable",
         "Events.Purchase.PromoRemoved",
+        "Events.Purchase.PromoTooMany",
         "Events.Purchase.PromoUnknown",
         "Events.Purchase.Retry",
         "Events.Purchase.SessionRequired",

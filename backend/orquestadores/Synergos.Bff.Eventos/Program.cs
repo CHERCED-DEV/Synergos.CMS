@@ -55,6 +55,19 @@ builder.Services.AddSingleton<EventosCapabilities>();
 builder.Services.AddSingleton<TicketingFlow>();
 builder.Services.AddSingleton<OfertaDeEventos>();
 
+// El tope de códigos de promoción que no sirven por comprador (ADR 0140, el cupón endurecido):
+// «cotizar» y «abrir» con código contestan distinto a uno que no existe, a uno vencido y a uno que
+// vale, y sin tope un miembro podía enumerarlos en bucle. Eventos:Cupon:FallosPorVentana (10) y
+// Eventos:Cupon:Ventana (00:15:00) los ajusta el despliegue; ver IntentosDeCodigo.
+builder.Services.AddSingleton(sp =>
+{
+    var configuracion = sp.GetRequiredService<IConfiguration>();
+    return new IntentosDeCodigo(
+        sp.GetRequiredService<TimeProvider>(),
+        configuracion.GetValue("Eventos:Cupon:FallosPorVentana", IntentosDeCodigo.TopePorDefecto),
+        configuracion.GetValue("Eventos:Cupon:Ventana", IntentosDeCodigo.VentanaPorDefecto));
+});
+
 // La compra se DECLARA en flujos/eventos.compra.json y se valida AL ARRANCAR (ADR 0140): un tipo
 // de paso que nadie registró, una lectura sin escritura previa o una reserva sin quien la consuma
 // tumban el proceso aquí, no en la primera compra. Se valida contra el MISMO registro de pasos que
