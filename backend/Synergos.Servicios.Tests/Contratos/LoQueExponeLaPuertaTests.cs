@@ -81,6 +81,7 @@ public sealed class LoQueExponeLaPuertaTests
             "CancelTicketPurchase eventos.compra/cancelar",
             "ConfirmTicketPurchase eventos.compra/cerrar",
             "GetTicketPurchase eventos.compra/consultar",
+            "QuoteTickets eventos.compra/cotizar",
         ], marcadas);
     }
 }

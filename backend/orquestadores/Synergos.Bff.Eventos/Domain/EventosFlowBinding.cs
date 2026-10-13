@@ -34,6 +34,9 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
     /// </summary>
     internal const string Promocion = "promocion";
 
+    /// <summary>Lo que escribe «cotizar»: la cotización de Pricing, con su descuento.</summary>
+    internal const string Cotizacion = "cotizacion";
+
     /// <summary>Adónde avisar al cerrar: lo pone la puerta, es efímero y no se guarda (ADR 0140 F3).</summary>
     internal const string Contacto = "contacto";
 

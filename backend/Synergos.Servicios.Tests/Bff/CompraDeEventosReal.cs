@@ -134,6 +134,18 @@ internal sealed class CompraDeEventosReal : IDisposable
         return await Enviar(peticion);
     }
 
+    /// <summary>
+    /// Cotiza la compra sin abrirla (ADR 0140, el cupón): el mismo cuerpo que abrir, sin llave, con lo que
+    /// pone la puerta.
+    /// </summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cotizar(string? sujeto, string? negocio, object cuerpo)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/ticket-quotes") { Content = JsonContent.Create(cuerpo) };
+        if (sujeto is not null) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto);
+        if (negocio is not null) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Negocio, negocio);
+        return await Enviar(peticion);
+    }
+
     /// <summary>Una operación sobre una compra: consultar (GET), «confirm» o «cancel».</summary>
     public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Sobre(
         string id, string? accion, string? sujeto, string? contacto = null)

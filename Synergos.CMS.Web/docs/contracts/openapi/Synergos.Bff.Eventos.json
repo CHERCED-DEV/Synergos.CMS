@@ -772,6 +772,120 @@
           }
         }
       }
+    },
+    "/v1/ticket-quotes": {
+      "post": {
+        "operationId": "QuoteTickets",
+        "parameters": [
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          },
+          {
+            "name": "X-Synergos-Negocio",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuyTicketsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketQuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "eventos.compra",
+          "operacion": "cotizar"
+        }
+      }
     }
   },
   "components": {
@@ -1182,6 +1296,44 @@
             "format": "int32"
           },
           "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TicketQuoteResponse": {
+        "required": [
+          "eventId",
+          "subtotal",
+          "discount",
+          "tax",
+          "serviceFee",
+          "total",
+          "promotionCode"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "subtotal": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "discount": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "serviceFee": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "total": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "promotionCode": {
             "type": [
               "null",
               "string"

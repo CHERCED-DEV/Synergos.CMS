@@ -115,13 +115,13 @@ public sealed class TablaDeLaPuertaTests
     }
 
     [Fact]
-    public void El_contrato_comiteado_arma_la_tabla_con_las_cuatro_de_la_compra()
+    public void El_contrato_comiteado_arma_la_tabla_con_las_cinco_de_la_compra()
     {
         // El control: sin mutar nada, la misma lectura arma la tabla. Sin esto, la Theory de arriba pasaría
         // también si TablaDeLaPuerta.De lanzara siempre.
         var tabla = TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", Contrato().ToJsonString())]);
 
-        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar"], tabla.Todas.Select(o => o.Operacion).Order(StringComparer.Ordinal));
+        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar"], tabla.Todas.Select(o => o.Operacion).Order(StringComparer.Ordinal));
     }
 
     private static string RepoRoot()

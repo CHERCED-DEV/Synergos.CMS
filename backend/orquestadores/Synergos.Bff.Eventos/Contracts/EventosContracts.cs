@@ -79,6 +79,33 @@ public sealed record TicketPurchaseResponse(
         s.Pending().Count, s.LastError);
 }
 
+/// <summary>Cuánto costaría una compra de entradas, sin apartar ni autorizar nada (ADR 0140, el cupón).</summary>
+/// <param name="EventId">De qué evento.</param>
+/// <param name="Subtotal">Las entradas, antes del descuento y del impuesto.</param>
+/// <param name="Discount">Lo que descuenta la promoción, calculado por Pricing; cero sin código.</param>
+/// <param name="Tax">El impuesto, sobre lo ya descontado.</param>
+/// <param name="ServiceFee">La comisión de servicio del sitio, sobre el subtotal de las entradas.</param>
+/// <param name="Total">Lo que abrir autorizaría con estas mismas líneas y este mismo código.</param>
+/// <param name="PromotionCode">El código que se cotizó, recortado; nulo si no se mandó.</param>
+/// <remarks>
+/// Es una vista previa HONESTA, no una promesa: no aparta aforo ni autoriza un cobro, y abrir vuelve a
+/// cotizar entero. Si la promoción vence o el precio deja de valer entre medias, lo dice abrir con su
+/// código.
+/// </remarks>
+public sealed record TicketQuoteResponse(
+    string EventId, MoneyDto Subtotal, MoneyDto Discount, MoneyDto Tax, MoneyDto ServiceFee, MoneyDto Total,
+    string? PromotionCode)
+{
+    public static TicketQuoteResponse From(string eventId, CotizacionDeCompra c) => new(
+        eventId,
+        new MoneyDto(c.Subtotal.Amount, c.Subtotal.Currency),
+        new MoneyDto(c.Descuento.Amount, c.Descuento.Currency),
+        new MoneyDto(c.Impuesto.Amount, c.Impuesto.Currency),
+        new MoneyDto(c.Comision.Amount, c.Comision.Currency),
+        new MoneyDto(c.Total.Amount, c.Total.Currency),
+        c.Promocion);
+}
+
 /// <summary>Una compensación pendiente, para quien vigila.</summary>
 /// <param name="PurchaseId">La compra a la que pertenece.</param>
 /// <param name="Kind">Qué hay que deshacer.</param>

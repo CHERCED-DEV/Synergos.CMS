@@ -91,4 +91,63 @@ public sealed class CuponDeLaCompraTests
         Assert.Equal(200_000m, cuerpo.GetProperty("total").GetProperty("amount").GetDecimal());
         Assert.Equal(JsonValueKind.String, cuerpo.GetProperty("id").ValueKind);
     }
+
+    // ── Cotizar sin reservar: la vista previa honesta (la puerta la abre como «cotizar») ──
+
+    private static decimal Monto(JsonElement cuerpo, string campo) => cuerpo.GetProperty(campo).GetProperty("amount").GetDecimal();
+
+    [Fact]
+    public async Task Cotizar_con_cupon_da_el_descuento_y_el_total_que_abrir_autoriza_sin_apartar_nada()
+    {
+        using var compra = new CompraDeEventosReal(precio: 100_000m);
+        await compra.Promocion("BIENVENIDA10", "Percentage", 1000m);
+        var negocio = CompraDeEventosReal.Negocio(12m);
+
+        var (estado, cotizacion) = await compra.Cotizar(A, negocio, Cuerpo(" bienvenida10 "));
+
+        Assert.True(estado == HttpStatusCode.OK, $"{(int)estado} {cotizacion}");
+        Assert.Equal(200_000m, Monto(cotizacion, "subtotal"));
+        Assert.Equal(20_000m, Monto(cotizacion, "discount"));
+        Assert.Equal(0m, Monto(cotizacion, "tax"));
+        Assert.Equal(24_000m, Monto(cotizacion, "serviceFee"));
+        Assert.Equal(204_000m, Monto(cotizacion, "total"));
+        Assert.Equal("COP", cotizacion.GetProperty("total").GetProperty("currency").GetString());
+        Assert.Equal("bienvenida10", cotizacion.GetProperty("promotionCode").GetString());
+
+        // Mirar no cuesta nada: el aforo entero, ninguna saga, y la cotización otra vez da lo mismo.
+        var pozo = await compra.Leer("inventory", "v1/items?subjectKind=eventos.aforo&subjectId=evt-1%2FGEN");
+        Assert.Equal(10, pozo.GetProperty("available").GetInt32());
+        Assert.Equal(0, compra.SagasGuardadas);
+
+        // Y lo que se vio es lo que se autoriza.
+        var (abierta, cuerpo) = await compra.Abrir(A, negocio, cuerpo: Cuerpo("BIENVENIDA10"));
+        Assert.True(abierta == HttpStatusCode.Created, $"{(int)abierta} {cuerpo}");
+        Assert.Equal(Monto(cotizacion, "total"), Monto(cuerpo, "total"));
+    }
+
+    [Fact]
+    public async Task Cotizar_sin_cupon_da_el_total_de_siempre_con_descuento_cero()
+    {
+        using var compra = new CompraDeEventosReal(precio: 100_000m);
+
+        var (estado, cotizacion) = await compra.Cotizar(A, CompraDeEventosReal.Negocio(12m), Cuerpo(null));
+
+        Assert.True(estado == HttpStatusCode.OK, $"{(int)estado} {cotizacion}");
+        Assert.Equal(0m, Monto(cotizacion, "discount"));
+        Assert.Equal(24_000m, Monto(cotizacion, "serviceFee"));
+        Assert.Equal(224_000m, Monto(cotizacion, "total"));
+        Assert.Equal(JsonValueKind.Null, cotizacion.GetProperty("promotionCode").ValueKind);
+    }
+
+    [Fact]
+    public async Task Cotizar_un_cupon_que_no_existe_rechaza_con_el_codigo_de_Pricing_sin_guardar_nada()
+    {
+        using var compra = new CompraDeEventosReal();
+
+        var (estado, rechazo) = await compra.Cotizar(A, CompraDeEventosReal.Negocio(0m), Cuerpo("NOEXISTE"));
+
+        Assert.True(estado == HttpStatusCode.NotFound, $"{(int)estado} {rechazo}");
+        Assert.Equal("pricing.promotion_not_found", rechazo.GetProperty("code").GetString());
+        Assert.Equal(0, compra.SagasGuardadas);
+    }
 }

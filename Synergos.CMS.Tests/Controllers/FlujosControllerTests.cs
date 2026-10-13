@@ -19,7 +19,7 @@ namespace Synergos.CMS.Tests.Controllers;
 
 /// <summary>
 /// La puerta de los flujos (ADR 0140 F3), contra un orquestador falso armado desde el contrato
-/// COMITEADO de <c>Bff.Eventos</c> con las cuatro operaciones de la compra marcadas en memoria.
+/// COMITEADO de <c>Bff.Eventos</c> con las cinco operaciones de la compra marcadas en memoria.
 /// </summary>
 /// <remarks>
 /// <para><b>El contrato es el de verdad</b>: la tabla sale del mismo JSON que la deriva mantiene fiel al
@@ -57,7 +57,7 @@ public sealed class FlujosControllerTests : IDisposable
 
     public void Dispose() => _orquestador.Dispose();
 
-    /// <summary>El contrato comiteado de Bff.Eventos, con las cuatro operaciones de la compra marcadas.</summary>
+    /// <summary>El contrato comiteado de Bff.Eventos, con las cinco operaciones de la compra marcadas.</summary>
     internal static TablaDeLaPuerta TablaDeLaCompra()
     {
         var doc = JsonNode.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "docs", "contracts", "openapi",
@@ -68,6 +68,7 @@ public sealed class FlujosControllerTests : IDisposable
         Marcar("/v1/ticket-purchases/{id}", "get", "consultar");
         Marcar("/v1/ticket-purchases/{id}/confirm", "post", "cerrar");
         Marcar("/v1/ticket-purchases/{id}/cancel", "post", "cancelar");
+        Marcar("/v1/ticket-quotes", "post", "cotizar");
         return TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]);
     }
 
@@ -181,11 +182,11 @@ public sealed class FlujosControllerTests : IDisposable
     // ── La tabla: sólo lo marcado ──────────────────────────────────────────────────
 
     [Fact]
-    public void La_tabla_trae_solo_las_cuatro_operaciones_marcadas_con_su_forma()
+    public void La_tabla_trae_solo_las_cinco_operaciones_marcadas_con_su_forma()
     {
         var tabla = TablaDeLaCompra();
 
-        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar"], tabla.Todas.Select(o => o.Operacion).Order(StringComparer.Ordinal));
+        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar"], tabla.Todas.Select(o => o.Operacion).Order(StringComparer.Ordinal));
         var abrir = tabla.Buscar(Flujo, "abrir")!;
         Assert.Equal(("POST", "v1/ticket-purchases", true, true), (abrir.Metodo, abrir.Ruta, abrir.ConCuerpo, abrir.LlaveRequerida));
         Assert.True(abrir.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto) && abrir.Declara(LoQuePoneLaPuerta.CabeceraDelNegocio));
@@ -193,6 +194,12 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.False(cerrar.ConCuerpo);
         Assert.True(cerrar.Declara(LoQuePoneLaPuerta.CabeceraDelContacto));
         Assert.Equal("id", Assert.Single(cerrar.Parametros).Nombre);
+        // Cotizar (el cupón): el mismo cuerpo que abrir, con el sujeto y el negocio, y SIN llave: no crea nada.
+        var cotizar = tabla.Buscar(Flujo, "cotizar")!;
+        Assert.Equal(("POST", "v1/ticket-quotes", true, (int?)null), (cotizar.Metodo, cotizar.Ruta, cotizar.ConCuerpo, cotizar.LargoDeLaLlave));
+        Assert.True(cotizar.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto) && cotizar.Declara(LoQuePoneLaPuerta.CabeceraDelNegocio));
+        Assert.False(cotizar.Declara(LoQuePoneLaPuerta.CabeceraDelContacto));
+        Assert.Empty(cotizar.Parametros);
     }
 
     // ── Los códigos de la puerta, en su orden ──────────────────────────────────────
@@ -445,6 +452,21 @@ public sealed class FlujosControllerTests : IDisposable
         var (metodo, ruta, cabeceras, _) = Assert.Single(_orquestador.Pedidos);
         Assert.Equal(("GET", "/v1/ticket-purchases/s%2F1"), (metodo, ruta));
         Assert.Equal(["X-Synergos-Sujeto"], cabeceras.Keys);
+    }
+
+    [Fact]
+    public async Task Cotizar_manda_el_cuerpo_tal_cual_con_el_sujeto_y_el_negocio_y_sin_llave_aunque_el_navegador_la_mande()
+    {
+        const string conCupon = """{"eventId":"e1","lines":[{"tier":"GEN","quantity":2}],"promotionCode":"BIENVENIDA10"}""";
+
+        var r = await Pedir("POST", "cotizar", cuerpo: conCupon, cabeceras: Llave("k1"));
+
+        Assert.Equal(200, r.Estado);
+        var (metodo, ruta, cabeceras, cuerpo) = Assert.Single(_orquestador.Pedidos);
+        Assert.Equal(("POST", "/v1/ticket-quotes"), (metodo, ruta));
+        Assert.Equal(conCupon, Encoding.UTF8.GetString(cuerpo));
+        Assert.Equal($"eventos.comprador:{Ana:n}", cabeceras["X-Synergos-Sujeto"]);
+        Assert.Equal(["X-Synergos-Negocio", "X-Synergos-Sujeto"], cabeceras.Keys.Order(StringComparer.Ordinal));
     }
 
     [Fact]

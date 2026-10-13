@@ -27,7 +27,12 @@ public sealed record OperacionEnLaPuerta(string Flujo, string Operacion);
 public static class EnLaPuertaExtensions
 {
     /// <summary>El vocabulario fijo de saga con que la puerta nombra las operaciones.</summary>
-    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar"];
+    /// <remarks>
+    /// <c>cotizar</c> no es una fase: es la que abre, anticipada sin saga y sin reservar nada
+    /// (<c>FlowRunner.AnticiparAsync</c>), para que quien compra vea el total —con su descuento— antes
+    /// de pagar (ADR 0140, el cupón). La misma lista vive en la puerta del CMS y en el generador del UI.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar"];
 
     /// <summary>Una clave de flujo: <c>dominio.flujo</c>, en minúsculas. Es lo que va en la ruta de la puerta.</summary>
     public static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));

@@ -16,7 +16,8 @@ namespace Synergos.Bff.Eventos.Endpoints;
 /// contacto del aviso) viaja en cabeceras declaradas con <c>.ConCabeceraDeLaPuerta</c> y se lee ANTES
 /// que cualquier otra regla (ADR 0140 F3); el cuerpo es sólo lo del navegador. Consultar, confirmar y
 /// cancelar exigen el sujeto y una compra de otro no existe para él. Las cuatro van marcadas con
-/// <c>.EnLaPuerta</c>: es lo que el CMS abre al navegador, por <c>/api/flujos/eventos.compra/…</c>.
+/// <c>.EnLaPuerta</c>: es lo que el CMS abre al navegador, por <c>/api/flujos/eventos.compra/…</c>. Y una
+/// quinta, cotizar, que es abrir anticipado sin reservar nada (ADR 0140, el cupón).
 /// </remarks>
 public static class EventosEndpoints
 {
@@ -28,7 +29,7 @@ public static class EventosEndpoints
     /// <c>flujos/eventos.compra.json</c> no pueden nombrar dos flujos distintos.
     /// </summary>
     /// <remarks>
-    /// Se exponen abrir, consultar, cerrar y cancelar, y nada más. Reintentar, la vista de
+    /// Se exponen abrir, consultar, cerrar, cancelar y —desde el cupón— cotizar, y nada más. Reintentar, la vista de
     /// compensaciones y la oferta son de operación y del CMS, no del navegador: sin marca no existen
     /// para la puerta (lo vigila <c>LoQueExponeLaPuertaTests</c>).
     /// </remarks>
@@ -47,21 +48,33 @@ public static class EventosEndpoints
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
             if (Sujeto(http, out var buyer) is { } sinSujeto) return sinSujeto;
             if (Negocio(http, out var negocio) is { } sinNegocio) return sinNegocio;
-            if (string.IsNullOrWhiteSpace(req.EventId)) return Invalid("bad_event", "Hace falta eventId.");
+            if (Pedido(req, out var lineas) is { } malPedido) return malPedido;
 
-            if (req.Lines is null || req.Lines.Count == 0) return Invalid("no_lines", "Hace falta al menos una línea.");
-
-            var lineas = req.Lines
-                .Select(l => new TicketLine(l.Tier ?? string.Empty, l.Seat, l.Quantity))
-                .ToList();
-
-            var r = await flow.BuyAsync(req.EventId!, buyer!, lineas, negocio!.FeePercent!.Value, req.PromotionCode, key.Value, ct);
+            var r = await flow.BuyAsync(req.EventId!, buyer!, lineas!, negocio!.FeePercent!.Value, req.PromotionCode, key.Value, ct);
 
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
         }).WithName("BuyTickets").ConLlaveDeSaga()
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true)
           .EnLaPuerta(Flujo, "abrir");
+
+        // Cotizar SIN reservar nada (ADR 0140, el cupón): la fase que abre, anticipada hasta antes de
+        // apartar —revisar, cotizar contra Pricing con el código, sumar la comisión—, con los MISMOS pasos
+        // y la MISMA definición que abrir. Recibe el mismo cuerpo que abrir, así lo que se ve es lo que se
+        // compraría; no lleva llave porque no crea nada, y lo que contesta no se guarda en ningún sitio.
+        app.MapPost("/v1/ticket-quotes", async Task<Results<Ok<TicketQuoteResponse>, ProblemHttpResult>> (
+            BuyTicketsRequest req, HttpRequest http, TicketingFlow flow, CancellationToken ct) =>
+        {
+            if (Sujeto(http, out var buyer) is { } sinSujeto) return sinSujeto;
+            if (Negocio(http, out var negocio) is { } sinNegocio) return sinNegocio;
+            if (Pedido(req, out var lineas) is { } malPedido) return malPedido;
+
+            return (await flow.CotizarAsync(req.EventId!, buyer!, lineas!, negocio!.FeePercent!.Value, req.PromotionCode, ct))
+                .Map(c => TicketQuoteResponse.From(req.EventId!, c)).ToHttp();
+        }).WithName("QuoteTickets")
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true)
+          .EnLaPuerta(Flujo, "cotizar");
 
         app.MapGet("/v1/ticket-purchases/{id}", Results<Ok<TicketPurchaseResponse>, ProblemHttpResult> (
             string id, HttpRequest http, TicketingFlow flow) =>
@@ -151,6 +164,22 @@ public static class EventosEndpoints
 
     private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>
+    /// Lo que pide el navegador, como líneas de la compra: el rechazo si falta el evento o no trae
+    /// líneas; si no, nulo y las líneas. Lo comparten abrir y cotizar, que reciben el mismo cuerpo.
+    /// </summary>
+    private static ProblemHttpResult? Pedido(BuyTicketsRequest req, out List<TicketLine>? lineas)
+    {
+        lineas = null;
+        if (string.IsNullOrWhiteSpace(req.EventId)) return Invalid("bad_event", "Hace falta eventId.");
+        if (req.Lines is null || req.Lines.Count == 0) return Invalid("no_lines", "Hace falta al menos una línea.");
+
+        lineas = req.Lines
+            .Select(l => new TicketLine(l.Tier ?? string.Empty, l.Seat, l.Quantity))
+            .ToList();
+        return null;
+    }
 
     /// <summary>
     /// Quién compra, de <c>X-Synergos-Sujeto</c>: el rechazo si falta o no se lee; si no, nulo y el sujeto.

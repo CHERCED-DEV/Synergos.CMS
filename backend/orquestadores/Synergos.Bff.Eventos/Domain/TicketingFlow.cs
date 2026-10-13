@@ -14,6 +14,16 @@ namespace Synergos.Bff.Eventos.Domain;
 /// </remarks>
 public sealed record TicketLine(string Tier, string? Seat, int Quantity);
 
+/// <summary>Lo que costaría una compra de entradas, sin apartar ni autorizar nada (ADR 0140, el cupón).</summary>
+/// <param name="Subtotal">Las entradas, antes del descuento y del impuesto: lo que cotizó Pricing.</param>
+/// <param name="Descuento">Lo que descuenta la promoción, calculado por Pricing; cero sin código.</param>
+/// <param name="Impuesto">El impuesto, sobre lo ya descontado.</param>
+/// <param name="Comision">La comisión de servicio, sobre el subtotal de las entradas (ADR 0137).</param>
+/// <param name="Total">Lo que abrir autorizaría con estas mismas líneas y este mismo código.</param>
+/// <param name="Promocion">El código cotizado, recortado; nulo si no se trajo.</param>
+public sealed record CotizacionDeCompra(
+    Money Subtotal, Money Descuento, Money Impuesto, Money Comision, Money Total, string? Promocion);
+
 /// <summary>
 /// Comprar entradas — <b>la puerta del flujo <c>eventos.compra</c></b>, que ya no está escrito acá.
 /// </summary>
@@ -186,6 +196,30 @@ public sealed class TicketingFlow
     /// <summary>Vuelve a intentar lo que se había rendido.</summary>
     public Task<Result<TicketingSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
         => _sagas.RetryStuckAsync(sagaId, ct);
+
+    /// <summary>
+    /// Lo que costaría la compra —con su descuento y su comisión— sin apartar ni autorizar nada: la
+    /// fase que abre, anticipada hasta antes de reservar (ADR 0140, el cupón).
+    /// </summary>
+    /// <remarks>
+    /// <b>Los mismos pasos y la misma definición que abrir</b>, no una cuenta aparte: lo que se le
+    /// muestra a quien compra es lo que abrir autorizaría con esas líneas y ese código, mientras la
+    /// promoción y el precio sigan vigentes. No se guarda nada, ni hace falta llave; abrir vuelve a
+    /// cotizar entero, así que lo que cambie entre medias lo rechaza abrir con su código.
+    /// </remarks>
+    public async Task<Result<CotizacionDeCompra>> CotizarAsync(
+        string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
+        string? promocion, CancellationToken ct)
+        => (await _flujo.AnticiparAsync(
+                Abrir, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct))
+            .Map(ctx =>
+            {
+                var cotizacion = ctx.Get<QuoteView>(EventosFlowBinding.Cotizacion);
+                var total = ctx.Get<Money>(EventosFlowBinding.Total);
+                return new CotizacionDeCompra(
+                    cotizacion.Subtotal, cotizacion.Descuento, cotizacion.Impuesto, total - cotizacion.Total, total,
+                    ctx.Get<string?>(EventosFlowBinding.Promocion));
+            });
 
     public Result<TicketingSaga> Get(string id)
         => _sagas.Find(id) is { } s ? Result.Ok(s) : NoExiste(id);

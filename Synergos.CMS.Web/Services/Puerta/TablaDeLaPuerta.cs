@@ -65,7 +65,12 @@ public sealed class TablaDeLaPuerta
     public const string MarcaDeLaPuerta = "x-synergos-puerta";
 
     /// <summary>El vocabulario fijo de saga con que la puerta nombra las operaciones.</summary>
-    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar"];
+    /// <remarks>
+    /// <c>cotizar</c> es la fase que abre anticipada, sin saga y sin reservar nada: el total con su
+    /// descuento antes de pagar (ADR 0140, el cupón). Lo cruza <c>PuertaGenericaTests</c> contra la lista
+    /// del orquestador.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar"];
 
     private static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ParametroDeRuta = new(@"\{([^}]+)\}", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
