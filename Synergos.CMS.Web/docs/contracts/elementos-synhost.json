@@ -1164,6 +1164,7 @@
         "Events.Purchase.PromoDiscount",
         "Events.Purchase.PromoExpired",
         "Events.Purchase.PromoFailed",
+        "Events.Purchase.PromoLocked",
         "Events.Purchase.PromoNotApplicable",
         "Events.Purchase.PromoRemoved",
         "Events.Purchase.PromoUnknown",
