@@ -208,6 +208,34 @@ aplicar:
 | `synergos-X/{fw}/latest/*` | `public, no-cache, must-revalidate` | Pointer mutable global — browser revalida cada request, devuelve 304 si no cambió. |
 | `synergos-X/{fw}/v{N}/*` | `public, no-cache, must-revalidate` | Pointer mutable major-version — mismo trato que `latest`. |
 | `registry.json` | `public, max-age=300, must-revalidate` | Index — refresh cada 5 min para descubrir bundles nuevos. |
+| `runtime/{fw}/{ver}/{stem}.{huella}.js` | `public, max-age=31536000, immutable` | El runtime publicado por contenido (ADR 0140): la huella son los 16 primeros hex (minúsculas) del sha256 de sus bytes, así que la URL no se reescribe nunca. Es lo que nombra el import map. |
+| `runtime/{fw}/{ver}/*` plano (sin huella, e `import-map.json`) | `public, no-cache, must-revalidate` | `{ver}` es la versión del FRAMEWORK (`21.1.6` es Angular), no la del contenido: `publish:runtime` lo reescribe cuando cambia `libs/shared`. Se sigue publicando (superset) y se revalida. |
+| `runtime/{fw}/latest/*` (incluido `huellas.json`) | `public, no-cache, must-revalidate` | Pointer mutable, como el `latest/` de los elementos. |
+
+Sólo el nombre con huella prueba el contenido: bajo `runtime/` no se
+promete `immutable` a nada más, tenga la forma de versión que tenga. El
+montaje local del CMS lo aplica en `PoliticaDeCacheDelCdnLocal`, gemela de
+`tools/lib/cdn-cache-policy.mjs` del UI (el Worker del CDN).
+
+### El libro del runtime: `runtime/{fw}/latest/huellas.json`
+
+Declara qué ficheros con huella hay publicados de ese framework. **Sólo
+crece**: una generación anterior sigue publicada mientras quede un
+navegador o un CMS con un mapa que la nombre. Cada entrada:
+
+```json
+{ "fichero": "sg-shared.js",
+  "url": "…/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js",
+  "sha256": "<64 hex>",
+  "bytes": 802496,
+  "desde": "2026-10-13T00:00:00.000Z" }
+```
+
+`fichero` es el nombre plano, `url` dónde está el fichero con huella,
+`sha256` el hash entero de sus bytes (su prefijo es la huella), `bytes` el
+tamaño y `desde` la primera vez que se publicó: una republicación idéntica
+no lo cambia. La forma exacta del fichero la escribe y la revisa el
+publicador del UI (`tools/lib/runtime-por-contenido.mjs`); el CMS no lo lee.
 
 CORS: `Access-Control-Allow-Origin: *` para todos. Los bundles son
 públicos por naturaleza (público = web).

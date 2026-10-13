@@ -121,15 +121,19 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
 // no está publicada todavía. Auto-detecta si Enabled+LocalPath son
 // válidos; sino, no-op silent.
 //
-// Smart cache control:
-// - Paths versionados semver (e.g. /synergos-column/angular/1.0.5/main.js)
-//   → Cache-Control: public, max-age=1y, immutable.
-// - Paths pointers mutables (latest/, v0/, v1/, ...)
-//   → Cache-Control: no-cache, must-revalidate (browser revalida con
-//     server cada request, devuelve 304 si no cambió).
+// Cache-Control, en PoliticaDeCacheDelCdnLocal (ADR 0140):
+// - Pointers mutables (latest/, v0/, v1/, ...) → no-cache, must-revalidate
+//   (el navegador revalida cada vez y recibe 304 si no cambió).
+// - El runtime compartido: su carpeta lleva la versión del FRAMEWORK
+//   (runtime/angular/21.1.6/ es Angular), no la de su contenido, y
+//   publish:runtime la reescribe cuando cambia libs/shared. Sólo la huella
+//   del nombre (sg-shared.<16 hex>.js) prueba el contenido: ése es
+//   immutable; el plano y su import-map.json se revalidan.
+// - Lo demás versionado (e.g. /synergos/column/angular/1.0.5/main.js)
+//   → public, max-age=1y, immutable.
 //
-// Esto evita el bug "1 year cached version inmovible" cuando el
-// CDN team publica una versión nueva bajo un pointer mutable.
+// Esto evita el bug "1 year cached version inmovible" cuando se publica
+// algo nuevo bajo una ruta que se mueve.
 {
     var cdnSettings = app.Services.GetRequiredService<IOptions<LocalCdnSettings>>().Value;
     if (cdnSettings.Enabled &&
@@ -145,26 +149,13 @@ app.UseStatusCodePagesWithReExecute("/error/{0}");
             OnPrepareResponse = ctx =>
             {
                 var path = ctx.Context.Request.Path.Value ?? string.Empty;
-                // Pointers mutables (no-cache):
-                //   /latest/    → global "current"
-                //   /v0/, /v1/, /v2/, ... → major-version pointer
-                // Pointers inmutables (cache 1y):
-                //   /1.0.5/, /0.1.0/, ... → semver exacto
-                var isMutablePointer =
-                    path.Contains("/latest/", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith("/latest", StringComparison.OrdinalIgnoreCase) ||
-                    System.Text.RegularExpressions.Regex.IsMatch(
-                        path,
-                        @"/v\d+(/|$)",
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                ctx.Context.Response.Headers.CacheControl = isMutablePointer
-                    ? "public, no-cache, must-revalidate"
-                    : $"public, max-age={maxAge}, immutable";
+                ctx.Context.Response.Headers.CacheControl =
+                    Synergos.CMS.Web.Services.PoliticaDeCacheDelCdnLocal.CacheControl(path, maxAge);
                 ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
             },
         });
         app.Logger.LogInformation(
-            "Local CDN mounted: path={Path} -> route={Route} (versioned cache {MaxAge}s, latest no-cache)",
+            "Local CDN mounted: path={Path} -> route={Route} (runtime con huella y versionados immutable {MaxAge}s; latest, vN y runtime plano no-cache)",
             cdnSettings.LocalPath, cdnSettings.RoutePath, maxAge);
     }
     else if (cdnSettings.Enabled)

@@ -43,6 +43,25 @@ public sealed class ReubicacionDelImportMapTests
             $"La forma «{forma}» no se reubicó al CDN de otro origen.");
     }
 
+    /// <summary>
+    /// El runtime publicado por contenido (ADR 0140, D1): el nombre lleva la huella de sus bytes y
+    /// es lo único que el navegador puede cachear para siempre. Reubicar no puede tocarla —ni el
+    /// punto ni un carácter—: una huella cambiada es otro fichero, o un 404.
+    /// </summary>
+    [Theory]
+    [InlineData("https://synergos-static-local/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js")]
+    [InlineData("/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js")]
+    [InlineData("../21.1.6/sg-shared.18a9decbae7fffb0.js")]
+    public void El_nombre_con_huella_llega_intacto_en_sus_tres_formas(string publicada)
+    {
+        Assert.Equal(
+            "/cdn-bundles/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js",
+            ReubicacionDelImportMap.Reubicar(publicada, "/cdn-bundles", Mapa));
+        Assert.Equal(
+            "https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js",
+            ReubicacionDelImportMap.Reubicar(publicada, "https://cdn.ejemplo.co/", Mapa));
+    }
+
     [Theory]
     [InlineData("./ng-core.js", "/cdn-bundles/synergos/runtime/angular/latest/ng-core.js")]
     [InlineData("ng-core.js", "/cdn-bundles/synergos/runtime/angular/latest/ng-core.js")]

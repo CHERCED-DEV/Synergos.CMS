@@ -509,6 +509,26 @@ public sealed class HttpBundleRegistryClientTests
     }
 
     [Fact]
+    public async Task El_alias_y_su_gemelo_con_la_misma_url_con_huella_se_componen_con_la_huella_intacta()
+    {
+        // ADR 0140, D1: el runtime se publica por contenido. El alias heredado y su gemelo
+        // calificado nombran el MISMO fichero con huella; se deduplican y la huella no se toca.
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con("/synergos/runtime/angular/latest/import-map.json", """
+                { "imports": {
+                    "@synergos/shared": "/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js",
+                    "@synergos/angular-shared": "/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js" } }
+                """);
+
+        var mapa = await Nuevo(cdn: cdn).Cliente.TryGetImportMapAsync();
+
+        Assert.NotNull(mapa);
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js", mapa!.Imports["@synergos/shared"]);
+        Assert.Equal("https://cdn.ejemplo.co/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js", mapa.Imports["@synergos/angular-shared"]);
+    }
+
+    [Fact]
     public async Task En_arranque_en_frio_un_conflicto_SI_deja_sin_mapa_y_eso_es_la_verdad()
     {
         // Sin vuelta previa no hay nada bueno que conservar. Inventar uno sería peor:

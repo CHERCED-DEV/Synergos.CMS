@@ -380,6 +380,25 @@ public sealed class FileSystemBundleRegistryClientTests : IDisposable
     }
 
     [Fact]
+    public async Task El_alias_y_su_gemelo_con_la_misma_url_con_huella_se_componen_con_la_huella_intacta()
+    {
+        // ADR 0140, D1: el runtime se publica por contenido. El alias heredado y su gemelo
+        // calificado nombran el MISMO fichero con huella; se deduplican y la huella no se toca.
+        WriteRegistry(SimpleRegistry);
+        WriteScript("runtime", "angular", "latest", "import-map.json", """
+            { "imports": {
+                "@synergos/shared": "/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js",
+                "@synergos/angular-shared": "/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js" } }
+            """);
+
+        var mapa = await BuildClient().TryGetImportMapAsync();
+
+        Assert.NotNull(mapa);
+        Assert.Equal("/cdn-bundles/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js", mapa!.Imports["@synergos/shared"]);
+        Assert.Equal("/cdn-bundles/synergos/runtime/angular/21.1.6/sg-shared.18a9decbae7fffb0.js", mapa.Imports["@synergos/angular-shared"]);
+    }
+
+    [Fact]
     public async Task ModeStub_NoOpBoot()
     {
         // Mode != FileSystem → el ctor logueа y NO carga nada.

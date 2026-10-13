@@ -75,8 +75,18 @@ jobs:
 
       # `npm run setup` instala la raíz Y cada plataforma: el repo hermano no usa
       # workspaces y cada una tiene su propio lock (Synergos.UI#70).
+      #
+      # SYNERGOS_CDN_CONSERVAR=no (ADR 0140): build:cdn restaura las generaciones
+      # ya publicadas del runtime desde la CDN pública antes de publicar, y se
+      # para si no puede. Este CDN se construye para el humo y NO se despliega:
+      # conservar las generaciones de producción no es su trabajo, y el humo no
+      # debe depender de que la CDN pública conteste. Es variable y no bandera
+      # porque build-cdn.mjs rechaza las banderas que no conoce: el build:cdn
+      # que todavía no conserva la ignora, y los dos órdenes de despliegue valen.
       - name: Construir el CDN
         working-directory: Synergos.UI
+        env:
+          SYNERGOS_CDN_CONSERVAR: 'no'
         run: |
           npm run setup
           npm run build:cdn
