@@ -28,6 +28,12 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
     internal const string Total = "total";
     internal const string Cobro = "paymentId";
 
+    /// <summary>
+    /// El código de la promoción que escribió el comprador, o nulo. Sólo lo lee la cotización: el
+    /// descuento lo calcula Pricing y lo que se guarda es el total que resulta, no el código.
+    /// </summary>
+    internal const string Promocion = "promocion";
+
     /// <summary>Adónde avisar al cerrar: lo pone la puerta, es efímero y no se guarda (ADR 0140 F3).</summary>
     internal const string Contacto = "contacto";
 
@@ -40,8 +46,11 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
     internal const string Apartar = "apartar";
     internal const string Autorizar = "autorizar";
 
-    /// <summary>Lo que <see cref="Entrada"/> pone: la compra que pide el comprador.</summary>
-    public IReadOnlyCollection<string> PoneAlAbrir { get; } = new[] { EventId, Comprador, Lineas, Comision };
+    /// <summary>
+    /// Lo que <see cref="Entrada(string, Ref, IReadOnlyList{TicketLine}, decimal, string?)"/> pone: la
+    /// compra que pide el comprador, con el código de su promoción (nulo si no trae).
+    /// </summary>
+    public IReadOnlyCollection<string> PoneAlAbrir { get; } = new[] { EventId, Comprador, Lineas, Comision, Promocion };
 
     /// <summary>Lo que <see cref="Leer"/> pone. Los apartados no van: el bloque los recorre desde la saga.</summary>
     public IReadOnlyCollection<string> Reconstruye { get; } = new[] { EventId, Comprador, Total, Cobro };
@@ -73,13 +82,21 @@ public sealed class EventosFlowBinding : IFlowBinding<TicketingSaga>
             [Autorizar] = FormaDeReserva.Unica,
         };
 
-    /// <summary>La entrada de la fase que abre la compra.</summary>
+    /// <summary>La entrada de la fase que abre la compra, sin promoción.</summary>
     public static FlowContext Entrada(string eventId, Ref comprador, IReadOnlyList<TicketLine> lineas, decimal comision)
+        => Entrada(eventId, comprador, lineas, comision, promocion: null);
+
+    /// <summary>La entrada de la fase que abre la compra.</summary>
+    /// <param name="promocion">El código que escribió el comprador. En blanco es lo mismo que ninguno, y
+    /// se recorta: un espacio pegado de un correo no es otro código.</param>
+    public static FlowContext Entrada(
+        string eventId, Ref comprador, IReadOnlyList<TicketLine> lineas, decimal comision, string? promocion)
         => new FlowContext()
             .Set(EventId, eventId)
             .Set(Comprador, comprador)
             .Set(Lineas, lineas.Select(Item).ToList())
-            .Set(Comision, comision);
+            .Set(Comision, comision)
+            .Set(Promocion, string.IsNullOrWhiteSpace(promocion) ? null : promocion.Trim());
 
     /// <summary>Una línea de la compra como ítem del bloque que la recorre.</summary>
     public static FlowContext Item(TicketLine linea)

@@ -793,6 +793,12 @@
             "items": {
               "$ref": "#/components/schemas/TicketLineRequest"
             }
+          },
+          "promotionCode": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

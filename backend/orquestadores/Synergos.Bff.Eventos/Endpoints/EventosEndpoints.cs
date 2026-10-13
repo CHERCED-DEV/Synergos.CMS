@@ -55,7 +55,7 @@ public static class EventosEndpoints
                 .Select(l => new TicketLine(l.Tier ?? string.Empty, l.Seat, l.Quantity))
                 .ToList();
 
-            var r = await flow.BuyAsync(req.EventId!, buyer!, lineas, negocio!.FeePercent!.Value, key.Value, ct);
+            var r = await flow.BuyAsync(req.EventId!, buyer!, lineas, negocio!.FeePercent!.Value, req.PromotionCode, key.Value, ct);
 
             return r.Map(TicketPurchaseResponse.From).ToCreated(s => $"/v1/ticket-purchases/{s.Id}");
         }).WithName("BuyTickets").ConLlaveDeSaga()

@@ -23,9 +23,13 @@ public sealed class EventosPorts : IPricingPort, IInventoryPort, IPaymentsPort, 
 
     public EventosPorts(EventosCapabilities caps) => _caps = caps;
 
-    public async Task<Result<QuoteView>> CotizarAsync(IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, CancellationToken ct)
-        => (await _caps.QuoteAsync(lineas, ct)).Map(q => new QuoteView(
-            Money.Of(q.Subtotal.Amount, q.Subtotal.Currency), Money.Of(q.Total.Amount, q.Total.Currency)));
+    public async Task<Result<QuoteView>> CotizarAsync(
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, string? promocion, CancellationToken ct)
+        => (await _caps.QuoteAsync(lineas, promocion, ct)).Map(q => new QuoteView(
+            Money.Of(q.Subtotal.Amount, q.Subtotal.Currency),
+            q.Discount is { } descuento ? Money.Of(descuento.Amount, descuento.Currency) : Money.Zero(q.Total.Currency),
+            Money.Of(q.Tax.Amount, q.Tax.Currency),
+            Money.Of(q.Total.Amount, q.Total.Currency)));
 
     public async Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct)
         => (await _caps.FindAforoAsync(sujeto, ct)).Map(i => i.Id);

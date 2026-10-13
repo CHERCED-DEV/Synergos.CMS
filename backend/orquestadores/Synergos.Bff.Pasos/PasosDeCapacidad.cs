@@ -8,18 +8,27 @@ namespace Synergos.Bff.Pasos;
 // la capacidad contestó: el valor, o su rechazo tal cual. Ninguno sabe de qué negocio es lo que
 // cotiza, aparta o cobra — eso lo pone el orquestador en el contexto antes de llamarlos.
 
-/// <summary><c>pricing.cotizar</c>: lee las líneas a cotizar y escribe la cotización.</summary>
+/// <summary>
+/// <c>pricing.cotizar</c>: lee las líneas a cotizar y el código de la promoción, y escribe la cotización.
+/// </summary>
+/// <remarks>
+/// <b>Las dos lecturas son obligatorias en la definición, y la segunda puede valer nulo</b>: sin
+/// promoción no hay descuento. Es lo único que el navegador pone en el precio —un código—, y el
+/// descuento lo calcula <c>Api.Pricing</c>; un código que no existe o que venció rechaza la compra con
+/// el código de la capacidad, antes de apartar nada.
+/// </remarks>
 public sealed class PasoCotizacion(IPricingPort precios) : IPaso
 {
     public string Tipo => "pricing.cotizar";
-    public int Lecturas => 1;
+    public int Lecturas => 2;
     public int Escrituras => 1;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entrada);
-        var cotizacion = await precios.CotizarAsync(entrada.Lee<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(0), ct);
+        var cotizacion = await precios.CotizarAsync(
+            entrada.Lee<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(0), entrada.Lee<string?>(1), ct);
         return cotizacion.IsOk ? SalidaDePaso.Sigue(cotizacion.Value) : SalidaDePaso.Rechaza(cotizacion.Rejection!);
     }
 }

@@ -160,6 +160,39 @@ internal sealed class CompraDeEventosReal : IDisposable
         return (await http.GetFromJsonAsync<JsonElement>(ruta)).GetProperty("items").EnumerateArray().ToList();
     }
 
+    /// <summary>Un recurso de una capacidad, tal como lo devuelve.</summary>
+    public async Task<JsonElement> Leer(string capacidad, string ruta)
+    {
+        using var http = Capacidades.CreateClient(capacidad);
+        return await http.GetFromJsonAsync<JsonElement>(ruta);
+    }
+
+    /// <summary>Cuántas sagas guardó el orquestador: una compra que no llegó a reservar nada no deja ninguna.</summary>
+    public int SagasGuardadas
+        => Directory.Exists(Path.Combine(Sagas, "sagas"))
+            ? Directory.EnumerateFiles(Path.Combine(Sagas, "sagas"), "*.json").Count()
+            : 0;
+
+    /// <summary>
+    /// Una promoción publicada en Pricing, como la crearía quien opera el sitio: <c>POST /v1/promotions</c>
+    /// (la oferta del evento no crea promociones). <paramref name="tipo"/> es <c>Percentage</c> —el valor
+    /// en puntos básicos: 1000 = 10 %— o <c>Fixed</c>, en la moneda.
+    /// </summary>
+    public Task Promocion(string codigo, string tipo, decimal valor, DateTimeOffset desde, DateTimeOffset hasta)
+        => Post("pricing", "v1/promotions", new
+        {
+            code = codigo,
+            kind = tipo,
+            value = valor,
+            currency = "COP",
+            validFrom = desde,
+            validTo = hasta,
+        }, "promocion-" + codigo);
+
+    /// <summary>Una promoción vigente desde ayer y hasta dentro de un mes.</summary>
+    public Task Promocion(string codigo, string tipo, decimal valor)
+        => Promocion(codigo, tipo, valor, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+
     /// <summary>El fichero de una saga, tal como lo guardó el orquestador.</summary>
     public string SagaGuardada(string id)
         => File.ReadAllText(Directory.EnumerateFiles(Path.Combine(Sagas, "sagas"), "*.json")

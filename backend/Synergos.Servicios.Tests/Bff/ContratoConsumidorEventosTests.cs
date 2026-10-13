@@ -41,7 +41,9 @@ public sealed class ContratoConsumidorEventosTests
     /// <summary>Cómo llamar a cada método con argumentos plausibles; el valor no importa, la forma sí.</summary>
     private static readonly Dictionary<string, Func<EventosCapabilities, Task>> Recorrido = new(StringComparer.Ordinal)
     {
-        ["QuoteAsync"] = c => c.QuoteAsync([(Ref.Create("eventos.localidad", "e1/vip"), 2)], Ct),
+        // Con código: así el cuerpo lleva también `promotionCode`, que es lo que hay que cruzar (sin
+        // código el cuerpo es el de siempre, y ése ya lo cruzaba).
+        ["QuoteAsync"] = c => c.QuoteAsync([(Ref.Create("eventos.localidad", "e1/vip"), 2)], "BIENVENIDA10", Ct),
         ["SetPriceAsync"] = c => c.SetPriceAsync(
             Ref.Create("eventos.localidad", "e1/vip"), Monto, 0, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddDays(1), 4, Llave, Ct),
         ["DeclareAforoAsync"] = c => c.DeclareAforoAsync(Ref.Create("eventos.aforo", "e1/vip"), 400, Llave, Ct),

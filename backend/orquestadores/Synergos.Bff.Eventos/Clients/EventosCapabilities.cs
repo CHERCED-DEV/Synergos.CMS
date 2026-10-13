@@ -39,12 +39,20 @@ public sealed class EventosCapabilities : CapabilityClients
     /// total llegara en la petición, cualquiera podría comprar la localidad VIP al precio de la
     /// general cambiando un número en el navegador. Se cotiza contra la capacidad, y lo que el
     /// llamador mandó —si mandó algo— no se mira.
+    ///
+    /// <para><b>Del comprador sólo viaja el código de la promoción</b>, y el descuento lo calcula la
+    /// capacidad. Sin código, el cuerpo es el de siempre, sin un <c>promotionCode</c> nulo: lo que se
+    /// mandaba a Pricing no cambia para quien no trae cupón.</para>
     /// </remarks>
-    public Task<Result<QuoteDto>> QuoteAsync(IReadOnlyList<(Ref Subject, int Quantity)> lineas, CancellationToken ct)
-        => Post<QuoteDto>(Pricing, "v1/quotes", new
-        {
-            lines = lineas.Select(l => new { subjectKind = l.Subject.Kind, subjectId = l.Subject.Id, quantity = l.Quantity }),
-        }, null, ct);
+    public Task<Result<QuoteDto>> QuoteAsync(
+        IReadOnlyList<(Ref Subject, int Quantity)> lineas, string? promotionCode, CancellationToken ct)
+    {
+        var lines = lineas.Select(l => new { subjectKind = l.Subject.Kind, subjectId = l.Subject.Id, quantity = l.Quantity });
+        object cuerpo = string.IsNullOrWhiteSpace(promotionCode)
+            ? new { lines }
+            : new { lines, promotionCode };
+        return Post<QuoteDto>(Pricing, "v1/quotes", cuerpo, null, ct);
+    }
 
     /// <summary>Publica el precio de una localidad, con su vigencia y su tope (la oferta, ADR 0140 F3).</summary>
     /// <remarks>
@@ -178,7 +186,8 @@ public sealed class EventosCapabilities : CapabilityClients
 // orquestador cada vez que una capacidad agrega un campo que no le importa.
 
 public sealed record MoneyDto(decimal Amount, string Currency);
-public sealed record QuoteDto(MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total);
+/// <summary>La cotización de Pricing: <c>Discount</c> es lo que descontó la promoción (cero sin ella).</summary>
+public sealed record QuoteDto(MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total, MoneyDto? Discount = null);
 public sealed record PriceDto(string Id, MoneyDto Amount, DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo, int? MaxPerQuote);
 public sealed record StockItemDto(string Id, string SubjectKind, string SubjectId, int OnHand, int Available);
 public sealed record StockHoldDto(string Id, int Quantity, DateTimeOffset ExpiresAtUtc, bool Released);

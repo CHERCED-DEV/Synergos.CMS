@@ -1,6 +1,6 @@
 {
   "clave": "eventos.compra",
-  "entrada": ["eventId", "comprador", "lineas", "comisionPct"],
+  "entrada": ["eventId", "comprador", "lineas", "comisionPct", "promocion"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": [
@@ -22,7 +22,7 @@
     "revisar-lineas": { "tipo": "eventos.revisar-lineas", "lee": ["lineas"] },
     "revisar-comision": { "tipo": "eventos.revisar-comision", "lee": ["comisionPct"] },
     "sujetos-precio": { "tipo": "eventos.sujetos-precio", "lee": ["eventId", "lineas"], "escribe": ["sujetosPrecio"] },
-    "cotizar": { "tipo": "pricing.cotizar", "lee": ["sujetosPrecio"], "escribe": ["cotizacion"] },
+    "cotizar": { "tipo": "pricing.cotizar", "lee": ["sujetosPrecio", "promocion"], "escribe": ["cotizacion"] },
     "total": { "tipo": "eventos.total", "lee": ["cotizacion", "comisionPct"], "escribe": ["total"] },
     "sujeto-pozo": { "tipo": "eventos.sujeto-pozo", "lee": ["eventId", "linea"], "escribe": ["linea.pozoSujeto"] },
     "hallar": {

@@ -38,8 +38,14 @@ public sealed record TicketLineRequest(int Quantity, string? Tier = null, string
 /// comisión. Un <c>buyerId</c> o un <c>serviceFeePercent</c> que lleguen en el cuerpo se ignoran.</para>
 ///
 /// <para><b>El precio tampoco viaja</b>: se cotiza contra <c>Api.Pricing</c>.</para>
+///
+/// <para><b>Del descuento, sólo el código</b> (<c>PromotionCode</c>): lo que descuenta lo calcula
+/// <c>Api.Pricing</c> al cotizar, y un código que no existe o que venció rechaza la compra con su
+/// código (<c>pricing.promotion_not_found</c>, <c>pricing.promotion_expired</c>) antes de apartar nada.
+/// Un monto de descuento en el cuerpo no existe en este contrato y no se mira.</para>
 /// </remarks>
-public sealed record BuyTicketsRequest(string? EventId = null, IReadOnlyList<TicketLineRequest>? Lines = null);
+public sealed record BuyTicketsRequest(
+    string? EventId = null, IReadOnlyList<TicketLineRequest>? Lines = null, string? PromotionCode = null);
 
 /// <summary>Una butaca o cupo apartado, tal como sale.</summary>
 /// <param name="Tier">La localidad.</param>

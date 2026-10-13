@@ -95,12 +95,24 @@ public sealed class TicketingFlow
         string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, string sagaId, CancellationToken ct)
         => BuyAsync(eventId, buyer, lineas, 0m, sagaId, ct);
 
+    /// <summary>Aparta el aforo y autoriza el cobro, sin promoción. No mueve plata todavía.</summary>
+    /// <param name="comisionPorcentaje">La comisión de servicio sobre el subtotal, de 0 a 100 y con
+    /// dos decimales como mucho: la que el CMS le mostró al comprador (ADR 0137).</param>
+    public Task<Result<TicketingSaga>> BuyAsync(
+        string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
+        string sagaId, CancellationToken ct)
+        => BuyAsync(eventId, buyer, lineas, comisionPorcentaje, promocion: null, sagaId, ct);
+
     /// <summary>Aparta el aforo y autoriza el cobro. No mueve plata todavía.</summary>
     /// <param name="comisionPorcentaje">La comisión de servicio sobre el subtotal, de 0 a 100 y con
     /// dos decimales como mucho: la que el CMS le mostró al comprador (ADR 0137).</param>
+    /// <param name="promocion">El código de la promoción que escribió el comprador, o nulo. El
+    /// descuento lo calcula Pricing al cotizar, y lo que se autoriza es el total que resulta; la
+    /// comisión sigue siendo sobre el subtotal de las entradas, antes del descuento (la regla de la
+    /// ADR 0137 no cambia: es la que el carrito muestra).</param>
     public async Task<Result<TicketingSaga>> BuyAsync(
         string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
-        string sagaId, CancellationToken ct)
+        string? promocion, string sagaId, CancellationToken ct)
     {
         // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
         // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
@@ -115,7 +127,7 @@ public sealed class TicketingFlow
         if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
 
         return await _flujo.EjecutarFaseAsync(
-            Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje), ct);
+            Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct);
     }
 
     /// <summary>Captura el cobro y consume el aforo, sin avisar a nadie.</summary>

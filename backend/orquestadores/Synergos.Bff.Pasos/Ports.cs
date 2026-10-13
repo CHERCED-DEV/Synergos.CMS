@@ -13,15 +13,26 @@ namespace Synergos.Bff.Pasos;
 // sin quien lo llame es una promesa que nadie prueba.
 
 /// <summary>Lo que vale algo según <c>Api.Pricing</c>.</summary>
-/// <param name="Subtotal">Antes de impuestos: la base de una comisión de servicio.</param>
-/// <param name="Total">Lo que se cobra por las líneas cotizadas.</param>
-public sealed record QuoteView(Money Subtotal, Money Total);
+/// <param name="Subtotal">Antes del descuento y de los impuestos: la base de una comisión de servicio.</param>
+/// <param name="Descuento">Lo que descuenta la promoción, si se cotizó con una; si no, cero. Lo
+/// calcula la capacidad sobre el subtotal, antes del impuesto.</param>
+/// <param name="Impuesto">El impuesto, sobre lo ya descontado.</param>
+/// <param name="Total">Lo que se cobra por las líneas cotizadas: el subtotal menos el descuento más el impuesto.</param>
+public sealed record QuoteView(Money Subtotal, Money Descuento, Money Impuesto, Money Total);
 
 /// <summary>Cotizar contra <c>Api.Pricing</c>.</summary>
 public interface IPricingPort
 {
-    /// <summary>Cuánto valen esas líneas. El precio sale de la capacidad, nunca del llamador.</summary>
-    Task<Result<QuoteView>> CotizarAsync(IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, CancellationToken ct);
+    /// <summary>
+    /// Cuánto valen esas líneas, con la promoción <paramref name="promocion"/> si la hay. El precio y el
+    /// descuento salen de la capacidad, nunca del llamador: del llamador sólo llega el CÓDIGO.
+    /// </summary>
+    /// <param name="lineas">Qué y cuántas.</param>
+    /// <param name="promocion">El código de la promoción, o nulo. Uno que no existe o que venció lo
+    /// rechaza la capacidad con su código, antes de que nadie aparte nada.</param>
+    /// <param name="ct">Cancelación.</param>
+    Task<Result<QuoteView>> CotizarAsync(
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, string? promocion, CancellationToken ct);
 }
 
 /// <summary>Apartar y consumir existencias de un pozo contable de <c>Api.Inventory</c>.</summary>
