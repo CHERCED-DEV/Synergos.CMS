@@ -964,6 +964,97 @@ public sealed class FlowRunnerTests
         Assert.Contains(banco.Log.Lineas, l => l.Contains("no se completa", StringComparison.Ordinal));
     }
 
+    // ── Anticipar: la fase que abre, hasta antes de reservar (ADR 0140, el cupón) ──
+
+    /// <summary>
+    /// Un paso CON LLAVE antes del primer tramo que reserva: abrirlo vale (escribe con su llave), pero
+    /// anticiparlo escribiría algo en una vista previa.
+    /// </summary>
+    private const string ConLlaveAntesDeReservar = """
+        {
+          "clave": "prueba.anticipo",
+          "entrada": ["monto"],
+          "fases": {
+            "abrir": ["registrar", "autorizar"],
+            "cerrar": ["capturar"]
+          },
+          "pasos": {
+            "registrar": { "tipo": "t.pedir", "escribe": ["pedido"], "llave": "reg" },
+            "autorizar": {
+              "tipo": "t.autorizar", "lee": ["monto"], "escribe": ["cobro"], "llave": "auth", "motivo": "no autorizó",
+              "reserva": { "consumado_por": "capturar", "antes": "Anular", "despues": "Devolver", "motivo": "sin cerrar" }
+            },
+            "capturar": { "tipo": "t.capturar", "lee": ["cobro"], "llave": "cap", "cierra_reserva": "autorizar", "motivo": "no capturó" }
+          }
+        }
+        """;
+
+    private static FlowContext Entrada(decimal monto, params string[] skus)
+        => new FlowContext()
+            .Set("items", skus.Select(s => new FlowContext().Set("sku", s)).ToList())
+            .Set("monto", monto);
+
+    [Fact]
+    public async Task Anticipar_corre_lo_que_va_antes_de_la_primera_reserva_y_no_escribe_ninguna_saga()
+    {
+        var banco = new Banco();
+
+        var r = await banco.Runner.AnticiparAsync("abrir", Entrada(10m, "a", "b"), CancellationToken.None);
+
+        Assert.True(r.IsOk);
+        // Revisar y cotizar, y NADA más: ni el bloque que aparta, ni una escritura de la saga.
+        Assert.Equal(new[] { "paso t.revisar", "paso t.cotizar" }, banco.Bitacora);
+        Assert.Equal(Money.Of(20m, "COP"), r.Value.Get<Money>("precio"));
+        Assert.Null(banco.Sagas.Find("s1"));
+
+        // Y abrir, después, corre entero: anticipar no dejó nada que reusar ni que estorbe.
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        Assert.Contains("paso t.apartar a", banco.Bitacora);
+    }
+
+    [Fact]
+    public async Task Anticipar_devuelve_el_rechazo_original_del_paso_sin_deshacer_nada()
+    {
+        var banco = new Banco();
+        banco.Fallan.Add("t.cotizar");
+
+        var r = await banco.Runner.AnticiparAsync("abrir", Entrada(10m, "a"), CancellationToken.None);
+
+        Assert.Equal("t.cotizar.no", r.Rejection!.Code);
+        Assert.Equal(new[] { "paso t.revisar", "paso t.cotizar" }, banco.Bitacora);
+    }
+
+    [Fact]
+    public async Task Solo_se_anticipa_la_fase_que_abre()
+    {
+        var banco = new Banco();
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => banco.Runner.AnticiparAsync("cerrar", new FlowContext(), CancellationToken.None));
+
+        // Por ser la que continúa, no por lo que corre: «cerrar» captura con llave, y la otra guarda
+        // también la pararía, pero diciendo otra cosa.
+        Assert.Contains("fase que abre", e.Message, StringComparison.Ordinal);
+        Assert.Empty(banco.Bitacora);
+    }
+
+    [Fact]
+    public async Task No_se_anticipa_un_tramo_que_corre_un_paso_con_llave()
+    {
+        var banco = new Banco(ConLlaveAntesDeReservar);
+
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => banco.Runner.AnticiparAsync("abrir", Entrada(10m), CancellationToken.None));
+
+        Assert.Contains("registrar", e.Message, StringComparison.Ordinal);
+        Assert.Empty(banco.Bitacora);
+
+        // Control: abrir sí lo corre, con su llave. Lo que no se puede es correrlo en una vista previa.
+        Assert.True((await banco.Runner.EjecutarFaseAsync(
+            "abrir", "s1", Entrada(10m), CancellationToken.None)).IsOk);
+        Assert.Contains("  llave s1|reg", banco.Bitacora);
+    }
+
     private sealed class RelojQueAvanza : TimeProvider
     {
         private DateTimeOffset _ahora = DateTimeOffset.UtcNow;

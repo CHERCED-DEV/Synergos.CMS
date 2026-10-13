@@ -206,6 +206,69 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         return Terminar(corrida, fase, ultima: ReferenceEquals(definicion, _flujo.Fases[^1]));
     }
 
+    /// <summary>
+    /// Corre la fase que ABRE hasta antes de su primer tramo que reserva, sin saga, y devuelve el
+    /// contexto: lo que esa fase sabría antes de apartar nada. Es la vista previa honesta de una
+    /// compra —cotizar con su descuento, sumar la comisión— hecha con los MISMOS pasos y la MISMA
+    /// definición que abrir, no con una copia.
+    /// </summary>
+    /// <param name="fase">La fase que abre: la primera de la definición.</param>
+    /// <param name="entrada">Lo mismo que pondría la fachada al abrir.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El contexto tras el último paso antes de reservar, o el rechazo ORIGINAL del paso que
+    /// falló. No se escribe nada en ningún sitio: ni saga, ni turno, ni compensación.</returns>
+    /// <remarks>
+    /// <para><b>Se apoya en la misma premisa que abrir</b>: lo que va antes del primer tramo que reserva
+    /// —revisar, cotizar— rechaza sin saga, porque no escribe en ninguna capacidad. Si no fuera así,
+    /// abrir dejaría escrito algo que nadie deshace. Por eso anticipar se NIEGA a correr un paso con
+    /// llave de idempotencia en ese tramo: pedir una llave es lo que hace un paso que escribe.</para>
+    ///
+    /// <para><b>No es una fase de la definición</b>, y no hace falta declararla: es el tramo de abrir
+    /// que ya existe. Lo que se anticipa no se guarda; abrir lo vuelve a correr entero, así que una
+    /// promoción que vence entre la vista previa y la compra la rechaza abrir, no esto.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si <paramref name="fase"/> no es la que abre, o si el
+    /// tramo a anticipar tiene un paso con llave o que cierra una reserva.</exception>
+    public async Task<Result<FlowContext>> AnticiparAsync(string fase, FlowContext entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+
+        var definicion = _flujo.Fase(fase);
+        if (!ReferenceEquals(definicion, _flujo.Fases[0]))
+        {
+            throw new InvalidOperationException(
+                $"Sólo se anticipa la fase que abre «{_flujo.Clave}»; «{fase}» continúa una saga que ya existe.");
+        }
+
+        var hasta = PrimerTramoQueReserva(definicion);
+        var escriben = definicion.Pasos.Take(hasta)
+            .SelectMany(e => e.ParaCada?.Pasos ?? new[] { e.Paso! })
+            .Select(id => _flujo.Pasos[id])
+            .Where(p => _pasos.Para(p.Tipo)!.Llave != LlaveRequerida.Ninguna || p.CierraReserva is not null)
+            .Select(p => p.Id)
+            .ToList();
+        if (escriben.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"«{_flujo.Clave}» no se puede anticipar: antes de reservar corre {string.Join(", ", escriben)}, "
+                + "que pide llave o cierra una reserva, y anticipar no escribe nada.");
+        }
+
+        var corrida = new Corrida(string.Empty, Ref.Create(_flujo.Clave, "anticipo"), Abrir(entrada), saga: null);
+        for (var i = 0; i < hasta; i++)
+        {
+            var elemento = definicion.Pasos[i];
+            var desenlace = elemento.ParaCada is { } bloque
+                ? await BloqueAsync(bloque, corrida, ct)
+                : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, ct);
+
+            if (desenlace.Rechazo is { } rechazo) return Result.Rejected<FlowContext>(rechazo);
+            if (desenlace.Control == PasoResultado.SaltarFase) break;
+        }
+
+        return Result.Ok(corrida.Ctx);
+    }
+
     /// <summary>Lo que contesta una fase que no consiguió el turno de su saga.</summary>
     private static Rejection SinTurno(string fase, string sagaId)
         => Rejection.Unavailable(Ocupada,
