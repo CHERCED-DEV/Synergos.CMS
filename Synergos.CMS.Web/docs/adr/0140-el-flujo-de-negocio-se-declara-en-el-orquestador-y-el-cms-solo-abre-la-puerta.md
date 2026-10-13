@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto. **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado»
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto. **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -1093,19 +1093,54 @@ hace lo mismo en las suites.
   arquitecto; sin él, salen los respaldos es-CO.
 - **Cambiar el código después de abrir** deja la saga anterior apartada hasta el barrido de abandono,
   como cambiar la selección (heredado de la F4).
+
+  > **Corregido el 2026-10-13 (el cupón endurecido, punto 1):** era peor que un apartado —con la
+  > saga ya cobrada era un doble cobro—, y ya no se puede: abierta la saga de la intención, el cupón
+  > queda fijado hasta que se deshaga.
 - **El impuesto no tiene fila**: la oferta de Eventos publica impuesto 0. Si una localidad lo tuviera,
   el total del servidor lo incluye y las filas no lo explicarían.
 - **Pricing no cuenta usos**: un código vale mientras esté vigente, para quien sea y cuantas veces sea.
   Un cupón de un solo uso o por miembro es una regla de la capacidad que no existe.
+
+  > **2026-10-13 (el cupón endurecido, punto 3):** el oráculo de «cotizar» y «abrir» lo frena un tope
+  > de códigos que no sirven por comprador en `Bff.Eventos`; el tope de usos sigue diferido.
 - **El índice §11.2** (repo `synergos`) no se tocó: el checkout principal lo usan otros.
 
 ## El cupón endurecido (2026-10-13)
 
 La verificación en vivo del cupón y su revisión (`_informes/79-adr-0140-cupon.json`) dejaron tres
 hallazgos confirmados y cuatro defectos vistos en el navegador. Esta sección dice cómo quedó cada
-uno; nada de lo anterior se borra.
+uno; nada de lo anterior se borra. Commits (`lego/integracion`, locales): CMS `aded10fa` y
+`f28759de`, más el de esta nota; UI `f4d7846`, `c8db2c4`, `4076807`, `b003e37` y `51a711b`.
 
-**El tope de códigos que no sirven (hallazgo de severidad baja: «cotizar» como oráculo).**
+**1. Una vez abierta la saga de la intención, el cupón queda FIJADO (hallazgo de severidad alta: el
+doble cobro).** Con un pago ya anotado —cerrar capturó y las entradas no llegaron, o cerrar dio un
+504 con la captura hecha—, aplicar o quitar el cupón en «revisar» cambiaba el total,
+`capturedReference` dejaba de reconocer el cobro y el reintento abría con OTRA llave
+(`sessionId~huella`): otra saga, que apartaba, autorizaba y cerrar capturaba. Medido en el spec
+antes del arreglo, sobre un borde que abre una saga por llave: dos sagas cobradas. Se decidió
+**fijar, no cancelar**: `cancelar` (`CompensateAsync`) rechaza una saga `Completed` con
+`already_completed` —deshacer lo cobrado es una devolución con su política, #183—, así que cancelar
+no cubre justo el caso del doble cobro, y fijar nunca deja dos sagas cobrables.
+- La estrategia RETIENE la llave en las líneas (`holdRef`) en cuanto envía abrir, y cada reintento
+  abre con ESA llave (la misma llave devuelve la misma saga). La suelta sólo cuando ninguna saga
+  puede cobrar con ella: un «no» del negocio o de la puerta antes de reenviar, o la saga deshecha
+  (`Compensated`). Lo transitorio y lo ilegible (504, 502 `puerta.respuesta_invalida`) pueden llegar
+  con la saga abierta: la llave se queda y el reintento la recupera.
+- El elemento fija el cupón con la llave retenida o con un pago anotado (éste cubre la sesión que
+  dejó el bundle anterior), y `syn-promo-code` gana `locked`: no deja escribir, aplicar ni quitar, y
+  dice por qué (`Events.Purchase.PromoLocked`).
+- Para cambiar el código hay que esperar a que la saga se deshaga, o elegir otra vez las entradas
+  (otra sesión, otra intención: lo heredado de la F4, abajo).
+
+**2. Con «Pagar y confirmar» en vuelo el cupón no cambia, y la pantalla nunca muestra un descuento
+distinto del autorizado (hallazgo de severidad media).** «revisar» no es válido mientras se valida
+un código (el pago espera a la vista previa); una vista previa que vuelve con la compra ya en vuelo
+se descarta; y `pay` deja en la sesión lo que ABRIÓ: el total del servidor y sólo la línea del
+cupón que viajó. Pagar primero y aplicar después ya lo cierra el punto 1 (la llave se retiene en el
+mismo tic del clic).
+
+**3. El tope de códigos que no sirven (hallazgo de severidad baja: «cotizar» como oráculo).**
 «cotizar» no pide llave, no aparta nada y contesta distinto a un código que no existe (404
 `pricing.promotion_not_found`), a uno vencido (410 `pricing.promotion_expired`) y a uno que vale
 (200 con su descuento): un miembro podía mandarla en bucle y enumerar qué códigos existen y cuánto
@@ -1128,6 +1163,62 @@ contestó Pricing.
   operaciones de la puerta sería de la puerta y de todos los flujos, no del cupón.
 - El UI traduce el corte con `Events.Purchase.PromoTooMany` (`syn-promo-code` gana el motivo
   `too-many-attempts`), y un «abrir» cortado suelta la llave retenida: no dejó saga.
+
+**4. `syn-promo-code` vuelve a tener estilos, con contraste AA en los siete temas (defecto en vivo,
+severidad media).** Las `--syn-promo-*` se declaraban en `.syn-promo-code`, la clase que pone el
+host; con encapsulación emulada Angular la compila como `.syn-promo-code[_ngcontent-…]`, un atributo
+que el host no lleva: la regla no casaba nunca (es de #29, anterior al cupón, y storefront monta la
+misma pieza). Van en `:host`; el borde del campo pasa a `--syn-color-text-muted` (border-default es
+decorativo: 1,2–1,5:1) y el texto de ejemplo tiene regla propia. Medido en Chrome headless contra
+`syn-tokens.css` en light, dark, eventsNight, silverGold, terraLux, scholar y meridian: 0 fallos
+(mínimos: borde del campo 5,88:1; «Aplicar», 4,81:1 de texto y 4,39:1 de relleno contra el panel).
+`libs/shared` cambió: hay que reconstruir el runtime (`build:runtime`) y publicarlo donde se
+verifique —en la CDN piloto, nunca en `C:\LOCAL_CDN` desde una rama—.
+
+**5. «Tu orden» explica el total, y el signo del descuento no se separa de la cifra (defectos en
+vivo, severidad baja).** `syn-checkout-wizard` gana `summaryRows` (las filas que explican el total,
+ya formateadas por el dominio) y Eventos le pasa los cargos y el descuento; el descuento lleva
+U+2060 tras el «−», y los importes no se parten.
+
+**6. La copia piloto puede no existir: cómo se recrea para verificar.** `%TEMP%\pilot-0137\vivo\`
+(`vivo.db` con su `-wal`/`-shm` y `tmp\`) vive en `%TEMP%`, y una limpieza se la llevó el
+2026-10-13 a las 07:49 junto con `f4-verif\respaldo\vivo`, dejando la CDN piloto en 11 ficheros. Los
+lanzadores de `_informes/scripts/orquestador/` (`integ-sobre-copia.cmd`, y `f3-cms.ps1`, que lo
+llama) fijan `Data Source=…\vivo\vivo.db`: **lanzados sin la copia, Umbraco arranca sobre una base
+VACÍA** (SQLite crea el fichero) y la verificación mide un sitio que no existe. Antes de verificar:
+- **Comprobar** que `%TEMP%\pilot-0137\vivo\vivo.db` existe y que `PRAGMA integrity_check` da `ok`;
+  si no, no lanzar nada.
+- **Recrear la base sin tocar la real**: una copia CONSISTENTE de la base de trabajo —con la API de
+  respaldo de SQLite (`sqlite3 <origen> ".backup <destino>"`, o `Connection.backup` de Python), que
+  incluye lo que está en el `-wal` aunque el CMS esté corriendo; o copiar `.db`, `-wal` y `-shm`
+  JUNTOS con el CMS parado—, nunca el `.db` solo con el CMS vivo. Lo que no tenga la copia (las
+  claves nuevas de un diccionario, un ElementType) se importa SÓLO sobre la copia, desde una carpeta
+  fuera del repo, como en la F4. Si no hace falta el contenido del sitio, sirve una copia de
+  `%TEMP%\pilot-0137\lote\lote.db` (con su `-wal`/`-shm`), la que usó la verificación del cupón (sin
+  las claves de `Events.Purchase`: `t()` pinta los respaldos es-CO).
+- **Recrear la CDN piloto**: respaldar lo que tenga, copiar `C:\LOCAL_CDN\synergos` en sólo lectura
+  (`robocopy /E`), publicar `eventos` con `tools/publish.mjs --element eventos --cdn <piloto>` y, si
+  cambió `libs/shared` —el endurecimiento lo cambió—, el runtime con `publish-runtime --cdn
+  <piloto>`; sin él, `syn-promo-code` se queda con los estilos y las entradas viejas.
+- **Respaldar** la copia antes de lanzar (`f3-cms.ps1` lo pide) y, al terminar, parar por PID
+  (`f3-parar.ps1`) y borrar las credenciales de los miembros de prueba que hayan quedado en ella.
+
+**Cómo se verificó.** Cada arreglo con su repo en verde: en el CMS, build en 0 avisos y las tres
+suites (de 3172 / 909 / 520 a **3172 / 917 / 520 = 4609**), `usync-audit` 0/0 y `spec-valida` ✓; en
+el UI, `npm test` 6 de 6 (de 875 + 115 + 2.079 + 11 a **875 + 115 + 2.097 + 11**) y
+`contracts:validate` EXIT 0, con `contratos:http:check` al día y `cms-sync` in sync; y en cada paso
+G-6 ✓ 537/9 y G-7 ✓ 55/21. Cada arreglo con su mutante fiel (hacia el código de antes), rojo y
+restaurado; el detalle, en el mensaje de cada commit. **Sin medir en vivo**: la compra en el
+navegador sobre la CDN piloto, porque la copia `vivo` no existe hoy (punto 6).
+
+**Lo que queda, dicho**
+- **La verificación en el navegador** del cupón endurecido, con la copia piloto recreada (punto 6)
+  y el runtime publicado en la CDN piloto.
+- **El import de `Events.Purchase.PromoLocked` y `PromoTooMany`** a la base real es del arquitecto.
+- **Una saga abierta y luego abandonada** (otra selección, otra sesión) sigue apartada hasta el
+  barrido de abandono, como en la F4; el cupón ya no puede abrir una segunda para la MISMA intención.
+- **La octava ruta de render** (`prefers-color-scheme: dark` sin `data-theme`) no se midió para
+  `syn-promo-code`: `action-primary` contra la superficie da 2,39:1 ahí, por el token del tema.
 
 ## Relación con otras ADRs
 
