@@ -759,8 +759,8 @@ cliente de la puerta y `<synergos-flujo>` en `vitals/core`; la regla 24 se cierr
 recibe el instrumento y el dominio escribe EL aviso de SH-3), `595b7ec` (el contrato con
 `Events.Purchase`), `8def0f9` (la recarga no miente), `4199329` (fuera el cupón), `ab91644` (la sesión
 antes de pagar), `1f92757` (la compra por la puerta) y `12d869b` (el enlace del aviso abre la compra).
-CMS: `cf3ce915` (la sección `Events.Purchase`), `2c136b4e` (el CMS coloca el coordinador), `0addf388`
-(G-6 y G-7 antes que el UI), `46a50fb0` (`Aviso.Ruta`) y el de esta sección.
+CMS: `3c019930` (la sección `Events.Purchase`), `e7a2e001` (el CMS coloca el coordinador), `9c35b4c3`
+(G-6 y G-7 antes que el UI), `8b05048d` (`Aviso.Ruta`) y el de esta sección.
 
 **Cómo se verificó**
 - Cada paso con su repo en verde: en el UI, `npm test` completo —6 tramos desde el primero, que sumó
@@ -893,8 +893,8 @@ el mensaje de cada commit). Commits UI (`lego/integracion`): `5b9d6c3` (la tinta
 `db8c38d` (el QR y la butaca de Eventos), `a0ff38c` (`?compra=` se consume), `f5e8bb4` (los ids sin
 `randomUUID`), `0bda010` (cerrar pregunta a la saga), `d4730e9` (el coordinador de cada participante),
 `47f819a` (el protocolo en crudo), `4b9f104` (G-15), `e77ebd8` (el foco tras pagar), `c4ec404` (el
-registro gratis) y `a5dee91` (el enlace sin sesión). CMS: `255ff855` (el parámetro del aviso),
-`ea3ef4be` y `6c7d9c49` (tres claves de `Events.Purchase`) y el de esta sección.
+registro gratis) y `a5dee91` (el enlace sin sesión). CMS: `2d728491` (el parámetro del aviso),
+`d6b0fc6b` y `c8708b39` (tres claves de `Events.Purchase`) y el de esta sección.
 
 **Lo que se decidió, y entra en la decisión**
 1. **Un lavado no es tinta, tampoco por un alias.** El aviso de rechazo del asistente —desde la decisión 5
@@ -987,11 +987,11 @@ puerta recibían un código. `Api.Pricing` ya tenía promociones (`SavePromotion
 el descuento ANTES de pagar —cotizado de verdad por Pricing, sin reservar nada— y lo que se autoriza y
 se cobra es el total descontado.
 
-Commits CMS (`lego/integracion`): `d3e7ddff` (la compra lleva el código y Pricing lo descuenta),
-`688a9788` (`FlowRunner.AnticiparAsync`: la fase que abre, anticipada sin saga), `e9dc13a7` («cotizar»
-por la puerta), `6cec568e` (seis claves de `Events.Purchase`) y el de esta sección. UI: `c97cdbd` (el
-tipo con `promotionCode`), `9bba3fc` («cotizar» en el vocabulario del generador), `d6afd7b`
-(`cotizarCompraDeEventos` en `vitals/core`) y `5f04726` (el cupón en `<synergos-eventos>`).
+Commits CMS (`lego/integracion`): `a93cb184` (la compra lleva el código y Pricing lo descuenta),
+`f336f328` (`FlowRunner.AnticiparAsync`: la fase que abre, anticipada sin saga), `c6441cb0` («cotizar»
+por la puerta), `129fdd60` (seis claves de `Events.Purchase`) y el de esta sección. UI: `15db938` (el
+tipo con `promotionCode`), `2526544` («cotizar» en el vocabulario del generador), `adf0b33`
+(`cotizarCompraDeEventos` en `vitals/core`) y `da4b32a` (el cupón en `<synergos-eventos>`).
 
 **Lo que se decidió, y entra en la decisión**
 1. **Del navegador sólo viaja el CÓDIGO** (`BuyTicketsRequest.promotionCode`). El monto lo calcula
@@ -1110,8 +1110,8 @@ hace lo mismo en las suites.
 
 La verificación en vivo del cupón y su revisión (`_informes/79-adr-0140-cupon.json`) dejaron tres
 hallazgos confirmados y cuatro defectos vistos en el navegador. Esta sección dice cómo quedó cada
-uno; nada de lo anterior se borra. Commits (`lego/integracion`, locales): CMS `aded10fa` y
-`f28759de`, más el de esta nota; UI `f4d7846`, `c8db2c4`, `4076807`, `b003e37` y `51a711b`.
+uno; nada de lo anterior se borra. Commits (`lego/integracion`, locales): CMS `6419dce1` y
+`b58b26b3`, más el de esta nota; UI `bc4626f`, `40c17a8`, `6732fd6`, `81ca51c` y `1c4887a`.
 
 **1. Una vez abierta la saga de la intención, el cupón queda FIJADO (hallazgo de severidad alta: el
 doble cobro).** Con un pago ya anotado —cerrar capturó y las entradas no llegaron, o cerrar dio un
@@ -1210,6 +1210,15 @@ el UI, `npm test` 6 de 6 (de 875 + 115 + 2.079 + 11 a **875 + 115 + 2.097 + 11**
 G-6 ✓ 537/9 y G-7 ✓ 55/21. Cada arreglo con su mutante fiel (hacia el código de antes), rojo y
 restaurado; el detalle, en el mensaje de cada commit. **Sin medir en vivo**: la compra en el
 navegador sobre la CDN piloto, porque la copia `vivo` no existe hoy (punto 6).
+
+**Rebasada sobre master** (2026-10-13): la del CMS, de `51dd8c4a` a `09213242` (#205: la poda de
+`umbracoCacheInstruction` ya no tranca el import del gate de reconstrucción); la del UI no se movió de
+`6af9486`, pero sus mensajes nombraban hashes del CMS y se reescribieron (sólo el mensaje: los árboles,
+idénticos). Los hashes de esta ADR son los rebasados. Sobre el resultado: CMS build en 0 avisos,
+**3172 / 917 / 520 = 4609**, `usync-audit` 0/0, las 403 vistas compilan y la reconstrucción desde el
+XML verde (1517 / 1517 ítems, 0 errores); UI `npm test` 6 de 6 y `contracts:validate` entero, con
+`cms-sync` in sync, `contratos:http` y `contratos:synhost` al día y G-15 ✓ 1 enlace; G-6 ✓ 537/9 y
+G-7 ✓ 55/21.
 
 **Lo que queda, dicho**
 - **La verificación en el navegador** del cupón endurecido, con la copia piloto recreada (punto 6)
