@@ -1634,6 +1634,64 @@
     --syn-color-state-danger-surface: rgb(239 68 68 / 0.16);
     --syn-color-state-danger-border: rgb(251 113 133 / 0.32);
     --syn-color-state-danger-text: #fecdd3;
+
+    /* Paridad con el tema oscuro: la vigila AutoDarkEspejoDeDarkTests. Sin
+       esto auto-dark heredaba de :root las acciones CLARAS: el relleno de
+       action-primary (brand-600) daba 2.39:1 sobre el lienzo oscuro. */
+    --syn-color-action-primary: var(--syn-color-brand-400);
+    --syn-color-action-primary-hover: var(--syn-color-brand-300);
+    --syn-color-action-primary-active: var(--syn-color-brand-200);
+    --syn-color-action-primary-text: var(--syn-color-neutral-900);
+    --syn-color-action-emphasis: var(--syn-color-accent-400);
+    --syn-color-action-secondary-surface: rgb(248 250 252 / 0.04);
+    --syn-color-action-secondary-surface-hover: rgb(248 250 252 / 0.08);
+    --syn-color-action-secondary-text: var(--syn-color-neutral-0);
+    --syn-color-action-secondary-text-hover: var(--syn-color-brand-200);
+    --syn-color-action-secondary-border: rgb(148 163 184 / 0.26);
+    --syn-color-action-secondary-border-hover: rgb(165 180 252 / 0.5);
+    --syn-color-action-ghost-text: var(--syn-color-neutral-300);
+    --syn-color-action-ghost-text-hover: var(--syn-color-neutral-0);
+    --syn-color-action-danger: var(--syn-color-danger-400);
+    --syn-color-action-danger-hover: var(--syn-color-danger-300);
+    --syn-color-action-danger-text: var(--syn-color-neutral-900);
+    --syn-color-action-disabled-surface: rgb(148 163 184 / 0.08);
+    --syn-color-action-disabled-border: rgb(148 163 184 / 0.16);
+    --syn-color-action-disabled-text: var(--syn-color-neutral-500);
+
+    --syn-color-text-accent: var(--syn-color-brand-300);
+    --syn-color-text-disabled: var(--syn-color-neutral-500);
+    --syn-color-text-inverse: var(--syn-color-neutral-900);
+    --syn-color-text-on-accent: var(--syn-color-neutral-0);
+
+    --syn-color-border-subtle: rgb(148 163 184 / 0.12);
+    --syn-color-border-strong: var(--syn-color-neutral-600);
+    --syn-color-border-accent: rgb(165 180 252 / 0.5);
+    --syn-color-border-inverse: rgb(255 255 255 / 0.16);
+
+    --syn-color-overlay-subtle: rgb(248 250 252 / 0.08);
+    --syn-color-overlay-medium: rgb(248 250 252 / 0.14);
+    --syn-color-overlay-strong: rgb(248 250 252 / 0.22);
+
+    --syn-color-focus-ring: rgb(165 180 252 / 0.88);
+    --syn-color-focus-ring-danger: rgb(253 164 175 / 0.88);
+
+    --syn-channel-ink: 2 6 23;
+
+    --syn-shadow-card: 0 10px 28px -18px rgb(2 6 23 / 0.78);
+    --syn-shadow-card-hover: 0 24px 56px -28px rgb(2 6 23 / 0.86);
+    --syn-shadow-panel: 0 8px 24px -18px rgb(2 6 23 / 0.74);
+    --syn-shadow-floating: 0 28px 72px -36px rgb(2 6 23 / 0.92);
+    --syn-shadow-action: 0 10px 22px -16px rgb(var(--syn-channel-brand) / 0.44);
+    --syn-shadow-action-hover: 0 18px 34px -18px rgb(var(--syn-channel-brand) / 0.54);
+
+    --syn-gradient-hero: linear-gradient(135deg,
+                           var(--syn-color-surface-canvas) 0%,
+                           var(--syn-color-surface-elevated) 46%,
+                           rgb(var(--syn-channel-brand) / 0.22) 100%);
+
+    --syn-image-placeholder-surface: #293a5c;
+    --syn-image-placeholder-ink: #cbd5e1;
+    --syn-highlight-top: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
   }
 }
 
