@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Faltan la verificación de la F4 en el navegador sobre la CDN piloto y el retiro de la ruta vieja, que va después
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto. **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -175,6 +175,12 @@ del flujo con la llave → devuelve **su** respuesta sin reinterpretarla.
 - **El motor en proceso de cada flujo se retira cuando su flujo pasa por la puerta.** Un flujo existe
   una sola vez. Los efectos que hoy dependen de la rama (aviso, seguimiento, registro) pasan a ser
   pasos del flujo (decisión 5).
+
+  > **Corregido el 2026-10-13 (decidido por el arquitecto):** no se retira. Synergos es un SUPERSET de
+  > piezas para generar funcionalidades, y una pieza que hoy no se usa no tiene por qué borrarse
+  > (CLAUDE.md §0.C.21): el motor en proceso y la ruta vieja de Eventos se conservan detrás de su
+  > interruptor (`Synergos:Eventos:Mode`). Lo que sí vale es lo de arriba: el front no vuelve a la ruta
+  > vieja, y un flujo nuevo se declara en el orquestador. Ver «El cupón reconectado».
 
 ### 5. Los pasos transversales son estándar, y cualquier flujo los declara
 
@@ -638,6 +644,9 @@ que resultaron equivalentes en un test se anotaron y se reforzó el test.
   checkout y confirm salen de `EventosController`, y se borran el motor en proceso de la compra y la
   mitad de compra de `HttpEventTicketingService`. Con el retiro, un clon limpio deja de vender
   entradas sin levantar servicios.
+
+  > **Descartado el 2026-10-13 (decidido por el arquitecto):** no se borra nada de eso. Se conserva
+  > como pieza detrás de su interruptor; ver «El cupón reconectado».
 - **El token de identidad (paso 18)**: descartado en la F3; se reabre con el disparador de arriba.
 - **El oráculo del molde (G-8) pierde dos ficheros**: el publicador de la oferta
   (`IEventOfferPublisher`, `HttpEventOfferPublisher`) no lo predice el doc 12. Es un hallazgo para el
@@ -863,6 +872,9 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
 - **El retiro** (pasos 19-20 del plan de la F3), después de republicar las CDN que lea cada CMS. M1 tiene
   que buscar la FORMA de la llamada: el bundle nuevo todavía trae `` `${…}/checkout` ``, que es la ruta
   por hash del propio elemento, no la API.
+
+  > **Descartado el 2026-10-13 (decidido por el arquitecto):** la ruta vieja se conserva detrás de su
+  > interruptor; ver «El cupón reconectado».
 - **El índice §11.2** (repo `synergos`) no se tocó desde esta tarea: el checkout principal lo usan otros.
 - G-7 no ve el cuerpo de los asistentes (el artefacto deserializa a mano); un renombre de `attendees`
   falla en voz alta en ejecución (`eventos.asistentes_no_cuadran`) y lo cubre el spec de la compra.
@@ -965,6 +977,127 @@ registro gratis) y `a5dee91` (el enlace sin sesión). CMS: `255ff855` (el parám
   como antes.
 - **El import de las 23 claves de `Events.Purchase` a la base real** es del arquitecto; sin él, salen los
   respaldos es-CO.
+
+## El cupón reconectado (2026-10-13)
+
+**El cupón de Eventos vuelve, y esta vez lo aplica el servidor.** La F4 (paso 9, UI `4199329`) lo
+había quitado porque restaba en el NAVEGADOR un descuento que nadie cobraba: ni la ruta vieja ni la
+puerta recibían un código. `Api.Pricing` ya tenía promociones (`SavePromotion` con vigencia,
+`QuoteRequest.promotionCode`); faltaba que la compra las usara. Hoy quien compra escribe un código, ve
+el descuento ANTES de pagar —cotizado de verdad por Pricing, sin reservar nada— y lo que se autoriza y
+se cobra es el total descontado.
+
+Commits CMS (`lego/integracion`): `d3e7ddff` (la compra lleva el código y Pricing lo descuenta),
+`688a9788` (`FlowRunner.AnticiparAsync`: la fase que abre, anticipada sin saga), `e9dc13a7` («cotizar»
+por la puerta), `6cec568e` (seis claves de `Events.Purchase`) y el de esta sección. UI: `c97cdbd` (el
+tipo con `promotionCode`), `9bba3fc` («cotizar» en el vocabulario del generador), `d6afd7b`
+(`cotizarCompraDeEventos` en `vitals/core`) y `5f04726` (el cupón en `<synergos-eventos>`).
+
+**Lo que se decidió, y entra en la decisión**
+1. **Del navegador sólo viaja el CÓDIGO** (`BuyTicketsRequest.promotionCode`). El monto lo calcula
+   Pricing al cotizar, y la definición no aprende ningún lenguaje de expresiones: `pricing.cotizar` lee
+   un nombre más (`promocion`, que puede ser nulo) y `IPricingPort.CotizarAsync` lo pasa. Sin código, el
+   cuerpo que va a Pricing es el de antes, byte a byte. Un código que no existe (404
+   `pricing.promotion_not_found`) o vencido (410 `pricing.promotion_expired`) rechaza en «cotizar»,
+   antes de apartar: sin saga, con el aforo entero, y la misma llave compra después sin él.
+2. **La vista previa honesta es la fase que abre, anticipada** (`FlowRunner.AnticiparAsync`, en
+   `Bff.Core`): corre la fase hasta antes de su primer tramo que reserva, sin saga, sin turno y sin
+   escribir nada, con los MISMOS pasos y la MISMA definición que abrir. No es una fase nueva ni una
+   cotización escrita aparte —sería la segunda copia del flujo—. Se apoya en la premisa que abrir ya
+   tenía (lo de antes de reservar no escribe) y la hace cumplir: se niega a anticipar un tramo con un
+   paso que pide llave o que cierra una reserva, y sólo la fase que abre.
+3. **«cotizar» entra en el vocabulario de la puerta** (`EnLaPuertaExtensions.Operaciones`,
+   `TablaDeLaPuerta.Operaciones` y el generador del UI, la misma lista en los tres sitios):
+   `POST /v1/ticket-quotes` (`QuoteTickets`), con el sujeto y el negocio que pone la puerta y SIN llave,
+   que recibe el mismo cuerpo que abrir y contesta `TicketQuoteResponse` —subtotal, descuento,
+   impuesto, comisión, total y el código recortado—. Abrir vuelve a cotizar entero: lo que cambie entre
+   medias lo rechaza abrir con su `code`.
+4. **La comisión sigue siendo sobre el subtotal de las entradas, antes del descuento.** Es la regla de
+   la ADR 0137 que muestra el carrito y cruzan los vectores de oro (G-12) en los tres sitios que la
+   calculan; cambiarla es cambiarla en los tres. Con 2 × 100.000, un 10 % y un 12 %: 200.000 − 20.000 +
+   24.000 = 204.000, medido contra Pricing, Inventory y Payments reales.
+5. **El cupón vive en la SESIÓN del front** (la línea `promo:<CÓDIGO>` negativa del pricing, con el
+   total del servidor), así sobrevive a la recarga y al login, y `pay` lo manda con la compra. Lo que se
+   pinta es lo que contestó el servidor; no queda ninguna resta local.
+6. **Con cupón, la intención es otra, y la llave también** (`llaveDeLaIntencion`: la de la sesión más
+   una huella del código). Con la misma llave, una saga abierta antes sin el código devolvía su total
+   sin descuento y se cobraba lo que la pantalla ya no decía.
+7. **El campo vive en el paso «revisar» del checkout**, con `syn-promo-code` del design system: ahí la
+   sesión ya está pedida, y la puerta es de miembros. Los rechazos se dicen por `code` con la sección
+   `Events.Purchase` (seis claves nuevas, es-CO y en-US); un «no» que no es del código —las entradas
+   fuera de venta— se dice con su texto sin culpar al código, y un código que vence entre la vista
+   previa y el pago se quita y el asistente lo dice una vez.
+
+**El retiro de la ruta vieja: DESCARTADO por decisión del arquitecto (2026-10-13).** Synergos es un
+superset de piezas estratégicas para generar funcionalidades, y lo que hoy no se usa no tiene por qué
+borrarse (CLAUDE.md §0.C.21: no se retira por defecto). `/api/eventos/checkout|confirm` de
+`EventosController`, el motor en proceso de la compra (`StubEventTicketingService`) y la mitad de
+compra de `HttpEventTicketingService` **se conservan como pieza detrás de su interruptor**
+(`Synergos:Eventos:Mode`: en proceso por defecto, `Bff` por el orquestador). El UI no la llama —sigue
+la decisión 10 de la F4— y la ruta vieja no recibe código: un cupón sólo se cobra por la puerta. Los
+pasos 19-20 del plan de la F3 no se ejecutan. Y la ruta `/api/eventos/promo` que llamaba el cupón de
+antes no existía en el CMS (`[Route]` de `EventosController` y una búsqueda de «promo» en controllers y
+servicios: 0): no había nada que conservar.
+
+**Cómo se verificó**
+- Cada paso con su repo en verde: en el CMS, build en 0 avisos y las tres suites (de 3171 / 897 / 520
+  = 4588 a **3172 / 909 / 520 = 4601**), el oráculo de la F1 sin tocar; en el UI, `npm test` 6 de 6 (de
+  874 + 113 + 2.073 + 11 a **875 + 115 + 2.079 + 11**) y `contracts:validate` en EXIT 0 con
+  `contratos:http:check`, `contratos:synhost:check` y `cms-sync` al día; y en cada paso G-6 ✓ 537
+  claves en 9 verticales y G-7 ✓ 55 claves en 21 rutas. `usync-audit` 0/0.
+- Los pares de los dos repos se midieron juntos: el contrato que cambia en el CMS y el tipo que lo
+  regenera en el UI.
+- La compra con cupón, contra el `Program` real de `Bff.Eventos` y Pricing, Inventory y Payments reales
+  (`CuponDeLaCompraTests`, 8 casos): el cobro autorizado, el aforo, las sagas en el disco y que lo que
+  cotiza «cotizar» es lo que abrir autoriza.
+- Una corrida de `Arquitectura.Tests` dio 1 rojo en `ComposeStackTests.El_check_ignora_el_fin_de_linea`
+  mientras la suite del UI corría al lado (el test reescribe `compose.prod.yml` del árbol); solo pasa,
+  y la suite entera repetida sin carga dio 520/520. Va dicho, no embolsado.
+- El bundle de `eventos` (dist) pasa de 415.760 a 420.501 B (73.149 gz), bajo su techo de 420 KB.
+- **Sin medir en vivo**: publicar `eventos` en la CDN piloto y recorrer el cupón en el navegador (en
+  los temas) es de la próxima verificación.
+
+**Mutantes** (cada uno aplicado por líneas, visto en el diff, rojo y restaurado; el detalle, en el
+mensaje de cada commit): el paso sin el código, el endpoint sin él, el cliente sin `promotionCode` o
+con otro nombre, el código sin recortar; anticipar la fase entera, sin la guarda de la llave o
+cualquier fase; «cotizar» sin `.EnLaPuerta` (después de regenerar, `LoQueExponeLaPuertaTests`), la
+vista previa sin la comisión o sin el código, el descuento de Pricing sin leer, la puerta del CMS sin
+«cotizar» en su vocabulario (41 rojos); el generador sin «cotizar»; el descuento sin leer en `vitals`,
+«cotizar» que pide «abrir» y `serviceFee` renombrado en el tipo generado (regla 24, `tsc` en rojo); un
+`.config` del diccionario fuera del árbol; y en `eventos`, `pay` sin el cupón o con la llave de
+siempre, el total que lo ignora, el descuento restado en el navegador (el cupón de antes), el pago
+fallido que no lo quita, el código inexistente leído como fallo de red y la vista previa sin el código.
+Todos rojos.
+
+**Datos de demo: cómo se crea una promoción para verificarlo.** La oferta que publica el CMS no crea
+promociones, y `tools/provisionar.sh` tampoco (provisiona precios, recursos y plantillas). Se crea en
+`Api.Pricing`, con la llave compartida, como la crearía quien opera el sitio:
+
+```bash
+curl -X POST "$PRICING_URL/v1/promotions" \
+  -H "X-Synergos-Key: $SYNERGOS_API_KEY" -H "Idempotency-Key: promo-BIENVENIDA10" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"BIENVENIDA10","kind":"Percentage","value":1000,"currency":"COP",
+       "validFrom":"2026-10-13T00:00:00Z","validTo":"2026-11-13T00:00:00Z"}'
+```
+
+`kind` es `Percentage` —`value` en puntos básicos: 1000 = 10 %— o `Fixed` —`value` en la moneda—; la
+vigencia es obligatoria (`validTo` excluido), el código es único (`pricing.code_taken`) y se busca sin
+mirar mayúsculas. En el compose, `PRICING_URL` es `http://api-pricing:8080`. `CompraDeEventosReal.Promocion`
+hace lo mismo en las suites.
+
+**Lo que queda, dicho**
+- **La verificación en el navegador** del cupón sobre la CDN piloto, con la promoción creada como
+  arriba y la sesión del miembro.
+- **El import de las 6 claves nuevas de `Events.Purchase`** (29 en la sección) a la base real es del
+  arquitecto; sin él, salen los respaldos es-CO.
+- **Cambiar el código después de abrir** deja la saga anterior apartada hasta el barrido de abandono,
+  como cambiar la selección (heredado de la F4).
+- **El impuesto no tiene fila**: la oferta de Eventos publica impuesto 0. Si una localidad lo tuviera,
+  el total del servidor lo incluye y las filas no lo explicarían.
+- **Pricing no cuenta usos**: un código vale mientras esté vigente, para quien sea y cuantas veces sea.
+  Un cupón de un solo uso o por miembro es una regla de la capacidad que no existe.
+- **El índice §11.2** (repo `synergos`) no se tocó: el checkout principal lo usan otros.
 
 ## Relación con otras ADRs
 

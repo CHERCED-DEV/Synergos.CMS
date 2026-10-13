@@ -145,8 +145,10 @@
     vista del bloque de Eventos le pone alrededor (no es un colocable tipado: con un participante no
     hace falta; lo cruza `CoordinadorDelFlujoEnLasVistasTests`), traduce los rechazos por `code` con la
     sección `Events.Purchase`, pide la sesión antes de pagar y nunca vuelve a la ruta vieja—; faltan la
-    verificación de la F4 en el navegador sobre la CDN piloto, el import de `Events.Purchase.*` a la
-    base real y, después, el retiro de checkout/confirm.
+    verificación de la F4 en el navegador sobre la CDN piloto y el import de `Events.Purchase.*` a la
+    base real. El cupón volvió por la puerta (2026-10-13: el navegador manda el código, Pricing descuenta y
+    «cotizar» es la vista previa sin reservar), y el retiro de checkout/confirm quedó DESCARTADO por el
+    arquitecto: se conservan, con su motor en proceso, detrás de `Synergos:Eventos:Mode` (§0.C.21).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por
@@ -3105,7 +3107,7 @@ SYNERGOS_ACTUALIZAR_CONTRATOS=1 dotnet test backend/Synergos.Servicios.Tests --f
 # TablaDeLaPuertaTests (cada regla con la que la tabla no arranca), ConsumidorCmsDeBffEventosTests
 # (contra el contrato de Bff.Eventos: lo que manda el publicador de la oferta, al publicar y al
 # retirar, y lo que se lee de una compra; el cuerpo que la ruta vieja manda a BuyTickets NO se cruza,
-# deuda heredada de antes de la F2 que se va con su retiro), PuertaGenericaTests (la puerta no nombra
+# deuda heredada de antes de la F2; la ruta se conserva: su retiro quedó descartado el 2026-10-13), PuertaGenericaTests (la puerta no nombra
 # flujos ni verticales, su techo de 25 s y el recorte del cliente que se compone, el destino sólo con
 # BaseUrl, lo incrustado es lo del disco) y CorrelacionUnaSolaTests (la correlación del CMS se limpia
 # como la de Shared). Y del orquestador: UnaSagaUnTurnoTests (Servicios: ninguna fase se intercala con
