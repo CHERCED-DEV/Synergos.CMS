@@ -156,7 +156,8 @@ public sealed class CuponDeLaCompraTests
     // «cotizar» —y «abrir» con un código que no sirve— contestan distinto a uno que no existe, a uno
     // vencido y a uno que vale: sin tope, un miembro enumeraba los códigos en bucle. Agotado el tope,
     // toda cotización o apertura CON código de ese comprador contesta eventos.demasiados_codigos,
-    // transitorio, antes de llamar a Pricing; sin código se compra igual.
+    // firme (409, no transitorio: repetirlo en el acto da lo mismo), antes de llamar a Pricing; sin
+    // código se compra igual.
 
     private static readonly string B = CompraDeEventosReal.Sujeto("miembro-b");
 
@@ -164,9 +165,9 @@ public sealed class CuponDeLaCompraTests
 
     private static void AssertCorte(HttpStatusCode estado, JsonElement rechazo)
     {
-        Assert.True(estado == HttpStatusCode.ServiceUnavailable, $"{(int)estado} {rechazo}");
+        Assert.True(estado == HttpStatusCode.Conflict, $"{(int)estado} {rechazo}");
         Assert.Equal("eventos.demasiados_codigos", rechazo.GetProperty("code").GetString());
-        Assert.True(rechazo.GetProperty("transient").GetBoolean());
+        Assert.False(rechazo.GetProperty("transient").GetBoolean());
     }
 
     [Fact]

@@ -19,9 +19,15 @@ namespace Synergos.Bff.Eventos.Domain;
 /// <para><b>Qué cuenta y qué corta.</b> Cuenta los rechazos de Pricing por el código
 /// (<c>pricing.promotion_*</c>) de cada sujeto, en las dos operaciones; un código que vale no cuenta,
 /// y una compra sin código ni cuenta ni se corta. Agotado el tope, toda cotización o apertura CON
-/// código de ese sujeto contesta <see cref="Codigo"/> —transitorio: con esperar basta— ANTES de
-/// llamar a Pricing, así que tampoco se aparta ni se autoriza nada. Sin código se sigue comprando
-/// igual: la semántica de los pagos no cambia (#183).</para>
+/// código de ese sujeto contesta <see cref="Codigo"/> —firme (409): repetirlo en el acto da lo
+/// mismo; pasada la ventana se vuelve a pedir— ANTES de llamar a Pricing, así que tampoco se aparta
+/// ni se autoriza nada. Sin código se sigue comprando igual: la semántica de los pagos no cambia
+/// (#183).</para>
+///
+/// <para><b>Firme y no transitorio, a propósito.</b> Un transitorio dice «repetir LO MISMO puede
+/// dar otra cosa», y la pieza del CMS que llama por la puerta repite en el acto todo transitorio con
+/// llave: el corte salía tres veces seguidas y contaba como caída. Nada cambia en segundos; lo que
+/// lo levanta es la ventana.</para>
 ///
 /// <para><b>Una apertura que el orquestador devolvería tal cual no se corta</b>: la misma llave con
 /// su saga viva no vuelve a cotizar, así que no es oráculo, y cortarla dejaría a quien ya apartó
@@ -34,7 +40,7 @@ namespace Synergos.Bff.Eventos.Domain;
 /// </remarks>
 public sealed class IntentosDeCodigo
 {
-    /// <summary>El rechazo de quien agotó el tope: transitorio, con esperar basta.</summary>
+    /// <summary>El rechazo de quien agotó el tope: firme (409); pasada la ventana se vuelve a pedir.</summary>
     public const string Codigo = "eventos.demasiados_codigos";
 
     /// <summary>Cuántos códigos que no sirven admite la ventana si el despliegue no dice otra cosa.</summary>
@@ -73,7 +79,7 @@ public sealed class IntentosDeCodigo
 
     /// <summary>
     /// Si <paramref name="sujeto"/> puede probar otro código: <c>null</c> si sí, y el rechazo
-    /// transitorio <see cref="Codigo"/> si ya agotó la ventana.
+    /// firme <see cref="Codigo"/> (409, no transitorio) si ya agotó la ventana.
     /// </summary>
     public Rejection? Revisar(Ref sujeto)
     {
@@ -93,7 +99,7 @@ public sealed class IntentosDeCodigo
         }
 
         var minutos = Math.Max(1, (int)Math.Ceiling(Ventana.TotalMinutes));
-        return Rejection.Unavailable(Codigo, string.Create(CultureInfo.InvariantCulture,
+        return Rejection.Conflict(Codigo, string.Create(CultureInfo.InvariantCulture,
             $"Demasiados códigos de promoción que no sirven en {minutos} min. Se puede volver a probar más tarde, o comprar sin código."));
     }
 

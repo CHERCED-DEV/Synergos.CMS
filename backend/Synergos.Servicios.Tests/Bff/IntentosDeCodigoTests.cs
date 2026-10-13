@@ -30,7 +30,7 @@ public sealed class IntentosDeCodigoTests
     }
 
     [Fact]
-    public void Al_agotar_el_tope_se_corta_con_un_rechazo_transitorio_y_solo_a_ese_comprador()
+    public void Al_agotar_el_tope_se_corta_con_un_conflicto_firme_y_solo_a_ese_comprador()
     {
         var intentos = new IntentosDeCodigo(new RelojFalso(DateTimeOffset.UnixEpoch), 3, TimeSpan.FromMinutes(15));
         intentos.Anotar(A, NoExiste);
@@ -42,8 +42,9 @@ public sealed class IntentosDeCodigoTests
         var corte = intentos.Revisar(A);
         Assert.NotNull(corte);
         Assert.Equal(IntentosDeCodigo.Codigo, corte.Code);
-        Assert.Equal(RejectionKind.Unavailable, corte.Kind);
-        Assert.True(corte.IsTransient);
+        // Firme: la pieza del CMS repite en el acto todo transitorio con llave, y repetirlo da lo mismo.
+        Assert.Equal(RejectionKind.Conflict, corte.Kind);
+        Assert.False(corte.IsTransient);
         Assert.Null(intentos.Revisar(B));
     }
 
