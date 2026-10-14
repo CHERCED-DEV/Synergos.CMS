@@ -14,6 +14,14 @@ steps required.
 
 ## [Unreleased]
 
+### Security
+
+- **Transitive crypto packages pinned to their patched versions (2026-10-14).** The
+  2026-10-13 advisories on `System.Security.Cryptography.Xml` (8.0.0–8.0.4 → 8.0.5) and
+  `System.Security.Cryptography.Pkcs` (8.0.0–8.0.1 → 8.0.2; 10.0.0–10.0.12 → 10.0.13) are
+  closed by central transitive pinning in `Directory.Packages.props` (Pkcs per target
+  framework). No suppression: each patch is inside its branch.
+
 ### Changed
 
 - **Repo root cleanup**. The repo root now contains only three entries:

@@ -128,4 +128,23 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 
+  <!--
+    Parches de seguridad de transitivas (pinning transitivo de CPM, arriba). El 2026-10-13 se
+    publicaron avisos HIGH de denegación de servicio sobre System.Security.Cryptography.Xml
+    (GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj, GHSA-r955-8q5j-3h83: rango 8.0.0–8.0.4, parche
+    8.0.5) y System.Security.Cryptography.Pkcs (GHSA-846f-f764-76mx: 8.0.0–8.0.1 → 8.0.2 y
+    10.0.0–10.0.12 → 10.0.13). Llegan transitivas: Xml 8.0.4 y Pkcs 8.0.1 por Umbraco en el CMS
+    (net8.0, que audita sólo directas: el aviso no ponía rojo su restore pero estaba en
+    producción) y Pkcs 10.0.0 en lo que va en net10.0 (Synergos.Arquitectura.Tests, que audita
+    transitivas y sí salió rojo). Cada parche está DENTRO de su rama, así que se fija y no se
+    suprime (la nota de NU1903 de Directory.Build.props). Versiones medidas en api.nuget.org y
+    en la API de avisos de GitHub el 2026-10-14. Pkcs va por marco porque la rama 8 y la 10 son
+    paquetes distintos de su runtime.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="8.0.5" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="8.0.2" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" Condition="'$(TargetFramework)' != 'net8.0'" />
+  </ItemGroup>
+
 </Project>
