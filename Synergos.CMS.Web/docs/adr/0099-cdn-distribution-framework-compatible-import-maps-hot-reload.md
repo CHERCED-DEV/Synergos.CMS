@@ -4,6 +4,7 @@
 - **Date:** 2026-06-25
 - **Deciders:** Arquitecto + agente, fase SynergosLabs. Verificado contra código vivo (pipeline UI `Synergos.UI/tools/` + `FileSystemBundleRegistryClient` del CMS + `C:\LOCAL_CDN`).
 - **Soporta a:** ADR 0096 (module-mount), 0097 (dashboard), 0098 (healthcare) y todos los `elementSyn*`.
+- **Enmendada por:** [ADR 0141](0141-el-runtime-compartido-se-publica-por-contenido.md) (propuesta, 2026-10-14) en su §3: el runtime compartido se publica por contenido. Ver la nota fechada en §3.
 
 ## Context
 
@@ -121,6 +122,17 @@ un runtime compartido se carga UNA vez vía import map.**
   un solo download del framework por página, varios módulos comparten runtime.
 - **Vanilla** no necesita import map (self-contained) — sirve de piso
   framework-compatible y de prueba del mecanismo.
+
+> **Enmienda (2026-10-14, ADR 0141, propuesta): el runtime se publica por contenido.** `{ver}` es la
+> versión del FRAMEWORK (`21.1.6` es Angular), no la de su contenido, y `publish:runtime` reescribía
+> esa carpeta cada vez que cambiaba `libs/shared`. Las dos políticas de caché la servían `immutable`,
+> así que un navegador que ya tenía el `sg-shared.js` viejo se quedaba con él hasta un año (medido en
+> vivo en el piloto de la ADR 0140). Desde la 0141, lo que nombra el `import-map.json` es
+> `runtime/{fw}/{ver}/<stem>.<sha256[0:16]>.js`, que se escribe una sola vez y es lo único del runtime
+> que se sirve `immutable`. Los ficheros planos de `{ver}/` y `latest/` se siguen publicando pero se
+> revalidan, `latest/huellas.json` declara todo lo publicado y sólo crece, y `build:cdn` conserva las
+> generaciones anteriores. Lo de esta sección sigue en pie: un runtime por framework, cargado una vez
+> por el import map.
 
 ### 4. El CMS emite el import map una vez por página — YA IMPLEMENTADO
 
