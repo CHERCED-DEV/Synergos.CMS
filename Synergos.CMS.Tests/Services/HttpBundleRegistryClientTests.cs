@@ -529,6 +529,37 @@ public sealed class HttpBundleRegistryClientTests
     }
 
     [Fact]
+    public async Task El_mapa_se_relee_cuando_cambia_el_registry_aunque_su_propio_reloj_no_haya_vencido()
+    {
+        // ADR 0140, revisión de D1: el mapa y el registry salen de la MISMA publicación y vencían con dos
+        // relojes. Un registry recién leído convivía hasta RefreshSeconds con el mapa de la publicación
+        // anterior, que nombra el sg-shared viejo.
+        const string RutaDelMapa = "/synergos/runtime/angular/latest/import-map.json";
+        var cdn = new CdnFalso()
+            .Con("/synergos/registry.json", Registry)
+            .Con(RutaDelMapa, """{ "imports": { "@synergos/shared": "/synergos/runtime/angular/21.1.6/sg-shared.1111111111111111.js" } }""");
+        var (cliente, _, reloj) = Nuevo(cdn: cdn);
+
+        Assert.NotNull(await cliente.TryResolveAsync("synergos-badge"));
+        reloj.Avanzar(TimeSpan.FromSeconds(30));
+        var viejo = await cliente.TryGetImportMapAsync();
+        Assert.EndsWith("sg-shared.1111111111111111.js", viejo!.Imports["@synergos/shared"]);
+
+        // Con el registry sin cambiar, el mapa no se vuelve a pedir: el camino caliente no sale a la red.
+        Assert.Same(viejo, await cliente.TryGetImportMapAsync());
+        Assert.Equal(1, cdn.Pedidas.Count(p => p == RutaDelMapa));
+
+        // Se despliega otra publicación. Vence el registry (61 s) y no el mapa (31 s).
+        cdn.Con(RutaDelMapa, """{ "imports": { "@synergos/shared": "/synergos/runtime/angular/21.1.6/sg-shared.2222222222222222.js" } }""");
+        reloj.Avanzar(TimeSpan.FromSeconds(31));
+        Assert.NotNull(await cliente.TryResolveAsync("synergos-badge"));
+
+        var nuevo = await cliente.TryGetImportMapAsync();
+
+        Assert.EndsWith("sg-shared.2222222222222222.js", nuevo!.Imports["@synergos/shared"]);
+    }
+
+    [Fact]
     public async Task En_arranque_en_frio_un_conflicto_SI_deja_sin_mapa_y_eso_es_la_verdad()
     {
         // Sin vuelta previa no hay nada bueno que conservar. Inventar uno sería peor:

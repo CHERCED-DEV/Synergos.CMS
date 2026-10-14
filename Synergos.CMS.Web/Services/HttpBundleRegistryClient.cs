@@ -240,19 +240,31 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
     /// <para><b>Y se sirve el último bueno si el CDN deja de contestar</b>, igual que el registry
     /// y por lo mismo: un CDN que parpadea no puede apagar los elementos de una página que se
     /// venía sirviendo bien.</para>
+    ///
+    /// <para><b>Se relee también cuando cambia el snapshot del registry</b> (ADR 0140, revisión de
+    /// D1). Los dos salen de la misma publicación y vencían con dos relojes: el registry recién leído
+    /// —el de la publicación nueva— convivía hasta <c>RefreshSeconds</c> con el mapa de la anterior.
+    /// Con el snapshot como llave, el primer render que ve el registry nuevo pide también su mapa. Lo
+    /// que esto NO cierra, dicho para no mentir sobre su alcance: el <c>main.js</c> de un elemento se
+    /// publica en una ruta que se sobrescribe, así que entre el despliegue del CDN y el refresco de
+    /// este proceso el navegador puede bajar un elemento nuevo con el mapa viejo; eso lo cierra
+    /// publicar los elementos por contenido, como ya se publica el runtime.</para>
     /// </remarks>
     public async Task<ImportMap?> TryGetImportMapAsync(CancellationToken ct = default)
     {
         var s = _settings.CurrentValue;
 
+        // El camino caliente sigue sin red: el snapshot fresco se lee sin cerrojo.
+        var snap = await ObtenerSnapshotAsync(s, ct).ConfigureAwait(false);
         var vigente = _mapa;
         if (vigente is not null
+            && ReferenceEquals(snap, _snapshotDelMapa)
             && _clock.GetUtcNow() - _mapaCargadoUtc < TimeSpan.FromSeconds(Math.Max(1, s.RefreshSeconds)))
         {
             return vigente;
         }
 
-        var frameworks = await FrameworksDelRegistryAsync(s, ct).ConfigureAwait(false);
+        var frameworks = FrameworksDelRegistry(snap, s);
         var leidos = new List<(string, IReadOnlyDictionary<string, string>)>();
 
         foreach (var framework in frameworks)
@@ -284,9 +296,11 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         if (leidos.Count == 0)
         {
             _logger.LogWarning(
-                "Ningún import map respondió bajo {Base}. Se sigue con el anterior ({Estado})",
+                "Ningún import map respondió bajo {Base}. Se sigue con el anterior ({Estado}){Atras}",
                 $"{s.PublicBaseUrl.TrimEnd('/')}/{s.BundlesNamespace}/runtime/",
-                vigente is null ? "no hay" : "vigente");
+                vigente is null ? "no hay" : "vigente",
+                vigente is not null && !ReferenceEquals(snap, _snapshotDelMapa)
+                    ? ", que es de una publicación anterior a la del registry" : string.Empty);
             return vigente;
         }
 
@@ -318,6 +332,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
         }
 
         _mapa = compuesto;
+        _snapshotDelMapa = snap;
         _mapaCargadoUtc = _clock.GetUtcNow();
         return _mapa;
     }
@@ -325,10 +340,8 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
     /// <summary>
     /// Los frameworks que el registry declara. Sin snapshot, el configurado.
     /// </summary>
-    private async Task<IReadOnlyList<string>> FrameworksDelRegistryAsync(
-        BundleRegistrySettings s, CancellationToken ct)
+    private static IReadOnlyList<string> FrameworksDelRegistry(Snapshot? snap, BundleRegistrySettings s)
     {
-        var snap = await ObtenerSnapshotAsync(s, ct).ConfigureAwait(false);
         if (snap is null) return new[] { s.DefaultFramework };
 
         var declarados = ImportMapComposer.FrameworksDeclarados(
@@ -338,6 +351,7 @@ public sealed class HttpBundleRegistryClient : IBundleRegistryClient, IDisposabl
     }
 
     private volatile ImportMap? _mapa;
+    private volatile Snapshot? _snapshotDelMapa;
     private DateTimeOffset _mapaCargadoUtc = DateTimeOffset.MinValue;
 
     private async Task<Snapshot?> DescargarRegistryAsync(BundleRegistrySettings s, CancellationToken ct)
