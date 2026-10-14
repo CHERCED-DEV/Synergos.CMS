@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto (hecha el 2026-10-09, `_informes/78`, y otra vez con el cupón: `_informes/80` y `83`). **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido». **Su verificación en vivo** (2026-10-13) dejó cinco defectos —el runtime republicado bajo la misma URL inmutable, el doble cobro eligiendo otra vez las entradas, el tope de códigos reintentado en el acto, el modo oscuro del sistema a 2,39:1 y la fila de cargos de un registro gratis—, arreglados con la fase D del doble cobro en el servidor y verificados en vivo el 2026-10-14 (12 de 12 escenarios, ningún defecto nuevo); el del runtime lo decide la ADR 0141 (propuesta); ver «La verificación en vivo del cupón endurecido y sus cinco defectos»
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto (hecha el 2026-10-09, `_informes/78`, y otra vez con el cupón: `_informes/80` y `83`). **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido». **Su verificación en vivo** (2026-10-13) dejó cinco defectos —el runtime republicado bajo la misma URL inmutable, el doble cobro eligiendo otra vez las entradas, el tope de códigos reintentado en el acto, el modo oscuro del sistema a 2,39:1 y la fila de cargos de un registro gratis—, arreglados con la fase D del doble cobro en el servidor y verificados en vivo el 2026-10-14 (12 de 12 escenarios, ningún defecto nuevo); el del runtime lo decide la ADR 0141 (propuesta); ver «La verificación en vivo del cupón endurecido y sus cinco defectos». **La ruta vieja, repuesta en el UI detrás del camino de compra que declara el CMS** (2026-10-14, regla del superset): el override de negocio gana; si no, la puerta cuando hay orquestador; si no, la ruta directa. Verificada en vivo; ver «La ruta vieja repuesta detrás del camino declarado»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -181,6 +181,11 @@ del flujo con la llave → devuelve **su** respuesta sin reinterpretarla.
   > (CLAUDE.md §0.C.21): el motor en proceso y la ruta vieja de Eventos se conservan detrás de su
   > interruptor (`Synergos:Eventos:Mode`). Lo que sí vale es lo de arriba: el front no vuelve a la ruta
   > vieja, y un flujo nuevo se declara en el orquestador. Ver «El cupón reconectado».
+
+  > **Precisado el 2026-10-14 (regla del superset):** «el front no vuelve a la ruta vieja» dejó de ser
+  > cierto. El UI la llama cuando el CMS declara el camino «directa»: sin orquestador, o por el
+  > override de negocio. Un flujo nuevo se sigue declarando en el orquestador. Ver «La ruta vieja
+  > repuesta detrás del camino declarado».
 
 ### 5. Los pasos transversales son estándar, y cualquier flujo los declara
 
@@ -816,6 +821,12 @@ CMS: `3c019930` (la sección `Events.Purchase`), `e7a2e001` (el CMS coloca el co
 10. **El UI nunca vuelve a la ruta vieja**, ni ante un 503 de la puerta: sin coordinador o sin puerta, la
     compra dice que no está disponible.
 
+    > **Precisado el 2026-10-14 (regla del superset):** «nunca CAE» sigue en pie: ante un 503 de la
+    > puerta el elemento no se pasa a la otra ruta, y una compra que ya salió se termina por el camino
+    > por el que salió. «Nunca VUELVE» ya no: cuando el CMS declara el camino «directa» —sin
+    > orquestador, o por el override de negocio—, el elemento compra por `/api/eventos/checkout|confirm`.
+    > Ver «La ruta vieja repuesta detrás del camino declarado».
+
 **Premisas que la F4 corrigió**
 - «La F4 se hace sin tocar el CMS» (frontera del plan de la F3): falso en seis puntos —la sección de
   diccionario, G-6, G-7 (44/17 contra un piso de 49/19, medido; 55/21 contra 60/23 tras rebasar sobre el alquiler), `Aviso.Ruta`, el envoltorio y
@@ -843,6 +854,11 @@ CMS: `3c019930` (la sección `Events.Purchase`), `e7a2e001` (el CMS coloca el co
 `normalizeCheckout`, `applyPromo` y su normalizador) y entran 56 (asistentes y entradas sobre el
 transporte); del modelo, 56 (comprador, contrato del checkout y cupón); del componente, el cupón y el
 método de pago. La tabla de la puerta y su tipo no se escriben: los genera el contrato.
+
+> **Corregido el 2026-10-14 (regla del superset):** `checkout`, `confirm` y `normalizeCheckout`
+> volvieron al cliente de eventos (UI `5d72686`), detrás del camino que declara el CMS. `applyPromo` no
+> volvió, porque la ruta directa no recibe códigos. Ver «La ruta vieja repuesta detrás del camino
+> declarado».
 
 **Mutantes** (cada uno aplicado por líneas, visto en el diff, rojo y restaurado; el detalle, en el
 mensaje de cada commit): `rootDir` de vuelta y un TS2322 inyectado; la tabla generada sin consulta y
@@ -880,6 +896,10 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
   > `despliegue-cdn.yml` (2026-10-01 a 2026-10-10). Lo que sirve es un build del 2026-09-12.
   > `despliegue-cdn.yml` no tiene secrets y se salta todos sus pasos. Las dos cosas son del arquitecto;
   > ver la ADR 0141, «Producción».
+
+  > **Precisado el 2026-10-14 (la ruta vieja repuesta):** el `eventos` de hoy no vende «sólo por la
+  > puerta»: vende por el camino que declara el CMS, la puerta si el despliegue tiene orquestador y la
+  > directa si no.
 - **El retiro** (pasos 19-20 del plan de la F3), después de republicar las CDN que lea cada CMS. M1 tiene
   que buscar la FORMA de la llamada: el bundle nuevo todavía trae `` `${…}/checkout` ``, que es la ruta
   por hash del propio elemento, no la API.
@@ -1060,6 +1080,12 @@ la decisión 10 de la F4— y la ruta vieja no recibe código: un cupón sólo s
 pasos 19-20 del plan de la F3 no se ejecutan. Y la ruta `/api/eventos/promo` que llamaba el cupón de
 antes no existía en el CMS (`[Route]` de `EventosController` y una búsqueda de «promo» en controllers y
 servicios: 0): no había nada que conservar.
+
+> **Complementado el 2026-10-14 (regla del superset):** conservarla en el CMS no bastaba. El UI ya no
+> tenía su cliente (la F4 lo borró en `1f927577`) y, sin orquestador, el elemento no vendía. Se repuso
+> en el UI detrás del camino que declara el CMS, así que «el UI no la llama» dejó de ser cierto cuando
+> el CMS declara «directa». Lo demás sigue: la ruta vieja no recibe código, y un cupón sólo se cobra
+> por la puerta. Ver «La ruta vieja repuesta detrás del camino declarado».
 
 **Cómo se verificó**
 - Cada paso con su repo en verde: en el CMS, build en 0 avisos y las tres suites (de 3171 / 897 / 520
@@ -1500,6 +1526,7 @@ publicaron en la CDN piloto, nunca en `C:\LOCAL_CDN`. Resultado: **12 escenarios
 | D4 | 5,15 de relleno y 6,29 de texto; los siete temas, iguales | 2,39 |
 | D5 | gratis sin la fila; lo pagado con ella | «$ 0» |
 | cupón | el válido y el fijado tras un fallo (la MISMA llave), un cobro cada uno; el desconocido, con el texto del diccionario | igual |
+| camino de compra (escenario 7) | ver «La ruta vieja repuesta detrás del camino declarado» | — |
 
 **Los cobros, contados por dos métodos** (almacén de Payments y de sagas):
 - 14 pagos: 11 capturados, uno por saga, y 3 sin capturar (2 cancelados, `Compensated`, y la
@@ -1527,6 +1554,8 @@ sembró emulando la cabecera exacta del CMS viejo, no con su binario.
 - Gates cruzados: G-6 ✓ 538 claves en 9 verticales y G-7 ✓ 55 en 21 rutas.
 - `build:cdn` sale con 0 y su puerta de enlace pasa 125 bundles de Angular y 1 de Preact.
 
+Las cifras finales, con el camino declarado, van en la sección siguiente.
+
 **Lo que queda, dicho**
 - **El import a la base real** de las 11 claves nuevas de `Events.Purchase` es del arquitecto; hasta
   entonces `t()` pinta el respaldo es-CO.
@@ -1538,6 +1567,118 @@ sembró emulando la cabecera exacta del CMS viejo, no con su binario.
 - **Los textos `Pending*`** hablan de «compra» también en un registro gratis; las variantes `Free*`
   serían claves nuevas.
 - **La autorización de la saga abandonada** con «Elegir otras» queda retenida hasta el barrido.
+
+## La ruta vieja repuesta detrás del camino declarado — regla del superset (2026-10-14)
+
+**La F4 había borrado del UI el cliente de la ruta vieja.** El paso 12 (UI `1f927577`) quitó `checkout`,
+`confirm` y `normalizeCheckout` de `eventos-api.client.ts`, y su uso en la estrategia, aunque el CMS
+conservaba la ruta y el arquitecto descartó su retiro el 2026-10-13. Así, el interruptor de camino no se
+podía conectar de punta a punta: en un despliegue sin orquestador la puerta contesta 503
+`puerta.flujo_no_disponible`, y `<synergos-eventos>` no podía vender. Por la regla del superset
+(CLAUDE.md §0.C.21: nada se retira por defecto) no se retira ninguno de los dos caminos: se repone el
+cliente, y **el CMS declara cuál gana**. Esto complementa el retiro DESCARTADO de «El cupón reconectado».
+
+**La regla de cuál gana** (`CaminoDeCompra.Decidir`, en `Synergos.CMS.Interfaces`; CMS `e82e4a3e`):
+1. **El override de negocio**, `Synergos:Features:Eventos:PurchasePath` (`puerta` o `directa`), con su
+   override por sitio (`Sitios:{Key}:PurchasePath`, ADR 0137). Se normaliza (sin espacios, en
+   minúsculas). Un valor mal escrito no deja arrancar el CMS, y el mensaje dice la regla (CMS
+   `6b495c9d`). Un sitio con el valor vacío vuelve a la regla.
+2. Si no hay override, **la puerta, si hay orquestador**: si la puerta abre `eventos.compra`, es decir,
+   si el flujo está en `Synergos:Puerta:Flujos` y su orquestador tiene destino en
+   `Synergos:Eventos:BaseUrl`.
+   - Es la MISMA condición con la que `FlujosController` contesta 503 (`IPuertaDeLosFlujos`), y un test
+     la cruza con el controller en los cuatro casos.
+   - No vale la del composer, «`BaseUrl` o `Mode=Bff`»: con `Mode=Bff` y sin `BaseUrl` la puerta no tiene
+     destino, mientras que la ruta directa sí llega al orquestador por su puerto local.
+3. Si no, **la directa**: `/api/eventos/checkout|confirm`, con el motor que diga `Synergos:Eventos:Mode`.
+
+Viaja como `purchasePath` dentro del `config` del elemento (`EventosProps.PurchasePath`, origen negocio,
+por el resolver tipado de la ADR 0135), y el contrato del SynHost y su tipo TS se regeneraron. La vista
+sigue colocando `<synergos-flujo>`, que con «directa» es inocuo.
+
+**En el UI** (UI `5d72686`):
+- El cliente se repone como estaba, adaptado a lo que cambió alrededor: lanza `EventosWriteFailedError`
+  si el borde no abrió o no emitió.
+- Con «directa», `pay` es POST `/checkout` y `confirm` es POST `/confirm`, como antes de la F4. Con
+  «puerta», o sin declarar, es lo de hoy. **Nunca cae de un camino al otro.**
+- Con «directa» el cupón no se ofrece ni se cotiza, porque esa ruta no recibe códigos: un cupón sólo se
+  cobra por la puerta.
+
+**La revisión del camino** dejó cuatro hallazgos, dos de severidad media. Cada arreglo es un commit con
+su mutante fiel:
+- **Una compra que ya salió se termina por el camino por el que salió** (UI `e05f441`). El camino se
+  leía de la página ACTUAL. Si la declaración pasaba de «puerta» a «directa» entre abrir y cerrar —justo
+  lo que este cambio deja hacer durante un incidente—, el reintento mandaba a `/confirm` una referencia
+  `pta-…` que el borde no conoce, la guarda soltaba la saga y la compra siguiente abría otra al lado: un
+  doble cobro. Ahora la estrategia anota el camino en las líneas antes de salir a la red y lo quita con
+  la llave. La ruta directa también pregunta por las compras sin acuse (la fase D) antes de abrir.
+- **Con «directa», elegir otra vez ya no descarta una orden que pudo cobrar** (UI `67b1039`). `/confirm`
+  es idempotente por `orderRef`, así que una orden con un pago anotado y sin confirmar se ofrece
+  terminar —confirma la MISMA orden— en vez de reemplazarse. La guarda vale para los dos caminos.
+- **Un cupón que quedó en la sesión ya no baja el total del asistente con «directa»** (UI `7faa386`): se
+  quita al llegar al checkout, y «Tu orden» y el pago dicen el total que cobra `/checkout`.
+- **El arranque que se niega por un `PurchasePath` mal escrito dice la regla** (CMS `6b495c9d`): sin
+  valor decide la regla, no «la puerta».
+
+**Los gates vuelven a cruzar la ruta directa** (CMS `76235f6b`, después del UI). El piso de G-7 sube a 60
+claves en 23 rutas, el de antes de la F4 con el alquiler, y la línea base de G-6 congela `free` y
+`paymentSessionId`. Control: contra el UI anterior a `5d72686`, G-7 sale rojo («la cobertura BAJÓ: 55
+claves en 21 rutas, contra un piso de 60 en 23») y G-6 también. **Orden de empuje**: CMS `e82e4a3e` →
+UI `5d72686` → CMS `76235f6b`; subir el piso de G-7 antes de que llegue el UI lo pone rojo.
+
+**Medido en vivo** (informe 83, escenario 7):
+- **(a) Con orquestador**, el SSR declara `purchasePath` «puerta». En toda esa parte de la verificación
+  hubo 43 llamadas a `/api/flujos` y 0 a `/api/eventos/checkout|confirm`.
+- **(b) Sin `Synergos__Eventos__BaseUrl`**, el SSR declara «directa» y la puerta contesta 503. La compra:
+  - el checkout sale sin `syn-promo-code`;
+  - `pendientes` da 503 `eventos.artefacto_no_disponible` y se degrada por ausencia;
+  - después, `/api/eventos/checkout` 200 → `/api/eventos/confirm` 200 `Confirmed`, con las entradas
+    emitidas, y «¡Compra confirmada!»;
+  - 0 llamadas a `/api/flujos`;
+  - en el CMS queda la orden (`ViaGate` false), el pago del motor en proceso capturado por 50.400 y un
+    `.eml` en su buzón.
+- **(c) El override de negocio gana en los dos sentidos.** Sin orquestador y con «puerta», el SSR dice
+  «puerta»; con orquestador y «directa», dice «directa» y la compra va por `/checkout` + `/confirm`.
+  `PurchasePath=puerto` no deja arrancar el CMS, y el mensaje explica la regla. Al terminar, el CMS se
+  relanzó tal cual («puerta») y se paró.
+
+**Cómo se verificó.** Los tests que suma cada commit:
+- CMS: `e82e4a3e`, +14 (vacío, feliz, sin orquestador, el override en los dos sentidos y por sitio, el
+  sitio vacío, los valores mal escritos, el cruce con el 503 de la puerta y el flujo que coloca la
+  vista); `6b495c9d`, +1.
+- UI, en Angular: `5d72686`, +12; `e05f441`, +3; `67b1039`, +1; `7faa386`, +1.
+
+Las cifras finales:
+- CMS: build con 0 avisos; **3231 / 924 / 520 = 4675**.
+- UI: `npm test` 6 de 6 (**998 + 117 + 2.142 + 11**; 999 con el CDN construido) y `contracts:validate`
+  EXIT 0 (`gate:clientes` 130 de 131, `gate:rutas` 109 de 124, `gate:literales` en su línea base de
+  2.813).
+- Gates cruzados: G-6 ✓ 540 claves en 9 verticales y G-7 ✓ 60 claves en 23 rutas.
+- El bundle de `eventos` pesa 436.822 B (426,6 KB), bajo su techo de 440 KB.
+
+**Corrige lo que decía esta ADR**, con su nota fechada en cada sitio:
+- la decisión 4 («el front no vuelve a la ruta vieja»);
+- la decisión 10 de la F4;
+- «Líneas escritas a mano retiradas en el UI»;
+- «el merge a master del UI despliega … un eventos que sólo vende por la puerta»;
+- y el retiro DESCARTADO, que esta reposición completa: el CMS ya conservaba la ruta, y ahora el UI la
+  vuelve a llamar cuando el CMS la declara.
+
+**Lo que queda, dicho**
+- **Con «directa» la sesión vence a los 30 min**: sólo la puerta la extiende a 24 h. Y la fase D del
+  servidor sólo lista sagas de la puerta, porque filtra por miembro y las órdenes directas guardan otro
+  comprador. Una orden directa pendiente pasado ese plazo no la ve nadie.
+- **Con «directa», un «no» definitivo de `/confirm`** (404 o 400) no suelta la orden: sólo se puede pulsar
+  «Terminar» hasta que venza la sesión. No se suelta porque en `Mode=Bff` un 400 también puede llegar
+  con el cobro hecho.
+- **Un pago anotado cuyo importe deja de coincidir con el total** hace que el asistente vuelva a llamar a
+  `pay`, y la directa abre otra orden. Es lo de antes de la F4 y no se tocó; el arreglo del cupón quita
+  la causa conocida.
+- **Pregunta de producto**: con «directa», ¿se sigue pidiendo la sesión de miembro, aunque la ruta
+  directa del CMS acepta compras anónimas?
+- **Un spec de la puerta intermitente bajo carga**, ajeno a este cambio («desde OTRO dispositivo, con una
+  compra que se deshizo DESPUÉS de cobrar…», que da `cart` en vez de `confirmed`): está anotado en
+  `5d72686` y sin investigar.
 
 ## Relación con otras ADRs
 
@@ -1555,6 +1696,8 @@ sembró emulando la cabecera exacta del CMS viejo, no con su binario.
 - **0001** — el CMS se queda en .NET 8 mientras siga el pin de Umbraco 13.
 - **0002** — los motores de `Synergos.CMS.Application` no dependen de Umbraco: los que sobrevivan como
   pasos se mudan sin reescribirse.
+- **0141** (propuesta, 2026-10-14) — el runtime compartido se publica por contenido: la decisión que
+  cerró el defecto 1 de la verificación en vivo del cupón endurecido.
 
 ## Referencias
 
