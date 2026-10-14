@@ -600,6 +600,24 @@ public sealed class EventosController : ControllerBase
             Tickets: r.Entradas.Tickets.Select(t => ToTicketDto(t, Lookup(events, t))).ToList()));
     }
 
+    // GET /api/eventos/compras/pendientes?eventId= → { compras:[{ id, status }] }   🔒 sesión
+    //
+    // Las compras del miembro para ese evento que no tienen acuse —cobradas sin entradas, en curso, o sin
+    // leer—, para que el elemento no abra OTRA con una llave nueva sin resolverlas antes (ADR 0140, D2,
+    // fase D). Sólo las suyas, y sin evento no hay lista: un parámetro mal nombrado no devuelve todo.
+    [HttpGet("compras/pendientes")]
+    public async Task<IActionResult> ComprasPendientes([FromQuery] string? eventId, CancellationToken cancellationToken)
+    {
+        SinCache();
+        if (Miembro() is { } sinSesion) return sinSesion;
+        if (_artefacto is null) return Problema(SinArtefacto);
+
+        var (compras, fallo) = await _artefacto.PendientesAsync(_gate.CurrentMemberKey!.Value, eventId, cancellationToken);
+        return fallo is not null
+            ? Problema(fallo)
+            : Ok(new ComprasPendientesResponse(compras.Select(c => new CompraPendienteDto(c.Id, c.Estado)).ToList()));
+    }
+
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
     /// <summary>
@@ -917,6 +935,12 @@ public sealed class EventosController : ControllerBase
 
     /// <summary>Cuántos asistentes quedaron anotados en la compra.</summary>
     public sealed record AsistentesAnotadosResponse(string Id, int Asistentes);
+
+    /// <summary>Una compra del miembro sin acuse: su id (la referencia) y en qué quedó.</summary>
+    public sealed record CompraPendienteDto(string Id, string Status);
+
+    /// <summary><c>GET /compras/pendientes?eventId=</c>: las compras sin acuse del miembro para ese evento.</summary>
+    public sealed record ComprasPendientesResponse(IReadOnlyList<CompraPendienteDto> Compras);
 
     /// <summary>
     /// <c>POST /checkout</c> — evento + ítems + asistentes + quien compra.

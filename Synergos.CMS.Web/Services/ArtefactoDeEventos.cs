@@ -121,6 +121,11 @@ public sealed record ResultadoDelArtefacto(
     public bool Bien => Codigo is null;
 }
 
+/// <summary>Una compra del miembro sin acuse —nadie emitió sus entradas— y en qué quedó en el orquestador.</summary>
+/// <param name="Id">El id de la saga: la referencia que ve quien compra.</param>
+/// <param name="Estado"><c>Running</c>, <c>Completed</c> o <see cref="ArtefactoDeEventos.SinLeer"/>.</param>
+public sealed record CompraSinAcuse(string Id, string Estado);
+
 /// <summary>
 /// El artefacto de una compra de entradas hecha por la puerta (ADR 0140 F3): quién se sienta —antes de
 /// cerrar— y las entradas con su QR —después—. El orquestador mueve aforo y plata; esto se queda en el CMS.
@@ -343,6 +348,97 @@ public sealed class ArtefactoDeEventos
         {
             await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>El estado de una compra sin acuse que no se pudo leer: ilegible, caído o fuera del techo.</summary>
+    public const string SinLeer = "Unknown";
+
+    /// <summary>
+    /// Las compras del miembro para un evento que no tienen acuse —su orden sigue
+    /// <see cref="EventOrderStatus.Pending"/>— y que todavía cuentan: en curso, cobradas sin entradas, o
+    /// sin leer. No emite nada.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Para qué</b> (ADR 0140, D2, fase D). Antes de abrir una compra con una llave NUEVA, el
+    /// elemento pregunta si quien compra ya tiene otra del mismo evento sin acuse: la que se cobró y cuya
+    /// respuesta se perdió, o la que sigue en curso. La guarda del navegador vive en su almacenamiento;
+    /// ésta la ve desde otro dispositivo, con los datos del sitio borrados o pasado su plazo, porque el
+    /// acuse lo sabe este lado (la orden <c>Pending</c> o <c>Confirmed</c>), no el orquestador. Es
+    /// consultiva: comprar dos veces a propósito sigue igual, porque la primera ya tiene acuse.</para>
+    ///
+    /// <para><b>Siempre del miembro</b>: se filtra por su sujeto y cada lectura al orquestador lo lleva,
+    /// así que una orden ajena ni se lista ni se consulta.</para>
+    ///
+    /// <para><b>Con el techo de la reconciliación</b>: mira como mucho <see cref="TopeDeReconciliacion"/>
+    /// órdenes, las más recientes primero, y deja de esperar a los <see cref="PresupuestoDeReconciliacion"/>.
+    /// Lo que no alcanzó a leer, o no se pudo leer, sale como <see cref="SinLeer"/>: no saber no es
+    /// «no hay». Lo deshecho o inexistente se descarta como en la reconciliación, y lo que se está
+    /// deshaciendo no se informa: no se cobrará.</para>
+    ///
+    /// <para><b>No confirma ni emite</b>: una cobrada sin acuse se informa y sus entradas salen por
+    /// <c>…/compras/{id}/entradas</c>, con su portador.</para>
+    /// </remarks>
+    public async Task<(IReadOnlyList<CompraSinAcuse> Compras, ResultadoDelArtefacto? Fallo)> PendientesAsync(
+        Guid miembro, string? eventId, CancellationToken ct)
+    {
+        if (NoDisponible() is { } cerrado) return ([], cerrado);
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return ([], new ResultadoDelArtefacto(StatusCodes.Status400BadRequest, "eventos.evento_requerido",
+                "Falta el evento de las compras."));
+        }
+
+        var sujeto = (Kind: Kind!, Id: miembro.ToString("n"));
+        var evento = eventId.Trim();
+        var pendientes = (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
+            .Where(o => o.Status == EventOrderStatus.Pending && DelComprador(o, sujeto)
+                        && string.Equals(o.EventId, evento, StringComparison.Ordinal))
+            .OrderByDescending(o => o.CreatedAt)
+            .ToList();
+        if (pendientes.Count == 0) return ([], null);
+
+        var leidas = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
+        using var presupuesto = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        presupuesto.CancelAfter(_presupuesto);
+        try
+        {
+            await Parallel.ForEachAsync(pendientes.Take(TopeDeReconciliacion),
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = presupuesto.Token },
+                async (orden, t) => leidas[orden.OrderRef] = await EnQueQuedoAsync(orden, sujeto, t).ConfigureAwait(false))
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _log.LogWarning(
+                "La lectura de compras sin acuse llegó a su techo de {Techo}: lo que falta sale sin leer.", _presupuesto);
+        }
+
+        var compras = pendientes
+            .Select(o => (o.PaymentSessionId, Estado: leidas.TryGetValue(o.OrderRef, out var e) ? e : SinLeer))
+            .Where(c => c.Estado is not null)
+            .DistinctBy(c => c.PaymentSessionId, StringComparer.Ordinal)
+            .Select(c => new CompraSinAcuse(c.PaymentSessionId, c.Estado!))
+            .ToList();
+        return (compras, null);
+    }
+
+    /// <summary>
+    /// En qué quedó una compra sin acuse, o nulo si ya no cuenta: deshecha o inexistente (se descarta, como
+    /// en <see cref="ReconciliarUnaAsync"/>) o deshaciéndose.
+    /// </summary>
+    private async Task<string?> EnQueQuedoAsync(PersistedEventOrder orden, (string Kind, string Id) sujeto, CancellationToken ct)
+    {
+        var (compra, fallo) = await LeerAsync(orden.PaymentSessionId, sujeto, ct).ConfigureAwait(false);
+        var estado = compra?.Status;
+        if (estado is "Running" or "Completed") return estado;
+        if (estado is "Compensating") return null;
+
+        if (estado is "Compensated" or "CompensationFailed" || fallo is { Codigo: "eventos.purchase_not_found" })
+        {
+            await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
+            return null;
+        }
+        return SinLeer;
     }
 
     private ResultadoDelArtefacto? NoDisponible()

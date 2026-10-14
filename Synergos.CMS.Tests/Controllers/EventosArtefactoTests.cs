@@ -58,17 +58,30 @@ public sealed class EventosArtefactoTests : IDisposable
     {
         public Dictionary<string, Saga> Sagas { get; } = new(StringComparer.Ordinal);
 
-        public int Llamadas { get; private set; }
+        private int _llamadas;
+
+        /// <summary>Cuántas peticiones llegaron; el artefacto lee varias a la vez.</summary>
+        public int Llamadas => Volatile.Read(ref _llamadas);
 
         public bool Caido { get; set; }
 
         /// <summary>Si contesta un estado de error sin rechazo que leer, como un proxy.</summary>
         public HttpStatusCode? SinRechazo { get; set; }
 
+        /// <summary>Acepta la conexión y no contesta nunca.</summary>
+        public bool Colgado { get; set; }
+
+        private static async Task<HttpResponseMessage> Colgarse(CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("inalcanzable");
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
-            Llamadas++;
+            Interlocked.Increment(ref _llamadas);
             if (Caido) throw new HttpRequestException("Connection refused");
+            if (Colgado) return Colgarse(ct);
             if (SinRechazo is { } estado) return Task.FromResult(new HttpResponseMessage(estado));
 
             var id = Uri.UnescapeDataString(r.RequestUri!.AbsolutePath.Split('/').Last());
@@ -106,7 +119,8 @@ public sealed class EventosArtefactoTests : IDisposable
     }
 
     private EventosController Controlador(
-        string? cuerpo = null, string tipo = "application/json", bool mismoOrigen = true, bool hayDestino = true, bool abierto = true)
+        string? cuerpo = null, string tipo = "application/json", bool mismoOrigen = true, bool hayDestino = true, bool abierto = true,
+        TimeSpan? presupuesto = null)
     {
         var puerta = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         puerta.CurrentValue.Returns(new PuertaSettings
@@ -119,7 +133,8 @@ public sealed class EventosArtefactoTests : IDisposable
                 : new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal),
         });
         var artefacto = new ArtefactoDeEventos(
-            new Fabrica(_orquestador), _ledger, puerta, NullLogger<ArtefactoDeEventos>.Instance, hayDestino: hayDestino);
+            new Fabrica(_orquestador), _ledger, puerta, NullLogger<ArtefactoDeEventos>.Instance, hayDestino: hayDestino,
+            presupuesto: presupuesto);
 
         var http = new DefaultHttpContext();
         http.Request.Scheme = "https";
@@ -351,5 +366,176 @@ public sealed class EventosArtefactoTests : IDisposable
         Assert.Equal((415, "puerta.tipo_no_soportado"),
             Fallo(await Controlador(DosAsistentes, tipo: "text/plain").AnotarAsistentes(Compra, default)));
         Assert.Empty(await _ledger.LoadAllAsync());
+    }
+
+    // ── Las compras sin acuse (ADR 0140, D2, fase D) ───────────────────────
+    //
+    // Antes de abrir con una llave NUEVA, el elemento pregunta si quien compra tiene otra compra del mismo
+    // evento sin acuse: la cobrada cuya respuesta se perdió, o la que sigue en curso. Lo sabe este lado —la
+    // orden Pending—, así que se ve desde otro dispositivo o con los datos del sitio borrados.
+
+    private const string Evento = "evt-1";
+
+    /// <summary>Una orden de este lado, sin pasar por el orquestador.</summary>
+    private async Task Orden(string saga, Guid quien, string evento = Evento, int haceMinutos = 0,
+        EventOrderStatus estado = EventOrderStatus.Pending)
+        => await _ledger.SaveAsync(new PersistedEventOrder(
+            "evord_" + Guid.NewGuid().ToString("n"), evento, saga, 200_000m, "COP", [], DateTimeOffset.UtcNow.AddMinutes(-haceMinutos))
+        {
+            BuyerKind = "eventos.comprador",
+            BuyerId = quien.ToString("n"),
+            ViaGate = true,
+            Status = estado,
+        });
+
+    private static IReadOnlyList<EventosController.CompraPendienteDto> Pendientes(IActionResult r)
+        => Assert.IsType<EventosController.ComprasPendientesResponse>(Assert.IsType<OkObjectResult>(r).Value).Compras;
+
+    [Fact]
+    public async Task Sin_ordenes_pendientes_la_lista_esta_vacia_y_no_sale_a_la_red()
+    {
+        Assert.Empty(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+        Assert.Equal(0, _orquestador.Llamadas);
+    }
+
+    [Fact]
+    public async Task Una_compra_en_curso_sin_acuse_se_informa_en_curso()
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+
+        var compra = Assert.Single(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+
+        Assert.Equal((Compra, "Running"), (compra.Id, compra.Status));
+    }
+
+    [Fact]
+    public async Task Una_compra_cobrada_sin_acuse_se_informa_sin_emitir_y_dos_lecturas_dicen_lo_mismo()
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Sagas[Compra] = _orquestador.Sagas[Compra] with { Estado = "Completed" };
+
+        var primera = Pendientes(await Controlador().ComprasPendientes(Evento, default));
+        var segunda = Pendientes(await Controlador().ComprasPendientes(Evento, default));
+
+        Assert.Equal((Compra, "Completed"), (Assert.Single(primera).Id, primera[0].Status));
+        Assert.Equal(primera, segunda);
+        Assert.Equal(EventOrderStatus.Pending, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, HttpStatusCode.InternalServerError)]
+    public async Task Una_compra_que_no_se_puede_leer_sale_sin_leer_y_no_se_descarta(bool caido, HttpStatusCode? sinRechazo)
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Caido = caido;
+        _orquestador.SinRechazo = sinRechazo;
+
+        var compra = Assert.Single(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+
+        Assert.Equal((Compra, ArtefactoDeEventos.SinLeer), (compra.Id, compra.Status));
+        Assert.Equal(EventOrderStatus.Pending, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Con_el_orquestador_colgado_sale_sin_leer_al_llegar_al_techo()
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Colgado = true;
+
+        var compra = Assert.Single(Pendientes(
+            await Controlador(presupuesto: TimeSpan.FromMilliseconds(200)).ComprasPendientes(Evento, default)));
+
+        Assert.Equal(ArtefactoDeEventos.SinLeer, compra.Status);
+    }
+
+    [Fact]
+    public async Task La_compra_sin_acuse_de_otro_comprador_no_se_ve_ni_se_consulta()
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        var llamadas = _orquestador.Llamadas;
+
+        Sesion(Beto);
+        Assert.Empty(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+        Assert.Equal(llamadas, _orquestador.Llamadas);
+    }
+
+    [Fact]
+    public async Task Otro_evento_y_lo_ya_resuelto_no_salen_y_lo_deshecho_o_inexistente_se_descarta()
+    {
+        _orquestador.Sagas["pta-otro-evento"] = new Saga($"eventos.comprador:{Ana:n}", "Running", [("GEN", null, 1)]);
+        _orquestador.Sagas["pta-confirmada"] = new Saga($"eventos.comprador:{Ana:n}", "Completed", [("GEN", null, 1)]);
+        _orquestador.Sagas["pta-deshecha"] = new Saga($"eventos.comprador:{Ana:n}", "Compensated", [("GEN", null, 1)]);
+        _orquestador.Sagas["pta-deshaciendose"] = new Saga($"eventos.comprador:{Ana:n}", "Compensating", [("GEN", null, 1)]);
+        await Orden("pta-otro-evento", Ana, evento: "evt-2");
+        await Orden("pta-confirmada", Ana, estado: EventOrderStatus.Confirmed);
+        await Orden("pta-descartada", Ana, estado: EventOrderStatus.Discarded);
+        await Orden("pta-deshecha", Ana);
+        await Orden("pta-deshaciendose", Ana);
+        await Orden("pta-inexistente", Ana);
+
+        Assert.Empty(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+
+        var estados = (await _ledger.LoadAllAsync()).ToDictionary(o => o.PaymentSessionId, o => o.Status);
+        Assert.Equal(EventOrderStatus.Discarded, estados["pta-deshecha"]);
+        Assert.Equal(EventOrderStatus.Discarded, estados["pta-inexistente"]);
+        Assert.Equal(EventOrderStatus.Pending, estados["pta-deshaciendose"]);
+        Assert.Equal(EventOrderStatus.Pending, estados["pta-otro-evento"]);
+        Assert.Equal(EventOrderStatus.Confirmed, estados["pta-confirmada"]);
+    }
+
+    [Fact]
+    public async Task Mira_como_mucho_el_tope_y_lo_que_no_alcanza_a_mirar_sale_sin_leer()
+    {
+        for (var i = 0; i <= ArtefactoDeEventos.TopeDeReconciliacion; i++)
+        {
+            var saga = $"pta-{i:D2}";
+            _orquestador.Sagas[saga] = new Saga($"eventos.comprador:{Ana:n}", "Running", [("GEN", null, 1)]);
+            await Orden(saga, Ana, haceMinutos: i);
+        }
+
+        var compras = Pendientes(await Controlador().ComprasPendientes(Evento, default));
+
+        Assert.Equal(ArtefactoDeEventos.TopeDeReconciliacion, _orquestador.Llamadas);
+        Assert.Equal(ArtefactoDeEventos.TopeDeReconciliacion + 1, compras.Count);
+        Assert.Equal(($"pta-{ArtefactoDeEventos.TopeDeReconciliacion:D2}", ArtefactoDeEventos.SinLeer),
+            (compras[^1].Id, compras[^1].Status));
+        Assert.All(compras.SkipLast(1), c => Assert.Equal("Running", c.Status));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    public async Task Sin_evento_es_400_y_no_sale_a_la_red(string? evento)
+    {
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        var llamadas = _orquestador.Llamadas;
+
+        var (estado, codigo, cuerpo) = Problema(await Controlador().ComprasPendientes(evento, default));
+
+        Assert.Equal((400, "eventos.evento_requerido"), (estado, codigo));
+        Assert.False(cuerpo.GetProperty("transient").GetBoolean());
+        Assert.Equal(llamadas, _orquestador.Llamadas);
+    }
+
+    [Fact]
+    public async Task Sin_sesion_es_401_sin_destino_503_y_todo_sale_sin_cache()
+    {
+        Sesion(null);
+        var anonimo = Controlador();
+        Assert.Equal((401, "puerta.sesion_requerida"), Fallo(await anonimo.ComprasPendientes(Evento, default)));
+
+        Sesion(Ana);
+        var sinDestino = Controlador(hayDestino: false);
+        var (estado, codigo, cuerpo) = Problema(await sinDestino.ComprasPendientes(Evento, default));
+        Assert.Equal((503, "eventos.artefacto_no_disponible"), (estado, codigo));
+        Assert.False(cuerpo.GetProperty("transient").GetBoolean());
+
+        var bien = Controlador();
+        Pendientes(await bien.ComprasPendientes(Evento, default));
+
+        Assert.All(new[] { anonimo, sinDestino, bien },
+            c => Assert.Equal("no-store", c.HttpContext.Response.Headers.CacheControl.ToString()));
+        Assert.Equal(0, _orquestador.Llamadas);
     }
 }
