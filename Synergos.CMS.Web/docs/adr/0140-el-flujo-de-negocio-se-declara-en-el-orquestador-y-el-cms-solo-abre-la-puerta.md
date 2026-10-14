@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto. **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido»
+- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto (hecha el 2026-10-09, `_informes/78`, y otra vez con el cupón: `_informes/80` y `83`). **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido». **Su verificación en vivo** (2026-10-13) dejó cinco defectos —el runtime republicado bajo la misma URL inmutable, el doble cobro eligiendo otra vez las entradas, el tope de códigos reintentado en el acto, el modo oscuro del sistema a 2,39:1 y la fila de cargos de un registro gratis—, arreglados con la fase D del doble cobro en el servidor y verificados en vivo el 2026-10-14 (12 de 12 escenarios, ningún defecto nuevo); el del runtime lo decide la ADR 0141 (propuesta); ver «La verificación en vivo del cupón endurecido y sus cinco defectos»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -865,10 +865,21 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
   provocados, el `.eml` y los temas, con la sesión inyectada como cookie. Hasta entonces no están medidos
   `SameSite` y `Sec-Fetch-Site` en un navegador real, `aria-busy` y `display:contents` sobre el custom
   element, ni los temas.
+
+  > **Hecha el 2026-10-09** (`_informes/78-adr-0140-f4-verificacion.json`; ver «Endurecimiento de la
+  > F4»), y otra vez con el cupón: `_informes/80-adr-0140-cupon-en-vivo.json` (2026-10-13) y
+  > `_informes/83-adr-0140-defectos-en-vivo-r1.json` (2026-10-14).
 - **El import de `Events.Purchase.*` a la base real** es del arquitecto (pregunta 1 del plan): sin él,
   los mensajes salen por su respaldo es-CO.
 - **El merge a master del UI** despliega el CDN público con un eventos que sólo vende por la puerta
   (pregunta 2 del plan): es del arquitecto.
+
+  > **Precisado el 2026-10-14:** hoy el merge a `master` del UI NO despliega el CDN público. Lo
+  > construye Cloudflare Workers Builds, que sale rojo en cada push de `master`: 60 de las 60 cabezas
+  > con su check, del 2026-09-17 al 2026-10-10, entre ellas los cinco últimos pushes que dispararon
+  > `despliegue-cdn.yml` (2026-10-01 a 2026-10-10). Lo que sirve es un build del 2026-09-12.
+  > `despliegue-cdn.yml` no tiene secrets y se salta todos sus pasos. Las dos cosas son del arquitecto;
+  > ver la ADR 0141, «Producción».
 - **El retiro** (pasos 19-20 del plan de la F3), después de republicar las CDN que lea cada CMS. M1 tiene
   que buscar la FORMA de la llamada: el bundle nuevo todavía trae `` `${…}/checkout` ``, que es la ruta
   por hash del propio elemento, no la API.
@@ -882,6 +893,12 @@ rojos. Los que salieron verdes o no compilaron se anotaron en su commit y se ree
 - `/account/register` no acepta `returnUrl`; cambiar la selección después de abrir deja la saga anterior
   apartada hasta el barrido de abandono; y la `SessionStore` vence a los 30 min, así que un login más
   largo vuelve a un carrito vacío.
+
+  > **Corregido el 2026-10-13 (D2 de la verificación en vivo del cupón endurecido):** después de
+  > CERRAR no quedaba un apartado, quedaba un doble cobro. Y el vencimiento de 30 min de la
+  > `SessionStore` olvidaba la compra pendiente antes que los 60 min del barrido de abandono. Hoy elegir
+  > otra vez la resuelve primero por su id, y la sesión con una compra pendiente tiene su propio plazo
+  > (24 h). Ver «La verificación en vivo del cupón endurecido y sus cinco defectos».
 
 ## Endurecimiento de la F4 (2026-10-09)
 
@@ -955,6 +972,11 @@ registro gratis) y `a5dee91` (el enlace sin sesión). CMS: `2d728491` (el parám
 - El contraste, por dos métodos: el resolutor de `syn-tokens.css` en las ocho rutas de render (peligro
   ≥ 5,04, aviso ≥ 4,79, éxito ≥ 5,70, contra 1,14) y Chromium con los estilos calculados de las hojas
   compiladas sobre el CSS del CMS en los siete `data-theme`. `audit-themes` sigue en 0 fallos.
+
+  > **Precisado el 2026-10-13 (D4 de la verificación en vivo del cupón endurecido):** ese 0 no cubría
+  > los rellenos. `audit-themes` no medía `action-*` ni `text-accent`, y en la octava ruta
+  > (`prefers-color-scheme: dark` sin `data-theme`) el relleno `action-primary` daba 2,39:1 contra el
+  > panel. Desde UI `bdae4f9`, G-5 los mide en las ocho rutas y aborta si deja de encontrarlos.
 - Cada mutante, aplicado por líneas y visto en el diff antes de leer el resultado; todos en rojo (el
   control de lo pagado en el registro gratis, en verde, como debe).
 - **Sin medir en vivo otra vez**: publicar el `eventos` endurecido en la CDN piloto y recorrer la compra
@@ -1097,6 +1119,10 @@ hace lo mismo en las suites.
   > **Corregido el 2026-10-13 (el cupón endurecido, punto 1):** era peor que un apartado —con la
   > saga ya cobrada era un doble cobro—, y ya no se puede: abierta la saga de la intención, el cupón
   > queda fijado hasta que se deshaga.
+
+  > **Precisado el 2026-10-13 (D2 de la verificación en vivo del cupón endurecido):** «ya no se puede»
+  > valía para la MISMA intención. Eligiendo otra vez las entradas sí se podía —se midieron en vivo dos
+  > cobros—, hasta el arreglo. Ver «La verificación en vivo del cupón endurecido y sus cinco defectos».
 - **El impuesto no tiene fila**: la oferta de Eventos publica impuesto 0. Si una localidad lo tuviera,
   el total del servidor lo incluye y las filas no lo explicarían.
 - **Pricing no cuenta usos**: un código vale mientras esté vigente, para quien sea y cuantas veces sea.
@@ -1133,6 +1159,28 @@ no cubre justo el caso del doble cobro, y fijar nunca deja dos sagas cobrables.
 - Para cambiar el código hay que esperar a que la saga se deshaga, o elegir otra vez las entradas
   (otra sesión, otra intención: lo heredado de la F4, abajo).
 
+  > **Corregido el 2026-10-13 (D2 de la verificación en vivo, `_informes/80-adr-0140-cupon-en-vivo.json`;
+  > verificado en vivo el 2026-10-14):** elegir otra vez NO era una salida segura. Con la saga ya
+  > cobrada —cerrar capturó y su respuesta se perdió—, la selección nueva reemplazaba la sesión entera
+  > (`selectIntoCart` → `SessionStore.reset()`): otra sesión, sin la llave retenida ni el pago anotado,
+  > con el cupón desbloqueado. Abrir con la llave nueva abrió y cobró otra saga. Se midió en el almacén
+  > de Payments y en el de sagas: `pta-32f13f7f…`, 50.400 COP, y `pta-a2f19519…`, 45.900 COP, del mismo
+  > comprador y para el mismo evento; la segunda se abrió 20,9 s después de capturada la primera,
+  > debajo de «no se te cobrará dos veces».
+  >
+  > Desde el arreglo, elegir otra vez con una compra pendiente (llave retenida, o pago anotado sin
+  > confirmar) la resuelve primero por su id: completada, se muestran sus entradas; en curso, se termina
+  > o se cancela; deshecha, se sigue; sin respuesta, no se abre otra. Y la sesión con una compra
+  > pendiente no vence a los 30 min. Para cambiar el código con la saga abierta hay que cancelarla, si
+  > no se cobró, o esperar a que se deshaga. Con la saga cobrada el código no cambia: deshacerla es una
+  > devolución (#183).
+  >
+  > El orquestador NO se niega a abrir una segunda compra del mismo comprador y evento: no sabe si quien
+  > compra vio el acuse de la primera. Eso lo sabe el artefacto del CMS (orden `Pending` o `Confirmed`),
+  > y de ahí sale la fase D. Negarse sólo con la saga en curso no habría evitado lo medido, y negarse
+  > con la completada rompería comprar dos veces a propósito (la opción B, declarada y apagada: ver «La
+  > verificación en vivo del cupón endurecido y sus cinco defectos»).
+
 **2. Con «Pagar y confirmar» en vuelo el cupón no cambia, y la pantalla nunca muestra un descuento
 distinto del autorizado (hallazgo de severidad media).** «revisar» no es válido mientras se valida
 un código (el pago espera a la vista previa); una vista previa que vuelve con la compra ya en vuelo
@@ -1154,6 +1202,15 @@ contestó Pricing.
 - Agotado el tope, toda cotización o apertura CON código de ese sujeto contesta 503
   `eventos.demasiados_codigos`, **transitorio** (con esperar basta), ANTES de llamar a Pricing: no se
   aparta ni se autoriza nada, y el corte no dice si el código existe.
+
+  > **Corregido el 2026-10-13 (D3 de la verificación en vivo):** contesta 409
+  > `eventos.demasiados_codigos`, **NO transitorio** (`Rejection.Conflict`), ANTES de llamar a Pricing.
+  > `transient` dice si repetir LO MISMO ya puede salir distinto, y la pieza del CMS repite en el acto
+  > todo lo transitorio que lleva llave (#178). Con el 503, cada «abrir» cortado eran 3 llamadas al
+  > orquestador (dos reintentos) y un Error en el log (informe 80). Pasada la ventana se vuelve a pedir,
+  > como cualquier conflicto, y lo dice `PromoTooMany`. El OpenAPI ya publicaba el 409; la puerta, la
+  > pieza y el UI no cambian de código. CMS `5f31dad8`, UI `0973a4c`; en vivo, una sola llamada
+  > (informe 83). El resto del punto no cambia.
 - Sin código se compra igual, y una apertura cuya llave devuelve su saga viva no se corta (no
   vuelve a cotizar, así que no es oráculo): **la semántica de los pagos no cambia** (#183).
 - `Eventos:Cupon:FallosPorVentana` (10) y `Eventos:Cupon:Ventana` (`00:15:00`) los ajusta el
@@ -1174,6 +1231,12 @@ decorativo: 1,2–1,5:1) y el texto de ejemplo tiene regla propia. Medido en Chr
 (mínimos: borde del campo 5,88:1; «Aplicar», 4,81:1 de texto y 4,39:1 de relleno contra el panel).
 `libs/shared` cambió: hay que reconstruir el runtime (`build:runtime`) y publicarlo donde se
 verifique —en la CDN piloto, nunca en `C:\LOCAL_CDN` desde una rama—.
+
+> **Precisado el 2026-10-14 (D1 de la verificación en vivo, ADR 0141):** publicarlo no bastaba. El
+> runtime se republicaba bajo la MISMA URL `immutable`, y quien ya lo tenía se quedaba con el viejo
+> hasta un año (medido en vivo: `syn-promo-code` sin estilos ni `locked`). Desde la 0141 la URL del
+> runtime lleva la huella de sus bytes: publicar con `publish-runtime` basta y nadie tiene que vaciar
+> su caché, porque quien tenía el `sg-shared` viejo baja el nuevo: es OTRA URL.
 
 **5. «Tu orden» explica el total, y el signo del descuento no se separa de la cifra (defectos en
 vivo, severidad baja).** `syn-checkout-wizard` gana `summaryRows` (las filas que explican el total,
@@ -1200,6 +1263,12 @@ VACÍA** (SQLite crea el fichero) y la verificación mide un sitio que no existe
   (`robocopy /E`), publicar `eventos` con `tools/publish.mjs --element eventos --cdn <piloto>` y, si
   cambió `libs/shared` —el endurecimiento lo cambió—, el runtime con `publish-runtime --cdn
   <piloto>`; sin él, `syn-promo-code` se queda con los estilos y las entradas viejas.
+
+  > **Precisado el 2026-10-14 (ADR 0141):** el `publish-runtime` de hoy publica el runtime por
+  > contenido, y un navegador que ya tuviera el de antes baja el nuevo sin vaciar la caché. La piloto
+  > quedó así el 2026-10-14 (informe 83): runtime por contenido con su `latest/huellas.json`, y
+  > `eventos` 0.1.11. Su estado anterior está copiado en
+  > `%TEMP%\pilot-0137\defectos-verif-r1\cdn-al-empezar`.
 - **Respaldar** la copia antes de lanzar (`f3-cms.ps1` lo pide) y, al terminar, parar por PID
   (`f3-parar.ps1`) y borrar las credenciales de los miembros de prueba que hayan quedado en ella.
 
@@ -1223,11 +1292,252 @@ G-7 ✓ 55/21.
 **Lo que queda, dicho**
 - **La verificación en el navegador** del cupón endurecido, con la copia piloto recreada (punto 6)
   y el runtime publicado en la CDN piloto.
+
+  > **Hecha el 2026-10-13** con la copia recreada (informe 80: cinco defectos) y, con los arreglos, el
+  > 2026-10-14 (informe 83: 12 de 12 escenarios). Ver la sección siguiente.
 - **El import de `Events.Purchase.PromoLocked` y `PromoTooMany`** a la base real es del arquitecto.
+
+  > **2026-10-14:** se suman las 11 claves de los arreglos: `PendingCompleted`, `PendingOpen`,
+  > `PendingUnknown`, `PendingResume`, `PendingCancel`, `PendingChooseOther` y `PendingUnanswered`
+  > (CMS `f7e20828`), y `PendingFound`, `PendingOpenElsewhere`, `PendingUnknownElsewhere` y
+  > `RefundInProgress` (CMS `c5de8b60`). Son 42 en la sección y 808 en el diccionario. Para verificar se
+  > importaron sólo sobre la copia piloto.
 - **Una saga abierta y luego abandonada** (otra selección, otra sesión) sigue apartada hasta el
   barrido de abandono, como en la F4; el cupón ya no puede abrir una segunda para la MISMA intención.
+
+  > **Corregido el 2026-10-13 (D2):** «otra selección» ya no abandona una saga que pueda cobrar, porque
+  > primero la resuelve. Hasta el barrido sólo queda apartada la saga cuyo abrir no contestó, si se
+  > eligen otras entradas igual. Ésa no se puede cobrar —nadie tiene su id—, pero su autorización queda
+  > retenida hasta el barrido (medido en vivo: `pta-968d590f…`, autorizada y sin capturar). Fuera de
+  > este navegador —otro dispositivo, los datos del sitio borrados, más de 24 h— lo cubre la fase D, la
+  > lectura de las compras sin acuse en el artefacto del CMS. Esa lectura no ve una saga sin asistentes
+  > anotados, que tampoco se puede cobrar.
 - **La octava ruta de render** (`prefers-color-scheme: dark` sin `data-theme`) no se midió para
   `syn-promo-code`: `action-primary` contra la superficie da 2,39:1 ahí, por el token del tema.
+
+  > **Corregido el 2026-10-13 (D4):** está medido —2,39 en vivo, 2,39 con el resolutor de
+  > `syn-tokens.css` y 2,388 a mano— y no era de `syn-promo-code`. El bloque `@media
+  > (prefers-color-scheme: dark)` de `syn-tokens.css` espejaba 40 de los 83 tokens del tema oscuro y
+  > no redeclaraba ningún `action-*` ni `text-accent`. Por eso todo relleno `action-primary` —el botón
+  > primario, el CTA del asistente, los shells— daba 2,39:1 contra el panel, y `text-accent`, que es
+  > TEXTO, también. La ruta está viva en `/admin` y en la página de error, que no ponen `data-theme`.
+  > Hoy el bloque espeja los 83, con un test de paridad en el CMS (`1f7711dc`); en vivo, el relleno da
+  > 5,15:1 y el texto 6,29:1.
+
+> **2026-10-13 (D5):** la fila «Cargos por servicio» se omite cuando el CARGO es 0, con una sola regla
+> en el carrito, «Tu orden» y «Revisa tu orden» (UI `8b2d1f4`). Es la misma regla por importe que usan
+> el pricing de la sesión y el `omitir_si_cero` del flujo, y cubre también un evento pagado en un sitio
+> sin comisión. Ninguna línea de esta ADR afirmaba lo contrario.
+
+## La verificación en vivo del cupón endurecido y sus cinco defectos (2026-10-13)
+
+**La verificación en vivo** (`_informes/80-adr-0140-cupon-en-vivo.json`, 2026-10-13) recorrió la compra
+sobre la copia piloto recreada: los cinco servicios en 5871-5875, el CMS en 5194 sobre `vivo.db` y la CDN
+piloto, CMS `01f3a0ec` y UI `1c4887a`, Chromium. Usó tres miembros de prueba creados por HTTP y dos
+promociones creadas en Pricing. De ocho escenarios, seis salieron bien y dos con defecto: **cinco
+defectos**, uno alto, uno medio y tres bajos. Nada de lo anterior se borra; donde esta ADR decía algo que
+resultó falso va una nota fechada en su sitio.
+
+**Lo que salió bien en el 80:**
+- el cupón válido, cobrado una vez con el descuento (BIENVENIDA10: 91.800 COP por dos entradas;
+  FIJO5000: 45.400);
+- el código desconocido, dicho con el texto del diccionario;
+- el cupón fijado con la MISMA llave tras un 504 de cerrar o de abrir, también tras F5 y con dos
+  pestañas pagando a la vez (un cobro);
+- el pago en vuelo, que no cambia el descuento;
+- el tope de códigos por comprador;
+- los estilos AA en los siete temas, cuando el runtime llega;
+- el registro gratis, con 0 cobros.
+
+**El plan de arreglo** (`_informes/82-adr-0140-defectos-en-vivo-plan.json`) eligió entre opciones medidas
+para cada defecto. Cada arreglo es un commit con su test y su mutante fiel, hacia el código de antes, y
+el detalle va en el mensaje de cada commit. Todo está en `lego/integracion`, local.
+
+### D1 (alta) — el runtime compartido se republicaba bajo la MISMA URL inmutable
+
+- **Síntoma medido.** En un navegador que ya tenía el runtime, `sg-shared.js` salía de la caché
+  (`transferSize` 0, 801.154 B) mientras el servidor servía 802.496 B en la misma URL, con `immutable` de
+  un año. `syn-promo-code` quedaba sin estilos y sin `locked`. No hubo doble cobro, porque la guarda vive
+  en `eventos`.
+- **Causa.** La carpeta `runtime/angular/21.1.6/` lleva la versión de Angular, no la del contenido, y las
+  dos políticas de caché la servían `immutable`.
+- **Arreglo.** Lo decide la [ADR 0141](0141-el-runtime-compartido-se-publica-por-contenido.md)
+  (propuesta): el runtime se publica por contenido. CMS `3a79c36f` y `c6a9973d`; UI `45609b3`, `822e95b`,
+  `ce4b73d`, `83f66ae`, `5985436`, `60af1ab`, `6dada50`, `2fee048`, `eaa9338`, `0ed9627` y `ac3e197`.
+- **En vivo** (informe 83, escenarios 1, 1b y 1c): el perfil envenenado se rescata sin vaciar nada
+  (`sg-shared.18a9decbae7fffb0.js`: 802.796 B transferidos y un SHA-256 que casa con la huella), y
+  `syn-promo-code` vuelve a tener estilos y `locked`. La segunda visita no hace ni una petición. Las
+  cabeceras y los 304 son los de la 0141, y republicar sin cambios no toca ninguno de los 66 ficheros.
+
+### D2 (media) — el doble cobro eligiendo otra vez las entradas
+
+- **Síntoma medido**, por dos métodos (el almacén de Payments y el de sagas). Cerrar capturó y su
+  respuesta se perdió; al volver a la ficha y elegir las mismas entradas, abrir abrió y cobró OTRA saga:
+  `pta-32f13f7f…`, 50.400 COP, y `pta-a2f19519…`, 45.900 COP, del mismo comprador y para el mismo evento.
+  La segunda se abrió 20,9 s después de capturada la primera, que ya estaba `Completed`.
+- **Causa.** `selectIntoCart` reemplazaba la sesión entera (`SessionStore.reset()`) sin mirar la llave
+  retenida ni el pago anotado. Además, la sesión vencía 30 min después de creada, antes que los 60 min
+  del barrido de abandono.
+- **Arreglo A, en este navegador** (UI `a2fda2c` y `a2403bd`, el contrato en `b502c4f`, las 7 claves
+  `Pending*` en CMS `f7e20828`). Antes de reemplazar la sesión, una compra pendiente —llave retenida, o
+  pago anotado sin confirmar— se resuelve por su id:
+  - completada: sus entradas y la vista confirmada (`PendingCompleted`);
+  - en curso: «Terminar mi compra» o «Cancelar esa compra» (`cancelarCompraDeEventos`, que la deja
+    `Compensated`);
+  - deshecha: se sigue con lo elegido;
+  - sin respuesta: no se abre otra (`PendingUnknown`);
+  - si abrir no contestó: «Terminar» con la MISMA llave, o «Elegir otras entradas»
+    (`PendingUnanswered`).
+
+  Retener la llave extiende la sesión a 24 h. Funciona tras F5 y en otra pestaña, porque la sesión vive
+  en `localStorage`.
+- **La fase D, en el servidor**, para otro dispositivo, los datos del sitio borrados o más de 24 h (CMS
+  `8f099371`; G-6 congela `compras` en `7e72a8d6`; UI `3cb872b`).
+  - `GET /api/eventos/compras/pendientes?eventId=` devuelve las órdenes `Pending` del miembro para ese
+    evento, reconciliadas con su saga con el mismo techo que `ReconciliarAsync` (tope 10, 3 s):
+    `{ compras: [{ id, status: Running|Completed|Unknown }] }`.
+  - Lo que no alcanza a leer sale `Unknown`: no saber no es «no hay». No emite nada y va sin caché.
+    Contesta 400 `eventos.evento_requerido` sin evento.
+  - `pay` pregunta antes de abrir; con alguna compra no abre (`eventos.compra_sin_acuse`) y el elemento
+    la pinta con el mismo panel. Si la lectura no está —red, 5xx, cuerpo ilegible—, abre como siempre:
+    se degrada por AUSENCIA, nunca por negación (ADR 0112).
+- **La revisión de los arreglos** (`_informes/84-adr-0140-defectos-pausa.json`) dejó 11 hallazgos. Un
+  escéptico refutó 2: la carrera del libro sin cerrojo, imposible en producción, y la vuelta atrás, que
+  hace lo que hace toda vuelta atrás. Confirmó 9. Los tres de D1 están en la ADR 0141; los seis de D2:
+  - **«Confirmed» no es acuse** (CMS `b901ac65`). Una reconciliación ajena a su comprador confirmaba la
+    orden y la fase D dejaba de verla. Hoy sólo da acuse `GET …/compras/{id}/entradas` del comprador.
+  - **Una compra que se deshace DESPUÉS de cobrar dice que hay dinero por devolver** (`refundPending` en
+    `TicketPurchaseResponse`, CMS `9fba61e5`; UI `fc8a9a2`, `Events.Purchase.RefundInProgress`). No
+    impide comprar otra.
+  - **`pay` pregunta también con la llave retenida**, y la saga de ESTA sesión, reconocida por su id, no
+    frena (UI `7cab962`).
+  - **El aviso del asistente** dice `PendingFound` cuando la fase D frena, y no «no se te cobró nada»
+    (UI `7e2ed4d`).
+  - **Las frases de una compra de otra sesión** dicen sólo lo que el código hace (UI `f59e2a8`).
+  - **La guarda compara el evento** (UI `82a8344`).
+
+  Las 4 claves nuevas van en CMS `c5de8b60`, y el contrato en UI `4264786`.
+- **Peso.** El bundle de `eventos` pasó su techo de 420 KB (mide 423,1 KB), y el techo sube a 440 KB
+  con la razón escrita (UI `9930dfb`). 26 KB de los 423 son escapes `\uXXXX` de esbuild; `charset: 'utf8'` los
+  quitaría de todos los elementos, pero es un cambio global de build y queda como decisión aparte.
+- **En vivo** (informe 83, escenarios 2 a 2d):
+  - el camino exacto del doble cobro ya no abre otra compra: 1 consultar, 0 abrir, sus entradas y
+    `PendingCompleted`, con un solo cobro;
+  - lo mismo tras F5, desde otra pestaña y con `localStorage` borrado (ahí frena la fase D);
+  - cada panel según el estado;
+  - y el control, comprar dos veces a propósito tras el acuse, sí se puede.
+
+### D3 (baja) — la puerta reintentaba en el acto el tope de códigos
+
+- **Medido.** El 503 `eventos.demasiados_codigos` era `transient:true`, y la pieza del CMS lo repetía:
+  tres entradas `puerta-eventos-reintento` en 308 ms (dos Warning y un Error) por cada clic.
+- **Arreglo** (opción B del plan). `Rejection.Conflict`: un 409 `transient:false`. El OpenAPI ya
+  publicaba el 409, así que no cambia; la puerta, la pieza y el UI tampoco cambian de código. CMS
+  `5f31dad8`; UI `0973a4c` fija que la forma de antes y la de hoy se entienden igual durante el
+  despliegue. Se descartaron un 429 con `Retry-After` (la pieza decide por la bandera, no por el
+  estado), leer `Retry-After` en el cliente (un segundo dato en la decisión de reintentar) y vetar en la
+  puerta todo reintento con cuerpo (perdía el reintento útil de `flow.busy`).
+- **En vivo** (informe 83, escenario 3): una sola entrada (409, intento 0, nivel Information),
+  `PromoTooMany`, la llave suelta y la compra sin código sale.
+
+### D4 (baja) — la octava ruta de render a 2,39:1
+
+- **Medido** por tres métodos (en vivo, con el resolutor y a mano): en la octava ruta el relleno de
+  «Aplicar» daba 2,39:1 contra el panel.
+- **Causa.** El bloque `@media (prefers-color-scheme: dark)` sin `data-theme` espejaba 40 de los 83
+  tokens del tema oscuro. Afectaba a todo `action-*` y a `text-accent`, no a `syn-promo-code`.
+- **Arreglo A**, en el token: el espejo completo con un test de paridad en el CMS, donde vive la fuente
+  y el PR que la rompería (CMS `1f7711dc`). El UI regenera su puente (UI `b502c4f`) y G-5 mide el relleno
+  y el texto de `action-primary` y el `text-accent` en las ocho rutas (UI `bdae4f9`). Se descartaron el
+  espejo mínimo (dejaba un TEXTO a 2,39:1), el arreglo en el componente (uno de unos 60 consumidores) y
+  poner `data-theme` en el admin (la ruta sigue existiendo).
+- **En vivo** (informe 83, escenario 4): sin `data-theme` y con el sistema en oscuro, el relleno da
+  5,15:1 y el texto 6,29:1, como `dark`. Los siete temas dan las cifras de antes (eventsNight 4,39 de
+  relleno y 4,81 de texto; el borde del campo, mínimo 5,88 en scholar).
+
+### D5 (baja) — el registro gratis mostraba «Cargos por servicio (12 %) $ 0»
+
+- **Causa.** Tres reglas para la misma fila: el carrito la pintaba si la comisión CONFIGURADA era mayor
+  que 0, «Tu orden» lo heredaba y «Revisa tu orden» la pintaba siempre.
+- **Arreglo A.** La fila se omite cuando el CARGO es 0, con un solo `computed` para las tres vistas (UI
+  `8b2d1f4`).
+- **En vivo** (informe 83, escenario 5): lo gratis sale sin la fila en las tres vistas y con 0 pagos; lo
+  pagado la muestra (5.400 por una entrada, 10.800 por dos).
+
+### La opción B, declarada y apagada
+
+Que el orquestador rechace abrir con OTRA llave cuando el mismo comprador tiene una saga en curso del
+mismo evento queda **declarado y sin construir**: un 409 con el id de esa saga y un arriendo por
+comprador y evento contra la carrera. Si el arquitecto la quiere, va detrás de un interruptor
+`Eventos:Compra:*` apagado por defecto. No se encendió porque **no habría evitado lo medido**: la primera
+saga ya estaba `Completed` 20,9 s antes de que se abriera la segunda (dos métodos). Además:
+- el rechazo de la puerta sólo lleva `code` y `transient`, así que devolver el id exige una extensión en
+  `Synergos.Shared`, una consulta nueva de sagas vivas en `Bff.Core` y el arriendo;
+- cambia la conducta de la ruta vieja en `Mode=Bff`;
+- bloquea compras paralelas a propósito desde dos dispositivos.
+
+Su código no puede ser `eventos.compra_en_curso`, porque el artefacto del CMS ya lo usa para otra cosa
+(no emitir entradas de una compra en curso). Se descartaron también C, negarse con una `Completed`
+reciente (rompe comprar dos veces a propósito, o cambia el contrato y pide un índice nuevo), y E,
+conservar el `sessionId` al elegir (con otras líneas devuelve la saga VIEJA).
+
+### Lo que midió la verificación en vivo final (informe 83, 2026-10-14)
+
+**Sobre qué.** La copia piloto con CMS `6b495c9d` y UI `7faa386`. Las 11 claves nuevas se importaron
+SÓLO a la copia, desde una carpeta fuera del repo. El runtime por contenido y `eventos` 0.1.11 se
+publicaron en la CDN piloto, nunca en `C:\LOCAL_CDN`. Resultado: **12 escenarios, 12 OK, 0 defectos**.
+
+| escenario | lo medido | en el 80 |
+|---|---|---|
+| D1, runtime en caché | el perfil envenenado baja `sg-shared.<huella>.js` (802.796 B transferidos) sin vaciar nada; vuelven los estilos y `locked` | sin estilos hasta vaciar la caché |
+| D1, cabeceras | con huella, `immutable` + ACAO; los planos, los mapas y el libro, `no-cache`; 304 a las dos revalidaciones | todo `immutable` |
+| D1, republicar | 0 de 66 ficheros cambian | — |
+| D2, el camino del doble cobro | 0 abrir, `PendingCompleted`, un cobro de 45.900 | dos cobros |
+| D2, F5, otra pestaña y `localStorage` borrado | 0 abrir en los tres; en el último frena la fase D | — |
+| D2, paneles | en curso: terminar o cancelar (un cobro en total); abrir sin respuesta: terminar con la misma saga o elegir otras; sin respuesta: `PendingUnknown` y 0 abrir | — |
+| D2, control | comprar dos veces a propósito tras el acuse: dos cobros, sin panel | — |
+| D3 | un 409, un intento en el log, `PromoTooMany` | tres intentos con 503 |
+| D4 | 5,15 de relleno y 6,29 de texto; los siete temas, iguales | 2,39 |
+| D5 | gratis sin la fila; lo pagado con ella | «$ 0» |
+| cupón | el válido y el fijado tras un fallo (la MISMA llave), un cobro cada uno; el desconocido, con el texto del diccionario | igual |
+
+**Los cobros, contados por dos métodos** (almacén de Payments y de sagas):
+- 14 pagos: 11 capturados, uno por saga, y 3 sin capturar (2 cancelados, `Compensated`, y la
+  autorización de la saga abandonada con «Elegir otras»).
+- 15 sagas, ninguna con dos capturas.
+- Avisos: 12 `.eml`, uno por compra completada por la puerta, y 2 en el buzón del CMS, de la ruta
+  directa.
+
+**Observaciones, que no son defectos:**
+- Con «Elegir otras» después de que abrir no contestara, la saga que el servidor sí abrió queda
+  autorizada y sin capturar hasta el barrido, y la fase D no la ve.
+- Cuando la fase D frena, `pendientes` se pide dos veces.
+- El cliente reintenta tres veces un consultar sin red.
+- La confirmación del registro gratis se titula «¡Compra confirmada!».
+
+**No se midió en esta ronda**, aunque estaba en el plan: de D1, el cambio trivial de `libs/shared`
+publicado en la piloto, el humo conectado contra la piloto, el export nuevo con el publicador viejo y la
+vuelta atrás; de D2, el reloj adelantado 31 min; de D4, `/admin` y `/error/404`. Y el envenenamiento se
+sembró emulando la cabecera exacta del CMS viejo, no con su binario.
+
+**En las suites**, tras los arreglos y su revisión:
+- CMS: build con 0 avisos, **3216 / 924 / 520 = 4660**, `usync-audit` 0/0.
+- UI: `npm test` 6 de 6 (**998 + 117 + 2.125 + 11**; 999 con el CDN construido) y `contracts:validate`
+  EXIT 0.
+- Gates cruzados: G-6 ✓ 538 claves en 9 verticales y G-7 ✓ 55 en 21 rutas.
+- `build:cdn` sale con 0 y su puerta de enlace pasa 125 bundles de Angular y 1 de Preact.
+
+**Lo que queda, dicho**
+- **El import a la base real** de las 11 claves nuevas de `Events.Purchase` es del arquitecto; hasta
+  entonces `t()` pinta el respaldo es-CO.
+- **El push a `master`** de los dos repos es del arquitecto, en el orden del plan: primero el CMS (el
+  job G-1 del design-gates del CMS sale rojo hasta que sube el UI: `gh run rerun --failed`), y nunca el
+  UI a medias.
+- **El CDN público** no se despliega desde `master` (Workers Builds sale rojo, y `despliegue-cdn.yml` no
+  tiene secrets): es del arquitecto. Ver la ADR 0141, «Producción».
+- **Los textos `Pending*`** hablan de «compra» también en un registro gratis; las variantes `Free*`
+  serían claves nuevas.
+- **La autorización de la saga abandonada** con «Elegir otras» queda retenida hasta el barrido.
 
 ## Relación con otras ADRs
 
