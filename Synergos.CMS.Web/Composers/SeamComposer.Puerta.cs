@@ -42,6 +42,8 @@ public sealed partial class SeamComposer
 
         services.AddSingleton(new DestinosDeLaPuerta(conDestino));
         services.AddSingleton<ReenvioDeLaPuerta>();
+        // Lo que la puerta abre, para quien declara un camino de compra sin llamarla (ADR 0140).
+        services.AddSingleton<Synergos.CMS.Interfaces.IPuertaDeLosFlujos, PuertaDeLosFlujos>();
         services.AddOptions<PuertaSettings>().Bind(builder.Config.GetSection(PuertaSettings.Seccion)).ValidateOnStart();
         services.AddSingleton<IValidateOptions<PuertaSettings>, ValidadorDeLaPuerta>();
     }

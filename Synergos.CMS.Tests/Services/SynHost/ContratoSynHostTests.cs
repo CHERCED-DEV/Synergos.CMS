@@ -892,6 +892,7 @@ public sealed class ContratoSynHostTests
 
     private static ServiceProvider Proveedor()
         => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
+            .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
@@ -981,6 +982,15 @@ public sealed class ContratoSynHostTests
         where T : class
     {
         public T Actual() => valores;
+    }
+
+    /// <summary>
+    /// La puerta de un despliegue sin destino para ningún orquestador —el clon limpio, que es lo que rige por
+    /// defecto—: no abre ningún flujo, y el camino de compra que se emite es el de esa regla (ADR 0140).
+    /// </summary>
+    private sealed class PuertaSinDestino : IPuertaDeLosFlujos
+    {
+        public bool Abre(string flujo) => false;
     }
 
     private static async Task<JsonElement> Emitido(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)

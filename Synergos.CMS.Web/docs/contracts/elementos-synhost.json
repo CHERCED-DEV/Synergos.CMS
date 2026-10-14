@@ -1226,6 +1226,12 @@
           "tipo": "number",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "purchasePath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -1235,7 +1241,8 @@
         "role": "organizer",
         "apiBase": "/api/eventos",
         "feePercent": 12,
-        "platformFeePercent": 10
+        "platformFeePercent": 10,
+        "purchasePath": "directa"
       }
     },
     {

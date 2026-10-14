@@ -24,6 +24,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// la puerta —pedir la sesión, un rechazo traducido por su <c>code</c>, la compra que quedó apartada—.
 /// El elemento decide por <c>code</c> y nunca por <c>title</c>, que la puerta llena con la frase HTTP;
 /// sólo se traducen los códigos que la persona puede provocar, más uno genérico por clase.</para>
+///
+/// <para><b>Y por dónde compra</b> (<c>PurchasePath</c>, ADR 0140): la puerta o la ruta directa
+/// <c>/api/eventos/checkout|confirm</c>, que se conservan las dos. Lo DECLARA el CMS con la regla de
+/// <see cref="CaminoDeCompra"/> —el override de <c>Synergos:Features:Eventos:PurchasePath</c>, o la puerta
+/// cuando abre <c>eventos.compra</c>, o la directa—; el elemento no lo adivina.</para>
 /// </remarks>
 [ElementoSynHost("eventos", TipoDeColocable.Funcionalidad, Diccionario = ["Events.Sale", "Events.Purchase"])]
 public sealed record EventosProps(
@@ -32,4 +37,5 @@ public sealed record EventosProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Role,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal FeePercent,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal PlatformFeePercent);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal PlatformFeePercent,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath);

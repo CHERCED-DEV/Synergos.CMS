@@ -123,4 +123,13 @@ public static class ReglasDeNegocio
         => valor is < 0m or > 100m || decimal.Round(valor, 2) != valor
             ? $"{clave}: {valor} tiene que ir de 0 a 100 con dos decimales como mucho."
             : null;
+
+    /// <summary>
+    /// Un <see cref="Synergos.CMS.Interfaces.CaminoDeCompra"/> declarado, o ninguno. Mal escrito no se
+    /// ignora: caería a la regla y el elemento compraría por un camino que nadie eligió.
+    /// </summary>
+    public static string? Camino(string clave, string? valor)
+        => Synergos.CMS.Interfaces.CaminoDeCompra.EsValido(valor)
+            ? null
+            : $"{clave}: «{valor}» tiene que ser «{Synergos.CMS.Interfaces.CaminoDeCompra.Puerta}» o «{Synergos.CMS.Interfaces.CaminoDeCompra.Directa}», o no estar (y decide la puerta).";
 }

@@ -124,6 +124,17 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             + "AVISOS_DE_LOS_FLUJOS del UI (gate:avisos, G-15).");
     }
 
+    /// <summary>
+    /// El resolver de Eventos declara el camino de compra preguntando a la puerta por un flujo (ADR 0140): tiene
+    /// que ser el MISMO que la vista coloca alrededor del elemento, o declararía «puerta» por un flujo y el
+    /// elemento pediría la compra a otro.
+    /// </summary>
+    [Fact]
+    public void El_camino_de_compra_pregunta_por_el_flujo_que_coloca_la_vista()
+    {
+        Assert.Equal(FlujoDeEventos, Synergos.CMS.Web.Services.SynHost.EventosResolutor.FlujoDeLaCompra);
+    }
+
     /// <summary>Las vistas, sin sus comentarios de Razor ni de HTML: lo que se nombra en un comentario no se coloca.</summary>
     private static IReadOnlyList<(string Ruta, string Texto)> Vistas()
     {

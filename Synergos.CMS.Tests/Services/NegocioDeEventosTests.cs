@@ -11,6 +11,7 @@ using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
 using Synergos.CMS.Tests.Services.SynHost;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Puerta;
 using Synergos.CMS.Web.Services.SynHost;
 using Umbraco.Cms.Core.Web;
 
@@ -133,6 +134,8 @@ public sealed class NegocioDeEventosTests
             ["FeePercent"] = "12.5",
             [$"Sitios:{Bogota}:FeePercent"] = "8",
             [$"Sitios:{Bogota}:PlatformFeePercent"] = "0",
+            ["PurchasePath"] = "puerta",
+            [$"Sitios:{Bogota}:PurchasePath"] = "directa",
         });
 
         sp.GetRequiredService<IStartupValidator>().Validate();
@@ -164,6 +167,8 @@ public sealed class NegocioDeEventosTests
     [InlineData("ApiBase", "/\\evil.example/api", "ApiBase")]
     [InlineData("ApiBase", "ftp://ejemplo.co/eventos", "ApiBase")]
     [InlineData("ApiBase", "api/eventos", "ApiBase")]
+    [InlineData("PurchasePath", "directo", "PurchasePath")]
+    [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:PurchasePath", "orquestador", "PurchasePath")]
     public void Una_clave_mal_escrita_o_fuera_de_rango_no_deja_arrancar(string clave, string valor, string seDice)
     {
         using var sp = Opciones(new() { [clave] = valor });
@@ -247,14 +252,88 @@ public sealed class NegocioDeEventosTests
     [Fact]
     public void El_resolver_copia_lo_del_editor_y_la_configuracion_del_sitio()
     {
-        var resolutor = new EventosResolutor(ElementoFalso.Fallback, Fijo(8m), NullLogger<EventosResolutor>.Instance);
+        var resolutor = new EventosResolutor(ElementoFalso.Fallback, Fijo(8m), Puerta(abierto: false, conDestino: false),
+            NullLogger<EventosResolutor>.Instance);
 
         var props = resolutor.Resolver(ElementoFalso.Con(
             ("heading", "Cartelera"), ("subheading", "Lo que viene"), ("role", "organizer"),
             // Lo que el editor podía escribir antes: ya no viaja.
             ("apiBase", "/otra/api"), ("config", """{"feePercent":0}"""))).Props;
 
-        Assert.Equal(new EventosProps("Cartelera", "Lo que viene", "organizer", "/api/eventos", 8m, 10m), props);
+        Assert.Equal(new EventosProps("Cartelera", "Lo que viene", "organizer", "/api/eventos", 8m, 10m, CaminoDeCompra.Directa), props);
+    }
+
+    // ── El camino de compra: lo declara el CMS (ADR 0140, regla del superset) ───────────────
+    //
+    // Las dos rutas de la compra se conservan: la puerta (/api/flujos/eventos.compra) y la directa
+    // (/api/eventos/checkout|confirm). Gana el override del negocio si lo hay; si no, la puerta cuando la
+    // abre el despliegue; si no, la directa.
+
+    /// <summary>Vacío: sin override y sin puerta (ni flujo abierto ni destino), la ruta directa.</summary>
+    [Fact]
+    public void Sin_override_y_sin_puerta_la_compra_va_por_la_ruta_directa()
+    {
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(12m), Puerta(abierto: false, conDestino: false)).PurchasePath);
+    }
+
+    /// <summary>Feliz: <c>eventos.compra</c> abierto en la puerta y el orquestador con destino.</summary>
+    [Fact]
+    public void Con_la_puerta_abierta_para_la_compra_va_por_la_puerta()
+    {
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(Fijo(12m), Puerta(abierto: true, conDestino: true)).PurchasePath);
+    }
+
+    /// <summary>
+    /// Sin orquestador: es el clon limpio —<c>appsettings.json</c> abre <c>eventos.compra</c> y no trae
+    /// <c>Synergos:Eventos:BaseUrl</c>—. La puerta contestaría 503 a cada compra, así que gana la directa,
+    /// que es la que vende con el motor en proceso. Y lo mismo con destino y el flujo sin abrir.
+    /// </summary>
+    [Fact]
+    public void Sin_orquestador_la_compra_va_por_la_ruta_directa_aunque_el_flujo_este_abierto()
+    {
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(12m), Puerta(abierto: true, conDestino: false)).PurchasePath);
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(12m), Puerta(abierto: false, conDestino: true)).PurchasePath);
+    }
+
+    /// <summary>Override: lo que declara el negocio gana a la regla, en los dos sentidos.</summary>
+    [Theory]
+    [InlineData(CaminoDeCompra.Directa, true)]
+    [InlineData(CaminoDeCompra.Puerta, false)]
+    public void El_camino_declarado_en_el_negocio_gana_a_la_regla(string declarado, bool puertaAbierta)
+    {
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEventos>>();
+        negocio.Actual().Returns(new NegocioDeEventos("/api/eventos", 12m, 10m, declarado));
+
+        Assert.Equal(declarado, Resuelto(negocio, Puerta(puertaAbierta, puertaAbierta)).PurchasePath);
+    }
+
+    /// <summary>
+    /// El override es por sitio, como toda clave de negocio, y se escribe como se quiera: se compara sin
+    /// espacios ni mayúsculas. El sitio que no lo declara sigue la regla.
+    /// </summary>
+    [Fact]
+    public void Un_sitio_declara_su_camino_y_los_demas_siguen_la_regla()
+    {
+        var (_, sp) = Recargable(new() { [$"Sitios:{Bogota}:PurchasePath"] = " Directa " });
+        using var __ = sp;
+        Guid? sitio = Bogota;
+        var lector = Lector(sp, () => sitio);
+        var abierta = Puerta(abierto: true, conDestino: true);
+
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(lector, abierta).PurchasePath);
+        sitio = Medellin;
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(lector, abierta).PurchasePath);
+        sitio = null;
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(lector, abierta).PurchasePath);
+    }
+
+    [Fact]
+    public void Un_sitio_con_el_camino_vacio_vuelve_a_la_regla()
+    {
+        var seccion = Seccion(new() { ["PurchasePath"] = "puerta", [$"Sitios:{Bogota}:PurchasePath"] = "" });
+
+        Assert.Equal(CaminoDeCompra.Puerta, seccion.Para(null).PurchasePath);
+        Assert.Null(seccion.Para(Bogota).PurchasePath);
     }
 
     // ── Lo que se cobra: el motor en proceso ─────────────────────────────────────────────────
@@ -352,6 +431,28 @@ public sealed class NegocioDeEventosTests
         negocio.Actual().Returns(new NegocioDeEventos("/api/eventos", comision, 10m));
         return negocio;
     }
+
+    /// <summary>
+    /// La puerta de verdad, con los contratos incrustados: <paramref name="abierto"/> si
+    /// <c>Synergos:Puerta:Flujos</c> trae <c>eventos.compra</c>, y <paramref name="conDestino"/> si
+    /// <c>Synergos:Eventos:BaseUrl</c> le da destino al orquestador.
+    /// </summary>
+    private static IPuertaDeLosFlujos Puerta(bool abierto, bool conDestino)
+    {
+        var ajustes = new PuertaSettings();
+        if (abierto)
+        {
+            ajustes.Flujos[EventosResolutor.FlujoDeLaCompra] = new FlujoDeLaPuertaSettings { Acceso = AccesoDeLaPuerta.Miembro };
+        }
+
+        var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
+        monitor.CurrentValue.Returns(ajustes);
+        return new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? ["Eventos"] : []));
+    }
+
+    private static EventosProps Resuelto(INegocioDelSitio<NegocioDeEventos> negocio, IPuertaDeLosFlujos puerta)
+        => new EventosResolutor(ElementoFalso.Fallback, negocio, puerta, NullLogger<EventosResolutor>.Instance)
+            .Resolver(ElementoFalso.Con(("heading", "Cartelera"))).Props;
 
     private static StubEventTicketingService Motor(IPaymentProvider pagos, INegocioDelSitio<NegocioDeEventos>? negocio)
         => new(new StubEventCatalogProvider(), new StubReservationService(), pagos,

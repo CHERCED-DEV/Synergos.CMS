@@ -251,6 +251,30 @@ public sealed class FlujosControllerTests : IDisposable
     }
 
     /// <summary>
+    /// Lo que dice <see cref="PuertaDeLosFlujos"/> —con lo que el CMS declara el camino de compra del
+    /// elemento (ADR 0140)— es lo contrario del 503 de la puerta, en los cuatro casos: el elemento nunca va a
+    /// una puerta que no lo pasaría, ni deja de ir a una que sí.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task Lo_que_abre_la_puerta_es_lo_contrario_de_su_503(bool abierto, bool conDestino)
+    {
+        if (!abierto) _ajustes.Flujos.Clear();
+        _conDestino = conDestino;
+        var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
+        monitor.CurrentValue.Returns(_ajustes);
+        var abre = new PuertaDeLosFlujos(TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(conDestino ? ["Eventos"] : [])).Abre(Flujo);
+
+        var r = await Pedir("GET", "consultar", "id=s-1");
+
+        Assert.Equal(abierto && conDestino, abre);
+        Assert.Equal(!abre, r.Estado == 503 && r.Codigo == "puerta.flujo_no_disponible");
+    }
+
+    /// <summary>
     /// El ORDEN de los códigos es el contrato (FlujosController): cuando fallan dos cosas, contesta la primera.
     /// </summary>
     [Fact]

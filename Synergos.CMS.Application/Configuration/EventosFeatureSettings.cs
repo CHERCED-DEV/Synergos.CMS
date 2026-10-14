@@ -34,12 +34,21 @@ public sealed class EventosFeatureSettings : SeccionDeNegocio<EventosFeatureSiti
     /// <remarks>El 10 es el que el bundle traía compilado en la plantilla del payout.</remarks>
     public decimal PlatformFeePercent { get; init; } = 10m;
 
+    /// <summary>
+    /// Por dónde compra el elemento, si el despliegue lo declara: <c>puerta</c> o <c>directa</c>
+    /// (<see cref="CaminoDeCompra"/>). Sin valor no se declara nada y decide la regla: la puerta cuando
+    /// abre <c>eventos.compra</c>, y la ruta directa en otro caso.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío vuelve a la regla aunque los valores base declaren uno.</remarks>
+    public string? PurchasePath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeEventos Fusionar(EventosFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             FeePercent: propio?.FeePercent ?? FeePercent,
-            PlatformFeePercent: propio?.PlatformFeePercent ?? PlatformFeePercent);
+            PlatformFeePercent: propio?.PlatformFeePercent ?? PlatformFeePercent,
+            PurchasePath: CaminoDeCompra.Normalizar(propio?.PurchasePath ?? PurchasePath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEventos negocio)
@@ -48,6 +57,7 @@ public sealed class EventosFeatureSettings : SeccionDeNegocio<EventosFeatureSiti
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             ReglasDeNegocio.Porcentaje("FeePercent", negocio.FeePercent),
             ReglasDeNegocio.Porcentaje("PlatformFeePercent", negocio.PlatformFeePercent),
+            ReglasDeNegocio.Camino("PurchasePath", negocio.PurchasePath),
         }.OfType<string>();
 }
 
@@ -64,4 +74,7 @@ public sealed class EventosFeatureSitio
 
     /// <inheritdoc cref="EventosFeatureSettings.PlatformFeePercent"/>
     public decimal? PlatformFeePercent { get; init; }
+
+    /// <inheritdoc cref="EventosFeatureSettings.PurchasePath"/>
+    public string? PurchasePath { get; init; }
 }

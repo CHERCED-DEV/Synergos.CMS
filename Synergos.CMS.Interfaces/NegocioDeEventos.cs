@@ -6,11 +6,14 @@ namespace Synergos.CMS.Interfaces;
 /// entradas, de 0 a 100.</param>
 /// <param name="PlatformFeePercent">Comisión de la plataforma que se descuenta de lo que se le
 /// liquida al organizador, de 0 a 100.</param>
+/// <param name="PurchasePath">Por dónde compra el elemento si el despliegue lo DECLARA
+/// (<see cref="CaminoDeCompra.Puerta"/> o <see cref="CaminoDeCompra.Directa"/>), ya normalizado; nulo si no
+/// lo declara, y entonces decide la regla de <see cref="CaminoDeCompra.Decidir"/>.</param>
 /// <remarks>
 /// <b>La moneda no está acá</b>: es un dato del precio y la decide el catálogo, que la manda con cada
 /// importe. Una moneda de configuración sería una segunda fuente para el mismo dato.
 /// </remarks>
-public sealed record NegocioDeEventos(string ApiBase, decimal FeePercent, decimal PlatformFeePercent)
+public sealed record NegocioDeEventos(string ApiBase, decimal FeePercent, decimal PlatformFeePercent, string? PurchasePath = null)
 {
     /// <summary>
     /// La comisión de servicio que corresponde a <paramref name="subtotal"/>: a dos decimales, con
