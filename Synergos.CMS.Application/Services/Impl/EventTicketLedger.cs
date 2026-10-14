@@ -238,6 +238,34 @@ public sealed class EventTicketLedger
         }
     }
 
+    /// <summary>
+    /// Deja constancia de que quien compró ya vio en qué quedó su compra (ADR 0140, el cupón endurecido): le
+    /// quita <see cref="PersistedEventOrder.Unacknowledged"/> a la orden, bajo el cerrojo de su saga y sin
+    /// tocar su estado. <c>true</c> si había algo que quitar.
+    /// </summary>
+    public async Task<bool> AcusarAsync(string sagaId, string orderRef, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sagaId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(orderRef);
+
+        var cerrojo = CerrojoDe(sagaId);
+        await cerrojo.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (await LoadAsync(orderRef, cancellationToken).ConfigureAwait(false) is not { Unacknowledged: true } orden
+                || !string.Equals(orden.PaymentSessionId, sagaId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            await SaveAsync(orden with { Unacknowledged = false }, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
     /// <summary>Todas las compras. Un fichero ilegible se salta, no tumba la lista.</summary>
     public async Task<List<PersistedEventOrder>> LoadAllAsync(CancellationToken cancellationToken = default)
     {
@@ -624,4 +652,18 @@ public sealed record PersistedEventOrder(
     /// </summary>
     /// <remarks>Opcional y fuera de la lista posicional, como <see cref="BuyerKind"/>: lo ya escrito se sigue leyendo.</remarks>
     public bool ViaGate { get; init; }
+
+    /// <summary>
+    /// Que quien compró todavía no vio en qué quedó (ADR 0140, el cupón endurecido): la resolvió una lectura
+    /// que no era la suya —la reconciliación de la consola del organizador o de «mis entradas», que sólo
+    /// enseña las entradas cuyo portador es quien pide—. La lectura de las compras sin acuse la sigue
+    /// informando hasta que su comprador lea sus entradas.
+    /// </summary>
+    /// <remarks>
+    /// <b>Existe porque <see cref="EventOrderStatus.Confirmed"/> no es acuse.</b> Una compra cobrada cuya
+    /// respuesta se perdió quedaba confirmada por cualquiera de esas dos lecturas, y desde otro dispositivo
+    /// se abría y se cobraba otra. Opcional y fuera de la lista posicional, como <see cref="BuyerKind"/>: lo
+    /// ya escrito se lee como «con acuse», que es como se trataba.
+    /// </remarks>
+    public bool Unacknowledged { get; init; }
 }

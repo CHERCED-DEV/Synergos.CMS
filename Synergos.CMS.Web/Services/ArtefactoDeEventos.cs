@@ -121,7 +121,7 @@ public sealed record ResultadoDelArtefacto(
     public bool Bien => Codigo is null;
 }
 
-/// <summary>Una compra del miembro sin acuse —nadie emitió sus entradas— y en qué quedó en el orquestador.</summary>
+/// <summary>Una compra del miembro sin acuse —su comprador no leyó sus entradas— y en qué quedó en el orquestador.</summary>
 /// <param name="Id">El id de la saga: la referencia que ve quien compra.</param>
 /// <param name="Estado"><c>Running</c>, <c>Completed</c> o <see cref="ArtefactoDeEventos.SinLeer"/>.</param>
 public sealed record CompraSinAcuse(string Id, string Estado);
@@ -240,6 +240,8 @@ public sealed class ArtefactoDeEventos
         var previa = await OrdenDeAsync(compraId, sujeto, ct).ConfigureAwait(false);
         if (previa is { Status: EventOrderStatus.Confirmed })
         {
+            // La confirmó una reconciliación sin que él la viera: ésta es su lectura, el acuse.
+            await AcusarAsync(previa, ct).ConfigureAwait(false);
             return new ResultadoDelArtefacto(StatusCodes.Status200OK, Entradas: _ledger.ConfirmationOf(previa));
         }
 
@@ -270,7 +272,21 @@ public sealed class ArtefactoDeEventos
             return new ResultadoDelArtefacto(StatusCodes.Status409Conflict, "eventos.compra_ya_cerrada",
                 "Esta compra ya emitió sus entradas con otra orden.", "Completed");
         }
+        // La pudo confirmar entre medias una reconciliación: quien compró la está leyendo ahora.
+        await AcusarAsync(confirmada, ct).ConfigureAwait(false);
         return new ResultadoDelArtefacto(StatusCodes.Status200OK, Entradas: _ledger.ConfirmationOf(confirmada));
+    }
+
+    /// <summary>
+    /// Quien compró está leyendo en qué quedó su compra: deja de estar sin acuse (ADR 0140, el cupón
+    /// endurecido). Es la única lectura que da el acuse; las reconciliaciones no.
+    /// </summary>
+    private async Task AcusarAsync(PersistedEventOrder orden, CancellationToken ct)
+    {
+        if (orden.Unacknowledged)
+        {
+            await _ledger.AcusarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Cuántas órdenes pendientes mira, como mucho, una reconciliación: las más recientes primero.</summary>
@@ -333,9 +349,13 @@ public sealed class ArtefactoDeEventos
         if (compra is { Status: "Completed" })
         {
             // Por el registro, que confirma UNA orden por saga: la gemela de una saga ya confirmada no
-            // emite las mismas butacas otra vez, y no se vuelve a mirar.
+            // emite las mismas butacas otra vez, y no se vuelve a mirar. Y SIN ACUSE: la confirma una
+            // lectura que no es la de su comprador —la consola del organizador, o «mis entradas», que sólo
+            // enseña las entradas cuyo portador es quien pide—, así que la lectura de las compras sin acuse
+            // la sigue informando hasta que él lea las suyas.
             var confirmada = await _ledger.ConfirmarAsync(orden.PaymentSessionId,
-                actual => actual is not null && actual.OrderRef == orden.OrderRef ? actual : orden, ct).ConfigureAwait(false);
+                actual => (actual is not null && actual.OrderRef == orden.OrderRef ? actual : orden) with { Unacknowledged = true },
+                ct).ConfigureAwait(false);
             if (!string.Equals(confirmada.OrderRef, orden.OrderRef, StringComparison.Ordinal))
             {
                 _log.LogWarning("La orden {Orden} es gemela de la que ya confirmó su compra: se descarta.", orden.OrderRef);
@@ -355,16 +375,20 @@ public sealed class ArtefactoDeEventos
 
     /// <summary>
     /// Las compras del miembro para un evento que no tienen acuse —su orden sigue
-    /// <see cref="EventOrderStatus.Pending"/>— y que todavía cuentan: en curso, cobradas sin entradas, o
-    /// sin leer. No emite nada.
+    /// <see cref="EventOrderStatus.Pending"/>, o la confirmó una reconciliación y su comprador no la ha
+    /// leído (<see cref="PersistedEventOrder.Unacknowledged"/>)— y que todavía cuentan: en curso, cobradas,
+    /// o sin leer. No emite nada.
     /// </summary>
     /// <remarks>
     /// <para><b>Para qué</b> (ADR 0140, D2, fase D). Antes de abrir una compra con una llave NUEVA, el
     /// elemento pregunta si quien compra ya tiene otra del mismo evento sin acuse: la que se cobró y cuya
     /// respuesta se perdió, o la que sigue en curso. La guarda del navegador vive en su almacenamiento;
     /// ésta la ve desde otro dispositivo, con los datos del sitio borrados o pasado su plazo, porque el
-    /// acuse lo sabe este lado (la orden <c>Pending</c> o <c>Confirmed</c>), no el orquestador. Es
-    /// consultiva: comprar dos veces a propósito sigue igual, porque la primera ya tiene acuse.</para>
+    /// acuse lo sabe este lado, no el orquestador. <b>Y el acuse no es <c>Confirmed</c></b>: lo da sólo
+    /// la lectura de sus entradas por su comprador (<see cref="EntradasAsync"/>); la consola del
+    /// organizador y «mis entradas» confirman sin que él vea nada, y la confirmada así se sigue informando
+    /// como <c>Completed</c>, sin preguntar al orquestador. Es consultiva: comprar dos veces a propósito
+    /// sigue igual, porque la primera ya tiene acuse.</para>
     ///
     /// <para><b>Siempre del miembro</b>: se filtra por su sujeto y cada lectura al orquestador lo lleva,
     /// así que una orden ajena ni se lista ni se consulta.</para>
@@ -390,12 +414,18 @@ public sealed class ArtefactoDeEventos
 
         var sujeto = (Kind: Kind!, Id: miembro.ToString("n"));
         var evento = eventId.Trim();
-        var pendientes = (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
-            .Where(o => o.Status == EventOrderStatus.Pending && DelComprador(o, sujeto)
-                        && string.Equals(o.EventId, evento, StringComparison.Ordinal))
+        var delMiembro = (await _ledger.LoadAllAsync(ct).ConfigureAwait(false))
+            .Where(o => DelComprador(o, sujeto) && string.Equals(o.EventId, evento, StringComparison.Ordinal))
+            .ToList();
+        var pendientes = delMiembro
+            .Where(o => o.Status == EventOrderStatus.Pending)
             .OrderByDescending(o => o.CreatedAt)
             .ToList();
-        if (pendientes.Count == 0) return ([], null);
+        // Cobradas que confirmó una reconciliación y que su comprador no ha leído: no hace falta preguntar.
+        var confirmadasSinAcuse = delMiembro
+            .Where(o => o.Status == EventOrderStatus.Confirmed && o.Unacknowledged)
+            .ToList();
+        if (pendientes.Count == 0 && confirmadasSinAcuse.Count == 0) return ([], null);
 
         var leidas = new System.Collections.Concurrent.ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
         using var presupuesto = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -414,8 +444,10 @@ public sealed class ArtefactoDeEventos
         }
 
         var compras = pendientes
-            .Select(o => (o.PaymentSessionId, Estado: leidas.TryGetValue(o.OrderRef, out var e) ? e : SinLeer))
+            .Select(o => (o.CreatedAt, o.PaymentSessionId, Estado: leidas.TryGetValue(o.OrderRef, out var e) ? e : SinLeer))
+            .Concat(confirmadasSinAcuse.Select(o => (o.CreatedAt, o.PaymentSessionId, Estado: (string?)"Completed")))
             .Where(c => c.Estado is not null)
+            .OrderByDescending(c => c.CreatedAt)
             .DistinctBy(c => c.PaymentSessionId, StringComparer.Ordinal)
             .Select(c => new CompraSinAcuse(c.PaymentSessionId, c.Estado!))
             .ToList();

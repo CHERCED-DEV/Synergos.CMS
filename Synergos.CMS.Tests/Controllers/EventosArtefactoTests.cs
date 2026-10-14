@@ -31,6 +31,7 @@ public sealed class EventosArtefactoTests : IDisposable
 
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
     private readonly IEventTicketingService _ticketing = Substitute.For<IEventTicketingService>();
+    private readonly IEventManagementService _management = Substitute.For<IEventManagementService>();
     private readonly EventTicketLedger _ledger = new(signer: new HmacTicketSigner(Encoding.UTF8.GetBytes("llave-de-tests-del-artefacto")));
     private readonly Orquestador _orquestador = new();
 
@@ -39,6 +40,8 @@ public sealed class EventosArtefactoTests : IDisposable
         Sesion(Ana);
         _ticketing.GetTicketsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(ci => _ledger.TicketsOfAsync(ci.ArgAt<string>(0), default));
+        _management.GetManageAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new EventManageView(ci.ArgAt<string>(0), [], 0, 0));
         _orquestador.Sagas[Compra] = new Saga($"eventos.comprador:{Ana:n}", "Running", [("GEN", null, 2)]);
     }
 
@@ -150,7 +153,7 @@ public sealed class EventosArtefactoTests : IDisposable
         }
 
         return new EventosController(
-            Substitute.For<IEventCatalogProvider>(), _ticketing, Substitute.For<IEventManagementService>(),
+            Substitute.For<IEventCatalogProvider>(), _ticketing, _management,
             Substitute.For<IPriceFormatter>(), _gate, Substitute.For<IRealtimeNotifier>(),
             NullLogger<EventosController>.Instance, artefacto: artefacto)
         {
@@ -420,6 +423,41 @@ public sealed class EventosArtefactoTests : IDisposable
         Assert.Equal((Compra, "Completed"), (Assert.Single(primera).Id, primera[0].Status));
         Assert.Equal(primera, segunda);
         Assert.Equal(EventOrderStatus.Pending, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    [Theory]
+    [InlineData("la consola del organizador")]
+    [InlineData("mis entradas")]
+    public async Task Una_compra_cobrada_que_confirmo_otra_lectura_sigue_sin_acuse_hasta_que_su_comprador_lee_sus_entradas(string quien)
+    {
+        // «Confirmed» no es acuse (revisión del cupón endurecido). La consola reconcilia el evento entero, y
+        // «mis entradas» sólo enseña las entradas cuyo portador es quien pide: Ana compró para Luisa y Pedro
+        // y no vio nada. Sin la marca, esta lectura dejaba de verla y otro dispositivo abría y cobraba otra.
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Sagas[Compra] = _orquestador.Sagas[Compra] with { Estado = "Completed" };
+        if (quien == "mis entradas")
+        {
+            var mias = Assert.IsType<EventosController.TicketsResponse>(Assert.IsType<OkObjectResult>(await Controlador().Tickets(default)).Value);
+            Assert.Empty(mias.Tickets);
+        }
+        else
+        {
+            _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
+            Assert.IsType<OkObjectResult>(await Controlador().Manage(Evento, default));
+        }
+        Assert.Equal(EventOrderStatus.Confirmed, Assert.Single(await _ledger.LoadAllAsync()).Status);
+        var llamadas = _orquestador.Llamadas;
+
+        var sinAcuse = Assert.Single(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+
+        Assert.Equal((Compra, "Completed"), (sinAcuse.Id, sinAcuse.Status));
+        Assert.Equal(llamadas, _orquestador.Llamadas);
+
+        // Ana lee sus entradas: ése es el acuse, y la compra deja de informarse.
+        Assert.Equal(2, Entradas(await Controlador().Entradas(Compra, default)).Tickets.Count);
+
+        Assert.Empty(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+        Assert.Equal(EventOrderStatus.Confirmed, Assert.Single(await _ledger.LoadAllAsync()).Status);
     }
 
     [Theory]
