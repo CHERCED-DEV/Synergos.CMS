@@ -1263,7 +1263,8 @@
           "total",
           "held",
           "pendingCompensations",
-          "lastError"
+          "lastError",
+          "refundPending"
         ],
         "type": "object",
         "properties": {
@@ -1300,6 +1301,9 @@
               "null",
               "string"
             ]
+          },
+          "refundPending": {
+            "type": "boolean"
           }
         }
       },

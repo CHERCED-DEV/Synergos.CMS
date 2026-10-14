@@ -100,9 +100,12 @@ internal static class CompraDeEventosEnElOrquestador
 
     internal sealed record HeldDto(string Tier, string? Seat, int Quantity);
 
+    /// <param name="RefundPending">Si se está deshaciendo con plata cobrada sin devolver (ADR 0140, el cupón
+    /// endurecido). Un orquestador de antes no lo manda, y se lee como de antes.</param>
     internal sealed record PurchaseDto(
         string Id, string? BuyerKind, string? BuyerId, string? EventId, string? Status,
-        MoneyDto Total, IReadOnlyList<HeldDto>? Held, int PendingCompensations, string? LastError);
+        MoneyDto Total, IReadOnlyList<HeldDto>? Held, int PendingCompensations, string? LastError,
+        bool RefundPending = false);
 }
 
 /// <summary>Cómo terminó una operación del artefacto: lo que se emitió, o el motivo con su código.</summary>
@@ -123,7 +126,9 @@ public sealed record ResultadoDelArtefacto(
 
 /// <summary>Una compra del miembro sin acuse —su comprador no leyó sus entradas— y en qué quedó en el orquestador.</summary>
 /// <param name="Id">El id de la saga: la referencia que ve quien compra.</param>
-/// <param name="Estado"><c>Running</c>, <c>Completed</c> o <see cref="ArtefactoDeEventos.SinLeer"/>.</param>
+/// <param name="Estado"><c>Running</c>, <c>Completed</c>, <see cref="ArtefactoDeEventos.SinLeer"/>, o
+/// <c>Compensating</c> / <c>CompensationFailed</c> sólo cuando lo que se deshace es una devolución: hay plata
+/// cobrada sin devolver.</param>
 public sealed record CompraSinAcuse(string Id, string Estado);
 
 /// <summary>
@@ -312,7 +317,9 @@ public sealed class ArtefactoDeEventos
     /// <para><b>Lo que no se completará deja de mirarse</b>: una compra deshecha (<c>Compensated</c>,
     /// <c>CompensationFailed</c>), una que el orquestador no tiene para ese comprador (404), o la gemela de
     /// una orden que ya confirmó su saga, quedan <see cref="EventOrderStatus.Discarded"/>. Sin eso se
-    /// volvían a consultar en cada carga, para siempre.</para>
+    /// volvían a consultar en cada carga, para siempre. <b>Salvo la que se rindió con plata cobrada sin
+    /// devolver</b>: sigue pendiente hasta que una persona la deshaga, porque es lo que la lectura de las
+    /// compras sin acuse le dice al miembro.</para>
     /// </remarks>
     public async Task ReconciliarAsync(Func<PersistedEventOrder, bool> lasQueTocan, CancellationToken ct)
     {
@@ -364,11 +371,24 @@ public sealed class ArtefactoDeEventos
             return;
         }
 
-        if (compra is { Status: "Compensated" or "CompensationFailed" } || fallo is { Codigo: "eventos.purchase_not_found" })
+        if (SeDescarta(compra, fallo))
         {
             await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Si la compra ya no cuenta para nada y su orden se descarta: deshecha, o que el orquestador no tiene
+    /// para ese comprador. Una que se rindió con plata cobrada sin devolver NO (ADR 0140, el cupón
+    /// endurecido): descartarla era olvidar el cobro, y la lectura de las compras sin acuse la informa.
+    /// </summary>
+    private static bool SeDescarta(PurchaseDto? compra, ResultadoDelArtefacto? fallo)
+        => compra is { Status: "Compensated" } or { Status: "CompensationFailed", RefundPending: false }
+           || fallo is { Codigo: "eventos.purchase_not_found" };
+
+    /// <summary>Si se está deshaciendo DESPUÉS de cobrar: lo que se deshace es una devolución.</summary>
+    private static bool Devolviendo(PurchaseDto? compra)
+        => compra is { Status: "Compensating" or "CompensationFailed", RefundPending: true };
 
     /// <summary>El estado de una compra sin acuse que no se pudo leer: ilegible, caído o fuera del techo.</summary>
     public const string SinLeer = "Unknown";
@@ -397,7 +417,9 @@ public sealed class ArtefactoDeEventos
     /// órdenes, las más recientes primero, y deja de esperar a los <see cref="PresupuestoDeReconciliacion"/>.
     /// Lo que no alcanzó a leer, o no se pudo leer, sale como <see cref="SinLeer"/>: no saber no es
     /// «no hay». Lo deshecho o inexistente se descarta como en la reconciliación, y lo que se está
-    /// deshaciendo no se informa: no se cobrará.</para>
+    /// deshaciendo ANTES de cobrar no se informa: no se cobrará. Lo que se deshace DESPUÉS de cobrar sí,
+    /// con su estado (<c>Compensating</c> o <c>CompensationFailed</c>): es plata del miembro sin devolver,
+    /// y decirle «no se te cobró nada» lo invitaba a comprar otra vez sin saberlo.</para>
     ///
     /// <para><b>No confirma ni emite</b>: una cobrada sin acuse se informa y sus entradas salen por
     /// <c>…/compras/{id}/entradas</c>, con su portador.</para>
@@ -456,16 +478,17 @@ public sealed class ArtefactoDeEventos
 
     /// <summary>
     /// En qué quedó una compra sin acuse, o nulo si ya no cuenta: deshecha o inexistente (se descarta, como
-    /// en <see cref="ReconciliarUnaAsync"/>) o deshaciéndose.
+    /// en <see cref="ReconciliarUnaAsync"/>) o deshaciéndose sin cobro. La que se deshace con plata cobrada
+    /// sin devolver cuenta, con su estado.
     /// </summary>
     private async Task<string?> EnQueQuedoAsync(PersistedEventOrder orden, (string Kind, string Id) sujeto, CancellationToken ct)
     {
         var (compra, fallo) = await LeerAsync(orden.PaymentSessionId, sujeto, ct).ConfigureAwait(false);
         var estado = compra?.Status;
-        if (estado is "Running" or "Completed") return estado;
+        if (estado is "Running" or "Completed" || Devolviendo(compra)) return estado;
         if (estado is "Compensating") return null;
 
-        if (estado is "Compensated" or "CompensationFailed" || fallo is { Codigo: "eventos.purchase_not_found" })
+        if (SeDescarta(compra, fallo))
         {
             await _ledger.DescartarAsync(orden.PaymentSessionId, orden.OrderRef, ct).ConfigureAwait(false);
             return null;

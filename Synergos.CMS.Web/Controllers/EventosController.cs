@@ -602,9 +602,10 @@ public sealed class EventosController : ControllerBase
 
     // GET /api/eventos/compras/pendientes?eventId= → { compras:[{ id, status }] }   🔒 sesión
     //
-    // Las compras del miembro para ese evento que no tienen acuse —cobradas sin entradas, en curso, o sin
-    // leer—, para que el elemento no abra OTRA con una llave nueva sin resolverlas antes (ADR 0140, D2,
-    // fase D). Sólo las suyas, y sin evento no hay lista: un parámetro mal nombrado no devuelve todo.
+    // Las compras del miembro para ese evento que no tienen acuse —cobradas sin entradas, en curso, sin
+    // leer, o deshaciéndose con un cobro por devolver—, para que el elemento no abra OTRA con una llave
+    // nueva sin resolverlas antes (ADR 0140, D2, fase D). Sólo las suyas, y sin evento no hay lista: un
+    // parámetro mal nombrado no devuelve todo.
     [HttpGet("compras/pendientes")]
     public async Task<IActionResult> ComprasPendientes([FromQuery] string? eventId, CancellationToken cancellationToken)
     {

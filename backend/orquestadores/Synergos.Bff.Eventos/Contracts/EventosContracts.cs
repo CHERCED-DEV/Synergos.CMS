@@ -68,15 +68,26 @@ public sealed record HeldSeatResponse(string Tier, string? Seat, int Quantity);
 /// <param name="Held">Qué quedó apartado — es lo que el CMS necesita para emitir los e-tickets.</param>
 /// <param name="PendingCompensations">Cuánto queda por deshacer.</param>
 /// <param name="LastError">Qué falló.</param>
+/// <param name="RefundPending">Si hay plata cobrada que todavía no se devolvió: la compra se está
+/// deshaciendo —o no se pudo deshacer— DESPUÉS de capturar.</param>
+/// <remarks>
+/// <b><c>RefundPending</c> existe porque el estado no lo dice</b> (ADR 0140, el cupón endurecido).
+/// <c>Compensating</c> y <c>CompensationFailed</c> son lo mismo antes y después de capturar, y sólo
+/// después lo que se deshace es una devolución: «cerrar» captura y luego consume el aforo, y si el
+/// apartado ya venció la compra se deshace con el cobro hecho. Decir ahí «no se te cobró nada» invitaba
+/// a comprar otra vez con un cobro sin devolver. Se deriva de la compensación de devolver pendiente en
+/// una compra que se deshace: en una en curso o completada, lo armado es el seguro, no la tarea.
+/// </remarks>
 public sealed record TicketPurchaseResponse(
     string Id, string BuyerKind, string BuyerId, string EventId, string Status, MoneyDto Total,
-    IReadOnlyList<HeldSeatResponse> Held, int PendingCompensations, string? LastError)
+    IReadOnlyList<HeldSeatResponse> Held, int PendingCompensations, string? LastError, bool RefundPending)
 {
     public static TicketPurchaseResponse From(TicketingSaga s) => new(
         s.Id, s.Buyer.Kind, s.Buyer.Id, s.EventId, s.Status.ToString(),
         new MoneyDto(s.Total.Amount, s.Total.Currency),
         s.Holds.Select(h => new HeldSeatResponse(h.Tier, h.Seat, h.Quantity)).ToList(),
-        s.Pending().Count, s.LastError);
+        s.Pending().Count, s.LastError,
+        s.IsUnwinding() && s.Compensations.Any(c => c.IsPending && c.Kind == EventosCompensations.RefundPayment));
 }
 
 /// <summary>Cuánto costaría una compra de entradas, sin apartar ni autorizar nada (ADR 0140, el cupón).</summary>

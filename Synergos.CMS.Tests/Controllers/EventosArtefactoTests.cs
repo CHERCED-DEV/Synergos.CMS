@@ -55,7 +55,7 @@ public sealed class EventosArtefactoTests : IDisposable
         _gate.CurrentMemberDisplayName.Returns(miembro == Ana ? "Ana María" : "Beto");
     }
 
-    internal sealed record Saga(string Dueno, string Estado, (string Tier, string? Seat, int Cantidad)[] Apartado);
+    internal sealed record Saga(string Dueno, string Estado, (string Tier, string? Seat, int Cantidad)[] Apartado, bool PorDevolver = false);
 
     internal sealed class Orquestador : HttpMessageHandler
     {
@@ -110,6 +110,7 @@ public sealed class EventosArtefactoTests : IDisposable
                 held = saga.Apartado.Select(a => new { tier = a.Tier, seat = a.Seat, quantity = a.Cantidad }),
                 pendingCompensations = 0,
                 lastError = saga.Estado == "Compensated" ? "payments.declined" : null,
+                refundPending = saga.PorDevolver,
             });
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
         }
@@ -520,6 +521,41 @@ public sealed class EventosArtefactoTests : IDisposable
         Assert.Equal(EventOrderStatus.Pending, estados["pta-deshaciendose"]);
         Assert.Equal(EventOrderStatus.Pending, estados["pta-otro-evento"]);
         Assert.Equal(EventOrderStatus.Confirmed, estados["pta-confirmada"]);
+    }
+
+    [Theory]
+    [InlineData("Compensating")]
+    [InlineData("CompensationFailed")]
+    public async Task Una_compra_que_se_deshace_despues_de_cobrar_se_informa_con_su_estado_y_no_se_descarta(string estado)
+    {
+        // «Cerrar» captura y luego consume el aforo: con el apartado vencido se deshace con el cobro hecho, y lo
+        // que se deshace es una DEVOLUCIÓN (revisión del cupón endurecido). Callarla, o descartarla al rendirse,
+        // era decirle al miembro que no se le cobró nada y dejarlo comprar otra vez sin saberlo.
+        await Controlador(DosAsistentes).AnotarAsistentes(Compra, default);
+        _orquestador.Sagas[Compra] = _orquestador.Sagas[Compra] with { Estado = estado, PorDevolver = true };
+
+        var compra = Assert.Single(Pendientes(await Controlador().ComprasPendientes(Evento, default)));
+
+        Assert.Equal((Compra, estado), (compra.Id, compra.Status));
+        Assert.Equal(EventOrderStatus.Pending, Assert.Single(await _ledger.LoadAllAsync()).Status);
+    }
+
+    [Fact]
+    public async Task La_reconciliacion_guarda_la_que_se_rindio_con_un_cobro_por_devolver_y_descarta_la_que_se_rindio_sin_cobro()
+    {
+        _orquestador.Sagas["pta-con-cobro"] = new Saga($"eventos.comprador:{Ana:n}", "CompensationFailed", [("GEN", null, 1)], PorDevolver: true);
+        _orquestador.Sagas["pta-sin-cobro"] = new Saga($"eventos.comprador:{Ana:n}", "CompensationFailed", [("GEN", null, 1)]);
+        await Orden("pta-con-cobro", Ana);
+        await Orden("pta-sin-cobro", Ana);
+
+        Assert.IsType<OkObjectResult>(await Controlador().Tickets(default));
+
+        var estados = (await _ledger.LoadAllAsync()).ToDictionary(o => o.PaymentSessionId, o => o.Status);
+        Assert.Equal(EventOrderStatus.Pending, estados["pta-con-cobro"]);
+        Assert.Equal(EventOrderStatus.Discarded, estados["pta-sin-cobro"]);
+        Assert.Equal(("pta-con-cobro", "CompensationFailed"),
+            (Assert.Single(Pendientes(await Controlador().ComprasPendientes(Evento, default))).Id,
+             Pendientes(await Controlador().ComprasPendientes(Evento, default))[0].Status));
     }
 
     [Fact]
