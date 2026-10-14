@@ -128,8 +128,13 @@ public static class ReglasDeNegocio
     /// Un <see cref="Synergos.CMS.Interfaces.CaminoDeCompra"/> declarado, o ninguno. Mal escrito no se
     /// ignora: caería a la regla y el elemento compraría por un camino que nadie eligió.
     /// </summary>
+    /// <remarks>
+    /// El mensaje dice lo que pasa SIN valor, que es la regla de <see cref="Synergos.CMS.Interfaces.CaminoDeCompra.Decidir"/>
+    /// y no siempre la puerta: quien lo borra esperando la puerta, en un despliegue sin destino para el
+    /// orquestador, compraría por la directa.
+    /// </remarks>
     public static string? Camino(string clave, string? valor)
         => Synergos.CMS.Interfaces.CaminoDeCompra.EsValido(valor)
             ? null
-            : $"{clave}: «{valor}» tiene que ser «{Synergos.CMS.Interfaces.CaminoDeCompra.Puerta}» o «{Synergos.CMS.Interfaces.CaminoDeCompra.Directa}», o no estar (y decide la puerta).";
+            : $"{clave}: «{valor}» tiene que ser «{Synergos.CMS.Interfaces.CaminoDeCompra.Puerta}» o «{Synergos.CMS.Interfaces.CaminoDeCompra.Directa}», o no estar (y decide la regla: la puerta si abre el flujo de la compra, y si no la directa).";
 }

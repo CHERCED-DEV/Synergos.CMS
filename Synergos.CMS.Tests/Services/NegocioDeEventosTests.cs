@@ -179,6 +179,22 @@ public sealed class NegocioDeEventosTests
     }
 
     /// <summary>
+    /// El arranque que se niega por un camino mal escrito dice lo que pasa si se borra: decide la REGLA,
+    /// que sin destino para el orquestador es la directa. Decía «y decide la puerta», y quien lo borraba
+    /// esperándola compraba por el otro camino.
+    /// </summary>
+    [Fact]
+    public void Un_camino_mal_escrito_dice_que_sin_valor_decide_la_regla_y_no_la_puerta()
+    {
+        using var sp = Opciones(new() { ["PurchasePath"] = "directo" });
+
+        var error = Assert.Throws<OptionsValidationException>(() => sp.GetRequiredService<IStartupValidator>().Validate());
+
+        Assert.Contains("o no estar (y decide la regla: la puerta si abre el flujo de la compra, y si no la directa)", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("decide la puerta", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Un porcentaje escrito como en es-CO —«1,5»— tampoco deja arrancar: lo rechaza el binder al
     /// convertirlo. Medido: no lo lee como 15, que era el riesgo de la cultura invariante.
     /// </summary>
