@@ -62,6 +62,12 @@ public sealed class SondasDelContratoTests
         ["AuthorizePayment"] = """
             {"forKind":"sonda.compra","forId":"s-1","payerKind":"sonda.comprador","payerId":"p-1","amount":{"amount":1000,"currency":"COP"}}
             """,
+
+        // El consentimiento resuelve quién actúa después de comprobar el sujeto (núcleo N2): con `{}`
+        // contesta `consent.bad_subject`. Revocar también exige el propósito antes de mirar la cabecera.
+        ["GrantConsent"] = """{"subjectKind":"sonda.titular","subjectId":"t-1","purpose":"sonda"}""",
+        ["RevokeConsent"] = """{"subjectKind":"sonda.titular","subjectId":"t-1","purpose":"sonda"}""",
+        ["ForgetSubject"] = """{"subjectKind":"sonda.titular","subjectId":"t-1"}""",
     };
 
     /// <summary>Lo que se manda en la cabecera de identidad para ver si el endpoint la lee: no es un token.</summary>

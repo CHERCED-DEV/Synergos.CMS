@@ -10,11 +10,19 @@ namespace Synergos.Api.Consent.Contracts;
 /// más fuerte que <c>CmsSession</c> sin presentar el token se rechaza (HU #14).
 /// </param>
 public sealed record GrantRequest(
-    string? SubjectKind, string? SubjectId, string? Purpose, string? PolicyVersion,
-    DateTimeOffset? ExpiresAtUtc, string? Assertion);
+    string? SubjectKind = null, string? SubjectId = null, string? Purpose = null, string? PolicyVersion = null,
+    DateTimeOffset? ExpiresAtUtc = null, string? Assertion = null);
 
-/// <summary>Retirar consentimiento — y consultar, que usa la misma forma.</summary>
-public sealed record RevokeRequest(string? SubjectKind, string? SubjectId, string? Purpose, string? Assertion);
+/// <summary>Retirar consentimiento.</summary>
+public sealed record RevokeRequest(string? SubjectKind = null, string? SubjectId = null, string? Purpose = null, string? Assertion = null);
+
+/// <summary>Consultar si hay un consentimiento vigente para un propósito.</summary>
+/// <remarks>
+/// Tiene forma propia desde el núcleo N2: antes reutilizaba <see cref="RevokeRequest"/>, y el contrato
+/// publicado habría dicho que consultar lleva una afirmación de identidad que el endpoint no mira.
+/// En el cable es lo mismo (<c>{ subjectKind, subjectId, purpose }</c>, y lo que sobre se ignora).
+/// </remarks>
+public sealed record CheckConsentRequest(string? SubjectKind = null, string? SubjectId = null, string? Purpose = null);
 
 /// <summary>Derecho al olvido.</summary>
 /// <param name="Assertion">
@@ -22,7 +30,7 @@ public sealed record RevokeRequest(string? SubjectKind, string? SubjectId, strin
 /// en <c>revoke</c>: retirarle TODOS los permisos a alguien es más grave que retirarle uno, y
 /// hasta el defecto #83 era lo único que no pedía nada (defecto #83).
 /// </param>
-public sealed record ForgetRequest(string? SubjectKind, string? SubjectId, string? Assertion = null);
+public sealed record ForgetRequest(string? SubjectKind = null, string? SubjectId = null, string? Assertion = null);
 
 /// <summary>Cómo sale un consentimiento.</summary>
 /// <param name="GrantedWith">
