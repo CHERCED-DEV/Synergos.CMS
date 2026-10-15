@@ -194,7 +194,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             var elemento = definicion.Pasos[i];
             var desenlace = elemento.ParaCada is { } bloque
                 ? await BloqueAsync(bloque, corrida, ct)
-                : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, ct);
+                : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, null, ct);
 
             if (desenlace.Rechazo is { } rechazo) return await FallarAsync(corrida, rechazo, desenlace.Motivo!, ct);
             if (desenlace.Control == PasoResultado.SaltarFase) break;
@@ -260,7 +260,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             var elemento = definicion.Pasos[i];
             var desenlace = elemento.ParaCada is { } bloque
                 ? await BloqueAsync(bloque, corrida, ct)
-                : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, ct);
+                : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, null, ct);
 
             if (desenlace.Rechazo is { } rechazo) return Result.Rejected<FlowContext>(rechazo);
             if (desenlace.Control == PasoResultado.SaltarFase) break;
@@ -335,11 +335,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // Los ítems se toman UNA vez, al entrar: el bloque reescribe la saga en cada vuelta, y
         // recorrer la lista nueva cada vez haría depender el recorrido de lo que el propio bloque
         // va cambiando.
-        foreach (var item in Items(bloque, corrida))
+        var items = Items(bloque, corrida);
+        for (var indice = 0; indice < items.Count; indice++)
         {
             foreach (var id in bloque.Pasos)
             {
-                var desenlace = await PasoAsync(_flujo.Pasos[id], corrida, bloque.Como, item, ct);
+                var desenlace = await PasoAsync(_flujo.Pasos[id], corrida, bloque.Como, items[indice], indice, ct);
                 if (desenlace.Rechazo is not null || desenlace.Control == PasoResultado.SaltarFase) return desenlace;
             }
         }
@@ -364,7 +365,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     }
 
     private async Task<Desenlace> PasoAsync(
-        PasoDef definicion, Corrida corrida, string? alias, FlowContext? item, CancellationToken ct)
+        PasoDef definicion, Corrida corrida, string? alias, FlowContext? item, int? indice, CancellationToken ct)
     {
         // Cerrar una reserva única que nunca se hizo no tiene nada que cerrar: es el
         // `if (saga.PaymentId is { } id)` de cada ConfirmAsync. Una compra que se cayó entre apartar
@@ -388,7 +389,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         try
         {
             salida = await paso.EjecutarAsync(
-                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item), ct);
+                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item, indice), ct);
         }
         catch (Exception ex) when (definicion.SigueSiFalla && !(ex is OperationCanceledException && ct.IsCancellationRequested))
         {

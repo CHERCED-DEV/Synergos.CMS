@@ -289,6 +289,11 @@ public sealed class FlowRunnerTests
                     return SalidaDePaso.Sigue();
                 }, e => e.Lee<string?>(0) ?? "-"),
                 Paso("t.extra", 0, 1, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue("x")),
+                Paso("t.indice", 0, 0, LlaveRequerida.Ninguna, e =>
+                {
+                    Bitacora.Add($"  indice {e.Indice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}");
+                    return SalidaDePaso.Sigue();
+                }),
                 Paso("t.revienta", 0, 0, LlaveRequerida.Ninguna, _ => throw new InvalidOperationException("el proceso se cae")),
             });
             Runner = new FlowRunner<SagaDePrueba>(Motor, Registro, Flujo, Binding, Fases, Reloj, Log);
@@ -781,6 +786,32 @@ public sealed class FlowRunnerTests
         ex = Assert.Throws<InvalidOperationException>(() => new Banco(conAlgoDetras));
         Assert.Contains("«confirmar» declara «al_fallar» y cierra una reserva, y detrás van pasos que no siguen si fallan («capturar»)",
             ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// La de siempre con un paso que anota la posición que recibe: fuera de un bloque, en el bloque de los
+    /// ítems y en el de <c>reservas:apartar</c> (núcleo N2, NV-1 de Viajes).
+    /// </summary>
+    private static readonly string ConIndices = Definicion
+        .Replace("\"revisar\",\n      \"cotizar\",", "\"revisar\",\n      \"suelto\",\n      \"cotizar\",", StringComparison.Ordinal)
+        .Replace("\"pasos\": [\"marcar\", \"apartar\"]", "\"pasos\": [\"marcar\", \"apartar\", \"en-items\"]", StringComparison.Ordinal)
+        .Replace("\"pasos\": [\"consumir\"]", "\"pasos\": [\"consumir\", \"en-reservas\"]", StringComparison.Ordinal)
+        .Replace("\"revisar\": { \"tipo\": \"t.revisar\", \"lee\": [\"items\"] },",
+            "\"revisar\": { \"tipo\": \"t.revisar\", \"lee\": [\"items\"] },\n    \"suelto\": { \"tipo\": \"t.indice\" },\n"
+            + "    \"en-items\": { \"tipo\": \"t.indice\" },\n    \"en-reservas\": { \"tipo\": \"t.indice\" },", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Cada_paso_de_un_bloque_recibe_la_posicion_de_su_item_desde_cero_y_fuera_de_un_bloque_ninguna()
+    {
+        Assert.Equal(3, ConIndices.Split("t.indice").Length - 1);   // las mutaciones del banco entraron
+        Assert.Contains("\"suelto\",", ConIndices, StringComparison.Ordinal);
+        var banco = new Banco(ConIndices);
+
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        Assert.True((await banco.Cerrar()).IsOk);
+
+        Assert.Equal(new[] { "  indice -", "  indice 0", "  indice 1", "  indice 0", "  indice 1" },
+            banco.Bitacora.Where(l => l.StartsWith("  indice", StringComparison.Ordinal)));
     }
 
     [Fact]

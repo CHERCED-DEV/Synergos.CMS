@@ -52,6 +52,28 @@ public sealed class PasosYDeshacerTests
 
     private static FlowContext Ctx() => new FlowContext().Set("recurso", "rs-1").Set("ventana", Hora).Set("paciente", Paciente).Set("apartado", "bh-1");
 
+    private static EntradaDePaso EnBloque(string tipo, string[] lee, string llaveBase, int? indice)
+        => new("viaje-1", Ref.Create("prueba.viaje", "viaje-1"),
+            new PasoDef("p", tipo, lee, ["x"], null, llaveBase, null, null, null), Ctx(), null, null, indice);
+
+    [Fact]
+    public async Task Por_indice_dos_items_identicos_llevan_llaves_distintas_y_son_las_de_TripFlow()
+    {
+        // NV-1 de Viajes: TripFlow arma hold:{i} y confirm:{i}. Con el mismo recurso y la misma ventana,
+        // apartar-por-item compartiría llave; por posición no.
+        var agenda = new Agenda();
+        var apartar = new PasoAgendaApartarPorIndice(agenda);
+
+        await apartar.EjecutarAsync(EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", 0), CancellationToken.None);
+        await apartar.EjecutarAsync(EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", 1), CancellationToken.None);
+        await new PasoAgendaConfirmarPorIndice(agenda).EjecutarAsync(
+            EnBloque("booking.confirmar-por-indice", ["apartado"], "confirm", 1), CancellationToken.None);
+
+        Assert.Equal(new[] { "apartar viaje-1|hold:0", "apartar viaje-1|hold:1", "confirmar viaje-1|confirm:1" }, agenda.Llamadas);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => apartar.EjecutarAsync(
+            EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", null), CancellationToken.None));
+    }
+
     [Fact]
     public async Task Apartar_llama_con_la_llave_FIJA_de_la_cita_y_reserva_lo_que_aparta()
     {

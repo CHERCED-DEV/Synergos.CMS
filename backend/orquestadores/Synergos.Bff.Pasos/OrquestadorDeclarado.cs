@@ -71,6 +71,7 @@ public static class PasosComunes
             new PasoPagosAutorizar(puertos), new PasoPagosCapturar(puertos),
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
+            new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos),
             new PasoAvisar(puertos), new PasoUnaLinea(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),

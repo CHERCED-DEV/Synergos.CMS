@@ -109,7 +109,7 @@ public sealed class EntradaDePaso
     private readonly string? _alias;
     private readonly FlowContext? _item;
 
-    public EntradaDePaso(string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item)
+    public EntradaDePaso(string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item, int? indice = null)
     {
         SagaId = sagaId;
         Origen = origen;
@@ -117,10 +117,24 @@ public sealed class EntradaDePaso
         _ctx = ctx;
         _alias = alias;
         _item = item;
+        Indice = indice;
     }
 
     /// <summary>La saga. Semilla de las llaves de idempotencia.</summary>
     public string SagaId { get; }
+
+    /// <summary>
+    /// La posición del ítem en la fuente del bloque, desde 0, fijada al entrar al bloque; nula fuera de uno
+    /// (núcleo N2, NV-1 de Viajes).
+    /// </summary>
+    /// <remarks>
+    /// En un bloque sobre <c>reservas:&lt;paso&gt;</c> es el orden en que se reservó, y se mantiene sólo si
+    /// la ranura de reservas de la saga conserva ese orden. Sirve de discriminante cuando dos ítems idénticos
+    /// tienen que llevar llaves distintas, o cuando un flujo imperativo ya las armó por posición
+    /// (<c>hold:{i}</c>): por posición es seguro si la fase que abre corre una sola vez por saga y el
+    /// dominio rechaza dos ítems iguales.
+    /// </remarks>
+    public int? Indice { get; }
 
     /// <summary>
     /// Para qué se reserva, tal como lo ve una capacidad: <c>Ref(clave del flujo, sagaId)</c>.
