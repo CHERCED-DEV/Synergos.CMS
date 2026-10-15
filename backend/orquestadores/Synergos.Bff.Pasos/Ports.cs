@@ -84,3 +84,55 @@ public interface INotificationsPort
         Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
         IdempotencyKey llave, CancellationToken ct);
 }
+
+/// <summary>Hallar la agenda de un sujeto, apartar una ventana y confirmarla en <c>Api.Booking</c>.</summary>
+public interface IBookingPort
+{
+    /// <summary>El identificador del recurso (la agenda) de <paramref name="sujeto"/>. Lo genera la capacidad: no se adivina.</summary>
+    Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct);
+
+    /// <summary>Aparta la ventana en el recurso para <paramref name="paraQuien"/> y devuelve el apartado.</summary>
+    Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>Confirma el apartado: devuelve la reserva, que es sobre lo que se cancela después.</summary>
+    Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct);
+}
+
+// ── Los puertos de deshacer ─────────────────────────────────────────────────
+// Separados de los de avance a propósito: los de avance los cumple también `EventosPorts`, cuyo
+// oráculo los construye a mano, y su deshacer sigue yendo por `EventosCompensationExecutor`
+// (supuesto P5 del núcleo). Los cumple `PuertosHttp` y los llama `DeshacerComun`: un método con
+// quien lo llama, no una promesa.
+
+/// <summary>Deshacer en <c>Api.Inventory</c>.</summary>
+public interface IDeshacerExistencias
+{
+    /// <summary>Suelta un apartado que no se consumió.</summary>
+    Task<Result<string>> SoltarAsync(string apartado, CancellationToken ct);
+
+    /// <summary>Devuelve al pozo unidades ya consumidas: un ajuste RELATIVO con llave (#30).</summary>
+    Task<Result<string>> ReponerAsync(string pozo, int cantidad, IdempotencyKey llave, CancellationToken ct);
+}
+
+/// <summary>Deshacer en <c>Api.Payments</c>.</summary>
+public interface IDeshacerCobros
+{
+    /// <summary>Anula una autorización que no se capturó.</summary>
+    Task<Result<string>> AnularAsync(string cobro, CancellationToken ct);
+
+    /// <summary>Lo que todavía se puede devolver de un cobro (cero si ya se devolvió todo).</summary>
+    Task<Result<Money>> DevolvibleAsync(string cobro, CancellationToken ct);
+
+    /// <summary>Devuelve <paramref name="monto"/> de un cobro capturado, con llave.</summary>
+    Task<Result<string>> DevolverAsync(string cobro, Money monto, string motivo, IdempotencyKey llave, CancellationToken ct);
+}
+
+/// <summary>Deshacer en <c>Api.Booking</c>.</summary>
+public interface IDeshacerAgenda
+{
+    /// <summary>Suelta un apartado que no se confirmó.</summary>
+    Task<Result<string>> LiberarAsync(string apartado, CancellationToken ct);
+
+    /// <summary>Cancela una reserva ya confirmada.</summary>
+    Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct);
+}

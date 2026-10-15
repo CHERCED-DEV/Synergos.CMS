@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Api.Booking.Contracts;
 using Synergos.Api.Booking.Domain;
 using Synergos.Core;
@@ -19,13 +20,20 @@ namespace Synergos.Api.Booking.Endpoints;
 /// <para><b>Sin <c>PUT</c> ni <c>PATCH</c>.</b> Las transiciones son acciones con nombre:
 /// <c>POST /holds/{id}/confirm</c> dice qué pasó. Un <c>PATCH {"status":"confirmed"}</c> deja
 /// que el cliente invente transiciones que la capacidad tendría que ir rechazando de a una.</para>
+///
+/// <para><b>Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con
+/// <c>WithName</c></b> (núcleo N1, el molde F2 de la ADR 0140): de ahí sale el contrato publicado
+/// (<c>docs/contracts/openapi/Synergos.Api.Booking.json</c>), contra el que se cruzan los pasos de
+/// agenda. Con tipos y no con <c>.Produces&lt;T&gt;()</c>: declarado a mano, un endpoint que devolvía
+/// otra forma dejaba el documento mintiendo en verde; tipado, no compila. Las rutas, los estados, los
+/// <c>Location</c> y los cuerpos son los de antes.</para>
 /// </remarks>
 public static class BookingEndpoints
 {
     public static IEndpointRouteBuilder MapBookingEndpoints(this IEndpointRouteBuilder app)
     {
         // ── Recursos ────────────────────────────────────────────────────────
-        app.MapPost("/v1/resources", (CreateResourceRequest req, HttpRequest http, BookingService svc) =>
+        app.MapPost("/v1/resources", Results<Created<ResourceResponse>, ProblemHttpResult> (CreateResourceRequest req, HttpRequest http, BookingService svc) =>
         {
             if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
@@ -45,39 +53,55 @@ public static class BookingEndpoints
             }
 
             var policy = new CancellationPolicy(TimeSpan.FromMinutes(Math.Max(0, req.CancellationNoticeMinutes ?? 0)));
-            var res = svc.RegisterResource(subject, req.Capacity ?? 1, req.TimeZoneId ?? "UTC", opening, policy, key);
-
-            return res.Match(
-                r => Results.Created($"/v1/resources/{r.Id}", ResourceResponse.From(r)),
-                bad => bad.ToProblem());
-        });
+            return svc.RegisterResource(subject, req.Capacity ?? 1, req.TimeZoneId ?? "UTC", opening, policy, key)
+                .Map(ResourceResponse.From).ToCreated(r => $"/v1/resources/{r.Id}");
+        }).WithName("RegisterResource").ConLlaveDeIdempotencia();
 
         app.MapGet("/v1/resources/{id}", (string id, BookingService svc) =>
-            svc.GetResource(id).Map(ResourceResponse.From).ToHttp());
+            svc.GetResource(id).Map(ResourceResponse.From).ToHttp()).WithName("GetResource");
 
         // Con subject se resuelve UNO; sin él se lista la página. Es la misma forma que
         // Api.Inventory le dio a /v1/items, y por la misma razón: quien tiene la referencia de su
         // entidad —un profesional, una sala— no tiene el identificador interno que esta capacidad
         // genera, y obligarlo a llevar un mapa aparte crea una segunda verdad.
-        app.MapGet("/v1/resources", (string? subjectKind, string? subjectId, int? offset, int? limit, BookingService svc) =>
+        //
+        // QUEDA FUERA DEL CONTRATO, y se conserva (superset): devuelve dos formas según la consulta y
+        // un documento sólo publica una por estado (medido: ASP.NET publicaba la página, y mentía para
+        // quien busca por sujeto, que es quien la usa —SaludCapabilities—). La búsqueda por sujeto se
+        // publica en /v1/resources/por-sujeto; está declarada en RutasFueraDelContratoTests.
+        app.MapGet("/v1/resources", Results<Ok<ResourceResponse>, Ok<PageResponse<ResourceResponse>>, ProblemHttpResult> (
+            string? subjectKind, string? subjectId, int? offset, int? limit, BookingService svc) =>
         {
             if (subjectKind is not null || subjectId is not null)
             {
                 var subject = Ref.TryCreate(subjectKind, subjectId);
-                return subject is null
-                    ? Invalid("bad_subject", "Para buscar por sujeto hacen falta subjectKind y subjectId.")
-                    : svc.GetResourceBySubject(subject).Map(ResourceResponse.From).ToHttp();
+                if (subject is null) return Invalid("bad_subject", "Para buscar por sujeto hacen falta subjectKind y subjectId.");
+
+                var uno = svc.GetResourceBySubject(subject).Map(ResourceResponse.From);
+                return uno.IsOk ? TypedResults.Ok(uno.Value) : uno.Rejection!.ToProblem();
             }
 
             var page = svc.ListResources(Math.Max(0, offset ?? 0), QueryWindow.Limit(limit));
-            return Results.Ok(ToPage(page.Map(ResourceResponse.From)));
-        });
+            return TypedResults.Ok(ToPage(page.Map(ResourceResponse.From)));
+        }).WithName("FindResources").ExcludeFromDescription();
+
+        // La agenda de un sujeto, con UNA forma (núcleo N1): la que lee el paso booking.hallar. Ruta
+        // literal, así que gana sobre /v1/resources/{id} (un id es un Guid «n» y nunca se llama así).
+        app.MapGet("/v1/resources/por-sujeto", Results<Ok<ResourceResponse>, ProblemHttpResult> (
+            string? subjectKind, string? subjectId, BookingService svc) =>
+        {
+            var subject = Ref.TryCreate(subjectKind, subjectId);
+            if (subject is null) return Invalid("bad_subject", "Para buscar por sujeto hacen falta subjectKind y subjectId.");
+
+            return svc.GetResourceBySubject(subject).Map(ResourceResponse.From).ToHttp();
+        }).WithName("FindResourceBySubject");
 
         // start y end llegan como TEXTO y se parsean acá, en vez de dejar que los ate el binder
         // a DateTimeOffset?. Con el binder, una fecha mal formada produce un 400 GENÉRICO y con
         // cuerpo vacío —el llamador no sabe cuál de los dos campos era ni por qué—, y el molde
         // dice que el borde valida devolviendo un Rejection con código (doc 08 §4.4).
-        app.MapGet("/v1/resources/{id}/availability", (string id, string? start, string? end, BookingService svc) =>
+        app.MapGet("/v1/resources/{id}/availability", Results<Ok<AvailabilityResponse>, ProblemHttpResult> (
+            string id, string? start, string? end, BookingService svc) =>
         {
             if (!TryInstant(start, out var desde)) return Invalid("bad_start", $"'{start}' no es una fecha ISO-8601.");
             if (!TryInstant(end, out var hasta)) return Invalid("bad_end", $"'{end}' no es una fecha ISO-8601.");
@@ -88,10 +112,10 @@ public static class BookingEndpoints
             return svc.CheckAvailability(id, window.Value)
                 .Map(a => new AvailabilityResponse(a.Available, a.Taken, a.Capacity, a.Reason?.Code, a.Reason?.Message))
                 .ToHttp();
-        });
+        }).WithName("CheckAvailability");
 
         // ── Holds ───────────────────────────────────────────────────────────
-        app.MapPost("/v1/holds", (CreateHoldRequest req, HttpRequest http, BookingService svc) =>
+        app.MapPost("/v1/holds", Results<Created<HoldResponse>, ProblemHttpResult> (CreateHoldRequest req, HttpRequest http, BookingService svc) =>
         {
             if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
@@ -104,31 +128,26 @@ public static class BookingEndpoints
             if (window is null) return Invalid("bad_window", "Hacen falta start y end, y end tiene que ser posterior.");
 
             var ttl = req.TtlMinutes is { } m ? TimeSpan.FromMinutes(m) : (TimeSpan?)null;
-            var res = svc.CreateHold(req.ResourceId!, window.Value, heldFor, ttl, key);
-
-            return res.Match(
-                h => Results.Created($"/v1/holds/{h.Id}", HoldResponse.From(h)),
-                bad => bad.ToProblem());
-        });
+            return svc.CreateHold(req.ResourceId!, window.Value, heldFor, ttl, key)
+                .Map(HoldResponse.From).ToCreated(h => $"/v1/holds/{h.Id}");
+        }).WithName("CreateHold").ConLlaveDeIdempotencia();
 
         app.MapGet("/v1/holds/{id}", (string id, BookingService svc) =>
-            svc.GetHold(id).Map(HoldResponse.From).ToHttp());
+            svc.GetHold(id).Map(HoldResponse.From).ToHttp()).WithName("GetHold");
 
         app.MapPost("/v1/holds/{id}/release", (string id, BookingService svc) =>
-            svc.ReleaseHold(id).Map(HoldResponse.From).ToHttp());
+            svc.ReleaseHold(id).Map(HoldResponse.From).ToHttp()).WithName("ReleaseHold");
 
-        app.MapPost("/v1/holds/{id}/confirm", (string id, HttpRequest http, BookingService svc) =>
+        app.MapPost("/v1/holds/{id}/confirm", Results<Created<ReservationResponse>, ProblemHttpResult> (string id, HttpRequest http, BookingService svc) =>
         {
             if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
 
-            return svc.ConfirmHold(id, key).Match(
-                r => Results.Created($"/v1/reservations/{r.Id}", ReservationResponse.From(r)),
-                bad => bad.ToProblem());
-        });
+            return svc.ConfirmHold(id, key).Map(ReservationResponse.From).ToCreated(r => $"/v1/reservations/{r.Id}");
+        }).WithName("ConfirmHold").ConLlaveDeIdempotencia();
 
         // ── Reservas ────────────────────────────────────────────────────────
         app.MapGet("/v1/reservations/{id}", (string id, BookingService svc) =>
-            svc.GetReservation(id).Map(ReservationResponse.From).ToHttp());
+            svc.GetReservation(id).Map(ReservationResponse.From).ToHttp()).WithName("GetReservation");
 
         // Se lista por recurso, por actor, o por los dos. Sin ninguno de los dos se rechaza —la
         // razón, la asimetría del vacío y lo que esta HU NO contesta están en ListReservations.
@@ -137,7 +156,8 @@ public static class BookingEndpoints
         // puesta —forKind sin forId— TryCreate devuelve null igual que si no viniera ninguno, así
         // que el llamador que se equivocó en un campo recibiría "hace falta filtrar" en vez de
         // "te falta la otra mitad". Es la misma forma que /v1/resources le dio a subjectKind.
-        app.MapGet("/v1/reservations", (string? resourceId, string? forKind, string? forId, int? offset, int? limit, BookingService svc) =>
+        app.MapGet("/v1/reservations", Results<Ok<PageResponse<ReservationResponse>>, ProblemHttpResult> (
+            string? resourceId, string? forKind, string? forId, int? offset, int? limit, BookingService svc) =>
         {
             Ref? forWhom = null;
             if (forKind is not null || forId is not null)
@@ -149,17 +169,17 @@ public static class BookingEndpoints
             return svc.ListReservations(resourceId, forWhom, Math.Max(0, offset ?? 0), QueryWindow.Limit(limit))
                 .Map(p => ToPage(p.Map(ReservationResponse.From)))
                 .ToHttp();
-        });
+        }).WithName("ListReservations");
 
         app.MapPost("/v1/reservations/{id}/cancel", (string id, BookingService svc) =>
-            svc.CancelReservation(id).Map(ReservationResponse.From).ToHttp());
+            svc.CancelReservation(id).Map(ReservationResponse.From).ToHttp()).WithName("CancelReservation");
 
         return app;
     }
 
     // ── Traducción del borde ────────────────────────────────────────────────
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{BookingRules.CodePrefix}.{code}", message).ToProblem();
 
     /// <summary>

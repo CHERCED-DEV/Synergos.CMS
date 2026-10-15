@@ -58,7 +58,7 @@ internal static class ContratoOpenApi
     public const string EsquemaLlave = "llaveCompartida";
 
     /// <summary>
-    /// Las piezas que publican contrato en la F2: Bff.Eventos y sus tres capacidades.
+    /// Las piezas que publican contrato: Bff.Eventos y sus tres capacidades (F2), y la agenda (núcleo N1).
     /// </summary>
     /// <remarks>
     /// El marcador es un tipo público de los <c>Contracts/</c> de cada una, como en
@@ -71,6 +71,7 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Pricing.Contracts.PriceResponse>("Pricing"),
         new PiezaPublicada<Synergos.Api.Inventory.Contracts.StockItemResponse>("Inventory"),
         new PiezaPublicada<Synergos.Api.Payments.Contracts.PaymentResponse>("Payments"),
+        new PiezaPublicada<Synergos.Api.Booking.Contracts.HoldResponse>("Booking"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
     ];
 
