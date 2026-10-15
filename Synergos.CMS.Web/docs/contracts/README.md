@@ -81,7 +81,8 @@ ensamblado, igual que su `info.title`.
 
 | Fichero | Pieza | Quién lo ejecuta |
 |---|---|---|
-| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El UI convierte en tipos los `Synergos.Bff.*`, no las capacidades (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Bff.Salud.json`](openapi/Synergos.Bff.Salud.json) | El orquestador de Salud: la cita declarada (`salud.cita`, las cinco operaciones de la puerta, del host genérico) y las rutas de la cita imperativa (`/v1/appointments*`), que lee la ruta directa del CMS (003-salud-cita). | CMS: los cuatro gates de abajo + `ConsumidorCmsDeBffSaludTests` · UI: el generador de tipos de los `Synergos.Bff.*` |
 | [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |

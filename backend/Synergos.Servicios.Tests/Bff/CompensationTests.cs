@@ -742,7 +742,7 @@ public sealed class CompensationTests
     {
         var (flow, _, _, _, _) = Nuevo(Feliz());
 
-        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var cotizado = (await flow.CopagoAsync(Servicio, CancellationToken.None)).Value;
         var agendada = await Agendar(flow);
 
         Assert.Equal(Money.Of(50_000m, "COP"), cotizado);
@@ -752,13 +752,32 @@ public sealed class CompensationTests
     [Fact]
     public async Task Sin_precio_publicado_la_cotizacion_es_cero_como_al_agendar()
     {
-        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.NotFound, "pricing.no_price");
+        // El código es el de Api.Pricing (PricingService: price_not_found). El guion decía «no_price»,
+        // que ninguna capacidad emite: con «cualquier falla = cero» daba igual, con la regla de P2 no.
+        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.NotFound, "pricing.price_not_found");
         var (flow, _, _, _, _) = Nuevo(caps);
 
-        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var cotizado = (await flow.CopagoAsync(Servicio, CancellationToken.None)).Value;
         var agendada = await Agendar(flow);
 
         Assert.True(cotizado.IsZero);
         Assert.Equal(cotizado, agendada.Value.Total);
+    }
+
+    [Fact]
+    public async Task Con_precios_caido_no_se_agenda_gratis_ni_se_aparta_nada()
+    {
+        // P2 (lote 2): sólo la AUSENCIA de precio es cero. Una caída rechaza, y antes de tomar el cupo:
+        // un cupo tomado y soltado es una compensación que no hacía falta.
+        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.ServiceUnavailable, "pricing.unavailable");
+        var (flow, _, _, _, _) = Nuevo(caps);
+
+        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var r = await Agendar(flow);
+
+        Assert.Equal("pricing.unavailable", cotizado.Rejection!.Code);
+        Assert.Equal("pricing.unavailable", r.Rejection!.Code);
+        Assert.Equal(0, caps.Veces("POST", "/v1/holds"));
+        Assert.Equal(0, caps.Veces("POST", "/v1/payments"));
     }
 }

@@ -95,7 +95,14 @@ public sealed class AppointmentFlow
             resourceId = agenda.Value.Id;
         }
 
-        // 2. Cupo. Es el paso barato y reversible: se toma antes de hablar de plata.
+        // 1.ter. Cuánto cuesta, ANTES de apartar (003-salud-cita, P2 del lote 2). Cotizar no mueve
+        //    plata, y una caída de Pricing tiene que rechazar sin dejar un cupo que soltar: con la
+        //    cotización después del cupo, la única salida honesta habría sido apartar y deshacer.
+        var cotizado = await CopagoAsync(service, ct);
+        if (!cotizado.IsOk) return Result.Rejected<AppointmentSaga>(cotizado.Rejection!);
+        var total = cotizado.Value;
+
+        // 2. Cupo. Es el paso barato y reversible: se toma antes de mover plata.
         var hold = await _caps.HoldAsync(resourceId, window, patient, saga.KeyFor("hold"), ct);
         if (!hold.IsOk) return Result.Rejected<AppointmentSaga>(hold.Rejection!);
 
@@ -109,9 +116,7 @@ public sealed class AppointmentFlow
         };
         _sagas.Put(saga);
 
-        // 3. Cuánto cuesta. Si no hay precio publicado, no hay copago: la cita sigue.
-        var total = await CopagoAsync(service, ct);
-
+        // 3. Si no hay precio publicado, no hay copago: la cita sigue.
         if (total.IsZero)
         {
             // Sin copago no hay cobro que autorizar — y un pago de cero lo rechazaría Payments.
@@ -155,13 +160,23 @@ public sealed class AppointmentFlow
     /// hay. Es LA regla: la usa <see cref="ScheduleAsync"/> para autorizar y la cotización que la
     /// pantalla pide antes de agendar, para que lo que se muestra sea lo que se cobra (CMS#196).
     /// </summary>
-    public async Task<Money> CopagoAsync(Ref service, CancellationToken ct)
+    /// <remarks>
+    /// <b>Sólo la AUSENCIA de precio es cero</b> (<see cref="SinPrecio"/>; P2, lote 2). Decía «cualquier
+    /// falla = cero», y una caída de Pricing regalaba la cita y la pantalla decía «sin copago». Cualquier
+    /// otro rechazo vuelve tal cual, con su carácter transitorio: degradar por ausencia, no por negación.
+    /// Es la misma regla que el paso común <c>pricing.cotizar-o-cero</c> del flujo declarado.
+    /// </remarks>
+    public async Task<Result<Money>> CopagoAsync(Ref service, CancellationToken ct)
     {
         var quote = await _caps.QuoteAsync(service, ct);
-        return quote.IsOk
-            ? Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency)
-            : Money.Zero(Money.Cop);
+        if (quote.IsOk) return Result.Ok(Money.Of(quote.Value.Total.Amount, quote.Value.Total.Currency));
+        return quote.Rejection!.Code == SinPrecio
+            ? Result.Ok(Money.Zero(Money.Cop))
+            : Result.Rejected<Money>(quote.Rejection);
     }
+
+    /// <summary>El código de <c>Api.Pricing</c> cuando un servicio no tiene precio publicado.</summary>
+    public const string SinPrecio = "pricing.price_not_found";
 
     public async Task<Result<AppointmentSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
     {
