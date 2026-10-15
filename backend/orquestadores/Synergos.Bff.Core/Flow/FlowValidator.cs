@@ -217,8 +217,16 @@ public static class FlowValidator
     /// consumir, o consumido sin cobrar. Después, ya no queda nada que deshacer, y deshacer por un
     /// aviso que no salió devolvería la plata de una compra que sí se hizo.</para>
     ///
-    /// <para>Por eso además no reserva, no cierra, no va en un bloque y no escribe: lo que escribiera
-    /// un paso que puede fallar sin parar la fase no tendría con qué contar quien lo lea.</para>
+    /// <para>Por eso además no reserva, no va en un bloque y no escribe: lo que escribiera un paso que
+    /// puede fallar sin parar la fase no tendría con qué contar quien lo lea.</para>
+    ///
+    /// <para><b>Cerrar sí, con una condición</b> (núcleo N2, N-3 de Tienda): el cierre de una reserva SIN
+    /// <c>despues</c> puede seguir si falla. Cumplir el pedido tras despachar es eso: con la plata cobrada
+    /// y el envío hecho, un pedido sin cumplir se concilia, no se anula. Completar marca hecha su
+    /// compensación, así que nadie lo anula. Con <c>despues</c>, cerrar es lo que mueve la plata o
+    /// consume, y completar sin cerrar dejaría la saga cobrada sin cobro. Y detrás de ese cierre sólo
+    /// pueden ir pasos que también siguen: uno que abortara deshaciendo lo demás anularía un pedido que
+    /// quizá sí se cumplió.</para>
     /// </remarks>
     private static void RevisarAlFallar(
         FlujoDef flujo, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
@@ -226,9 +234,32 @@ public static class FlowValidator
         foreach (var paso in flujo.Pasos.Values.Where(p => p.AlFallar is not null))
         {
             var aqui = $"«{paso.Id}» declara «al_fallar»";
-            if (paso.Reserva is not null || paso.CierraReserva is not null)
+
+            // soltar (NV-2): sólo en el cierre por ítem de un bloque sobre las reservas que cierra. Ahí hay un ítem
+            // que soltar con su «antes»; en cualquier otro sitio no habría qué soltar ni a quién preguntar.
+            if (paso.SueltaSiFalla)
             {
-                errores.Add($"{aqui} y reserva o cierra una reserva: seguir dejaría la saga a medias.");
+                if (paso.CierraReserva is not { } cierra)
+                {
+                    errores.Add($"«{paso.Id}» declara «al_fallar: soltar» y no cierra ninguna reserva: no hay ítem que soltar.");
+                }
+                else if (!donde.TryGetValue(paso.Id, out var dondeSuelta)
+                         || !string.Equals(dondeSuelta.Bloque?.Fuente, Reservas + cierra, StringComparison.Ordinal))
+                {
+                    errores.Add($"«{paso.Id}» declara «al_fallar: soltar» fuera de un bloque sobre «{Reservas}{cierra}»: "
+                        + "sólo ahí hay un ítem de esa reserva que soltar y seguir con los demás.");
+                }
+                continue;
+            }
+            if (paso.Reserva is not null)
+            {
+                errores.Add($"{aqui} y reserva: seguir dejaría la saga a medias.");
+            }
+            if (paso.CierraReserva is { } cerrada
+                && flujo.Pasos.TryGetValue(cerrada, out var reservante) && reservante.Reserva?.Despues is { } despues)
+            {
+                errores.Add($"{aqui} y cierra la reserva de «{cerrada}», que se deshace con «{despues}» después de "
+                    + "cerrarla: completar sin cerrarla dejaría la saga como si se hubiera consumido.");
             }
             if (paso.Escribe.Count > 0)
             {
@@ -251,6 +282,22 @@ public static class FlowValidator
 
             var elementos = flujo.Fases[ultima].Pasos;
             var posicion = elementos.ToList().FindIndex(e => string.Equals(e.Paso, paso.Id, StringComparison.Ordinal));
+
+            if (paso.CierraReserva is not null)
+            {
+                var detras = elementos.Skip(posicion + 1)
+                    .SelectMany(e => e.ParaCada?.Pasos ?? new[] { e.Paso! })
+                    .Where(id => !flujo.Pasos.TryGetValue(id, out var p) || p.AlFallar is null)
+                    .ToList();
+                if (detras.Count > 0)
+                {
+                    errores.Add($"{aqui} y cierra una reserva, y detrás van pasos que no siguen si fallan "
+                        + $"({string.Join(", ", detras.Select(d => $"«{d}»"))}): uno que abortara deshaciendo la saga "
+                        + "anularía lo que este cierre quizá sí cerró.");
+                }
+                continue;
+            }
+
             var ultimoCierre = elementos.ToList().FindLastIndex(e =>
                 (e.ParaCada?.Pasos ?? new[] { e.Paso! }).Any(id =>
                     flujo.Pasos.TryGetValue(id, out var p) && p.CierraReserva is not null));
@@ -350,6 +397,14 @@ public static class FlowValidator
                     ? $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que avisa con «plantilla», y no la declara."
                     : $"el paso «{paso.Id}» declara una plantilla y «{paso.Tipo}» no avisa: quien la lea creerá que ese "
                       + "paso manda algo.");
+            }
+
+            if (registro.Para(paso.Tipo) is { } pide && pide.UsaProposito != paso.Proposito is not null)
+            {
+                errores.Add(pide.UsaProposito
+                    ? $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que comprueba un permiso con «proposito», y no lo declara."
+                    : $"el paso «{paso.Id}» declara un propósito y «{paso.Tipo}» no comprueba permisos: quien lo lea creerá "
+                      + "que ese paso pide permiso.");
             }
         }
 

@@ -54,6 +54,16 @@ public sealed class ContratoConsumidorPasosTests
         ["CancelarReservaAsync"] = p => p.CancelarReservaAsync("rv-1", Ct),
         ["PedirAvisoAsync"] = p => p.PedirAvisoAsync(
             Alguien, "ana@ejemplo.co", "muestra.cita.confirmada", new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave, Ct),
+        ["VerificarPermisoAsync"] = p => p.VerificarPermisoAsync(Alguien, "muestra.agenda", Ct),
+        ["LeerCanastaAsync"] = p => p.LeerCanastaAsync("ca-1", Ct),
+        ["CerrarCanastaAsync"] = p => p.CerrarCanastaAsync("ca-1", Ct),
+        ["CrearPedidoAsync"] = p => p.CrearPedidoAsync(
+            Alguien, [new Synergos.Bff.Pasos.LineaDePedido(Ref.Create("muestra.producto", "pr-1"), 2, Monto)], Monto, Llave, Ct),
+        ["CumplirPedidoAsync"] = p => p.CumplirPedidoAsync("pd-1", Ct),
+        ["CancelarPedidoAsync"] = p => p.CancelarPedidoAsync("pd-1", Ct),
+        ["DespacharEnvioAsync"] = p => p.DespacharEnvioAsync(
+            Ref.Create("orders.pedido", "pd-1"),
+            new Synergos.Bff.Pasos.DireccionDeEnvio("Calle 1 # 2-3", null, "Bogotá", null, null, "CO", "Ana"), "servientrega", Llave, Ct),
     };
 
     /// <summary>
@@ -87,8 +97,8 @@ public sealed class ContratoConsumidorPasosTests
     {
         var declarados = DelAdaptador().Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.True(declarados.Count >= 17,
-            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en PuertosHttp y son al menos 17: el censo dejó de ver.");
+        Assert.True(declarados.Count >= 24,
+            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en PuertosHttp y son al menos 24: el censo dejó de ver.");
         Assert.True(declarados.SequenceEqual(Recorrido.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal),
             "PuertosHttp y el recorrido de este gate no tienen los mismos métodos." +
             $"{Environment.NewLine}  sin recorrido: {string.Join(", ", declarados.Except(Recorrido.Keys))}" +

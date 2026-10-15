@@ -13,10 +13,10 @@ namespace Synergos.Api.Cart.Contracts;
 /// hecho</b>: lo que se guarda lo decide esta capacidad tras mirar el token (HU #14), y lo único
 /// que se acepta sin prueba es lo más débil.
 /// </param>
-public sealed record OpenCartRequest(string? OwnerKind, string? OwnerId, int? TtlHours, string? Assertion);
+public sealed record OpenCartRequest(string? OwnerKind = null, string? OwnerId = null, int? TtlHours = null, string? Assertion = null);
 
 /// <summary>Poner o quitar una línea.</summary>
-public sealed record CartLineRequest(string? SubjectKind, string? SubjectId, int? Quantity);
+public sealed record CartLineRequest(string? SubjectKind = null, string? SubjectId = null, int? Quantity = null);
 
 /// <summary>Cómo sale una línea.</summary>
 public sealed record CartLineResponse(string SubjectKind, string SubjectId, int Quantity);

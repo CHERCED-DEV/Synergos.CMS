@@ -114,7 +114,7 @@ public sealed class HostDeFlujosTests
     }
 
     /// <summary>Puertos falsos: lo que la capacidad contestaría, sin red.</summary>
-    private sealed class Falsos : IPricingPort, IBookingPort, IPaymentsPort, INotificationsPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias
+    private sealed class Falsos : IPricingPort, IBookingPort, IPaymentsPort, INotificationsPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias, IDeshacerPedidos, IConsentPort
     {
         public List<string> Llamadas { get; } = [];
         public bool RechazaAutorizar { get; set; }
@@ -133,6 +133,7 @@ public sealed class HostDeFlujosTests
         }
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Ok("rs-1", $"hallar {sujeto}");
+        public Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-1", $"permiso {proposito}");
         public Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
             => Ok("bh-1", $"apartar {recurso} {llave.Value}");
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Ok("rv-1", $"confirmar {apartado}");
@@ -155,6 +156,7 @@ public sealed class HostDeFlujosTests
             => Ok(cobro, $"devolver {cobro}");
         public Task<Result<string>> SoltarAsync(string apartado, CancellationToken ct) => Ok(apartado, $"soltar {apartado}");
         public Task<Result<string>> ReponerAsync(string pozo, int cantidad, IdempotencyKey llave, CancellationToken ct) => Ok(pozo, $"reponer {pozo}");
+        Task<Result<string>> IDeshacerPedidos.CancelarAsync(string pedido, CancellationToken ct) => Ok(pedido, $"anular-pedido {pedido}");
 
         private Task<Result<string>> Ok(string valor, string llamada)
         {
@@ -201,7 +203,7 @@ public sealed class HostDeFlujosTests
         {
             Flujo = FlujoDef.Leer(definicion);
             var vocabulario = new SagaVocabulary("prueba", "la cita");
-            var deshacer = new DeshacerComun(Puertos, Puertos, Puertos, []);
+            var deshacer = new DeshacerComun(Puertos, Puertos, Puertos, Puertos, []);
             Raiz = Path.Combine(Path.GetTempPath(), "host-flujos-" + Guid.NewGuid().ToString("N"));
             var almacen = new FileSystemSagaStore<SagaDeFlujo>(Options.Create(new SagaStorageOptions { Root = Raiz }));
             Motor = new SagaEngine<SagaDeFlujo>(
@@ -213,7 +215,7 @@ public sealed class HostDeFlujosTests
                 new PasoAgendaApartar(Puertos), new PasoAgendaConfirmar(Puertos), new PasoPagosAutorizar(Puertos),
                 new PasoPagosCapturar(Puertos), new PasoAvisar(Puertos),
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
-                new PasoLineasDeLaRenta(), new PasoConservar(),
+                new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos),
             ]);
             Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto()), Registro, deshacer.Tipos);
         }
@@ -290,6 +292,35 @@ public sealed class HostDeFlujosTests
 
         Assert.Contains(errores, e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
         Assert.Throws<InvalidOperationException>(() => banco.Fachada());
+    }
+
+    [Fact]
+    public async Task Pedir_permiso_declara_su_proposito_en_los_dos_sentidos()
+    {
+        // NN-3 de Salud: el propósito es un dato del flujo, como la plantilla del aviso, y se cruza igual.
+        var conPermiso = Mutar("\"abrir\": [\"apartar\", \"autorizar\"]", "\"abrir\": [\"permiso\", \"apartar\", \"autorizar\"]")
+            .Replace("\"pasos\": {", "\"pasos\": {\n    \"permiso\": { \"tipo\": \"consent.verificar\", \"lee\": [\"paciente\"], \"proposito\": \"salud.agenda\" },",
+                StringComparison.Ordinal);
+        Assert.Contains("\"proposito\": \"salud.agenda\"", conPermiso, StringComparison.Ordinal);
+
+        using (var control = new Banco(conPermiso))
+        {
+            Assert.Empty(control.Errores());
+            Assert.True((await control.Fachada().AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+            Assert.Equal("permiso salud.agenda", control.Puertos.Llamadas[0]);
+        }
+
+        using (var sinProposito = new Banco(conPermiso.Replace(", \"proposito\": \"salud.agenda\"", string.Empty, StringComparison.Ordinal)))
+        {
+            Assert.Contains(sinProposito.Errores(), e => e.Contains("«permiso» es de tipo «consent.verificar», que comprueba un permiso con «proposito», y no lo declara", StringComparison.Ordinal));
+        }
+
+        var deMas = conPermiso.Replace("\"llave\": \"hold\",", "\"llave\": \"hold\", \"proposito\": \"salud.agenda\",", StringComparison.Ordinal);
+        Assert.NotEqual(conPermiso, deMas);
+        using (var conDeMas = new Banco(deMas))
+        {
+            Assert.Contains(conDeMas.Errores(), e => e.Contains("«apartar» declara un propósito y «booking.apartar» no comprueba permisos", StringComparison.Ordinal));
+        }
     }
 
     [Fact]

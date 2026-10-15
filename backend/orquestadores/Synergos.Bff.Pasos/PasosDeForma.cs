@@ -51,6 +51,51 @@ public sealed class PasoDesglose : IPaso
     }
 }
 
+/// <summary>
+/// <c>pricing.precios-por-linea</c>: lee las líneas (sujeto y cantidad) y la cotización, y escribe las líneas del
+/// pedido con el precio unitario que cotizó Pricing para cada una (núcleo N2, N-1 de Tienda).
+/// </summary>
+/// <remarks>
+/// <para><b>Se cruza por SUJETO y no por posición.</b> La respuesta viene hoy en el orden de la petición,
+/// pero eso no está escrito en ningún contrato, y un cruce por posición que se desalinee no falla: le pone a
+/// cada línea el precio de otra, que es peor que un cero porque es plausible (#122).</para>
+///
+/// <para><b>Una línea sin precio se RECHAZA, no se rellena</b> (<c>pricing.quote_without_lines</c>): sin dato se
+/// dice que no hay dato, y va antes de apartarle nada a nadie.</para>
+/// </remarks>
+public sealed class PasoPreciosPorLinea : IPaso
+{
+    /// <summary>El código cuando la cotización no trae el precio de una línea.</summary>
+    public const string SinPrecioDeLinea = "pricing.quote_without_lines";
+
+    public string Tipo => "pricing.precios-por-linea";
+    public int Lecturas => 2;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(IReadOnlyList<LineaDePedido>)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var lineas = entrada.Lee<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(0);
+        var precios = new Dictionary<Ref, Money>();
+        foreach (var (sujeto, precio) in entrada.Lee<QuoteView>(1).Lineas) precios.TryAdd(sujeto, precio);
+
+        var salida = new List<LineaDePedido>(lineas.Count);
+        foreach (var (sujeto, cantidad) in lineas)
+        {
+            if (!precios.TryGetValue(sujeto, out var unitario))
+            {
+                return Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(SinPrecioDeLinea,
+                    $"La cotización no trae precio para {sujeto}: no se sabe a cuánto va ese renglón del pedido.")));
+            }
+            salida.Add(new LineaDePedido(sujeto, cantidad, unitario));
+        }
+
+        return Task.FromResult(SalidaDePaso.Sigue((IReadOnlyList<LineaDePedido>)salida));
+    }
+}
+
 /// <summary><c>pricing.cotizar-sin-codigo</c>: cotiza las líneas sin promoción. Lee sólo las líneas.</summary>
 /// <remarks>Para el flujo que no tiene códigos (la cita): sin él, declararía una entrada que vale siempre nulo.</remarks>
 public sealed class PasoCotizacionSinCodigo(IPricingPort precios) : IPaso

@@ -232,6 +232,31 @@ public sealed class FlowRunnerTests
         /// </summary>
         public bool AnotaLoQueVe { get; init; }
 
+        /// <summary>Adónde anota cada cierre que le avisa el intérprete (NV-3): la bitácora del banco.</summary>
+        public Action<string>? AnotaCierres { get; set; }
+
+        public SagaDePrueba ConCierre(SagaDePrueba saga, string reservante, HoldLeg cerrada, string? objetivo)
+        {
+            AnotaCierres?.Invoke($"  concierre {reservante} {cerrada.HoldId} {objetivo ?? "-"}");
+            return saga;
+        }
+
+        /// <summary>La política de la saga (NV-2): si admite soltar un ítem y seguir.</summary>
+        public bool Parcial { get; init; }
+
+        /// <summary>El tipo de la compensación nueva que arma el dominio para cada ítem soltado (la devolución de su parte).</summary>
+        public string? ArmaAlSoltar { get; init; }
+
+        public bool SueltaSiFalla(SagaDePrueba saga) => Parcial;
+
+        public SagaDePrueba ConItemSoltado(SagaDePrueba saga, string reservante, HoldLeg soltada)
+        {
+            AnotaCierres?.Invoke($"  soltado {reservante} {soltada.HoldId}");
+            return ArmaAlSoltar is { } tipo
+                ? saga.WithCompensations(saga.Compensations.Append(Compensation.For(tipo, soltada.HoldId, "ítem no cumplido")).ToList())
+                : saga;
+        }
+
         public SagaDePrueba AlGuardar(SagaDePrueba saga, FlowContext ctx)
         {
             if (!AnotaLoQueVe) return saga;
@@ -248,7 +273,7 @@ public sealed class FlowRunnerTests
             var vocabulario = new SagaVocabulary("prueba", "la prueba");
             Motor = new SagaEngine<SagaDePrueba>(
                 Sagas,
-                new Compensator<SagaDePrueba>(new Deshacer(Bitacora), Reloj, NullLogger<Compensator<SagaDePrueba>>.Instance),
+                new Compensator<SagaDePrueba>(new Deshacer(Bitacora, DeshacerFalla), Reloj, NullLogger<Compensator<SagaDePrueba>>.Instance),
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
                 arriendo ?? ArriendoDePrueba.Nuevo(), vocabulario, Reloj, NullLogger<SagaEngine<SagaDePrueba>>.Instance);
             Flujo = FlujoDef.Leer(definicion);
@@ -289,6 +314,11 @@ public sealed class FlowRunnerTests
                     return SalidaDePaso.Sigue();
                 }, e => e.Lee<string?>(0) ?? "-"),
                 Paso("t.extra", 0, 1, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue("x")),
+                Paso("t.indice", 0, 0, LlaveRequerida.Ninguna, e =>
+                {
+                    Bitacora.Add($"  indice {e.Indice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}");
+                    return SalidaDePaso.Sigue();
+                }),
                 Paso("t.revienta", 0, 0, LlaveRequerida.Ninguna, _ => throw new InvalidOperationException("el proceso se cae")),
             });
             Runner = new FlowRunner<SagaDePrueba>(Motor, Registro, Flujo, Binding, Fases, Reloj, Log);
@@ -304,6 +334,9 @@ public sealed class FlowRunnerTests
         public Action? AlAvisar { get; set; }
 
         public List<string> Bitacora { get; } = new();
+
+        /// <summary>Qué compensaciones fallan al deshacerse: <c>Kind:TargetId</c>.</summary>
+        public HashSet<string> DeshacerFalla { get; } = new(StringComparer.Ordinal);
 
         /// <summary>Qué pasos fallan: el tipo, o <c>tipo@dato</c> para uno solo de un bloque.</summary>
         public HashSet<string> Fallan { get; } = new(StringComparer.Ordinal);
@@ -397,12 +430,14 @@ public sealed class FlowRunnerTests
         public void Dejar(SagaDePrueba saga) => _s[saga.Id] = saga;
     }
 
-    private sealed class Deshacer(List<string> bitacora) : ICompensationExecutor<SagaDePrueba>
+    private sealed class Deshacer(List<string> bitacora, HashSet<string> fallan) : ICompensationExecutor<SagaDePrueba>
     {
         public Task<Rejection?> UndoAsync(SagaDePrueba saga, Compensation pending, CancellationToken ct)
         {
             bitacora.Add($"undo {pending.Kind}:{pending.TargetId} ({pending.Reason})");
-            return Task.FromResult<Rejection?>(null);
+            return Task.FromResult(fallan.Contains($"{pending.Kind}:{pending.TargetId}")
+                ? Rejection.Unavailable("t.deshacer.caido", "guionado")
+                : null);
         }
     }
 
@@ -734,6 +769,209 @@ public sealed class FlowRunnerTests
         Assert.False(r.IsOk);
         Assert.Equal("t.confirmar.no", r.Rejection!.Code);
         Assert.Equal(new[] { "undo Cancelar:pedido-1 (no confirmó)", "undo Devolver:cobro-1 (no confirmó)" }, banco.Deshechos);
+    }
+
+    /// <summary>
+    /// La de dos únicas con el cierre del pedido que SIGUE si falla (núcleo N2, N-3 de Tienda): con la plata
+    /// capturada, un pedido sin confirmar se concilia, no se anula.
+    /// </summary>
+    private static readonly string ConfirmarQueSigue = DosUnicas.Replace(
+        "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\" }",
+        "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\", \"al_fallar\": \"seguir\" }", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Un_cierre_sin_despues_que_sigue_si_falla_completa_la_saga_sin_anular_lo_reservado()
+    {
+        Assert.NotEqual(DosUnicas, ConfirmarQueSigue);   // la mutación del banco entró
+        var banco = new Banco(ConfirmarQueSigue);
+        await banco.Abrir();
+        banco.Fallan.Add("t.confirmar");
+        banco.Bitacora.Clear();
+
+        var r = await banco.Cerrar();
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Empty(banco.Deshechos);
+        Assert.Equal("put Completed [Cancelar:pedido-1+, Devolver:cobro-1+]", banco.Escrituras.Last());
+    }
+
+    [Fact]
+    public void Un_cierre_que_sigue_no_vale_si_su_reserva_tiene_despues_ni_con_un_paso_que_no_sigue_detras()
+    {
+        // Capturar cierra el cobro, que se devuelve DESPUÉS de cerrarlo: completar sin capturar dejaría la
+        // compra como cobrada sin cobro.
+        var conDespues = DosUnicas.Replace(
+            "\"cierra_reserva\": \"autorizar\", \"motivo\": \"no capturó\" }",
+            "\"cierra_reserva\": \"autorizar\", \"motivo\": \"no capturó\", \"al_fallar\": \"seguir\" }", StringComparison.Ordinal);
+        Assert.NotEqual(DosUnicas, conDespues);
+        var ex = Assert.Throws<InvalidOperationException>(() => new Banco(conDespues));
+        Assert.Contains("«capturar» declara «al_fallar» y cierra la reserva de «autorizar», que se deshace con «Devolver»",
+            ex.Message, StringComparison.Ordinal);
+
+        // Confirmar sigue, y detrás va capturar, que aborta y deshace: anularía un pedido quizá confirmado.
+        var conAlgoDetras = ConfirmarQueSigue.Replace(
+            "\"cerrar\": [\"capturar\", \"confirmar\"]", "\"cerrar\": [\"confirmar\", \"capturar\"]", StringComparison.Ordinal);
+        Assert.NotEqual(ConfirmarQueSigue, conAlgoDetras);
+        ex = Assert.Throws<InvalidOperationException>(() => new Banco(conAlgoDetras));
+        Assert.Contains("«confirmar» declara «al_fallar» y cierra una reserva, y detrás van pasos que no siguen si fallan («capturar»)",
+            ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// La de siempre con un paso que anota la posición que recibe: fuera de un bloque, en el bloque de los
+    /// ítems y en el de <c>reservas:apartar</c> (núcleo N2, NV-1 de Viajes).
+    /// </summary>
+    private static readonly string ConIndices = Definicion
+        .Replace("\"revisar\",\n      \"cotizar\",", "\"revisar\",\n      \"suelto\",\n      \"cotizar\",", StringComparison.Ordinal)
+        .Replace("\"pasos\": [\"marcar\", \"apartar\"]", "\"pasos\": [\"marcar\", \"apartar\", \"en-items\"]", StringComparison.Ordinal)
+        .Replace("\"pasos\": [\"consumir\"]", "\"pasos\": [\"consumir\", \"en-reservas\"]", StringComparison.Ordinal)
+        .Replace("\"revisar\": { \"tipo\": \"t.revisar\", \"lee\": [\"items\"] },",
+            "\"revisar\": { \"tipo\": \"t.revisar\", \"lee\": [\"items\"] },\n    \"suelto\": { \"tipo\": \"t.indice\" },\n"
+            + "    \"en-items\": { \"tipo\": \"t.indice\" },\n    \"en-reservas\": { \"tipo\": \"t.indice\" },", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Cada_paso_de_un_bloque_recibe_la_posicion_de_su_item_desde_cero_y_fuera_de_un_bloque_ninguna()
+    {
+        Assert.Equal(3, ConIndices.Split("t.indice").Length - 1);   // las mutaciones del banco entraron
+        Assert.Contains("\"suelto\",", ConIndices, StringComparison.Ordinal);
+        var banco = new Banco(ConIndices);
+
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        Assert.True((await banco.Cerrar()).IsOk);
+
+        Assert.Equal(new[] { "  indice -", "  indice 0", "  indice 1", "  indice 0", "  indice 1" },
+            banco.Bitacora.Where(l => l.StartsWith("  indice", StringComparison.Ordinal)));
+    }
+
+    // ── La confirmación parcial (núcleo N2, NV-2 de Viajes, 006-P2 forma A) ──────────────
+
+    /// <summary>La de siempre con el cierre por ítem que puede soltar su ítem si falla.</summary>
+    private static readonly string Parcial = Definicion.Replace(
+        "\"cierra_reserva\": \"apartar\", \"motivo\": \"no consumió\" }",
+        "\"cierra_reserva\": \"apartar\", \"motivo\": \"no consumió\", \"al_fallar\": \"soltar\" }", StringComparison.Ordinal);
+
+    private static async Task<Banco> AbiertaParcial(BindingDePrueba binding)
+    {
+        Assert.NotEqual(Definicion, Parcial);   // la mutación del banco entró
+        var banco = new Banco(Parcial, binding);
+        binding.AnotaCierres = banco.Bitacora.Add;
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        banco.Bitacora.Clear();
+        return banco;
+    }
+
+    [Fact]
+    public async Task Sin_el_si_del_dominio_soltar_aborta_como_siempre()
+    {
+        var banco = await AbiertaParcial(new BindingDePrueba { Parcial = false });
+        banco.Fallan.Add("t.consumir@h-b");
+
+        var r = await banco.Cerrar();
+
+        Assert.Equal("t.consumir.no", r.Rejection?.Code);
+        Assert.Equal(SagaStatus.Compensated, banco.Sagas.Find("s1")!.Status);
+        Assert.DoesNotContain(banco.Bitacora, l => l.StartsWith("  soltado", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Con_el_si_del_dominio_el_item_que_falla_se_suelta_en_el_acto_y_la_saga_se_completa_con_los_demas()
+    {
+        var banco = await AbiertaParcial(new BindingDePrueba { Parcial = true });
+        banco.Fallan.Add("t.consumir@h-b");
+
+        var r = await banco.Cerrar();
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Equal(new[] { "undo Soltar:h-b (sin cerrar)" }, banco.Deshechos);
+        Assert.Contains("  soltado apartar h-b", banco.Bitacora);
+        Assert.DoesNotContain(r.Value.Compensations, c => c.IsPending);
+    }
+
+    [Fact]
+    public async Task Si_soltar_falla_su_compensacion_queda_viva_al_completar_y_las_demas_se_dan_por_hechas()
+    {
+        var banco = await AbiertaParcial(new BindingDePrueba { Parcial = true });
+        banco.Fallan.Add("t.consumir@h-b");
+        banco.DeshacerFalla.Add("Soltar:h-b");
+
+        var r = await banco.Cerrar();
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        var viva = Assert.Single(r.Value.Compensations, c => c.IsPending);
+        Assert.Equal(("Soltar", "h-b", 1), (viva.Kind, viva.TargetId, viva.Attempts));
+    }
+
+    [Fact]
+    public async Task Lo_que_el_dominio_arma_al_soltar_se_ejecuta_en_el_acto_y_si_falla_queda_viva()
+    {
+        var banco = await AbiertaParcial(new BindingDePrueba { Parcial = true, ArmaAlSoltar = "DevolverParte" });
+        banco.Fallan.Add("t.consumir@h-b");
+        banco.DeshacerFalla.Add("DevolverParte:h-b");
+
+        var r = await banco.Cerrar();
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(new[] { "undo Soltar:h-b (sin cerrar)", "undo DevolverParte:h-b (ítem no cumplido)" }, banco.Deshechos);
+        Assert.Equal("DevolverParte", Assert.Single(r.Value.Compensations, c => c.IsPending).Kind);
+    }
+
+    [Fact]
+    public async Task Si_se_sueltan_todos_no_es_parcial_sino_nada_cumplido_y_se_deshace_entera()
+    {
+        var banco = await AbiertaParcial(new BindingDePrueba { Parcial = true });
+        banco.Fallan.Add("t.consumir");
+
+        var r = await banco.Cerrar();
+
+        Assert.Equal(FlowRunner<SagaDePrueba>.NadaCumplido, r.Rejection?.Code);
+        Assert.Equal(SagaStatus.Compensated, banco.Sagas.Find("s1")!.Status);
+        Assert.Contains("undo Devolver:cobro-1 (no se pudo cumplir ningún ítem)", banco.Deshechos);
+    }
+
+    [Fact]
+    public void Soltar_solo_vale_en_el_cierre_de_un_bloque_sobre_las_reservas_que_cierra()
+    {
+        var enUnPasoQueNoCierra = Parcial.Replace(
+            "\"cotizar\": { \"tipo\": \"t.cotizar\", \"lee\": [\"monto\"], \"escribe\": [\"precio\"], \"motivo\": \"no se pudo cotizar\" }",
+            "\"cotizar\": { \"tipo\": \"t.cotizar\", \"lee\": [\"monto\"], \"escribe\": [\"precio\"], \"motivo\": \"no se pudo cotizar\", \"al_fallar\": \"soltar\" }",
+            StringComparison.Ordinal);
+        Assert.NotEqual(Parcial, enUnPasoQueNoCierra);
+        var ex = Assert.Throws<InvalidOperationException>(() => new Banco(enUnPasoQueNoCierra));
+        Assert.Contains("«cotizar» declara «al_fallar: soltar» y no cierra ninguna reserva", ex.Message, StringComparison.Ordinal);
+
+        var fueraDelBloque = DosUnicas.Replace(
+            "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\" }",
+            "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\", \"al_fallar\": \"soltar\" }", StringComparison.Ordinal);
+        Assert.NotEqual(DosUnicas, fueraDelBloque);
+        ex = Assert.Throws<InvalidOperationException>(() => new Banco(fueraDelBloque));
+        Assert.Contains("«confirmar» declara «al_fallar: soltar» fuera de un bloque sobre «reservas:pedir»", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task El_enlace_se_entera_de_lo_que_produjo_cada_cierre_antes_de_la_escritura_que_lo_guarda()
+    {
+        // NV-3 de Viajes: la saga tipada guarda por ítem la reserva que confirmó. Llega con lo que el cierre
+        // produjo y ANTES del put que cambia la compensación: van en la misma escritura.
+        var binding = new BindingDePrueba();
+        var banco = new Banco(Definicion, binding) { ProducenCierre = true };
+        binding.AnotaCierres = banco.Bitacora.Add;
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        banco.Bitacora.Clear();
+
+        Assert.True((await banco.Cerrar()).IsOk);
+
+        Assert.Equal(new[]
+        {
+            "paso t.capturar cobro-1", "  concierre autorizar cobro-1 -", "put",
+            "paso t.consumir h-a", "  concierre apartar h-a res-h-a", "put",
+            "paso t.consumir h-b", "  concierre apartar h-b res-h-b", "put",
+            "put",
+        }, banco.Bitacora
+            .Where(l => !l.StartsWith("  llave", StringComparison.Ordinal))
+            .Select(l => l.StartsWith("put", StringComparison.Ordinal) ? "put" : l));
     }
 
     [Fact]

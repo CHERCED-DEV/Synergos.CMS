@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Api.Consent.Contracts;
 using Synergos.Api.Consent.Domain;
 using Synergos.Core;
@@ -6,11 +7,18 @@ using Synergos.Shared;
 namespace Synergos.Api.Consent.Endpoints;
 
 /// <summary>El ruteo del consentimiento.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO, su nombre con <c>WithName</c> y lo que lee
+/// de la petición —la llave, el token de identidad— con su metadato (núcleo N2, el molde F2 de la ADR
+/// 0140): de ahí sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Api.Consent.json</c>),
+/// contra el que se cruza el paso <c>consent.verificar</c>. Las rutas, los estados y los cuerpos son los
+/// de antes.
+/// </remarks>
 public static class ConsentEndpoints
 {
     public static IEndpointRouteBuilder MapConsentEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/grants", (
+        app.MapPost("/v1/grants", Results<Created<ConsentResponse>, ProblemHttpResult> (
             GrantRequest req, HttpRequest http, ConsentService svc,
             IdentityTokenGate identidad, TimeProvider clock) =>
         {
@@ -22,13 +30,12 @@ public static class ConsentEndpoints
             var (assertion, motivo) = Afirmacion(identidad, http, subject, req.Assertion, clock);
             if (assertion is null) return motivo!.ToProblem();
 
-            return svc.Grant(subject, req.Purpose, req.PolicyVersion, req.ExpiresAtUtc, key, assertion.Value).Match(
-                g => Results.Created($"/v1/grants/{g.Id}", ConsentResponse.From(g, clock.GetUtcNow())),
-                bad => bad.ToProblem());
-        });
+            return svc.Grant(subject, req.Purpose, req.PolicyVersion, req.ExpiresAtUtc, key, assertion.Value)
+                .Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToCreated(g => $"/v1/grants/{g.Id}");
+        }).WithName("GrantConsent").ConLlaveDeIdempotencia().ConTokenDeIdentidad();
 
         app.MapGet("/v1/grants/{id}", (string id, ConsentService svc, TimeProvider clock) =>
-            svc.Get(id).Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToHttp());
+            svc.Get(id).Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToHttp()).WithName("GetConsent");
 
         app.MapGet("/v1/grants", (string? subjectKind, string? subjectId, int? offset, int? limit, ConsentService svc, TimeProvider clock) =>
         {
@@ -37,24 +44,25 @@ public static class ConsentEndpoints
                 .Map(p => new PageResponse<ConsentResponse>(
                     p.Items.Select(g => ConsentResponse.From(g, ahora)).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp();
-        });
+        }).WithName("ListConsents");
 
         // Consultar es POST porque el sujeto y el propósito son datos personales por su sola
         // combinación: "¿este paciente autorizó tratamiento oncológico?" no puede quedar en la
         // URL, donde vive en logs de proxy y en el historial.
-        app.MapPost("/v1/grants/check", (RevokeRequest req, ConsentService svc, TimeProvider clock) =>
+        app.MapPost("/v1/grants/check", Results<Ok<ConsentResponse>, ProblemHttpResult> (
+            CheckConsentRequest req, ConsentService svc, TimeProvider clock) =>
         {
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
             if (string.IsNullOrWhiteSpace(req.Purpose)) return Invalid("bad_purpose", "Hace falta el propósito.");
 
             return svc.Check(subject, req.Purpose!).Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToHttp();
-        });
+        }).WithName("CheckConsent");
 
         // Revocar TAMBIÉN afirma identidad, y no es simetría por gusto: retirar el permiso de
         // otro es tan grave como darlo en su nombre. Un registro que dijera quién lo dio y con
         // qué, pero no quién lo quitó, dejaría el hueco justo donde más duele.
-        app.MapPost("/v1/grants/revoke", (
+        app.MapPost("/v1/grants/revoke", Results<Ok<ConsentResponse>, ProblemHttpResult> (
             RevokeRequest req, HttpRequest http, ConsentService svc,
             IdentityTokenGate identidad, TimeProvider clock) =>
         {
@@ -67,7 +75,7 @@ public static class ConsentEndpoints
 
             return svc.Revoke(subject, req.Purpose!, assertion.Value)
                 .Map(g => ConsentResponse.From(g, clock.GetUtcNow())).ToHttp();
-        });
+        }).WithName("RevokeConsent").ConTokenDeIdentidad();
 
         // EL DERECHO AL OLVIDO TAMBIÉN SE COMPRUEBA (defecto #83).
         //
@@ -85,7 +93,7 @@ public static class ConsentEndpoints
         // sujeto. Si algún día hace falta que un operador lo ejerza en su nombre —una petición por
         // ventanilla— eso es otra cosa: hay que distinguir «revocado por el titular» de «revocado
         // por un tercero a petición suya», y hoy no lo pide nadie.
-        app.MapPost("/v1/grants/forget", (
+        app.MapPost("/v1/grants/forget", Results<Ok<ForgetResponse>, ProblemHttpResult> (
             ForgetRequest req, HttpRequest http, ConsentService svc,
             IdentityTokenGate identidad, TimeProvider clock) =>
         {
@@ -95,8 +103,8 @@ public static class ConsentEndpoints
             var (assertion, motivo) = Afirmacion(identidad, http, subject, req.Assertion, clock);
             if (assertion is null) return motivo!.ToProblem();
 
-            return Results.Ok(new ForgetResponse(svc.Forget(subject, assertion.Value)));
-        });
+            return TypedResults.Ok(new ForgetResponse(svc.Forget(subject, assertion.Value)));
+        }).WithName("ForgetSubject").ConTokenDeIdentidad();
 
         return app;
     }
@@ -137,6 +145,6 @@ public static class ConsentEndpoints
             ConsentRules.CodePrefix);
     }
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{ConsentRules.CodePrefix}.{code}", message).ToProblem();
 }
