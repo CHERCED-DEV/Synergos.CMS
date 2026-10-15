@@ -736,6 +736,53 @@ public sealed class FlowRunnerTests
         Assert.Equal(new[] { "undo Cancelar:pedido-1 (no confirmó)", "undo Devolver:cobro-1 (no confirmó)" }, banco.Deshechos);
     }
 
+    /// <summary>
+    /// La de dos únicas con el cierre del pedido que SIGUE si falla (núcleo N2, N-3 de Tienda): con la plata
+    /// capturada, un pedido sin confirmar se concilia, no se anula.
+    /// </summary>
+    private static readonly string ConfirmarQueSigue = DosUnicas.Replace(
+        "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\" }",
+        "\"cierra_reserva\": \"pedir\", \"motivo\": \"no confirmó\", \"al_fallar\": \"seguir\" }", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Un_cierre_sin_despues_que_sigue_si_falla_completa_la_saga_sin_anular_lo_reservado()
+    {
+        Assert.NotEqual(DosUnicas, ConfirmarQueSigue);   // la mutación del banco entró
+        var banco = new Banco(ConfirmarQueSigue);
+        await banco.Abrir();
+        banco.Fallan.Add("t.confirmar");
+        banco.Bitacora.Clear();
+
+        var r = await banco.Cerrar();
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Empty(banco.Deshechos);
+        Assert.Equal("put Completed [Cancelar:pedido-1+, Devolver:cobro-1+]", banco.Escrituras.Last());
+    }
+
+    [Fact]
+    public void Un_cierre_que_sigue_no_vale_si_su_reserva_tiene_despues_ni_con_un_paso_que_no_sigue_detras()
+    {
+        // Capturar cierra el cobro, que se devuelve DESPUÉS de cerrarlo: completar sin capturar dejaría la
+        // compra como cobrada sin cobro.
+        var conDespues = DosUnicas.Replace(
+            "\"cierra_reserva\": \"autorizar\", \"motivo\": \"no capturó\" }",
+            "\"cierra_reserva\": \"autorizar\", \"motivo\": \"no capturó\", \"al_fallar\": \"seguir\" }", StringComparison.Ordinal);
+        Assert.NotEqual(DosUnicas, conDespues);
+        var ex = Assert.Throws<InvalidOperationException>(() => new Banco(conDespues));
+        Assert.Contains("«capturar» declara «al_fallar» y cierra la reserva de «autorizar», que se deshace con «Devolver»",
+            ex.Message, StringComparison.Ordinal);
+
+        // Confirmar sigue, y detrás va capturar, que aborta y deshace: anularía un pedido quizá confirmado.
+        var conAlgoDetras = ConfirmarQueSigue.Replace(
+            "\"cerrar\": [\"capturar\", \"confirmar\"]", "\"cerrar\": [\"confirmar\", \"capturar\"]", StringComparison.Ordinal);
+        Assert.NotEqual(ConfirmarQueSigue, conAlgoDetras);
+        ex = Assert.Throws<InvalidOperationException>(() => new Banco(conAlgoDetras));
+        Assert.Contains("«confirmar» declara «al_fallar» y cierra una reserva, y detrás van pasos que no siguen si fallan («capturar»)",
+            ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Cerrar_una_reserva_unica_no_toca_otra_que_se_deshaga_igual()
     {

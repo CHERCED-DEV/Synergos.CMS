@@ -287,18 +287,19 @@ public sealed class FlowValidatorTests
     }
 
     [Fact]
-    public void Al_fallar_solo_va_en_un_paso_que_no_reserva_ni_cierra_en_la_ultima_fase()
+    public void Al_fallar_no_va_en_un_paso_que_reserva_ni_en_un_cierre_con_despues_ni_fuera_de_la_ultima_fase()
     {
         // Seguir tras un fallo antes del último cierre completaría una saga con algo reservado sin
-        // consumir, o consumido sin cobrar.
+        // consumir, o consumido sin cobrar. El cierre de una reserva SIN «despues» sí puede seguir
+        // (núcleo N2): lo prueba FlowRunnerTests con el pedido de la tienda.
         var enCapturar = Errores(Mutar("\"llave\": \"capture\",", "\"llave\": \"capture\", \"al_fallar\": \"seguir\","));
         var enAutorizar = Errores(Mutar("\"llave\": \"authorize\",", "\"llave\": \"authorize\", \"al_fallar\": \"seguir\","));
         var enAbrir = Errores(Mutar(
             "{ \"tipo\": \"eventos.revisar-lineas\", \"lee\": [\"lineas\"] }",
             "{ \"tipo\": \"eventos.revisar-lineas\", \"lee\": [\"lineas\"], \"al_fallar\": \"seguir\" }"));
 
-        Assert.Contains(enCapturar, e => e.Contains("«capturar» declara «al_fallar» y reserva o cierra", StringComparison.Ordinal));
-        Assert.Contains(enAutorizar, e => e.Contains("«autorizar» declara «al_fallar» y reserva o cierra", StringComparison.Ordinal));
+        Assert.Contains(enCapturar, e => e.Contains("«capturar» declara «al_fallar» y cierra la reserva de «autorizar», que se deshace con", StringComparison.Ordinal));
+        Assert.Contains(enAutorizar, e => e.Contains("«autorizar» declara «al_fallar» y reserva", StringComparison.Ordinal));
         Assert.Contains(enAbrir, e => e.Contains("«revisar-lineas» declara «al_fallar» y no está en la última fase", StringComparison.Ordinal));
     }
 
