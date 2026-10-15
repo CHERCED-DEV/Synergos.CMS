@@ -18,7 +18,7 @@ public sealed class PasosYDeshacerTests
     /// <summary>La saga más larga que admite el borde: lo que cuelgue de ella tiene que caber en una llave.</summary>
     private static readonly string SagaLarga = new string('s', LlaveDeSaga.MaxLength - 4) + "#100";
 
-    private sealed class Agenda : IBookingPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias
+    private sealed class Agenda : IBookingPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias, IDeshacerPedidos
     {
         public List<string> Llamadas { get; } = [];
         public Rejection? Rechaza { get; set; }
@@ -37,6 +37,7 @@ public sealed class PasosYDeshacerTests
         public Task<Result<string>> SoltarAsync(string apartado, CancellationToken ct) => Hacer(apartado, $"soltar {apartado}");
         public Task<Result<string>> ReponerAsync(string pozo, int cantidad, IdempotencyKey llave, CancellationToken ct)
             => Hacer(pozo, $"reponer {pozo} {cantidad}");
+        Task<Result<string>> IDeshacerPedidos.CancelarAsync(string pedido, CancellationToken ct) => Hacer(pedido, $"anular-pedido {pedido}");
 
         private Task<Result<string>> Hacer(string valor, string llamada)
         {
@@ -50,6 +51,28 @@ public sealed class PasosYDeshacerTests
             new PasoDef("p", tipo, lee, ["x"], llave, llaveBase, null, null, null), ctx, null, null);
 
     private static FlowContext Ctx() => new FlowContext().Set("recurso", "rs-1").Set("ventana", Hora).Set("paciente", Paciente).Set("apartado", "bh-1");
+
+    private static EntradaDePaso EnBloque(string tipo, string[] lee, string llaveBase, int? indice)
+        => new("viaje-1", Ref.Create("prueba.viaje", "viaje-1"),
+            new PasoDef("p", tipo, lee, ["x"], null, llaveBase, null, null, null), Ctx(), null, null, indice);
+
+    [Fact]
+    public async Task Por_indice_dos_items_identicos_llevan_llaves_distintas_y_son_las_de_TripFlow()
+    {
+        // NV-1 de Viajes: TripFlow arma hold:{i} y confirm:{i}. Con el mismo recurso y la misma ventana,
+        // apartar-por-item compartiría llave; por posición no.
+        var agenda = new Agenda();
+        var apartar = new PasoAgendaApartarPorIndice(agenda);
+
+        await apartar.EjecutarAsync(EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", 0), CancellationToken.None);
+        await apartar.EjecutarAsync(EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", 1), CancellationToken.None);
+        await new PasoAgendaConfirmarPorIndice(agenda).EjecutarAsync(
+            EnBloque("booking.confirmar-por-indice", ["apartado"], "confirm", 1), CancellationToken.None);
+
+        Assert.Equal(new[] { "apartar viaje-1|hold:0", "apartar viaje-1|hold:1", "confirmar viaje-1|confirm:1" }, agenda.Llamadas);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => apartar.EjecutarAsync(
+            EnBloque("booking.apartar-por-indice", ["recurso", "ventana", "paciente"], "hold", null), CancellationToken.None));
+    }
 
     [Fact]
     public async Task Apartar_llama_con_la_llave_FIJA_de_la_cita_y_reserva_lo_que_aparta()
@@ -120,7 +143,7 @@ public sealed class PasosYDeshacerTests
     public async Task Reponer_devuelve_la_cantidad_de_SU_reserva_aunque_dos_cierren_en_el_mismo_pozo()
     {
         var agenda = new Agenda();
-        var deshacer = new DeshacerComun(agenda, agenda, agenda, []);
+        var deshacer = new DeshacerComun(agenda, agenda, agenda, agenda, []);
         var primera = new Compensation("c1", TiposDeDeshacer.ReponerExistencias, "po-1", "m");
         var segunda = new Compensation("c2", TiposDeDeshacer.ReponerExistencias, "po-1", "m");
         var saga = Saga(primera, segunda);
@@ -135,7 +158,7 @@ public sealed class PasosYDeshacerTests
     public async Task Devolver_lo_ya_devuelto_se_da_por_hecho_y_lo_que_queda_va_con_llave_determinista()
     {
         var agenda = new Agenda { Devolvible = Money.Zero("COP") };
-        var deshacer = new DeshacerComun(agenda, agenda, agenda, []);
+        var deshacer = new DeshacerComun(agenda, agenda, agenda, agenda, []);
         var devolver = new Compensation("c9", TiposDeDeshacer.DevolverCobro, "pg-1", "m");
 
         Assert.Null(await deshacer.UndoAsync(Saga(devolver), devolver, CancellationToken.None));
@@ -150,23 +173,23 @@ public sealed class PasosYDeshacerTests
     public async Task Cada_tipo_estandar_va_a_su_puerto_y_uno_desconocido_se_rechaza_sin_reintento()
     {
         var agenda = new Agenda();
-        var deshacer = new DeshacerComun(agenda, agenda, agenda, []);
+        var deshacer = new DeshacerComun(agenda, agenda, agenda, agenda, []);
 
         foreach (var (tipo, objetivo) in new[]
                  {
                      (TiposDeDeshacer.LiberarAgenda, "bh-1"), (TiposDeDeshacer.CancelarReserva, "rv-1"),
-                     (TiposDeDeshacer.AnularCobro, "pg-1"), (TiposDeDeshacer.SoltarExistencias, "ih-1"),
+                     (TiposDeDeshacer.AnularCobro, "pg-1"), (TiposDeDeshacer.SoltarExistencias, "ih-1"), (TiposDeDeshacer.CancelarPedido, "pd-1"),
                  })
         {
             var c = new Compensation("c", tipo, objetivo, "m");
             Assert.Null(await deshacer.UndoAsync(Saga(c), c, CancellationToken.None));
         }
 
-        Assert.Equal(new[] { "liberar bh-1", "cancelar rv-1", "anular pg-1", "soltar ih-1" }, agenda.Llamadas);
+        Assert.Equal(new[] { "liberar bh-1", "cancelar rv-1", "anular pg-1", "soltar ih-1", "anular-pedido pd-1" }, agenda.Llamadas);
         var rara = new Compensation("c", "booking.soltar", "x", "m");
         var r = await deshacer.UndoAsync(Saga(rara), rara, CancellationToken.None);
         Assert.Equal(DeshacerComun.Desconocida, r?.Code);
         Assert.False(r!.IsTransient);
-        Assert.Equal(6, deshacer.Tipos.Count);
+        Assert.Equal(7, deshacer.Tipos.Count);
     }
 }

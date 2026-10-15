@@ -8,11 +8,11 @@ namespace Synergos.Api.Orders.Contracts;
 public sealed record MoneyDto(decimal Amount, string Currency);
 
 /// <summary>Una línea del pedido.</summary>
-public sealed record OrderLineRequest(string? SubjectKind, string? SubjectId, int? Quantity, MoneyDto? UnitPrice);
+public sealed record OrderLineRequest(string? SubjectKind = null, string? SubjectId = null, int? Quantity = null, MoneyDto? UnitPrice = null);
 
 /// <summary>Registrar un pedido.</summary>
 public sealed record PlaceOrderRequest(
-    string? BuyerKind, string? BuyerId, IReadOnlyList<OrderLineRequest>? Lines, MoneyDto? Total);
+    string? BuyerKind = null, string? BuyerId = null, IReadOnlyList<OrderLineRequest>? Lines = null, MoneyDto? Total = null);
 
 /// <summary>Cómo sale una línea.</summary>
 public sealed record OrderLineResponse(string SubjectKind, string SubjectId, int Quantity, MoneyDto UnitPrice, MoneyDto Subtotal);

@@ -95,7 +95,8 @@ public sealed class IdentityGateTests
         var desde = codigo.IndexOf(ruta, StringComparison.Ordinal);
         Assert.True(desde > 0, $"El endpoint {ruta} cambió de forma: revisar este gate.");
 
-        var hasta = codigo.IndexOf("        });", desde, StringComparison.Ordinal);
+        // Hasta el cierre de SU lambda: `});` o, desde el molde F2 (núcleo N2), `}).WithName(…)`.
+        var hasta = codigo.IndexOf("        })", desde, StringComparison.Ordinal);
         Assert.True(hasta > desde, $"No se pudo delimitar {ruta}: revisar este gate.");
         return codigo[desde..hasta];
     }
@@ -330,7 +331,8 @@ public sealed class IdentityGateTests
         var desde = codigo.IndexOf("MapPost(\"/v1/carts\"", StringComparison.Ordinal);
         Assert.True(desde > 0, "Cambió la ruta de abrir canasta: revisar este gate.");
 
-        var hasta = codigo.IndexOf("        });", desde, StringComparison.Ordinal);
+        // Hasta el cierre de SU lambda: `});` o, desde el molde F2 (núcleo N2), `}).WithName(…)`.
+        var hasta = codigo.IndexOf("        })", desde, StringComparison.Ordinal);
         Assert.True(hasta > desde, "No se pudo delimitar el endpoint de abrir canasta: revisar este gate.");
         return codigo[desde..hasta];
     }

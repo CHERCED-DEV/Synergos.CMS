@@ -62,6 +62,21 @@ public interface ISagaStore<TSaga> where TSaga : class, ISaga
     void Invalidate();
 }
 
+/// <summary>
+/// Dónde vive una saga dentro de la raíz del almacén del orquestador, cuando no es la raíz (núcleo N2, NN-15 de
+/// Salud).
+/// </summary>
+/// <remarks>
+/// <para><b>Un orquestador puede llevar dos sagas</b>: la tipada de su flujo imperativo y la genérica de sus
+/// flujos declarados (el matiz 1 del lote 2). Con una sola raíz por proceso, las dos acabarían en
+/// <c>sagas/</c> y <c>sagas-vivas/</c>, y cada barrido leería las de la otra como si fueran suyas.</para>
+///
+/// <para><b>La tipada no se mueve</b>: sin esto vive en la raíz, donde están sus datos de producción. La que se
+/// registra con una carpeta (la genérica, en <c>flujos/</c>) va aparte.</para>
+/// </remarks>
+/// <param name="Nombre">La subcarpeta, relativa a la raíz.</param>
+public sealed record CarpetaDeSagas<TSaga>(string Nombre) where TSaga : class, ISaga;
+
 /// <summary>El almacén por defecto: un documento por saga, más el índice de las VIVAS.</summary>
 /// <remarks>
 /// <para><b>El índice existe porque el barrido pagaba por la HISTORIA y no por el trabajo</b>
@@ -119,11 +134,15 @@ public sealed class FileSystemSagaStore<TSaga> : ISagaStore<TSaga> where TSaga :
     private readonly string _indice;
     private readonly object _gate = new();
 
-    public FileSystemSagaStore(IOptions<SagaStorageOptions> options)
+    /// <param name="options">La raíz del almacén del orquestador.</param>
+    /// <param name="carpeta">La subcarpeta de esta saga, si no vive en la raíz (núcleo N2, NN-15). Sin ella, la
+    /// raíz: donde están los datos de producción de cada saga tipada, que no se mueven.</param>
+    public FileSystemSagaStore(IOptions<SagaStorageOptions> options, CarpetaDeSagas<TSaga>? carpeta = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        _store = new JsonCollectionStore<TSaga>(options.Value.Root, "sagas", s => s.Id);
-        _indice = Path.Combine(options.Value.Root, "sagas-vivas");
+        var raiz = carpeta is null ? options.Value.Root : Path.Combine(options.Value.Root, carpeta.Nombre);
+        _store = new JsonCollectionStore<TSaga>(raiz, "sagas", s => s.Id);
+        _indice = Path.Combine(raiz, "sagas-vivas");
     }
 
     /// <summary>
