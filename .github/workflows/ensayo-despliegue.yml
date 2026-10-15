@@ -1,0 +1,310 @@
+name: Ensayo del despliegue
+
+# 002-produccion — el despliegue entero, en una máquina desechable, sin servidor
+# y sin una sola credencial.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# LO QUE SE MIDIÓ, Y POR QUÉ ESTE FICHERO EXISTE (2026-10-15)
+#
+# `deploy.yml` corrió en master 4 de 4 veces con TODOS sus pasos `skipped`: no
+# hay servidor ni secretos, y eso es correcto. Pero quiere decir que el stack de
+# producción —`compose.prod.yml`, el portero, `deploy-remoto.sh`,
+# `importar-schema.sh`, el respaldo y la restauración— NO SE HA LEVANTADO NUNCA.
+# Ningún workflow lo corría y la máquina donde se escribe no tiene Docker.
+#
+# Y tenía defectos esperando al primer servidor: el `.env` que deja
+# `bootstrap-servidor.sh` no traía dos de las cinco variables que el compose
+# exige con `:?`, así que el primer `compose pull` habría muerto. Eso no lo ve un
+# gate de texto que mire cada fichero por separado; lo ve correr los ficheros
+# JUNTOS, que es lo que hace esto.
+#
+# EL RUNNER HACE DE SERVIDOR, Y LA FIDELIDAD ES LA REGLA:
+#
+#   · `/opt/synergos` con lo que copia `deploy.yml` — la lista se EXTRAE de su
+#     `scp`, no se repite acá: una segunda lista se desincroniza el día que
+#     nadie mira, que es como el despliegue dejó dos veces scripts sin copiar.
+#   · el `.env` es el que deja `bootstrap-servidor.sh --solo-env`, más lo único
+#     que el arquitecto pone a mano: el dominio.
+#   · los MISMOS scripts, en el orden de la guía; el humo es `humo-publico.sh`,
+#     el mismo que corre el despliegue contra el dominio de verdad.
+#   · el dominio es `localhost`: Caddy le firma el certificado con su CA local
+#     y el humo confía en ella por `CURL_CA_BUNDLE`, sin tocar el script (que no
+#     puede decir `localhost`: lo vigila DeployPipelineTests).
+#
+# Las imágenes son las de GHCR — las mismas que bajaría el servidor— de un
+# commit de MASTER: sólo ahí se publican. En una rama, el ensayo usa el commit
+# de master en que se basa; lo que se ensaya entonces son los FICHEROS del
+# despliegue de la rama contra las imágenes publicadas, que es lo que una rama
+# de despliegue cambia.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # Después de cada publicación de imágenes en master, como el despliegue.
+  workflow_run:
+    workflows: ["Imágenes (GHCR)"]
+    types: [completed]
+    branches: [main, master]
+
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit de master cuyas imágenes se ensayan (vacío = el de este ref o su base en master)"
+        required: false
+
+  # En una rama, sólo si toca una pieza del despliegue: lo que se ensaya son
+  # esos ficheros. Master lo cubre el `workflow_run` de arriba.
+  push:
+    branches-ignore: [main, master]
+    paths:
+      - compose.prod.yml
+      - Caddyfile
+      - tools/deploy-remoto.sh
+      - tools/importar-schema.sh
+      - tools/respaldo.sh
+      - tools/enviar-respaldo.sh
+      - tools/restaurar.sh
+      - tools/provisionar.sh
+      - tools/provisionar.*.json
+      - tools/humo-publico.sh
+      - tools/bootstrap-servidor.sh
+      - .github/workflows/deploy.yml
+      - .github/workflows/ensayo-despliegue.yml
+
+concurrency:
+  group: ensayo-despliegue-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ensayo:
+    name: Poner en pie, respaldar, restaurar y volver atrás
+    # Si las imágenes fallaron no hay nada que ensayar: el despliegue tampoco correría.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      SYNERGOS_DIR: /opt/synergos
+      REGISTRO: ghcr.io/cherced-dev
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      # ── 0. Qué imágenes se ensayan, y a cuál se vuelve ──────────────────
+      #
+      # Las imágenes se publican por push a master, no por commit: un commit
+      # intermedio no tiene. Se busca hacia atrás por la historia de master el
+      # primero que sí, y después el ANTERIOR con imágenes — el destino de la
+      # vuelta atrás, como `tag.actual` en el servidor.
+      - id: etiquetas
+        name: Qué se ensaya
+        env:
+          EVENTO: ${{ github.event_name }}
+          PEDIDO: ${{ github.event.inputs.sha }}
+        run: |
+          set -euo pipefail
+          tiene_imagenes() { docker manifest inspect "$REGISTRO/synergos-cms:$1" >/dev/null 2>&1; }
+
+          git fetch --quiet origin master
+          case "$EVENTO" in
+            workflow_dispatch) DESDE="${PEDIDO:-$(git merge-base HEAD origin/master)}" ;;
+            workflow_run)      DESDE="$(git rev-parse HEAD)" ;;
+            *)                 DESDE="$(git merge-base HEAD origin/master)" ;;
+          esac
+
+          SHA=""; ANTERIOR=""
+          for c in $(git rev-list --first-parent --max-count=40 "$DESDE"); do
+            if tiene_imagenes "$c"; then
+              if [ -z "$SHA" ]; then SHA="$c"; else ANTERIOR="$c"; break; fi
+            fi
+          done
+          [ -n "$SHA" ] || { echo "✗ ningún commit de master desde $DESDE tiene imágenes en GHCR"; exit 1; }
+          [ -n "$ANTERIOR" ] || { echo "✗ no hay una versión anterior con imágenes: no se puede ensayar la vuelta atrás"; exit 1; }
+
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "anterior=$ANTERIOR" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Ensayo del despliegue"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| ficheros del despliegue | \`$(git rev-parse --short HEAD)\` ($EVENTO) |"
+            echo "| imágenes que se ponen | \`${SHA:0:7}\` |"
+            echo "| versión a la que se vuelve | \`${ANTERIOR:0:7}\` |"
+            echo
+            echo "| paso | resultado | tiempo |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Dos juegos de 26 imágenes no caben cómodos en el disco por defecto del
+      # runner: se quita lo que este job no usa.
+      - name: Liberar disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
+
+      # ── 1. El «servidor» ────────────────────────────────────────────────
+      - name: Preparar /opt/synergos como lo deja el despliegue
+        run: |
+          set -euo pipefail
+          sudo install -d -o "$USER" -g "$USER" -m 755 "$SYNERGOS_DIR"
+
+          # La lista del `scp` de deploy.yml, extraída de él: desde la línea del
+          # `scp` hasta el destino en el servidor, sin las barras de continuación.
+          LISTA="$(awk '/scp -i ~\/\.ssh\/id_deploy/ {dentro=1; next}
+                        dentro && /USUARIO@\$HOST:\/opt\/synergos\// {dentro=0}
+                        dentro {print}' .github/workflows/deploy.yml | tr -d '\\' | xargs)"
+          case " $LISTA " in
+            *" compose.prod.yml "*" tools/deploy-remoto.sh "*) ;;
+            *) echo "✗ no se pudo extraer la lista que copia deploy.yml (salió: '$LISTA')"; exit 1 ;;
+          esac
+          echo "copia: $LISTA"
+          # shellcheck disable=SC2086
+          cp $LISTA "$SYNERGOS_DIR/"
+          chmod +x "$SYNERGOS_DIR"/*.sh
+
+          # El `.env` que deja la preparación del servidor, más el dominio.
+          bash tools/bootstrap-servidor.sh --solo-env "$SYNERGOS_DIR/.env"
+          sed -i 's/^SYNERGOS_DOMAIN=.*/SYNERGOS_DOMAIN=localhost/' "$SYNERGOS_DIR/.env"
+          echo "| \`.env\` del bootstrap + dominio | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 2. Una obligatoria que falta para ANTES de tocar nada (FR-006) ───
+      - name: Sin una obligatoria, el despliegue se niega antes de parar nada
+        working-directory: /opt/synergos
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -uo pipefail
+          cp .env .env.completo
+          grep -v '^SYNERGOS_ADMIN_PASSWORD=' .env.completo > .env
+          if ./deploy-remoto.sh "$SHA" > /tmp/negativo.log 2>&1; then
+            cat /tmp/negativo.log; echo "✗ desplegó con una obligatoria vacía"; exit 1
+          fi
+          grep -q 'SYNERGOS_ADMIN_PASSWORD' /tmp/negativo.log || { cat /tmp/negativo.log; echo "✗ falló sin nombrar la variable"; exit 1; }
+          [ -z "$(docker ps -q)" ] || { docker ps; echo "✗ arrancó contenedores"; exit 1; }
+          mv .env.completo .env
+          echo "| sin \`SYNERGOS_ADMIN_PASSWORD\`: se niega nombrándola, 0 contenedores | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 3. Poner en pie, como el servidor ───────────────────────────────
+      - name: deploy-remoto.sh
+        working-directory: /opt/synergos
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          ./deploy-remoto.sh "$SHA"
+          echo "| en pie con \`${SHA:0:7}\` (\`deploy-remoto.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: importar-schema.sh
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          ./importar-schema.sh
+          echo "| schema y contenido (\`importar-schema.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      # La CA local de Caddy cambia si se borra su volumen (paso 5), así que se
+      # vuelve a leer antes de cada humo.
+      - name: Humo público (1)
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker compose --file /opt/synergos/compose.prod.yml --project-directory /opt/synergos \
+            cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/ca-del-ensayo.crt
+          CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt ./tools/humo-publico.sh localhost "$SHA"
+          echo "| humo público tras el import | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 4. Lo que hay que sembrar, medido (R7) ──────────────────────────
+      #
+      # `provisionar.sh` habla con las capacidades por su nombre de servicio,
+      # que sólo resuelve DENTRO de la red de Docker. Se corre como se correría
+      # en el servidor: en un contenedor efímero sobre `synergos_interna`.
+      - name: provisionar.sh dentro de la red
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          set -a; . ./.env; set +a
+          provisionar() {
+            docker run --rm --network synergos_interna \
+              -v /opt/synergos:/opt/synergos:ro -w /opt/synergos \
+              -e SYNERGOS_API_KEY python:3.12-alpine \
+              sh -c 'apk add --no-cache --quiet bash curl >/dev/null && bash ./provisionar.sh "$@"' _ "$@"
+          }
+          echo "── --verificar (en un servidor nuevo, tiene que decir qué falta)"
+          provisionar --verificar || true
+          echo "── publicar"
+          provisionar
+          echo "── --verificar otra vez (tiene que pasar)"
+          provisionar --verificar
+          echo "| \`provisionar.sh\` publicar + verificar, dentro de \`synergos_interna\` | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 5. Respaldo, pérdida y restauración ─────────────────────────────
+      - name: respaldo.sh
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          ./respaldo.sh /tmp/respaldos
+          ls -la /tmp/respaldos
+          echo "| respaldo (\`respaldo.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      # El ÚNICO `--volumes` de este fichero, y es a propósito: simula perder el
+      # disco. Si la restauración no devuelve la base del CMS, Umbraco arranca
+      # VACÍO y el humo lo ve (el cartel «No published content»), porque esta
+      # vez NO se reimporta nada.
+      - name: Perder los volúmenes y restaurarlos
+        working-directory: /opt/synergos
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          docker compose --file compose.prod.yml --project-directory . down --volumes
+          ARCHIVO="$(ls -t /tmp/respaldos/*.tar.gz | head -1)"
+          ./restaurar.sh "$ARCHIVO" --si-estoy-seguro
+          ./deploy-remoto.sh "$SHA"
+          echo "| volúmenes borrados → \`restaurar.sh\` → en pie | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Humo público (2) — sin reimportar
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker compose --file /opt/synergos/compose.prod.yml --project-directory /opt/synergos \
+            cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/ca-del-ensayo.crt
+          CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt ./tools/humo-publico.sh localhost "$SHA"
+          echo "| humo tras restaurar, sin reimportar: la base volvió | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 6. Volver a la versión anterior, como hace deploy.yml si el humo falla
+      - name: Vuelta atrás
+        working-directory: /opt/synergos
+        env:
+          ANTERIOR: ${{ steps.etiquetas.outputs.anterior }}
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          ./deploy-remoto.sh "$ANTERIOR"
+          echo "| vuelta a \`${ANTERIOR:0:7}\` | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Humo público (3) — la versión anterior
+        env:
+          ANTERIOR: ${{ steps.etiquetas.outputs.anterior }}
+        run: |
+          set -euo pipefail
+          docker compose --file /opt/synergos/compose.prod.yml --project-directory /opt/synergos \
+            cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/ca-del-ensayo.crt
+          CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt ./tools/humo-publico.sh localhost "$ANTERIOR"
+          echo "| humo con la versión anterior | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          df -h / | tail -1
+
+      - name: Qué pasó, si algo falló
+        if: failure()
+        working-directory: /opt/synergos
+        run: |
+          docker compose --file compose.prod.yml --project-directory . ps -a || true
+          docker compose --file compose.prod.yml --project-directory . logs --tail 80 cms proxy || true
