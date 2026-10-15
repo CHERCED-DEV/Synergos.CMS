@@ -204,7 +204,7 @@ jobs:
         run: |
           set -euo pipefail
           t=$SECONDS
-          ./importar-schema.sh
+          ./importar-schema.sh --con-contenido
           echo "| schema y contenido (\`importar-schema.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       # Lo que sirve el CMS justo después del import, directo y sin el portero.

@@ -29,10 +29,28 @@
 # deja de ser un ritual de backoffice imposible en un VPS sin pantalla.
 # ─────────────────────────────────────────────────────────────────────────────
 #
-#   ./importar-schema.sh [--compose <fichero>] [--espera <segundos>]
+#   ./importar-schema.sh [--con-contenido] [--compose <fichero>] [--espera <segundos>]
 #
 # Se corre EN EL SERVIDOR, con el stack ya levantado. Es idempotente: uSync
 # compara y aplica lo que difiere, así que correrlo dos veces no duplica nada.
+#
+# ── EL CONTENIDO, SÓLO CON `--con-contenido` ─────────────────────────────────
+#
+# ⚠️ Lo que este fichero decía y era falso (medido el 2026-10-15 en el ensayo del
+# despliegue, 002-produccion): que `appsettings.json` deja encendidos
+# `ContentHandler` y `MediaHandler`. En la imagen NO importan: sobre una base
+# limpia el import procesaba 1240 ítems —EXACTAMENTE todo uSync menos `Content`
+# (96) y `Media` (192)— y la base quedaba con 0 documentos, o sea la portada en
+# el cartel vacío de Umbraco aunque el import saliera verde. El gate que prueba
+# que la base es derivable (`tools/usync-rebuild-check.mjs`) ya los encendía por
+# entorno, a propósito; este script no.
+#
+# Ahora los enciende sólo `--con-contenido`, y sin la bandera los APAGA de forma
+# explícita. Es la regla de la ADR 0013 (la siembra es un acto explícito y de una
+# vez): el contenido versionado (ADR 0129) entra al montar un servidor NUEVO, y
+# nunca más — volver a importarlo después revertiría lo que publicaron los
+# editores. Para traer schema nuevo a un servidor que ya tiene contenido, sin la
+# bandera.
 #
 # Lo que hace: PARA el CMS, levanta un contenedor efímero con la misma imagen y
 # los mismos volúmenes y con `ImportAtStartup=All` puesto SÓLO para él, y cuando
@@ -55,8 +73,10 @@ COMPOSE_FILE="compose.prod.yml"
 # porque un servidor pequeño tarda más y cortar un import a medias es peor que
 # esperar.
 ESPERA="${SYNERGOS_IMPORT_TIMEOUT:-900}"
+CONTENIDO=false
 while [ $# -gt 0 ]; do
   case "$1" in
+    --con-contenido) CONTENIDO=true; shift ;;
     --compose) COMPOSE_FILE="$2"; shift 2 ;;
     --espera) ESPERA="$2"; shift 2 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
@@ -97,13 +117,24 @@ trap levantar_de_vuelta EXIT
 echo "── parando el CMS (dos Umbraco sobre la misma base se matan por MainDom)…"
 $COMPOSE stop cms >/dev/null
 
-echo "── importando el schema de uSync en un contenedor efímero…"
+if [ "$CONTENIDO" = "true" ]; then
+  echo "── importando el schema Y EL CONTENIDO versionado (--con-contenido) en un contenedor efímero…"
+else
+  echo "── importando el schema de uSync (sin contenido) en un contenedor efímero…"
+fi
 
 # `run --rm` y no `exec`: el que sirve el sitio arrancó sin ImportAtStartup y
 # tiene que seguir así. Éste nace con la variable puesta, importa, y desaparece.
 #
 # `--no-deps` porque el import no habla con ninguna capacidad: sólo con la DB.
 # Sin esto, `run` levantaría media pila para nada.
+#
+# Los handlers de contenido y media van por entorno (ver la cabecera), y con
+# ellos los tres ajustes de `tools/usync-rebuild-check.mjs`, el gate que prueba
+# que la base es derivable: que un ítem sin su padre falle en vez de colgarse
+# en otro sitio, que la poda de `umbracoCacheInstruction` no se trabe con el
+# import (#205: ~580 s de reintentos y a veces el ítem no entra) y que el
+# keepalive no pinguee una URL que este proceso efímero no escucha.
 #
 # El proceso NO termina solo —es un servidor web— así que se lee su salida hasta
 # ver el resumen del import y ahí se corta. Esperar a que salga colgaría para
@@ -113,6 +144,11 @@ timeout --signal=INT "$ESPERA" \
   $COMPOSE run --rm --no-deps --entrypoint "" \
     --env "uSync__Settings__ImportAtStartup=All" \
     --env "uSync__Settings__ExportOnSave=None" \
+    --env "uSync__Sets__Default__Handlers__ContentHandler__Enabled=$CONTENIDO" \
+    --env "uSync__Sets__Default__Handlers__MediaHandler__Enabled=$CONTENIDO" \
+    --env "uSync__Sets__Default__HandlerDefaults__FailOnMissingParent=true" \
+    --env "Umbraco__CMS__Global__DatabaseServerMessenger__TimeBetweenPruneOperations=1.00:00:00" \
+    --env "Umbraco__CMS__KeepAlive__DisableKeepAliveTask=true" \
     --env "ASPNETCORE_URLS=http://127.0.0.1:8099" \
     cms \
     dotnet Synergos.CMS.Web.dll > "$LOG" 2>&1 &
