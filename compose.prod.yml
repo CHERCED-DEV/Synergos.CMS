@@ -898,6 +898,8 @@ services:
       Alquiler__Capabilities__notifications__ApiKey: ${SYNERGOS_API_KEY}
       Alquiler__Capabilities__payments__BaseUrl: "http://api-payments:8080"
       Alquiler__Capabilities__payments__ApiKey: ${SYNERGOS_API_KEY}
+      Alquiler__Capabilities__pricing__BaseUrl: "http://api-pricing:8080"
+      Alquiler__Capabilities__pricing__ApiKey: ${SYNERGOS_API_KEY}
 
       # El aviso cuando una compensacion se rinde tras ocho intentos. Sin esto
       # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,

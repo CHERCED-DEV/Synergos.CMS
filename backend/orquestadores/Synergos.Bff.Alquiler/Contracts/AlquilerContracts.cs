@@ -31,6 +31,57 @@ public sealed record ReserveRentalRequest(
     MoneyPayload? RentalTotal = null,
     MoneyPayload? Deposit = null);
 
+/// <summary>Un tramo de la tarifa, como llega del CMS.</summary>
+/// <param name="MinDays">Desde cuántos días aplica (dos o más).</param>
+/// <param name="PerDay">Cuánto vale el día en ese tramo.</param>
+public sealed record RateTierPayload(int? MinDays = null, decimal? PerDay = null);
+
+/// <summary>La oferta de un equipo que publica el CMS al publicar su ficha (línea 005, T008).</summary>
+/// <param name="EquipmentId">El slug del equipo.</param>
+/// <param name="Currency">ISO 4217 de todos los importes.</param>
+/// <param name="DailyRate">La tarifa base del día.</param>
+/// <param name="Rates">Los tramos por duración.</param>
+/// <param name="DepositPerUnit">La garantía de UNA unidad; cero es «sin garantía».</param>
+/// <param name="MinDays">El alquiler más corto.</param>
+/// <param name="MaxDays">El alquiler más largo.</param>
+/// <param name="Units">Cuántas unidades hay.</param>
+public sealed record PublishEquipmentOfferRequest(
+    string? EquipmentId = null,
+    string? Currency = null,
+    decimal? DailyRate = null,
+    IReadOnlyList<RateTierPayload>? Rates = null,
+    decimal? DepositPerUnit = null,
+    int? MinDays = null,
+    int? MaxDays = null,
+    int? Units = null);
+
+/// <summary>Un tramo publicado.</summary>
+/// <param name="MinDays">Desde cuántos días aplica.</param>
+/// <param name="PerDay">Cuánto vale el día.</param>
+public sealed record RateTierResponse(int MinDays, decimal PerDay);
+
+/// <summary>Lo que quedó publicado de un equipo.</summary>
+/// <param name="EquipmentId">El slug del equipo.</param>
+/// <param name="Currency">La moneda.</param>
+/// <param name="DailyRate">La tarifa base.</param>
+/// <param name="Rates">Los tramos.</param>
+/// <param name="DepositPerUnit">La garantía por unidad.</param>
+/// <param name="MinDays">El alquiler más corto.</param>
+/// <param name="MaxDays">El más largo.</param>
+/// <param name="Units">Las unidades.</param>
+/// <param name="Retired">Si la oferta se retiró: el equipo ya no se ofrece por la puerta.</param>
+public sealed record EquipmentOfferResponse(
+    string EquipmentId, string Currency, decimal DailyRate, IReadOnlyList<RateTierResponse> Rates,
+    decimal DepositPerUnit, int MinDays, int MaxDays, int Units, bool Retired)
+{
+    /// <summary>Proyecta lo registrado.</summary>
+    /// <param name="o">La oferta registrada.</param>
+    /// <returns>La respuesta.</returns>
+    public static EquipmentOfferResponse From(OfertaDeAlquilerRegistrada o)
+        => new(o.Equipo, o.Moneda, o.ValorDia, o.Tramos.Select(t => new RateTierResponse(t.DesdeDias, t.ValorDia)).ToList(),
+            o.GarantiaUnidad, o.MinDias, o.MaxDias, o.Unidades, o.Retirada);
+}
+
 /// <summary>Lo que se pide para cerrar un alquiler.</summary>
 /// <param name="Amount">El daño o la penalidad, ya calculado por quien recibió.</param>
 public sealed record SettleRentalRequest(MoneyPayload? Amount = null);

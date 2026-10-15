@@ -89,6 +89,27 @@ public static class AlquilerEndpoints
             return (await flow.CancelAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
         }).WithName("CancelRental");
 
+        // La oferta de un equipo (lote 3, 005-P1): el precio de cada tramo y la garantía en Pricing, y el
+        // recurso con sus unidades en Booking. La llama el CMS al publicar la ficha, no un navegador, así que no
+        // lleva marca de la puerta. Repetirla no duplica nada; ver OfertaDeAlquiler.
+        app.MapPost("/v1/ofertas", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (
+            PublishEquipmentOfferRequest req, HttpRequest http, OfertaDeAlquiler ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out _, out var falta)) return falta!;
+
+            var oferta = new OfertaDeEquipo(req.EquipmentId, req.Currency, req.DailyRate,
+                req.Rates?.Select(t => new TramoDeTarifa(t.MinDays ?? 0, t.PerDay ?? 0m)).ToList(),
+                req.DepositPerUnit, req.MinDays, req.MaxDays, req.Units);
+            return (await ofertas.PublicarAsync(oferta, ct)).Map(EquipmentOfferResponse.From).ToHttp();
+        }).WithName("PublishEquipmentOffer").ConLlaveDeIdempotencia();
+
+        app.MapPost("/v1/ofertas/{equipmentId}/retirar", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (
+            string equipmentId, HttpRequest http, OfertaDeAlquiler ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out _, out var falta)) return falta!;
+            return (await ofertas.RetirarAsync(equipmentId, ct)).Map(EquipmentOfferResponse.From).ToHttp();
+        }).WithName("RetireEquipmentOffer").ConLlaveDeIdempotencia();
+
         return app;
     }
 

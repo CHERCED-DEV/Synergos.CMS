@@ -5,6 +5,206 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/ofertas": {
+      "post": {
+        "operationId": "PublishEquipmentOffer",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishEquipmentOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquipmentOfferResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ofertas/{equipmentId}/retirar": {
+      "post": {
+        "operationId": "RetireEquipmentOffer",
+        "parameters": [
+          {
+            "name": "equipmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EquipmentOfferResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/rentals": {
       "post": {
         "operationId": "ReserveRental",
@@ -399,6 +599,57 @@
   },
   "components": {
     "schemas": {
+      "EquipmentOfferResponse": {
+        "required": [
+          "equipmentId",
+          "currency",
+          "dailyRate",
+          "rates",
+          "depositPerUnit",
+          "minDays",
+          "maxDays",
+          "units",
+          "retired"
+        ],
+        "type": "object",
+        "properties": {
+          "equipmentId": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "dailyRate": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RateTierResponse"
+            }
+          },
+          "depositPerUnit": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "minDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "units": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "retired": {
+            "type": "boolean"
+          }
+        }
+      },
       "MoneyPayload": {
         "type": "object",
         "properties": {
@@ -414,6 +665,103 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "PublishEquipmentOfferRequest": {
+        "type": "object",
+        "properties": {
+          "equipmentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currency": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dailyRate": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
+          },
+          "rates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/RateTierPayload"
+            }
+          },
+          "depositPerUnit": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
+          },
+          "minDays": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "maxDays": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "units": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "RateTierPayload": {
+        "type": "object",
+        "properties": {
+          "minDays": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "perDay": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
+          }
+        }
+      },
+      "RateTierResponse": {
+        "required": [
+          "minDays",
+          "perDay"
+        ],
+        "type": "object",
+        "properties": {
+          "minDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "perDay": {
+            "type": "number",
+            "format": "decimal"
           }
         }
       },

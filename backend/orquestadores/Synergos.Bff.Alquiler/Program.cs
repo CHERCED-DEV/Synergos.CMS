@@ -49,10 +49,13 @@ builder.AddSagaMachinery<RentalSaga, AlquilerCompensationExecutor>(
     // y sirve además de raíz de configuración: las claves de IConfiguration no distinguen
     // mayúsculas, así que "alquiler:Alerts" encuentra "Alquiler:Alerts" del appsettings.
     new SagaVocabulary("alquiler", "el alquiler de equipos"),
-    AlquilerCapabilities.Booking, AlquilerCapabilities.Payments);
+    AlquilerCapabilities.Booking, AlquilerCapabilities.Payments, AlquilerCapabilities.Pricing);
 
 builder.Services.AddSingleton<AlquilerCapabilities>();
 builder.Services.AddSingleton<RentalFlow>();
+
+// La oferta de cada equipo (línea 005): lo que la renta por la puerta cotiza en vez de un total del navegador.
+builder.Services.AddSingleton<OfertaDeAlquiler>();
 
 var app = builder.Build();
 

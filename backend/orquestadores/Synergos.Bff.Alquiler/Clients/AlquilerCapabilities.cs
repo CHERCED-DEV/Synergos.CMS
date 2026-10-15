@@ -25,6 +25,12 @@ public sealed class AlquilerCapabilities : CapabilityClients
     /// <summary>La capacidad que mueve la plata.</summary>
     public const string Payments = "payments";
 
+    /// <summary>
+    /// La capacidad de precios: la oferta publicada deja ahí el valor de cada tramo y la garantía (lote 3,
+    /// 005-P1), para que por la puerta el precio no lo ponga el navegador.
+    /// </summary>
+    public const string Pricing = "pricing";
+
     /// <summary>Construye los clientes.</summary>
     /// <param name="clients">La fábrica con la llave compartida y la correlación.</param>
     public AlquilerCapabilities(IHttpClientFactory clients) : base(clients) { }
@@ -132,7 +138,56 @@ public sealed class AlquilerCapabilities : CapabilityClients
     /// <returns>El cobro, o el rechazo.</returns>
     public Task<Result<PaymentDto>> GetPaymentAsync(string paymentId, CancellationToken ct)
         => Get<PaymentDto>(Payments, $"v1/payments/{paymentId}", ct);
+
+    // ── La oferta (línea 005, T008): lo que publica el orquestador en las capacidades ─────────
+
+    /// <summary>El recurso de un sujeto por la ruta tipada de la agenda (la que publica su contrato).</summary>
+    /// <param name="subject">El equipo, como <c>Ref</c>.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El recurso, o el rechazo (<c>booking.resource_not_found</c> si no existe).</returns>
+    public Task<Result<ResourceDto>> FindResourceBySubjectAsync(Ref subject, CancellationToken ct)
+        => Get<ResourceDto>(Booking,
+            $"v1/resources/por-sujeto?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}",
+            ct);
+
+    /// <summary>
+    /// Crea el recurso de un equipo con sus unidades: horario vacío, que es «siempre abierto» —lo correcto
+    /// para un alquiler por días— y en UTC, porque las ventanas viajan a medianoche UTC.
+    /// </summary>
+    /// <param name="subject">El equipo, como <c>Ref</c>.</param>
+    /// <param name="capacity">Cuántas unidades.</param>
+    /// <param name="key">La llave de idempotencia.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El recurso, o el rechazo.</returns>
+    public Task<Result<ResourceDto>> CreateResourceAsync(Ref subject, int capacity, IdempotencyKey key, CancellationToken ct)
+        => Post<ResourceDto>(Booking, "v1/resources", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            capacity,
+            timeZoneId = "UTC",
+        }, key, ct);
+
+    /// <summary>Fija el precio de un sujeto, sin impuesto: el valor de la ficha es lo que se cobra.</summary>
+    /// <param name="subject">Qué se cotiza.</param>
+    /// <param name="amount">Cuánto.</param>
+    /// <param name="key">La llave de idempotencia.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El precio, o el rechazo.</returns>
+    public Task<Result<PriceDto>> SetPriceAsync(Ref subject, Money amount, IdempotencyKey key, CancellationToken ct)
+        => Post<PriceDto>(Pricing, "v1/prices", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            amount = new { amount = amount.Amount, currency = amount.Currency },
+            taxRateBasisPoints = 0,
+        }, key, ct);
 }
+
+/// <summary>Un precio de <c>Api.Pricing</c>.</summary>
+/// <param name="Id">Su identificador.</param>
+/// <param name="Amount">Cuánto vale.</param>
+public sealed record PriceDto(string Id, MoneyDto Amount);
 
 /// <summary>Dinero, como lo emiten las capacidades.</summary>
 /// <param name="Amount">El monto.</param>
