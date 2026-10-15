@@ -183,6 +183,29 @@ else
 fi
 
 rm -f "$LOG"
+
+# ── El CMS de vuelta, y SANO ─────────────────────────────────────────────────
+#
+# Antes esto lo hacía sólo la trampa de salida, sin esperar: el script decía
+# «ahora la portada tiene que dejar de ser el cartel» con el CMS todavía
+# arrancando, y un humo inmediato pegaba contra un proceso a medio levantar.
+# Ahora se levanta acá y se espera a su healthcheck, como `deploy-remoto.sh`.
+trap - EXIT
+echo "── arrancando el CMS y esperando a que esté sano…"
+$COMPOSE up --detach cms >/dev/null
+for i in $(seq 1 60); do
+  ID="$($COMPOSE ps --quiet cms 2>/dev/null || true)"
+  if [ -n "$ID" ] && [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$ID" 2>/dev/null)" = "healthy" ]; then
+    echo "✓ el CMS está sano (a los $((i * 5)) s)"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo "✗ el CMS no quedó sano a los 5 min del import: mirá \`docker compose logs cms\`"
+    exit 1
+  fi
+  sleep 5
+done
+
 echo
 echo "── ahora la portada tiene que dejar de ser el cartel de Umbraco vacío."
 echo "   Comprobalo con:  tools/humo-publico.sh <dominio> <sha>"

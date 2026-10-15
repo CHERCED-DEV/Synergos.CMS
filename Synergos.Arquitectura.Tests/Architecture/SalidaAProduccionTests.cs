@@ -98,7 +98,7 @@ public sealed class SalidaAProduccionTests
 
         // Y que los dos caminos escriban con la MISMA función: un esqueleto por camino es el mismo
         // defecto que este fichero vino a cerrar, con dos sitios donde olvidarse de una variable.
-        Assert.Equal(1, Regex.Matches(bootstrap, "<<ENV").Count);
+        Assert.Equal(1, Regex.Count(bootstrap, "<<ENV"));
     }
 
     // ── El compose, como lo lee Docker ──────────────────────────────────────
@@ -194,7 +194,7 @@ public sealed class SalidaAProduccionTests
 
         // El único `--volumes` es el de simular el disco perdido: cualquier otro borraría lo que
         // el ensayo necesita para comprobar que la restauración devolvió algo.
-        Assert.Equal(1, Regex.Matches(ensayo, @"down --volumes").Count);
+        Assert.Equal(1, Regex.Count(ensayo, @"down --volumes"));
     }
 
     // ── El borde ────────────────────────────────────────────────────────────
@@ -291,8 +291,8 @@ public sealed class SalidaAProduccionTests
         }
 
         var images = Leer(".github", "workflows", "images.yml");
-        var construcciones = Regex.Matches(images, @"uses:\s*docker/build-push-action").Count;
+        var construcciones = Regex.Count(images, @"uses:\s*docker/build-push-action");
         Assert.True(construcciones >= 2, "images.yml: no se encontraron las construcciones (docker/build-push-action).");
-        Assert.Equal(construcciones, Regex.Matches(images, @"(?m)^\s*pull:\s*true\s*$").Count);
+        Assert.Equal(construcciones, Regex.Count(images, @"(?m)^\s*pull:\s*true\s*$"));
     }
 }

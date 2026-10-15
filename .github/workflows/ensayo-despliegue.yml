@@ -207,6 +207,35 @@ jobs:
           ./importar-schema.sh
           echo "| schema y contenido (\`importar-schema.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
+      # Lo que sirve el CMS justo después del import, directo y sin el portero.
+      # Medido en la corrida 4: tras un import de 1240 ítems sin errores, la
+      # portada seguía siendo el cartel vacío. Esto dice si es la caché de
+      # contenido (que un reinicio arreglaría) o el import.
+      - name: Tras el import, qué sirve el CMS
+        if: always() && steps.etiquetas.outputs.sha != ''
+        working-directory: /opt/synergos
+        run: |
+          set -uo pipefail
+          C="docker compose --file compose.prod.yml --project-directory ."
+          export SYNERGOS_TAG="$(cat tag.actual)"
+          portada() {
+            docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -o /tmp/p.html -w '%{http_code} %{size_download} B\n' http://cms:8080/ 2>/dev/null \
+              || docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -w '%{http_code}\n' -o /dev/null http://cms:8080/
+            docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s http://cms:8080/ | grep -o '<title>[^<]*' | head -1
+          }
+          echo "── portada, directa al CMS:"; portada
+          echo "── la caché en disco:"
+          $C exec -T cms sh -c 'ls -la /app/umbraco/Data/TEMP/NuCache /app/umbraco/Data/TEMP/DistCache 2>&1 | head -20' || true
+          echo "── el log del CMS sobre la caché:"
+          $C logs cms 2>&1 | grep -iE 'nucache|cold boot|lastsynced|instruction|maindom|rebuil|published content|content cache' | tail -25 || true
+          echo "── un reinicio, para ver si lo arregla:"
+          $C restart cms >/dev/null
+          for i in $(seq 1 60); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' "$($C ps --quiet cms)")" = healthy ] && break
+            sleep 5
+          done
+          portada || true
+
       # La CA local de Caddy cambia si se borra su volumen (paso 5), así que se
       # vuelve a leer antes de cada humo.
       - name: Humo público (1)

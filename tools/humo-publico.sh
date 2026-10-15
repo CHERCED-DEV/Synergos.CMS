@@ -99,7 +99,18 @@ fi
 # de lo que corre, no su salud.
 echo "── la versión"
 SALUD="$(curl --silent --show-error --location --max-time 30 "$BASE/_health" || echo '{}')"
-VERSION="$(printf '%s' "$SALUD" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+# La `version` de ARRIBA, no cualquiera. `/_health` trae también los `details` de
+# cada probe, y la del registro de la CDN lleva su propio `"version":"0.1.0"`. Esto
+# era un `sed` con `.*` codicioso, que se quedaba con la ÚLTIMA de la línea: con la
+# CDN en modo Http —el de producción— el humo leía `0.1.0`, decía «el reinicio no
+# tomó efecto» y CADA despliegue volvía atrás. Lo destapó el ensayo del despliegue
+# (002-produccion, 2026-10-15). Con `jq` se lee el campo; sin él, la PRIMERA
+# aparición, que es la de arriba (el controller la escribe antes de `checks`).
+if command -v jq >/dev/null 2>&1; then
+  VERSION="$(printf '%s' "$SALUD" | jq -r '.version // empty' 2>/dev/null || true)"
+else
+  VERSION="$(printf '%s' "$SALUD" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+fi
 
 if [ -z "$VERSION" ]; then
   falla "/_health no dijo qué versión corre — el humo no puede verificar nada"
