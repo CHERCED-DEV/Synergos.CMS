@@ -159,6 +159,37 @@ function entornoIdentidad(proyecto) {
   ].join('\n');
 }
 
+/**
+ * El abandono que DECLARA un orquestador en su `appsettings.json`
+ * (`<Seccion>:Sweep:AbandonAfterMinutes`), o `null` si no lo declara.
+ *
+ * El compose ponia a los cinco `${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`, y una
+ * variable de entorno PISA el `appsettings.json`: el abandono de 15 minutos que
+ * declaran Alquiler y Salud quedaba en 60 en produccion, sin que nada fallara (NP-1
+ * de la linea 005, decidido el 2026-10-15). Hoy quien lo declara lo lleva al
+ * compose como default de SU variable (`SYNERGOS_<SECCION>_ABANDON_AFTER_MINUTES`),
+ * y quien no, sigue con la base comun de 60. Lo cruza SalidaAProduccionTests.
+ */
+function abandonoDeclarado(proyecto, seccion) {
+  let crudo;
+  try {
+    crudo = readFileSync(join(RAIZ, rutaDe(proyecto), 'appsettings.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  const config = JSON.parse(crudo.replace(/^﻿/, ''));
+  // Las claves de IConfiguration no distinguen mayusculas: aca tampoco.
+  const hijo = (o, k) => (o && typeof o === 'object'
+    ? Object.entries(o).find(([clave]) => clave.toLowerCase() === k.toLowerCase())?.[1]
+    : undefined);
+  const valor = hijo(hijo(hijo(config, seccion), 'Sweep'), 'AbandonAfterMinutes');
+  if (valor === undefined) return null;
+  if (!Number.isInteger(valor) || valor <= 0) {
+    throw new Error(`compose-gen: ${proyecto} declara ${seccion}:Sweep:AbandonAfterMinutes=${valor}; tiene que ser un entero positivo`);
+  }
+  return valor;
+}
+
 /** Las lineas de entorno propias de cada servicio. */
 function entornoExtra(proyecto, disponibles) {
   const seccion = seccionConfig(proyecto);
@@ -170,6 +201,11 @@ function entornoExtra(proyecto, disponibles) {
       throw new Error(
         `compose-gen: ${proyecto} nombra capacidades que no existen: ${desconocidas.join(', ')}`);
     }
+
+    const abandono = abandonoDeclarado(proyecto, seccion);
+    const lineaAbandono = abandono === null
+      ? `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`
+      : `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_${seccion.toUpperCase()}_ABANDON_AFTER_MINUTES:-${abandono}}`;
 
     const rutas = caps.flatMap((c) => [
       `      ${seccion}__Capabilities__${c}__BaseUrl: "http://api-${c}:8080"`,
@@ -188,7 +224,9 @@ function entornoExtra(proyecto, disponibles) {
       '      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,',
       '      # no rompe, pero nadie se entera.',
       `      ${seccion}__Sweep__IntervalSeconds: \${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}`,
-      `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`,
+      '      # El abandono: el que declare el orquestador en su appsettings.json, con su',
+      '      # propia variable; si no declara, la base comun (NP-1, 002-produccion).',
+      lineaAbandono,
       '',
       '      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).',
       '      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir',
