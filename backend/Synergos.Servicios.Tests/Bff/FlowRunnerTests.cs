@@ -232,6 +232,15 @@ public sealed class FlowRunnerTests
         /// </summary>
         public bool AnotaLoQueVe { get; init; }
 
+        /// <summary>Adónde anota cada cierre que le avisa el intérprete (NV-3): la bitácora del banco.</summary>
+        public Action<string>? AnotaCierres { get; set; }
+
+        public SagaDePrueba ConCierre(SagaDePrueba saga, string reservante, HoldLeg cerrada, string? objetivo)
+        {
+            AnotaCierres?.Invoke($"  concierre {reservante} {cerrada.HoldId} {objetivo ?? "-"}");
+            return saga;
+        }
+
         public SagaDePrueba AlGuardar(SagaDePrueba saga, FlowContext ctx)
         {
             if (!AnotaLoQueVe) return saga;
@@ -812,6 +821,30 @@ public sealed class FlowRunnerTests
 
         Assert.Equal(new[] { "  indice -", "  indice 0", "  indice 1", "  indice 0", "  indice 1" },
             banco.Bitacora.Where(l => l.StartsWith("  indice", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task El_enlace_se_entera_de_lo_que_produjo_cada_cierre_antes_de_la_escritura_que_lo_guarda()
+    {
+        // NV-3 de Viajes: la saga tipada guarda por ítem la reserva que confirmó. Llega con lo que el cierre
+        // produjo y ANTES del put que cambia la compensación: van en la misma escritura.
+        var binding = new BindingDePrueba();
+        var banco = new Banco(Definicion, binding) { ProducenCierre = true };
+        binding.AnotaCierres = banco.Bitacora.Add;
+        Assert.True((await banco.Abrir("a", "b")).IsOk);
+        banco.Bitacora.Clear();
+
+        Assert.True((await banco.Cerrar()).IsOk);
+
+        Assert.Equal(new[]
+        {
+            "paso t.capturar cobro-1", "  concierre autorizar cobro-1 -", "put",
+            "paso t.consumir h-a", "  concierre apartar h-a res-h-a", "put",
+            "paso t.consumir h-b", "  concierre apartar h-b res-h-b", "put",
+            "put",
+        }, banco.Bitacora
+            .Where(l => !l.StartsWith("  llave", StringComparison.Ordinal))
+            .Select(l => l.StartsWith("put", StringComparison.Ordinal) ? "put" : l));
     }
 
     [Fact]

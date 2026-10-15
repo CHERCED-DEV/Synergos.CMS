@@ -112,6 +112,23 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
     TSaga AlGuardar(TSaga saga, FlowContext ctx) => saga;
 
     /// <summary>
+    /// Lo que el dominio guarda de cada cierre de una reserva (núcleo N2, NV-3 de Viajes), en la MISMA escritura
+    /// que cambia el carácter de su compensación.
+    /// </summary>
+    /// <param name="saga">La saga, con la compensación de esa reserva ya cambiada.</param>
+    /// <param name="reservante">El paso cuya reserva se cerró.</param>
+    /// <param name="cerrada">La reserva: lo apartado y el objetivo anotado al reservar.</param>
+    /// <param name="objetivo">Lo que produjo el cierre (la reserva confirmada de un apartado), o nulo si no produjo nada.</param>
+    /// <remarks>
+    /// <para>Una saga tipada que guarda por ítem lo que confirmó (<c>ItemHold.ReservationId</c> de Viajes) lo
+    /// necesita: de ahí salen lo confirmado en la respuesta y la cancelación de un viaje confirmado. Sin esto,
+    /// la compensación reescrita apunta a la reserva y nadie sabe ya de qué apartado salió.</para>
+    ///
+    /// <para>Por defecto devuelve la misma saga: el fichero de una saga que no lo necesita no cambia.</para>
+    /// </remarks>
+    TSaga ConCierre(TSaga saga, string reservante, HoldLeg cerrada, string? objetivo) => saga;
+
+    /// <summary>
     /// Los tipos de valor con que este binding lee y guarda (núcleo N1): sólo un binding genérico los
     /// tiene. Con ellos, el validador cruza además las reglas del modo genérico.
     /// </summary>

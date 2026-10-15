@@ -462,13 +462,17 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             : Ledger(corrida).Legs(reservante).Single();
         DateTimeOffset? ahora = reserva.Despues is null ? _reloj.GetUtcNow() : null;
 
-        Guardar(corrida, saga.WithCompensations(saga.Compensations
+        var cambiada = saga.WithCompensations(saga.Compensations
             .Select(c => c.Kind == reserva.Antes && c.IsPending && c.TargetId == cerrada.HoldId
                 ? reserva.Despues is { } despues
                     ? c with { Kind = despues, TargetId = objetivo ?? cerrada.CloseTargetId }
                     : c with { DoneAtUtc = ahora }
                 : c)
-            .ToList()));
+            .ToList());
+
+        // Lo que el dominio guarda del cierre va en la MISMA escritura (NV-3): escrito aparte, una caída entre
+        // las dos dejaría la compensación apuntando a la reserva sin que la saga sepa de qué apartado salió.
+        Guardar(corrida, _binding.ConCierre(cambiada, reservante, cerrada, objetivo));
     }
 
     /// <summary>
