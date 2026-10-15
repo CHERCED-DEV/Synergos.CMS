@@ -315,6 +315,21 @@ public sealed class SalidaAProduccionTests
         // El único `--volumes` es el de simular el disco perdido: cualquier otro borraría lo que
         // el ensayo necesita para comprobar que la restauración devolvió algo.
         Assert.Equal(1, Regex.Count(ensayo, @"down --volumes"));
+
+        // Y el despliegue de producción ESPERA a este ensayo: `deploy.yml` excluye de su puerta los
+        // checks cuyo nombre empieza por su propio prefijo, y el ensayo se llamaba así (converge,
+        // 2026-10-15). Se deriva del filtro de `deploy.yml`, no se copia.
+        var prefijo = Regex.Match(deploy, @"startsWith\('(?<p>[^']+)'\)");
+        Assert.True(prefijo.Success, "No se encontró el prefijo que deploy.yml excluye de su puerta (startsWith('…')).");
+        var nombres = Regex.Matches(ensayo, @"(?m)^    name:\s*(?<n>.+)$").Select(m => m.Groups["n"].Value.Trim()).ToList();
+        Assert.NotEmpty(nombres);
+        Assert.All(nombres, n => Assert.False(n.StartsWith(prefijo.Groups["p"].Value, StringComparison.Ordinal),
+            $"El job del ensayo se llama «{n}», que empieza por «{prefijo.Groups["p"].Value}»: deploy.yml lo excluye de su puerta y "
+            + "desplegaría sin esperar al ensayo del mismo commit."));
+
+        // Y lo carga un navegador: el humo ve que las cabeceras están; esto, que no rompen nada.
+        Assert.Contains("chromium", ensayo, StringComparison.Ordinal);
+        Assert.Contains("'/umbraco'", ensayo, StringComparison.Ordinal);
     }
 
     // ── El borde ────────────────────────────────────────────────────────────

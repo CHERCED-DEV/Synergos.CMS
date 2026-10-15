@@ -79,7 +79,12 @@ concurrency:
 
 jobs:
   ensayo:
-    name: Poner en pie, respaldar, restaurar y volver atrás
+    # ⚠️ El nombre NO puede empezar por «Poner en pie»: `deploy.yml` excluye ese
+    # prefijo de su puerta (es el suyo, para no esperarse a sí mismo), y con él
+    # el despliegue de producción no esperaba a este ensayo del mismo commit.
+    # Hoy lo espera, y no despliega si el ensayo salió rojo (SalidaAProduccionTests).
+    name: El despliegue entero, ensayado
+
     # Si las imágenes fallaron no hay nada que ensayar: el despliegue tampoco correría.
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
@@ -281,6 +286,41 @@ jobs:
             cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/ca-del-ensayo.crt
           CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt ./tools/humo-publico.sh localhost "$SHA"
           echo "| humo público tras el import | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 3.bis. Con navegador: las cabeceras no rompen nada ──────────────
+      #
+      # El humo comprueba que las cabeceras ESTÁN; esto, que no rompen lo que
+      # carga un navegador: `nosniff` rechaza un script servido con otro tipo, y
+      # `frame-ancestors`/`X-Frame-Options` cortan un marco. Se cargan la portada y
+      # el backoffice y se falla con cualquier aviso de esa familia en la consola.
+      - name: Con navegador, la portada y el backoffice bajo las cabeceras
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/navegador && cd /tmp/navegador
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund playwright@1.48.2 >/dev/null
+          npx --yes playwright@1.48.2 install --with-deps chromium >/dev/null
+          cat > ver.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const navegador = await chromium.launch();
+          const pagina = await navegador.newPage({ ignoreHTTPSErrors: true });
+          const avisos = [];
+          pagina.on('console', (m) => {
+            const t = m.text();
+            if (/Content Security Policy|Refused to|frame-ancestors|X-Frame-Options|MIME type/i.test(t)) avisos.push(t);
+          });
+          for (const ruta of ['/', '/umbraco']) {
+            const r = await pagina.goto('https://localhost' + ruta, { waitUntil: 'load', timeout: 90000 });
+            await pagina.waitForTimeout(3000);
+            console.log(`${ruta} → ${r.status()} «${await pagina.title()}»`);
+            if (!r.ok()) { console.error(`✗ ${ruta} contestó ${r.status()}`); process.exit(1); }
+          }
+          await navegador.close();
+          if (avisos.length) { console.error('✗ el navegador avisa por las cabeceras:\n  ' + avisos.join('\n  ')); process.exit(1); }
+          console.log('✓ la portada y el backoffice cargan con las cabeceras, sin avisos de CSP, marcos ni MIME');
+          JS
+          node ver.mjs
+          echo "| navegador: portada y backoffice sin avisos por las cabeceras | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── 4. Lo que hay que sembrar, medido (R7) ──────────────────────────
       #
