@@ -1,4 +1,8 @@
+using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
+using Synergos.Bff.Pasos.Http;
 using Synergos.Bff.Salud.Clients;
 using Synergos.Bff.Salud.Domain;
 using Synergos.Bff.Salud.Endpoints;
@@ -31,6 +35,13 @@ using Synergos.Shared;
 // alertedAtUtc en nulo y un error en el log que nombra lo que falta. La
 // dirección no la siembra nadie, y a propósito: adivinar una dirección de
 // guardia es peor que no mandar nada.
+//
+// LA CITA DECLARADA (ADR 0140, línea 003-salud-cita). flujos/salud.cita.json
+// la declara y el host genérico la sirve en las rutas de la puerta
+// (/v1/flujos/salud.cita/…). AppointmentFlow se queda en /v1/appointments*,
+// que es lo que usa la ruta directa del CMS: dos motores en rutas distintas, y
+// el interruptor salud:Flujos:Modo dice si corre el declarado («declarado»
+// por defecto en las rutas de la puerta: lote 2, matiz 1).
 // ─────────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,22 +49,51 @@ var builder = WebApplication.CreateBuilder(args);
 // El hilo que permite seguir una compra por los seis procesos (HU #28).
 builder.AddCorrelation();
 
+// En minúscula porque es el prefijo de los códigos de rechazo (salud.saga_not_found).
+// Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
+// mayúsculas, así que "salud:Alerts" encuentra "Salud:Alerts" del appsettings.
+var vocabulario = new SagaVocabulary("salud", "la cita");
+
 builder.AddSagaMachinery<AppointmentSaga, SaludCompensationExecutor>(
-    // En minúscula porque es el prefijo de los códigos de rechazo (salud.saga_not_found).
-    // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
-    // mayúsculas, así que "salud:Alerts" encuentra "Salud:Alerts" del appsettings.
-    new SagaVocabulary("salud", "la cita"),
+    vocabulario,
     SaludCapabilities.Consent, SaludCapabilities.Booking,
     SaludCapabilities.Pricing, SaludCapabilities.Payments);
 
 builder.Services.AddSingleton<SaludCapabilities>();
 builder.Services.AddSingleton<AppointmentFlow>();
 
+var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
+if (declarado)
+{
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
+
+    // El permiso de agenda, provisional hasta consent.verificar (N2; NN-3).
+    builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
+        sp.GetRequiredService<PuertosHttp>(), new PasoPermisoDeAgenda(sp.GetRequiredService<SaludCapabilities>())));
+
+    // Dos máquinas de saga en un orquestador (NN-15), hasta que Bff.Core lo resuelva: la saga
+    // genérica en su propia carpeta —la tipada no se mueve: sus datos ya están desplegados— y la
+    // llave UNA vez en los clientes que configuran las dos (dos veces es «k,k» y la capacidad
+    // contesta 401).
+    builder.Services.AddSingleton<ISagaStore<SagaDeFlujo>>(sp => new FileSystemSagaStore<SagaDeFlujo>(Options.Create(
+        new SagaStorageOptions { Root = Path.Combine(sp.GetRequiredService<IOptions<SagaStorageOptions>>().Value.Root, "flujos") })));
+    foreach (var capacidad in PuertosHttp.Capacidades)
+    {
+        var llave = builder.Configuration[$"{vocabulario.Origin}:Capabilities:{capacidad}:ApiKey"];
+        builder.Services.AddHttpClient(capacidad).ConfigureHttpClient(http =>
+        {
+            http.DefaultRequestHeaders.Remove(SharedKeyAuth.HeaderName);
+            if (llave is { Length: > 0 }) http.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, llave);
+        });
+    }
+}
+
 var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Salud:ApiKey"]);
 app.MapSaludEndpoints();
+if (declarado) app.MapFlujosDeclarados();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
