@@ -256,6 +256,80 @@ public sealed class HttpClinicalSchedulingServiceTests
         Assert.Equal("cita-1", cita.Id);
     }
 
+    // ── Las dos fases (003-salud-cita, P8 del lote 2) ────────────────────────
+    //
+    // El orquestador AGENDA en dos fases: abrir aparta el cupo y AUTORIZA el copago, y confirmar lo
+    // captura y confirma el cupo. El doble de arriba contestaba «Completed» al abrir, que es lo que el
+    // orquestador real no hace nunca, y así nadie vio que el CMS no llamaba a confirmar: el paciente
+    // salía con su cita «booked», el copago sin cobrar y el cupo sin confirmar.
+
+    private const string CitaAbierta = """
+        {"id":"cita-1","patientKind":"salud.paciente","patientId":"pac-1",
+         "professionalKind":"salud.profesional","professionalId":"doc-3",
+         "start":"2026-08-10T14:00:00+00:00","end":"2026-08-10T14:30:00+00:00",
+         "status":"Running","total":{"amount":50000,"currency":"COP"},
+         "reservationId":null,"pendingCompensations":2,"lastError":null}
+        """;
+
+    [Fact]
+    public async Task Agendar_hace_las_DOS_fases_y_solo_entonces_es_booked()
+    {
+        var bff = new BffFalso()
+            .Ok("POST /v1/appointments", CitaAbierta)
+            .Ok("POST /v1/appointments/cita-1/confirm", CitaOk);
+
+        var cita = await Nuevo(bff).BookAsync(Pedido());
+
+        Assert.Equal("booked", cita.Status);
+        Assert.Equal("res-9", cita.ReservationId);
+        Assert.Equal(["/v1/appointments", "/v1/appointments/cita-1/confirm"], bff.Llamadas.Select(l => l.Path).ToArray());
+    }
+
+    [Fact]
+    public async Task Si_confirmar_falla_la_cita_NO_es_booked_y_llega_con_su_motivo()
+    {
+        // El orquestador ya deshizo la saga (soltó el cupo, anuló o devolvió el copago): lo que queda es
+        // decirle al paciente la verdad, con el motivo que lleva a elegir otro horario.
+        var bff = new BffFalso()
+            .Ok("POST /v1/appointments", CitaAbierta)
+            .Falla("POST /v1/appointments/cita-1/confirm", HttpStatusCode.Gone, "booking.hold_expired", "El cupo venció antes de confirmar.");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Nuevo(bff).BookAsync(Pedido()));
+
+        Assert.Contains("venció", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Una_cita_que_ya_estaba_confirmada_no_se_vuelve_a_confirmar()
+    {
+        // El reintento con la misma llave devuelve la saga tal como quedó: si ya está completa, no hay
+        // nada que confirmar.
+        var bff = Feliz();
+
+        await Nuevo(bff).BookAsync(Pedido());
+
+        Assert.DoesNotContain(bff.Llamadas, l => l.Path.EndsWith("/confirm", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Si_confirmar_no_responde_se_PREGUNTA_y_solo_una_cita_completa_es_booked()
+    {
+        var bff = new BffFalso()
+            .Ok("POST /v1/appointments", CitaAbierta)
+            .Caida("POST /v1/appointments/cita-1/confirm")
+            .Ok("GET /v1/appointments/cita-1", CitaOk);
+
+        var cita = await Nuevo(bff).BookAsync(Pedido());
+
+        Assert.Equal("booked", cita.Status);
+
+        var sigueAbierta = new BffFalso()
+            .Ok("POST /v1/appointments", CitaAbierta)
+            .Caida("POST /v1/appointments/cita-1/confirm")
+            .Ok("GET /v1/appointments/cita-1", CitaAbierta);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Nuevo(sigueAbierta).BookAsync(Pedido()));
+    }
+
     [Fact]
     public async Task Un_medico_que_no_existe_se_rechaza_SIN_tocar_el_cupo_de_nadie()
     {
