@@ -3600,11 +3600,10 @@ segregación y molde en verde.
 > **vuelto a usar** sólo se comprueba contando.
 >
 > Con SEGUNDO consumidor (o sea reutilización PROBADA): `Api.Booking`, `Api.Cart`,
-> `Api.Inventory`, `Api.Payments` y `Api.Pricing`.
+> `Api.Consent`, `Api.Fulfillment`, `Api.Inventory`, `Api.Orders`, `Api.Payments` y `Api.Pricing`.
 >
-> Con **uno**, diez: `Api.Audit`, `Api.Consent`, `Api.Fulfillment`, `Api.Identity`,
-> `Api.Messaging`, `Api.Notifications`, `Api.Orders`, `Api.Sessions`, `Api.Signing` y
-> `Api.Workflow`. Con **ninguno**, cinco: `Api.Catalog`, `Api.Documents`, `Api.Engagement`,
+> Con **uno**, siete: `Api.Audit`, `Api.Identity`, `Api.Messaging`, `Api.Notifications`,
+> `Api.Sessions`, `Api.Signing` y `Api.Workflow`. Con **ninguno**, cinco: `Api.Catalog`, `Api.Documents`, `Api.Engagement`,
 > `Api.Geo` y `Api.Moderation`.
 >
 > **No es deuda y no hay trinquete**: las veinte se construyeron a propósito antes que sus
