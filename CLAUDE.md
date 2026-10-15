@@ -129,10 +129,12 @@
     declaran los records de sus elementos, y se escala a todos los que tienen record. La
     **configuración de negocio por funcionalidad** (ADR 0137) está **Aceptada** (2026-10-02): vive en
     `Synergos:Features:<X>`, por sitio y validada al arrancar, y la leen lo que se muestra y lo que se
-    cobra; se escala a las funcionalidades (#196). **Propuestos**, y describen el rumbo, no lo que ya
-    está: coordinación de página por eventos DOM (0138) y bundles con varias entradas colocables
-    frente a 0113 (0139); y el flujo de negocio declarado en el orquestador, con el contrato
-    HTTP publicado y el CMS como puerta (0140, piloto en Eventos #201). Del piloto están hechas la
+    cobra; se escala a las funcionalidades (#196). El **flujo de negocio declarado en el
+    orquestador**, con el contrato HTTP publicado y el CMS como puerta (ADR 0140), está **Aceptado**
+    (2026-10-15), con el piloto en Eventos (#201) cerrado en `master` y el runtime compartido
+    publicado por contenido (ADR 0141, **Aceptada** el mismo día). **Propuestos**, y describen el
+    rumbo, no lo que ya está: coordinación de página por eventos DOM (0138) y bundles con varias
+    entradas colocables frente a 0113 (0139). Del piloto están hechas la
     F1 —la compra de Eventos es un dato que interpreta `Bff.Core`— y la F2 —el contrato HTTP de
     `Bff.Eventos` y sus tres capacidades se GENERA del código a `docs/contracts/openapi/` y lo
     vigilan deriva, suelo, la respuesta por su tipo, sondas contra el host y un gate de
@@ -144,11 +146,14 @@
     endurecida, y la F4 —el front: `<synergos-eventos>` pide la compra al `<synergos-flujo>` que la
     vista del bloque de Eventos le pone alrededor (no es un colocable tipado: con un participante no
     hace falta; lo cruza `CoordinadorDelFlujoEnLasVistasTests`), traduce los rechazos por `code` con la
-    sección `Events.Purchase`, pide la sesión antes de pagar y nunca vuelve a la ruta vieja—; faltan la
-    verificación de la F4 en el navegador sobre la CDN piloto y el import de `Events.Purchase.*` a la
-    base real. El cupón volvió por la puerta (2026-10-13: el navegador manda el código, Pricing descuenta y
-    «cotizar» es la vista previa sin reservar), y el retiro de checkout/confirm quedó DESCARTADO por el
-    arquitecto: se conservan, con su motor en proceso, detrás de `Synergos:Eventos:Mode` (§0.C.21).
+    sección `Events.Purchase` y pide la sesión antes de pagar—, verificada en el navegador sobre la
+    CDN piloto, con las claves de `Events.Purchase.*` en la base real. El cupón volvió por la puerta
+    (2026-10-13: el navegador manda el código, Pricing descuenta y «cotizar» es la vista previa sin
+    reservar), y el retiro de checkout/confirm quedó DESCARTADO por el arquitecto: se conservan, con
+    su motor en proceso, detrás de `Synergos:Eventos:Mode` (§0.C.21), y el UI vuelve a llamarlos
+    cuando el CMS declara el camino «directa» (2026-10-14: gana el override de negocio; si no, la
+    puerta cuando hay orquestador; si no, la directa). Con «directa» se sigue pidiendo la sesión de
+    miembro (decisión del 2026-10-15).
 21. **No se retira por defecto.** Una pieza sin consumidor es **vocabulario** de la fábrica, no
     deuda: se decide usarla, mejorarla, **fusionarla** si duplica un concepto que ya existe, o
     declararla con su disparador. Retirar es una decisión con evidencia, nunca la salida por

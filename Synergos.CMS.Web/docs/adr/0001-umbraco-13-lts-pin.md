@@ -143,3 +143,19 @@ tooth closes what the bump itself exposed — the version was written by hand in
 **seven** places and **nothing cross-checked them**, so the three suites stayed
 green while `Directory.Packages.props` already said 13.16.2 and `CLAUDE.md` §1,
 the guardrails skill and this ADR still said 13.13.1.
+
+## Actualización — 2026-10-15: el fin de soporte de .NET 8, y el pin se queda hasta salir a producción
+
+**Qué lo trae.** El soporte de **.NET 8 termina el 2026-11-10**. Umbraco 13 corre sobre .NET 8, y la
+fase de sólo seguridad de la rama 13 LTS termina a mediados de diciembre de 2026 (calendarios
+públicos). El backend —capacidades, orquestadores y sus pruebas— ya está en .NET 10 (ADR 0140, F2):
+sólo el CMS queda en .NET 8.
+
+**Decisión del arquitecto (2026-10-15, primer lote de decisiones de las líneas en paralelo).**
+- **No se migra antes de salir a producción.** El pin de esta ADR no cambia: rama 13 LTS, sin 14+ sin
+  un ADR sucesor.
+- Hasta entonces, el CMS corre con **el último parche de servicio de .NET 8**: cada despliegue
+  reconstruye la imagen sobre la base 8.0 al día. Se acepta, dicho, el tramo entre el 2026-11-10 y el
+  fin de la fase de seguridad de la rama 13.
+- **Después de la salida**, una línea propia migra el CMS a **Umbraco 17 LTS sobre .NET 10**. Esa
+  línea escribe el ADR sucesor de éste, con su medición del costo antes de empezar.

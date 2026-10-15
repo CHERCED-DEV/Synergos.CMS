@@ -4,7 +4,7 @@
 - **Date:** 2026-06-25
 - **Deciders:** Arquitecto + agente, fase SynergosLabs. Verificado contra código vivo (pipeline UI `Synergos.UI/tools/` + `FileSystemBundleRegistryClient` del CMS + `C:\LOCAL_CDN`).
 - **Soporta a:** ADR 0096 (module-mount), 0097 (dashboard), 0098 (healthcare) y todos los `elementSyn*`.
-- **Enmendada por:** [ADR 0141](0141-el-runtime-compartido-se-publica-por-contenido.md) (propuesta, 2026-10-14) en su §3: el runtime compartido se publica por contenido. Ver la nota fechada en §3.
+- **Enmendada por:** [ADR 0141](0141-el-runtime-compartido-se-publica-por-contenido.md) (2026-10-14, aceptada el 2026-10-15) en su §3: el runtime compartido se publica por contenido. Ver la nota fechada en §3.
 
 ## Context
 
@@ -123,7 +123,7 @@ un runtime compartido se carga UNA vez vía import map.**
 - **Vanilla** no necesita import map (self-contained) — sirve de piso
   framework-compatible y de prueba del mecanismo.
 
-> **Enmienda (2026-10-14, ADR 0141, propuesta): el runtime se publica por contenido.** `{ver}` es la
+> **Enmienda (2026-10-14, ADR 0141, aceptada el 2026-10-15): el runtime se publica por contenido.** `{ver}` es la
 > versión del FRAMEWORK (`21.1.6` es Angular), no la de su contenido, y `publish:runtime` reescribía
 > esa carpeta cada vez que cambiaba `libs/shared`. Las dos políticas de caché la servían `immutable`,
 > así que un navegador que ya tenía el `sg-shared.js` viejo se quedaba con él hasta un año (medido en

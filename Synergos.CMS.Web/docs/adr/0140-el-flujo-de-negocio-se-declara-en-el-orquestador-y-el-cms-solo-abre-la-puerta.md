@@ -1,6 +1,6 @@
 # ADR 0140 — El flujo de negocio se declara en el orquestador, el contrato se publica, y el CMS sólo abre la puerta
 
-- **Estado:** Propuesto — se acepta o se descarta con el piloto en Eventos ([#201](../../../../../issues/201)), ver al final. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto (hecha el 2026-10-09, `_informes/78`, y otra vez con el cupón: `_informes/80` y `83`). **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido». **Su verificación en vivo** (2026-10-13) dejó cinco defectos —el runtime republicado bajo la misma URL inmutable, el doble cobro eligiendo otra vez las entradas, el tope de códigos reintentado en el acto, el modo oscuro del sistema a 2,39:1 y la fila de cargos de un registro gratis—, arreglados con la fase D del doble cobro en el servidor y verificados en vivo el 2026-10-14 (12 de 12 escenarios, ningún defecto nuevo); el del runtime lo decide la ADR 0141 (propuesta); ver «La verificación en vivo del cupón endurecido y sus cinco defectos». **La ruta vieja, repuesta en el UI detrás del camino de compra que declara el CMS** (2026-10-14, regla del superset): el override de negocio gana; si no, la puerta cuando hay orquestador; si no, la ruta directa. Verificada en vivo; ver «La ruta vieja repuesta detrás del camino declarado»
+- **Estado:** **Aceptado (2026-10-15)** — el arquitecto la ratificó con el piloto en Eventos cerrado ([#201](../../../../../issues/201)); ver «La ratificación (2026-10-15)», al final. Hasta entonces fue Propuesto: se aceptaba o se descartaba con el piloto. **F1 y F2 hechas** (2026-10-07), la F2 en los dos repos y endurecida tras su verificación adversarial; **F3 hecha** (2026-10-08): la puerta genérica abre `eventos.compra`, sin el token de identidad (corrección de la decisión 4), verificada en vivo y endurecida (2026-10-09); **F4 hecha** (2026-10-09) en el código de los dos repos: la compra de Eventos va por la puerta con `<synergos-flujo>`, que el CMS coloca desde la vista del bloque (corrección de la decisión 6); ver «Avance del piloto». Falta la verificación de la F4 en el navegador sobre la CDN piloto (hecha el 2026-10-09, `_informes/78`, y otra vez con el cupón: `_informes/80` y `83`). **El cupón de Eventos volvió de verdad** (2026-10-13): el navegador manda el código, Pricing calcula el descuento y la puerta suma «cotizar», la vista previa sin reservar nada. **El retiro de la ruta vieja quedó DESCARTADO** por decisión del arquitecto (2026-10-13): se conserva como pieza detrás de su interruptor; ver «El cupón reconectado». **El cupón endurecido** (2026-10-13): fijado mientras su saga pueda cobrar, sin cambios con el pago en vuelo, con un tope de códigos que no sirven, con estilos AA en los siete temas y con «Tu orden» que explica el total; ver «El cupón endurecido». **Su verificación en vivo** (2026-10-13) dejó cinco defectos —el runtime republicado bajo la misma URL inmutable, el doble cobro eligiendo otra vez las entradas, el tope de códigos reintentado en el acto, el modo oscuro del sistema a 2,39:1 y la fila de cargos de un registro gratis—, arreglados con la fase D del doble cobro en el servidor y verificados en vivo el 2026-10-14 (12 de 12 escenarios, ningún defecto nuevo); el del runtime lo decide la ADR 0141 (aceptada el 2026-10-15); ver «La verificación en vivo del cupón endurecido y sus cinco defectos». **La ruta vieja, repuesta en el UI detrás del camino de compra que declara el CMS** (2026-10-14, regla del superset): el override de negocio gana; si no, la puerta cuando hay orquestador; si no, la ruta directa. Verificada en vivo; ver «La ruta vieja repuesta detrás del camino declarado»
 - **Fecha:** 2026-10-07
 - **Propone:** el análisis de estado del arte de 2026-10-05/07 (`_informes/70-estado-del-arte.md`:
   nueve dimensiones, cada una verificada por un segundo agente que intentó refutarla), a partir de
@@ -1675,10 +1675,42 @@ Las cifras finales:
   `pay`, y la directa abre otra orden. Es lo de antes de la F4 y no se tocó; el arreglo del cupón quita
   la causa conocida.
 - **Pregunta de producto**: con «directa», ¿se sigue pidiendo la sesión de miembro, aunque la ruta
-  directa del CMS acepta compras anónimas?
+  directa del CMS acepta compras anónimas? *(Nota 2026-10-15: decidida por el arquitecto: sí; ver «La
+  ratificación (2026-10-15)».)*
 - **Un spec de la puerta intermitente bajo carga**, ajeno a este cambio («desde OTRO dispositivo, con una
   compra que se deshizo DESPUÉS de cobrar…», que da `cart` en vez de `confirmed`): está anotado en
-  `5d72686` y sin investigar.
+  `5d72686` y sin investigar. *(Nota 2026-10-15: no era la carga ni era ajeno: era una carrera real del
+  elemento, arreglada en UI `327b0aa`; ver «La ratificación (2026-10-15)».)*
+
+## La ratificación (2026-10-15)
+
+**El arquitecto la ratificó el 2026-10-15**, junto con la [ADR 0141](0141-el-runtime-compartido-se-publica-por-contenido.md),
+en el primer lote de decisiones de las líneas en paralelo. El piloto quedó cerrado en `master`: **CMS
+`87ac5483` · UI `327b0aa`**, con F1–F4, el cupón, los cinco defectos en vivo, la ruta vieja detrás del
+camino declarado y las 42 claves de `Events.Purchase` en la base real. Desde aquí el patrón es la regla
+de los verticales: lo extiende la línea del núcleo (host genérico, pasos de Booking, Cart, Orders y
+Fulfillment, puerta y front genéricos) y lo pone a prueba el segundo flujo, la cita de Salud.
+
+**Lo que decidió el mismo lote y toca esta ADR**
+- **Con «directa» se sigue pidiendo la sesión de miembro, por los dos caminos**, hasta que la puerta
+  sepa abrir con acceso de invitado y con freno por sujeto (P07). Sin sesión, ni la fase D del servidor
+  ni «mis entradas» encuentran una compra pendiente. Que la ruta directa del CMS acepte compras anónimas
+  se queda como pieza (superset), **declarada y apagada**: falta su interruptor de acceso, con
+  «miembro» como valor por defecto y su gate. Lo hace la línea de Eventos o el núcleo en P07; hasta
+  entonces, esto es lo que la regla dice que gana.
+- **El reintento de una autorización con un fallo pasajero (#183)**: el fallo pasajero deja la llave
+  «en duda» en vez de cerrarla con `Failed`. El reintento con la misma llave pregunta primero al
+  proveedor por la referencia del cobro y sólo vuelve a autorizar si no hay rastro. Así `transient` dice
+  la verdad y no hay doble cobro. Lleva su test del caso exacto, con los dos desenlaces. Es de
+  `Api.Payments` (del núcleo) y va antes del pago con acción requerida (P16).
+
+**El spec intermitente, cerrado.** El rojo de «…la segunda, abre la nueva» no era el tiempo del test.
+El spec anterior terminaba con un reintento de la lista de compras sin acuse todavía dormido. Ese
+reintento llegaba en el siguiente, y el elemento **ya destruido** navegaba al carrito escribiendo la URL
+de la página; el elemento vivo la seguía y saltaba al carrito con la compra confirmada. Desde UI
+`327b0aa`, un `<synergos-eventos>` destruido no toca la URL de la página. Lo cubre un test que retiene
+la lista y destruye el elemento, con su mutante fiel visto en rojo; después, 32 de 32 corridas en
+verde y `npm test` 6/6 tres veces seguidas.
 
 ## Relación con otras ADRs
 

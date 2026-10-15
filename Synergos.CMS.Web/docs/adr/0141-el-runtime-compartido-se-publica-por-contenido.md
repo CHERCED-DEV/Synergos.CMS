@@ -1,7 +1,11 @@
 # ADR 0141 — El runtime compartido se publica por contenido: la URL que nombra el import map lleva la huella de sus bytes (enmienda la 0099)
 
-- **Estado:** Propuesta — la ratifica el arquitecto. Construida en los dos repos y verificada en vivo
-  sobre la copia piloto (2026-10-14); nada empujado a `master`.
+- **Estado:** **Aceptada (2026-10-15)** — la ratificó el arquitecto, junto con la 0140. Construida en
+  los dos repos y verificada en vivo sobre la copia piloto (2026-10-14). En `master` del CMS desde el
+  2026-10-14 y del UI desde el 2026-10-15 (`327b0aa`). `C:\LOCAL_CDN` se republicó con ella el
+  2026-10-15: el import map nombra con huella los 18 ficheros de Angular y los 5 de Preact, y las 20
+  entradas del libro `latest/huellas.json` cuadran con el sha256 de sus bytes. Hasta entonces fue
+  Propuesta.
 - **Fecha:** 2026-10-14
 - **Propone:** el plan del defecto 1 de la verificación en vivo del cupón endurecido
   (`_informes/82-adr-0140-defectos-en-vivo-plan.json`, pasos 1 y 11-17: tres diseños puntuados por un
