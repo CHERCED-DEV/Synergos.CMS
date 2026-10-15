@@ -20,6 +20,7 @@ namespace Synergos.Bff.Pasos;
 public sealed class PasoCotizacion(IPricingPort precios) : IPaso
 {
     public string Tipo => "pricing.cotizar";
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(QuoteView)];
     public int Lecturas => 2;
     public int Escrituras => 1;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
@@ -38,6 +39,7 @@ public sealed class PasoCotizacion(IPricingPort precios) : IPaso
 public sealed class PasoInventarioHallar(IInventoryPort existencias) : IPaso
 {
     public string Tipo => "inventory.hallar";
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
     public int Lecturas => 1;
     public int Escrituras => 1;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
@@ -60,6 +62,7 @@ public sealed class PasoInventarioHallar(IInventoryPort existencias) : IPaso
 public sealed class PasoInventarioApartar(IInventoryPort existencias) : IPaso
 {
     public string Tipo => "inventory.apartar";
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
     public int Lecturas => 2;
     public int Escrituras => 1;
     public LlaveRequerida Llave => LlaveRequerida.PorItem;
@@ -68,11 +71,12 @@ public sealed class PasoInventarioApartar(IInventoryPort existencias) : IPaso
     {
         ArgumentNullException.ThrowIfNull(entrada);
         var itemId = entrada.Lee<string>(0);
+        var cantidad = entrada.Lee<int>(1);
         var apartado = await existencias.ApartarAsync(
-            itemId, entrada.Lee<int>(1), entrada.Origen, entrada.LlavePara(itemId), ct);
+            itemId, cantidad, entrada.Origen, entrada.LlavePara(itemId), ct);
 
         return apartado.IsOk
-            ? SalidaDePaso.Reserva(new Reservado(apartado.Value, CierreId: itemId), apartado.Value)
+            ? SalidaDePaso.Reserva(new Reservado(apartado.Value, CierreId: itemId, Cantidad: cantidad), apartado.Value)
             : SalidaDePaso.Rechaza(apartado.Rejection!);
     }
 }
@@ -81,6 +85,7 @@ public sealed class PasoInventarioApartar(IInventoryPort existencias) : IPaso
 public sealed class PasoInventarioConsumir(IInventoryPort existencias) : IPaso
 {
     public string Tipo => "inventory.consumir";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
@@ -100,6 +105,7 @@ public sealed class PasoInventarioConsumir(IInventoryPort existencias) : IPaso
 public sealed class PasoPagosAutorizar(IPaymentsPort pagos) : IPaso
 {
     public string Tipo => "payments.autorizar";
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
     public int Lecturas => 2;
     public int Escrituras => 1;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
@@ -121,6 +127,7 @@ public sealed class PasoPagosAutorizar(IPaymentsPort pagos) : IPaso
 public sealed class PasoPagosCapturar(IPaymentsPort pagos) : IPaso
 {
     public string Tipo => "payments.capturar";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
@@ -162,6 +169,7 @@ public sealed class PasoAvisar(INotificationsPort avisos) : IPaso
     };
 
     public string Tipo => "notifications.avisar";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
     public int Lecturas => 3;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
