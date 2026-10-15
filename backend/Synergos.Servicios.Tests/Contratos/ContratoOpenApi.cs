@@ -240,13 +240,14 @@ internal static class ContratoOpenApi
             Properties = props,
         };
 
-        /// <summary>Un esquema JSON de los que emite el host (type, format, properties, required, items, oneOf) a su modelo.</summary>
+        /// <summary>Un esquema JSON de los que emite el host (type, format, enum, properties, required, items, oneOf) a su modelo.</summary>
         internal static OpenApiSchema Esquema(JsonObject s)
         {
             var r = new OpenApiSchema();
             if (s["type"] is JsonValue un) r.Type = Tipo((string)un!);
             else if (s["type"] is JsonArray varios) r.Type = varios.Select(t => Tipo((string)t!)).Aggregate((a, b) => a | b);
             if (s["format"] is JsonValue f) r.Format = (string)f!;
+            if (s["enum"] is JsonArray valores) r.Enum = valores.Select(v => v!.DeepClone()).ToList();
             if (s["properties"] is JsonObject props)
             {
                 r.Properties = props.ToDictionary(p => p.Key, p => (IOpenApiSchema)Esquema(p.Value!.AsObject()), StringComparer.Ordinal);
