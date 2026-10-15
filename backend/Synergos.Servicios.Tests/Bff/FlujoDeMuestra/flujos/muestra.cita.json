@@ -3,9 +3,9 @@
   "entrada": ["paciente", "profesional", "ventana", "servicio", "promocion"],
   "tipos": {
     "paciente": { "de": "sujeto" },
-    "profesional": "ref",
+    "profesional": { "tipo": "ref", "kind": "muestra.profesional" },
     "ventana": "ventana",
-    "servicio": "ref",
+    "servicio": { "tipo": "ref", "kind": "muestra.servicio" },
     "promocion": "texto?",
     "contacto": { "de": "contacto" }
   },

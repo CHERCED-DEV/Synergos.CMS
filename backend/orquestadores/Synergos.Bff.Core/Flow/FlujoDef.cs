@@ -170,6 +170,12 @@ public enum OrigenDelValor
     Contacto,
 }
 
+/// <summary>El tipo de un valor del cuerpo: el nombre del tipo y, si es una referencia, su clase.</summary>
+/// <param name="Tipo">El nombre del tipo de valor (<c>ref</c>, <c>texto?</c>…).</param>
+/// <param name="Clase">El <c>kind</c> que admite una referencia (<c>salud.profesional</c>); nulo en lo
+/// demás. Es un dato, como la plantilla del aviso: el host sólo lee del cuerpo una referencia de esa clase.</param>
+public sealed record TipoDeCampo(string Tipo, string? Clase = null);
+
 /// <summary>El tipo declarado de un valor que entra al flujo, y su origen.</summary>
 /// <param name="Origen">De dónde viene.</param>
 /// <param name="Tipo">El nombre del tipo de valor (<c>texto</c>, <c>dinero?</c>…), salvo en una lista.
@@ -177,12 +183,15 @@ public enum OrigenDelValor
 /// <c>contacto</c>: los pone el lector.</param>
 /// <param name="Campos">Si es una lista de ítems, el tipo de cada campo del ítem; si no, nulo.</param>
 /// <param name="Campo">En <see cref="OrigenDelValor.Negocio"/>, el campo de la configuración que se lee.</param>
+/// <param name="Clase">Si es una referencia del cuerpo, la clase que admite (<c>{ "tipo": "ref", "kind": … }</c>).</param>
 /// <remarks>
-/// El lector sólo comprueba la FORMA; que el nombre del tipo exista lo comprueba el validador contra el
-/// registro de tipos del orquestador, que es ampliable (<c>Bff.Pasos</c> registra <c>contacto</c>).
+/// El lector sólo comprueba la FORMA; que el nombre del tipo exista, y que una referencia del cuerpo
+/// declare su clase, lo comprueba el validador contra el registro de tipos del orquestador, que es
+/// ampliable (<c>Bff.Pasos</c> registra <c>contacto</c>).
 /// </remarks>
 public sealed record TipoDeclarado(
-    OrigenDelValor Origen, string? Tipo, IReadOnlyDictionary<string, string>? Campos = null, string? Campo = null)
+    OrigenDelValor Origen, string? Tipo, IReadOnlyDictionary<string, TipoDeCampo>? Campos = null, string? Campo = null,
+    string? Clase = null)
 {
     /// <summary>El tipo con que el lector declara un sujeto.</summary>
     public const string TipoDelSujeto = "ref";
@@ -307,13 +316,19 @@ internal static class LectorDeFlujo
         {
             SoloEstos(nodo, donde, "lista");
             Objeto(lista, $"{donde}, «lista»");
-            var campos = new Dictionary<string, string>(StringComparer.Ordinal);
+            var campos = new Dictionary<string, TipoDeCampo>(StringComparer.Ordinal);
             foreach (var c in lista.EnumerateObject())
             {
-                campos[c.Name] = NombreDeTipo(c.Value, $"{donde}, el campo «{c.Name}»");
+                campos[c.Name] = DelCuerpo(c.Value, $"{donde}, el campo «{c.Name}»");
             }
             if (campos.Count == 0) throw new FormatException($"{donde}: una «lista» sin campos no trae nada que leer.");
             return new TipoDeclarado(OrigenDelValor.Cuerpo, null, campos);
+        }
+
+        if (!nodo.TryGetProperty("de", out _))
+        {
+            var delCuerpo = DelCuerpo(nodo, donde);
+            return new TipoDeclarado(OrigenDelValor.Cuerpo, delCuerpo.Tipo, Clase: delCuerpo.Clase);
         }
 
         var de = Texto(nodo, "de", donde);
@@ -331,8 +346,26 @@ internal static class LectorDeFlujo
                     NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"), null, Texto(nodo, "campo", donde));
             default:
                 throw new FormatException(
-                    $"{donde}: «de» admite «sujeto», «negocio» o «contacto», y trae «{de}». Lo que viene en el cuerpo se declara con el nombre del tipo.");
+                    $"{donde}: «de» admite «sujeto», «negocio» o «contacto», y trae «{de}». Lo que viene en el cuerpo se declara con el nombre del tipo, o con «tipo» y «kind» si es una referencia.");
         }
+    }
+
+    /// <summary>
+    /// Lo que viene del cuerpo: el nombre del tipo, o <c>{ "tipo", "kind" }</c> para una referencia con su clase.
+    /// </summary>
+    /// <remarks>
+    /// La forma objeto existe para declarar la clase, así que la pide: sin ella diría lo mismo que el nombre solo.
+    /// </remarks>
+    private static TipoDeCampo DelCuerpo(JsonElement nodo, string donde)
+    {
+        if (nodo.ValueKind == JsonValueKind.String) return new TipoDeCampo(NombreDeTipo(nodo, donde));
+        if (nodo.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException($"{donde}: tiene que ser el nombre de un tipo (un texto no vacío) o {{ \"tipo\", \"kind\" }}.");
+        }
+
+        SoloEstos(nodo, donde, "tipo", "kind");
+        return new TipoDeCampo(NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"), Texto(nodo, "kind", donde));
     }
 
     private static string NombreDeTipo(JsonElement nodo, string donde)

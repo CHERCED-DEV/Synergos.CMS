@@ -79,6 +79,9 @@ public sealed class ContratoDeFlujosGenericosTests
         var cuerpo = Esquema(doc, abrir["requestBody"]!["content"]!["application/json"]!["schema"]);
         Assert.Equal(new[] { "profesional", "ventana", "servicio", "promocion" }, cuerpo["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal("""["profesional","ventana","servicio"]""", cuerpo["required"]!.ToJsonString());
+        // La clase que declara la definición (NR-1 de 008) es la única que el contrato admite.
+        Assert.Equal("""["muestra.profesional"]""", cuerpo["properties"]!["profesional"]!["properties"]!["kind"]!["enum"]!.ToJsonString());
+        Assert.Equal("""["muestra.servicio"]""", cuerpo["properties"]!["servicio"]!["properties"]!["kind"]!["enum"]!.ToJsonString());
 
         var parametros = abrir["parameters"]!.AsArray().Select(p => p!.AsObject()).ToList();
         var llave = parametros.Single(p => (string?)p["name"] == "Idempotency-Key");
