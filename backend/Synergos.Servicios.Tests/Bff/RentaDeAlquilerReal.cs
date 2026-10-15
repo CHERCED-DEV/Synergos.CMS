@@ -435,6 +435,48 @@ public sealed class RentaDeAlquilerRealTests
         Assert.Equal(0, r.Cable.Veces("POST", "^/v1/payments$"));
     }
 
+    /// <summary>
+    /// Un pedido no aparta en la agenda de otro vertical (NR-1 del director, hallada por 008).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El flujo no toma una <c>ref</c> del cuerpo</b>: <c>equipo</c> es un texto, y el recurso se busca con
+    /// la clase fija <c>alquiler.equipo</c> (<c>RentalSubject.For</c>) sólo si el equipo tiene oferta publicada. Así
+    /// que la agenda que comparten todos los verticales no se alcanza desde aquí: ni nombrando el id de un recurso
+    /// ajeno, ni mandando una referencia con su clase.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Un_pedido_no_aparta_en_la_agenda_de_otro_vertical()
+    {
+        using var r = await ConOferta();
+        using (var booking = r.Capacidades.CreateClient("booking"))
+        using (var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/resources")
+        {
+            Content = JsonContent.Create(new { subjectKind = "salud.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC" }),
+        })
+        {
+            peticion.Headers.Add("Idempotency-Key", "recurso-ajeno");
+            using var creado = await booking.SendAsync(peticion);
+            Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
+        }
+        var (inicio, fin) = RentaDeAlquilerReal.Ventana(7);
+        var antes = r.Cable.Llamadas.Count;
+
+        var (porId, rechazoPorId) = await r.Abrir("alq-1", new
+        {
+            equipo = "dra-1", unidades = new[] { new { unidad = 1 } }, ventana = new { start = inicio, end = fin },
+        });
+        var (porRef, rechazoPorRef) = await r.Abrir("alq-2", new
+        {
+            equipo = new { kind = "salud.profesional", id = "dra-1" }, unidades = new[] { new { unidad = 1 } }, ventana = new { start = inicio, end = fin },
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, porId);
+        Assert.Equal("alquiler.equipment_not_offered", rechazoPorId.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, porRef);
+        Assert.Equal("alquiler.entrada_invalida", rechazoPorRef.GetProperty("code").GetString());
+        Assert.Empty(r.Cable.Llamadas.Skip(antes));
+    }
+
     [Fact]
     public async Task Sin_unidades_suficientes_se_rechaza_y_suelta_lo_que_aparto()
     {
