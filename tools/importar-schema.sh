@@ -29,10 +29,28 @@
 # deja de ser un ritual de backoffice imposible en un VPS sin pantalla.
 # ─────────────────────────────────────────────────────────────────────────────
 #
-#   ./importar-schema.sh [--compose <fichero>] [--espera <segundos>]
+#   ./importar-schema.sh [--con-contenido] [--compose <fichero>] [--espera <segundos>]
 #
 # Se corre EN EL SERVIDOR, con el stack ya levantado. Es idempotente: uSync
 # compara y aplica lo que difiere, así que correrlo dos veces no duplica nada.
+#
+# ── EL CONTENIDO, SÓLO CON `--con-contenido` ─────────────────────────────────
+#
+# ⚠️ Lo que este fichero decía y era falso (medido el 2026-10-15 en el ensayo del
+# despliegue, 002-produccion): que `appsettings.json` deja encendidos
+# `ContentHandler` y `MediaHandler`. En la imagen NO importan: sobre una base
+# limpia el import procesaba 1240 ítems —EXACTAMENTE todo uSync menos `Content`
+# (96) y `Media` (192)— y la base quedaba con 0 documentos, o sea la portada en
+# el cartel vacío de Umbraco aunque el import saliera verde. El gate que prueba
+# que la base es derivable (`tools/usync-rebuild-check.mjs`) ya los encendía por
+# entorno, a propósito; este script no.
+#
+# Ahora los enciende sólo `--con-contenido`, y sin la bandera los APAGA de forma
+# explícita. Es la regla de la ADR 0013 (la siembra es un acto explícito y de una
+# vez): el contenido versionado (ADR 0129) entra al montar un servidor NUEVO, y
+# nunca más — volver a importarlo después revertiría lo que publicaron los
+# editores. Para traer schema nuevo a un servidor que ya tiene contenido, sin la
+# bandera.
 #
 # Lo que hace: PARA el CMS, levanta un contenedor efímero con la misma imagen y
 # los mismos volúmenes y con `ImportAtStartup=All` puesto SÓLO para él, y cuando
@@ -55,8 +73,10 @@ COMPOSE_FILE="compose.prod.yml"
 # porque un servidor pequeño tarda más y cortar un import a medias es peor que
 # esperar.
 ESPERA="${SYNERGOS_IMPORT_TIMEOUT:-900}"
+CONTENIDO=false
 while [ $# -gt 0 ]; do
   case "$1" in
+    --con-contenido) CONTENIDO=true; shift ;;
     --compose) COMPOSE_FILE="$2"; shift 2 ;;
     --espera) ESPERA="$2"; shift 2 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
@@ -64,6 +84,24 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$COMPOSE_FILE" ] || { echo "✗ no existe $COMPOSE_FILE — corré esto desde donde vive el compose" >&2; exit 1; }
+
+# ── La versión que corre ─────────────────────────────────────────────────────
+#
+# El compose nombra cada imagen por `${SYNERGOS_TAG}`, y en el servidor esa
+# variable SÓLO existe mientras corre `deploy-remoto.sh`: el `.env` la deja vacía
+# a propósito (la versión no es configuración) y lo que queda escrito es
+# `tag.actual`. Sin esto, `compose run cms` pedía `…/synergos-cms:` —sin
+# etiqueta— en el servidor, que es justo donde la guía manda correr esto.
+if [ -z "${SYNERGOS_TAG:-}" ]; then
+  TAG_ACTUAL="$(dirname "$COMPOSE_FILE")/tag.actual"
+  SYNERGOS_TAG="$(cat "$TAG_ACTUAL" 2>/dev/null || true)"
+  if [ -z "$SYNERGOS_TAG" ]; then
+    echo "✗ no hay $TAG_ACTUAL: no se sabe qué versión corre. Desplegá primero" >&2
+    echo "  (deploy-remoto.sh <sha>, o el workflow «Despliegue») y corré esto después." >&2
+    exit 1
+  fi
+fi
+export SYNERGOS_TAG
 
 COMPOSE="docker compose --file $COMPOSE_FILE"
 LOG="$(mktemp)"
@@ -79,13 +117,48 @@ trap levantar_de_vuelta EXIT
 echo "── parando el CMS (dos Umbraco sobre la misma base se matan por MainDom)…"
 $COMPOSE stop cms >/dev/null
 
-echo "── importando el schema de uSync en un contenedor efímero…"
+# La imagen que corre: de ella salen los ficheros de la vitrina y la cuenta de lo
+# que el import debería procesar.
+IMAGEN="$($COMPOSE config --images 2>/dev/null | grep '/synergos-cms:' | head -1 || true)"
+
+# ── Los ficheros de la vitrina, al volumen de medios si faltan ──────────────
+#
+# Los trae la imagen en `wwwroot/media` (ADR 0129) y Docker los copia al volumen
+# `cms-media` sólo cuando lo crea vacío. Si el volumen ya existía —un servidor que
+# se desplegó con una imagen anterior— los ítems de media se importarían apuntando
+# a ficheros que no están. Se copian sin pisar NADA de lo que haya (`-n`): lo que
+# un editor subió se queda como está.
+if [ "$CONTENIDO" = "true" ]; then
+  PROYECTO="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
+  VOLUMEN="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
+               --filter "label=com.docker.compose.volume=cms-media" | head -1 || true)"
+  if [ -n "$VOLUMEN" ] && [ -n "$IMAGEN" ]; then
+    echo "── los ficheros de la vitrina al volumen de medios (sin pisar nada)…"
+    docker run --rm --user 0 --entrypoint sh --volume "$VOLUMEN:/destino" "$IMAGEN" -c \
+      'cp -rn /app/wwwroot/media/. /destino/ 2>/dev/null || true; echo "   $(find /destino -type f | wc -l) ficheros en el volumen"'
+  else
+    echo "⚠ no se encontró el volumen cms-media o la imagen: los ficheros de la vitrina NO se repusieron." >&2
+  fi
+fi
+
+if [ "$CONTENIDO" = "true" ]; then
+  echo "── importando el schema Y EL CONTENIDO versionado (--con-contenido) en un contenedor efímero…"
+else
+  echo "── importando el schema de uSync (sin contenido) en un contenedor efímero…"
+fi
 
 # `run --rm` y no `exec`: el que sirve el sitio arrancó sin ImportAtStartup y
 # tiene que seguir así. Éste nace con la variable puesta, importa, y desaparece.
 #
 # `--no-deps` porque el import no habla con ninguna capacidad: sólo con la DB.
 # Sin esto, `run` levantaría media pila para nada.
+#
+# Los handlers de contenido y media van por entorno (ver la cabecera), y con
+# ellos los tres ajustes de `tools/usync-rebuild-check.mjs`, el gate que prueba
+# que la base es derivable: que un ítem sin su padre falle en vez de colgarse
+# en otro sitio, que la poda de `umbracoCacheInstruction` no se trabe con el
+# import (#205: ~580 s de reintentos y a veces el ítem no entra) y que el
+# keepalive no pinguee una URL que este proceso efímero no escucha.
 #
 # El proceso NO termina solo —es un servidor web— así que se lee su salida hasta
 # ver el resumen del import y ahí se corta. Esperar a que salga colgaría para
@@ -95,6 +168,11 @@ timeout --signal=INT "$ESPERA" \
   $COMPOSE run --rm --no-deps --entrypoint "" \
     --env "uSync__Settings__ImportAtStartup=All" \
     --env "uSync__Settings__ExportOnSave=None" \
+    --env "uSync__Sets__Default__Handlers__ContentHandler__Enabled=$CONTENIDO" \
+    --env "uSync__Sets__Default__Handlers__MediaHandler__Enabled=$CONTENIDO" \
+    --env "uSync__Sets__Default__HandlerDefaults__FailOnMissingParent=true" \
+    --env "Umbraco__CMS__Global__DatabaseServerMessenger__TimeBetweenPruneOperations=1.00:00:00" \
+    --env "Umbraco__CMS__KeepAlive__DisableKeepAliveTask=true" \
     --env "ASPNETCORE_URLS=http://127.0.0.1:8099" \
     cms \
     dotnet Synergos.CMS.Web.dll > "$LOG" 2>&1 &
@@ -109,7 +187,23 @@ while kill -0 "$IMPORT" 2>/dev/null; do
   sleep 2
 done
 grep --extended-regexp "uSync Import:|uSync: Startup Complete| ERR\]" "$LOG" | sed 's/^/   /' || true
-$COMPOSE rm --stop --force cms >/dev/null 2>&1 || true
+
+# ⚠️ El contenedor del import se PARA y se QUITA acá, y no es limpieza: cortar la
+# lectura del log no para el `compose run`, y `compose rm cms` no toca los
+# contenedores one-off. Medido en el ensayo del despliegue (002-produccion,
+# 2026-10-15): el import seguía vivo —un segundo Umbraco sobre la misma base, lo
+# que la cabecera de este script dice que hay que evitar— hasta que el CMS que
+# arranca después le ganaba MainDom; y su contenedor muerto quedaba en el
+# proyecto, donde `restaurar.sh` lo contaba como «hay stack que arrancar».
+kill -INT "$IMPORT" 2>/dev/null || true
+for _ in $(seq 1 30); do kill -0 "$IMPORT" 2>/dev/null || break; sleep 2; done
+kill -KILL "$IMPORT" 2>/dev/null || true
+wait "$IMPORT" 2>/dev/null || true
+PROYECTO_IMPORT="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
+docker ps --all --quiet \
+  --filter "label=com.docker.compose.project=${PROYECTO_IMPORT:-synergos}" \
+  --filter "label=com.docker.compose.service=cms" \
+  --filter "label=com.docker.compose.oneoff=True" | xargs -r docker rm --force >/dev/null 2>&1 || true
 set -e
 
 # ── El veredicto ─────────────────────────────────────────────────────────────
@@ -126,35 +220,88 @@ ERRORES="$(grep --count ' ERR]' "$LOG" || true)"
 # que `usync-rebuild-check.mjs` consigue con `git ls-files '…/**/*.config'`,
 # que tampoco casa un fichero de la raíz; acá no se puede usar git porque en el
 # servidor no hay clon.
-ESPERADOS="$(find "$(dirname "$0")/../Synergos.CMS.Web/uSync/v9" -mindepth 2 -name '*.config' 2>/dev/null | wc -l | tr -d ' ')"
+#
+# ⚠️ En el SERVIDOR no hay clon, y esto hacía dos cosas mal, las dos medidas en el
+# ensayo del despliegue (002-produccion, 2026-10-15):
+#   · con `set -o pipefail`, el `find` sobre un árbol que no está salía 1 y
+#     `set -e` mataba el script EN SILENCIO, sin ninguno de los mensajes de abajo;
+#   · y aun sin eso, sin árbol no se comparaba nada: 1240 procesados de 1528 —sin
+#     el contenido— salían «✓ 0 errores» con la base vacía de documentos.
+# Hoy se cuenta el árbol que se IMPORTA: el de al lado si se corre desde un clon, y
+# si no, el de DENTRO de la imagen. Sin `--con-contenido` no cuentan Content ni
+# Media, que es justo lo que ese import no trae.
+FILTRO=(-mindepth 2 -name '*.config')
+[ "$CONTENIDO" = "true" ] || FILTRO+=(-not -path '*/Content/*' -not -path '*/Media/*')
+ARBOL="$(dirname "$0")/../Synergos.CMS.Web/uSync/v9"
+ESPERADOS=0
+DE_DONDE="ningún sitio"
+if [ -d "$ARBOL" ]; then
+  ESPERADOS="$(find "$ARBOL" "${FILTRO[@]}" | wc -l | tr -d ' ')"
+  DE_DONDE="el árbol de al lado"
+elif [ -n "$IMAGEN" ]; then
+  ESPERADOS="$({ docker run --rm --entrypoint find "$IMAGEN" /app/uSync/v9 "${FILTRO[@]}" 2>/dev/null || true; } | wc -l | tr -d ' ')"
+  DE_DONDE="la imagen"
+fi
 
 if [ -z "$RESUMEN" ]; then
-  echo "✗ el import no llegó a terminar. El log completo está en $LOG"
+  echo "✗ el import no llegó a terminar. Lo último que dijo:"
+  tail -n 25 "$LOG" | sed 's/^/   /'
+  echo "  El log completo está en $LOG"
   exit 1
 fi
 
 PROCESADOS="$(printf '%s' "$RESUMEN" | sed -n 's/.*processed \([0-9]*\) items.*/\1/p')"
 echo "── $RESUMEN"
 
+# Los avisos, a la vista. uSync registra un ítem que NO pudo importar como `WRN`,
+# no como `ERR` (CMS#205): contar sólo `ERR` da por bueno un import con huecos.
+AVISOS="$(grep --count ' WRN\]' "$LOG" || true)"
+if [ "$AVISOS" != "0" ]; then
+  echo "── $AVISOS avisos (WRN) durante el import; los primeros:"
+  grep ' WRN\]' "$LOG" | head -n 15 | cut -c1-240 | sed 's/^/   /'
+fi
+
 if [ "$ERRORES" != "0" ]; then
   echo "✗ el import terminó con $ERRORES líneas [ERR] — parece verde y dejó huecos. Log: $LOG"
   exit 1
 fi
 
-# El conteo esperado sólo se puede calcular si el árbol uSync está al lado (o
-# sea, si esto se corre desde un clon). En el servidor puede no estarlo, y
-# entonces no se inventa un número: se dice que no se pudo cruzar.
+# Si no hubo de dónde contar (ni árbol ni imagen), no se inventa un número: se
+# dice que no se pudo cruzar.
 if [ "$ESPERADOS" -gt 0 ] 2>/dev/null; then
   if [ "$PROCESADOS" -lt "$ESPERADOS" ]; then
-    echo "✗ procesó $PROCESADOS de $ESPERADOS ficheros .config — se saltó algo. Log: $LOG"
+    echo "✗ procesó $PROCESADOS de $ESPERADOS ficheros .config de $DE_DONDE — se saltó algo. Log: $LOG"
     exit 1
   fi
-  echo "✓ $PROCESADOS ítems, 0 errores (hay $ESPERADOS ficheros .config en el árbol)"
+  echo "✓ $PROCESADOS ítems, 0 errores ($ESPERADOS ficheros .config en $DE_DONDE)"
 else
-  echo "✓ $PROCESADOS ítems, 0 errores (sin árbol uSync al lado: no se cruzó el conteo)"
+  echo "✓ $PROCESADOS ítems, 0 errores (no hubo de dónde contar los .config: no se cruzó el conteo)"
 fi
 
 rm -f "$LOG"
+
+# ── El CMS de vuelta, y SANO ─────────────────────────────────────────────────
+#
+# Antes esto lo hacía sólo la trampa de salida, sin esperar: el script decía
+# «ahora la portada tiene que dejar de ser el cartel» con el CMS todavía
+# arrancando, y un humo inmediato pegaba contra un proceso a medio levantar.
+# Ahora se levanta acá y se espera a su healthcheck, como `deploy-remoto.sh`.
+trap - EXIT
+echo "── arrancando el CMS y esperando a que esté sano…"
+$COMPOSE up --detach cms >/dev/null
+for i in $(seq 1 60); do
+  ID="$($COMPOSE ps --quiet cms 2>/dev/null || true)"
+  if [ -n "$ID" ] && [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$ID" 2>/dev/null)" = "healthy" ]; then
+    echo "✓ el CMS está sano (a los $((i * 5)) s)"
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    echo "✗ el CMS no quedó sano a los 5 min del import: mirá \`docker compose logs cms\`"
+    exit 1
+  fi
+  sleep 5
+done
+
 echo
 echo "── ahora la portada tiene que dejar de ser el cartel de Umbraco vacío."
 echo "   Comprobalo con:  tools/humo-publico.sh <dominio> <sha>"

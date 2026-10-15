@@ -192,8 +192,16 @@ En **Hetzner → Firewalls**, o con `ufw` en la máquina. Entrante:
 ### 1.4 Dejar el servidor listo — un script, una vez
 
 Todo lo que el despliegue automático da por hecho —Docker con el plugin `compose` v2, un usuario
-que no es root, `/opt/synergos` con los permisos correctos, el firewall, y un `.env` con las dos
-llaves largas ya generadas— lo pone esto:
+que no es root, `/opt/synergos` con los permisos correctos, el firewall, y un `.env` con **todas las
+obligatorias que se pueden generar ya generadas** (la llave compartida, la del carrito, la contraseña
+del backoffice y la que firma las identidades)— lo pone esto:
+
+> ⚠️ **Lo que este documento decía y era falso** (medido el 2026-10-15): «las dos llaves largas». El
+> compose exige CINCO con `:?`, y el `.env` que dejaba el script traía dos: el primer `compose pull`
+> habría muerto en el servidor recién pagado. Hoy las genera todas menos el dominio, y un gate cruza
+> las del compose con las del script. La contraseña del backoffice hay que **apuntarla**:
+> `grep SYNERGOS_ADMIN_PASSWORD /opt/synergos/.env`. El mismo script deja sólo el `.env`, sin root y
+> sin instalar nada, con `--solo-env <fichero>`: es lo que usa el ensayo (§8).
 
 ```bash
 scp tools/bootstrap-servidor.sh root@<ip>:/tmp/
@@ -241,6 +249,23 @@ Si ya lo comprás en otro lado, hay que apuntar los *nameservers* a Cloudflare i
 
 Y en **SSL/TLS → Overview**: modo **Full (strict)**.
 
+> **Pero el PRIMER despliegue, en gris** (`specs/002-produccion/preguntas.md`, P4). Caddy saca su
+> certificado contestando él mismo a Let's Encrypt; con la nube naranja desde el principio ese
+> primer reto pasa por Cloudflare y puede fallar, y con Full (strict) un origen sin certificado da
+> 526. Orden: registros en gris → primer despliegue en verde (ya hay certificado) → naranja → §2.3.
+> Si una renovación fallara más adelante, lo avisa el humo programado (§9) y la alternativa es el
+> certificado de origen de Cloudflare.
+
+### 2.2.bis Las cabeceras de seguridad
+
+Las pone el portero (`Caddyfile`, bloque `header`) a todo lo que sale: `Strict-Transport-Security`
+(un año, sin `includeSubDomains` ni `preload`), `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+`X-Frame-Options: SAMEORIGIN` y una CSP **mínima** (`frame-ancestors`, `base-uri`, `object-src`); y
+quita `Server`. Medido el 2026-10-15: antes no había ninguna. El humo público exige las cinco y un
+gate cruza las dos listas. La CSP completa (scripts de la CDN, el import map en línea, el backoffice
+de Umbraco 13) queda para medirla en un navegador con los siete temas: restringir sin medir es
+arriesgar la salida por una cabecera.
+
 ### 2.3 Cerrar el origen
 
 Los rangos de Cloudflare están en [cloudflare.com/ips](https://www.cloudflare.com/ips/). Se
@@ -287,6 +312,21 @@ cifra — ver #86.)
 > trabajo es enumerar lo que hay que hacer a mano. Mandaba a no hacer algo que hay que hacer.
 > Mientras no estén las credenciales, **lo que hay arriba puede no ser lo que dice el repo, y nada
 > se pone rojo**: el humo del CDN pasa igual, porque el CDN viejo está perfecto.
+
+> ### Medido otra vez el 2026-10-15, y decidido (línea 002-produccion)
+>
+> - La CDN **seguía** en `b951c77` (2026-09-12).
+> - **«Workers Builds: synergos-ui» salió rojo en 60 de 60 push a master** del UI (2026-08-02 →
+>   2026-10-15): Cloudflare corría `wrangler deploy` sin construir y la puerta de Wrangler daba por
+>   bueno un `public/` que no existía. Reproducido en una copia limpia.
+> - **Decidido por el arquitecto** (`specs/DECISIONES.md`, lote 1, #2): un solo publicador,
+>   `despliegue-cdn.yml`, y el build automático de Workers Builds **apagado sin borrar el proyecto**.
+> - La puerta exige ahora el **sello** de `build:cdn` (sin salida, a medias, tocada o de otro commit,
+>   no despliega), y `ensayo-cdn.yml` del UI corre todo menos subir —construir, la puerta, el
+>   `--dry-run` y el Worker servido en local con su humo— en cada rama que toca la CDN.
+>
+> **Orden de la primera salida**: la CDN al día ANTES que el servidor. El CMS de octubre no puede
+> servirse contra bundles de septiembre: los contratos de los elementos cambiaron entre medias.
 
 Quedó en **Workers con assets estáticos**, no en Pages como decía este documento. Dos cosas
 salieron mejor de lo previsto:
@@ -444,6 +484,7 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 |---|---|---|
 | `tools/importar-schema.sh` | **el servidor** | importa el árbol de uSync en un contenedor efímero |
 | `tools/provisionar.sh` | **el servidor** | publica definiciones, la plantilla del aviso, recursos y precios; reconcilia |
+| `tools/provisionar-en-la-red.sh` | **el servidor** | corre `provisionar.sh` dentro de la red de Docker, que es donde resuelven los nombres de las capacidades |
 
 > **Los dos los COPIA el despliegue**, junto con los dos ficheros de datos de `provisionar.sh`:
 > `tools/provisionar.recursos.json` y `tools/provisionar.plantillas.json`. No es un
@@ -458,10 +499,20 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 ### 5.bis.1 El schema de uSync
 
 ```bash
-tools/importar-schema.sh          # en el servidor, con el stack levantado
+./importar-schema.sh --con-contenido   # en /opt/synergos, UNA vez, en un servidor NUEVO
+./importar-schema.sh                   # después: sólo schema (traer tipos nuevos sin tocar contenido)
 ```
 
-Para el CMS, importa en un contenedor efímero y lo vuelve a levantar. Es **idempotente** —uSync
+> ⚠️ **Lo que esta sección decía y ya no vale (medido el 2026-10-15 en el ensayo, §8).** El import
+> procesaba **1240 ítems** —todo uSync menos `Content` (96) y `Media` (192)— y dejaba la base con
+> **0 documentos**: la imagen no llevaba la vitrina (el `.dockerignore` la excluía) y los handlers de
+> contenido no se encendían. Hoy la imagen la lleva, y `--con-contenido` la trae con sus medios:
+> **1528 ítems, 0 errores, 96 documentos (95 publicados), ~1 min**, y la portada es «SynergosLabs».
+> Sin la bandera, sólo schema: volver a importar el contenido revertiría lo que publiquen los
+> editores. El conteo de «se saltó algo» se hace ahora contra los `.config` **de la imagen**: sin
+> árbol al lado no comparaba nada, y 1240 de 1528 salía verde.
+
+Para el CMS, importa en un contenedor efímero —que para y quita al terminar— y lo vuelve a levantar. Es **idempotente** —uSync
 compara y aplica lo que difiere— y comprueba lo mismo que el gate de reconstrucción: que termine,
 sin líneas `[ERR]`, y que procese al menos tantos ítems como ficheros `.config` hay. Medido en el
 stack compuesto: **896 ítems, 355 cambios, 0 errores, ~28 s**.
@@ -491,6 +542,12 @@ Así que **ADR 0008 se queda como está**, y lo que cambia es que el import deja
 backoffice imposible en un VPS sin pantalla: es un comando.
 
 ### 5.bis.2 El contenido — la portada de arranque
+
+> ⚠️ **Lo que esta sección cuenta es la historia hasta la ADR 0129**: desde entonces `uSync/v9/Content/`
+> **no está vacía** —es la vitrina SynergosLabs versionada, 96 nodos y 192 medios con sus 218
+> ficheros— y la decisión 002-P2 (`specs/DECISIONES.md`, lote 2) la manda a producción. En un
+> servidor nuevo la trae `./importar-schema.sh --con-contenido` (§5.bis.1). Lo de abajo sigue
+> valiendo para sembrar y exportar una portada propia.
 
 Con el schema importado, la portada **sigue diciendo «No published content»** hasta que alguien
 publique un nodo. No es un fallo del import: es que `uSync/v9/Content/` **está vacía en el repo**
@@ -611,8 +668,21 @@ siembre nada en el servidor.
 ### 5.bis.3 El estado que las capacidades exigen
 
 ```bash
-tools/provisionar.sh --verificar   # qué falta, sin escribir nada
-tools/provisionar.sh               # lo publica
+./provisionar-en-la-red.sh --verificar   # en /opt/synergos: qué falta, sin escribir nada
+./provisionar-en-la-red.sh               # lo publica
+```
+
+> ⚠️ **Lo que este documento decía y no funcionaba** (medido el 2026-10-15 en el ensayo, §8):
+> «`tools/provisionar.sh` en el servidor». `provisionar.sh` habla con las capacidades por su nombre
+> de servicio (`http://api-workflow:8080`…), que **sólo resuelve dentro de la red de Docker**: desde
+> el servidor no llega a ninguna. `provisionar-en-la-red.sh` lo corre en un contenedor efímero
+> enganchado a esa red, con la llave por entorno y las herramientas GNU (con las de BusyBox un precio
+> de 320000 salía «no numérico»). El ensayo lo corre así en cada pasada: `--verificar`, publicar y
+> `--verificar` otra vez.
+
+```bash
+# directo, sólo desde dentro de la red (lo que hace el envoltorio por vos):
+tools/provisionar.sh --verificar
 ```
 
 Cinco cosas, y las cinco se rechazan con su motivo si faltan —`definition_not_found`,
@@ -786,6 +856,12 @@ personales que nadie decidió.
 Se niega a correr si el proyecto de ensayo es el de producción, y si la identidad está dentro de
 `/opt/synergos`.
 
+> ⚠️ **Lo que no habría funcionado, medido el 2026-10-15**: «la versión que escribió esos datos» la
+> lee del `MANIFIESTO`, y `respaldo.sh` la sacaba de `SYNERGOS_TAG` en el `.env`, que en el servidor
+> está **vacía a propósito** (la versión vive en `tag.actual`). Todo respaldo salía con `sha=` y este
+> ensayo habría pedido imágenes sin etiqueta. Hoy `respaldo.sh`, `restaurar.sh` e
+> `importar-schema.sh` toman la versión de `tag.actual`, y un gate lo vigila.
+
 > **Por qué no basta con mirar que el fichero llegó.** Se levantó `Api.Audit` sobre un almacén
 > ilegible para medirlo: **`/health` contesta 200 y la lectura contesta 500.** Un humo de salud da
 > por buena esa restauración. Es el defecto #82 tal cual —la bitácora guardaba sus asientos y
@@ -829,3 +905,53 @@ el propio código lo deja escrito en el log al pasar. Guardalo donde guardás la
 >
 > **Eso es lo que compra un precio fijo.** El mes de un ataque cuesta lo mismo que el anterior —
 > que era el miedo concreto detrás de no querer cobro por uso.
+
+---
+
+## 8. El ensayo — el despliegue entero, sin servidor
+
+`.github/workflows/ensayo-despliegue.yml` (línea 002-produccion). Corre al terminar «Imágenes (GHCR)»
+en master, a mano, y en cada rama que toque una pieza del despliegue. **No necesita ninguna
+credencial**: el runner de GitHub hace de servidor.
+
+Lo que hace, en el orden de esta guía y con los mismos ficheros:
+
+1. `/opt/synergos` con **lo que copia `deploy.yml`** — la lista se extrae de su `scp`, no se repite.
+2. El `.env` que deja `bootstrap-servidor.sh --solo-env`, más el dominio (`localhost`: Caddy firma con
+   su CA local y el humo confía en ella por `CURL_CA_BUNDLE`, sin tocar el script).
+3. Que sin una obligatoria `deploy-remoto.sh` se niega **nombrándola** y sin arrancar nada.
+4. `deploy-remoto.sh` → `importar-schema.sh` → `humo-publico.sh`.
+5. `provisionar.sh` dentro de la red de Docker (§5.bis.3).
+6. `respaldo.sh` → **borrar los volúmenes** → `restaurar.sh --si-estoy-seguro` → en pie → humo **sin
+   reimportar** (si la base no volvió, Umbraco arranca vacío y el humo lo ve).
+7. `deploy-remoto.sh <la versión anterior>` → humo con esa versión: la vuelta atrás.
+
+> **Por qué existe.** Hasta el 2026-10-15 el stack de producción **no se había levantado nunca**:
+> `deploy.yml` se salta sin servidor y esta máquina de trabajo no tiene Docker. Las primeras
+> corridas del ensayo encontraron, una por una, cosas que habrían roto el primer servidor y que
+> ningún gate de texto veía porque cada fichero, leído solo, estaba bien:
+>
+> - **`Api.Identity` no arrancaba**: el compose ponía la llave en una variable cuyo NOMBRE llevaba
+>   `${…}`, y compose no interpola nombres. Los verificadores arrancaban sanos sin poder verificar.
+> - **`importar-schema.sh` moría en silencio en el servidor**: `find` sobre el árbol de uSync —que
+>   en el servidor no está— con `pipefail`.
+> - **El humo leía la versión equivocada** de `/_health` (la última `"version"` de la línea, la del
+>   registro de la CDN): con la CDN en `Http`, cada despliegue habría vuelto atrás.
+> - **El respaldo anotaba `sha=` vacío**, y su ensayo de restauración habría pedido imágenes sin
+>   etiqueta.
+> - **El `.env` del bootstrap no traía dos de las cinco obligatorias.**
+> - **La imagen no llevaba la vitrina**: el import salía verde con la base vacía (§5.bis.1).
+> - **El contenedor del import seguía vivo** junto al CMS: dos Umbraco sobre la misma base.
+> - **`provisionar.sh` no alcanzaba las capacidades** desde el servidor (§5.bis.3).
+> - **`restaurar.sh` salía en rojo en un servidor perdido**, con los datos ya devueltos.
+>
+> Los nueve están arreglados y con su gate (`SalidaAProduccionTests`). La primera corrida entera en
+> verde: `38790612898`, 6 min 50 s.
+
+## 9. La vigilancia
+
+`.github/workflows/humo-programado.yml` corre `humo-publico.sh` contra `SYNERGOS_DOMAIN` **cada seis
+horas**, exigiendo la versión del último «Despliegue» que de verdad desplegó. Si sale rojo, GitHub
+avisa por correo como con cualquier workflow programado. Sin dominio, o sin un despliegue real
+todavía, se salta en verde diciendo por qué. Un monitor externo gratuito (UptimeRobot o similar)
+contra la portada es un complemento barato, no un reemplazo.

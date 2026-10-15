@@ -38,6 +38,11 @@ DIR="${SYNERGOS_DIR:-/opt/synergos}"
 PROYECTO="${SYNERGOS_COMPOSE_PROJECT:-${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}}"
 COMPOSE="docker compose --file $DIR/compose.prod.yml --project-directory $DIR --project-name $PROYECTO"
 
+# La versión que corre, para que el compose sepa nombrar las imágenes al parar y
+# arrancar: en el servidor sólo está en `tag.actual` (el `.env` la deja vacía).
+# Quien llama puede ponerla, como hace `prueba-restauracion.sh`.
+export SYNERGOS_TAG="${SYNERGOS_TAG:-$(cat "$DIR/tag.actual" 2>/dev/null || true)}"
+
 [ -f "$ARCHIVO" ] || { echo "✗ no existe $ARCHIVO" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
@@ -118,8 +123,28 @@ for v in "${VOLUMENES[@]}"; do
   restaurados=$((restaurados + 1))
 done
 
-echo "  arrancando…"
-$COMPOSE start >/dev/null
+# Arrancar lo que había — si había algo. En un servidor PERDIDO, que es el caso
+# para el que existe esto, no hay contenedores: `compose start` salía 1 («service
+# … has no container to start») con los datos ya devueltos, y el operador leía
+# un fallo donde había una restauración buena. Medido en el ensayo del despliegue
+# (002-produccion, 2026-10-15). Sin contenedores se dice cómo levantarlo, y lo
+# levanta `deploy-remoto.sh`, que es quien sabe qué versión poner.
+#
+# Se cuentan sólo los contenedores de SERVICIO: uno one-off (un `compose run` que
+# quedó, como el que dejaba el import) no es un stack que arrancar, y contarlo
+# hacía fallar el `start` igual.
+CONTENEDORES="$(docker ps --all --quiet \
+  --filter "label=com.docker.compose.project=$PROYECTO" \
+  --filter "label=com.docker.compose.oneoff=False" 2>/dev/null || true)"
+if [ -n "$CONTENEDORES" ]; then
+  echo "  arrancando…"
+  $COMPOSE start >/dev/null
+else
+  VERSION_RESPALDO="$(sed -n 's/^sha=//p' "$TMP/MANIFIESTO" | head -1)"
+  echo "  no hay contenedores que arrancar (servidor nuevo o perdido): levantalo con la"
+  echo "  versión que escribió estos datos:"
+  echo "    ./deploy-remoto.sh ${VERSION_RESPALDO:-<sha: no viene en el MANIFIESTO>}"
+fi
 
 echo "✓ $restaurados volúmenes restaurados."
 echo

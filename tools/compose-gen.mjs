@@ -122,6 +122,26 @@ function capacidadesDe(proyecto) {
   return [...new Set([...nombres, 'notifications'])].sort();
 }
 
+/**
+ * El `kid` de la llave de identidad: LITERAL, y no `${SYNERGOS_IDENTITY_ACTIVE_KID}`.
+ *
+ * Compose interpola VALORES, no NOMBRES. Esto decia
+ * `IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: …`, y el contenedor
+ * recibia una variable que se llamaba literalmente asi, con el `${…}` dentro.
+ * .NET parte ese nombre por el `:` de `:-k1`, el mapa de llaves quedaba VACIO y:
+ *   · Api.Identity moria al arrancar, en bucle («IdentityTokens:Keys está vacío»);
+ *   · los verificadores arrancaban SANOS y sin poder verificar ningun token.
+ * Lo destapo el ensayo del despliegue (CMS 002-produccion, 2026-10-15): es la
+ * primera vez que el stack de produccion se levanto entero. Ningun gate de texto
+ * lo veia porque cada linea, leida sola, estaba bien.
+ *
+ * Rotar la llave desde `.env` exige otra forma de pasarla (ver
+ * specs/002-produccion/necesidades-del-nucleo.md); hasta entonces, una sola llave
+ * con nombre fijo. Lo vigila SalidaAProduccionTests: ningun NOMBRE de variable
+ * del compose lleva `${`.
+ */
+const KID_DE_IDENTIDAD = 'k1';
+
 /** La llave con la que una capacidad VERIFICA tokens de identidad, si los verifica. */
 function entornoIdentidad(proyecto) {
   if (!verificaIdentidad(proyecto)) return '';
@@ -134,9 +154,40 @@ function entornoIdentidad(proyecto) {
     '      # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del',
     '      # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token',
     '      # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.',
-    `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
-    '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+    `      IdentityTokens__Keys__${KID_DE_IDENTIDAD}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
+    `      IdentityTokens__ActiveKeyId: ${KID_DE_IDENTIDAD}`,
   ].join('\n');
+}
+
+/**
+ * El abandono que DECLARA un orquestador en su `appsettings.json`
+ * (`<Seccion>:Sweep:AbandonAfterMinutes`), o `null` si no lo declara.
+ *
+ * El compose ponia a los cinco `${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`, y una
+ * variable de entorno PISA el `appsettings.json`: el abandono de 15 minutos que
+ * declaran Alquiler y Salud quedaba en 60 en produccion, sin que nada fallara (NP-1
+ * de la linea 005, decidido el 2026-10-15). Hoy quien lo declara lo lleva al
+ * compose como default de SU variable (`SYNERGOS_<SECCION>_ABANDON_AFTER_MINUTES`),
+ * y quien no, sigue con la base comun de 60. Lo cruza SalidaAProduccionTests.
+ */
+function abandonoDeclarado(proyecto, seccion) {
+  let crudo;
+  try {
+    crudo = readFileSync(join(RAIZ, rutaDe(proyecto), 'appsettings.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  const config = JSON.parse(crudo.replace(/^﻿/, ''));
+  // Las claves de IConfiguration no distinguen mayusculas: aca tampoco.
+  const hijo = (o, k) => (o && typeof o === 'object'
+    ? Object.entries(o).find(([clave]) => clave.toLowerCase() === k.toLowerCase())?.[1]
+    : undefined);
+  const valor = hijo(hijo(hijo(config, seccion), 'Sweep'), 'AbandonAfterMinutes');
+  if (valor === undefined) return null;
+  if (!Number.isInteger(valor) || valor <= 0) {
+    throw new Error(`compose-gen: ${proyecto} declara ${seccion}:Sweep:AbandonAfterMinutes=${valor}; tiene que ser un entero positivo`);
+  }
+  return valor;
 }
 
 /** Las lineas de entorno propias de cada servicio. */
@@ -150,6 +201,11 @@ function entornoExtra(proyecto, disponibles) {
       throw new Error(
         `compose-gen: ${proyecto} nombra capacidades que no existen: ${desconocidas.join(', ')}`);
     }
+
+    const abandono = abandonoDeclarado(proyecto, seccion);
+    const lineaAbandono = abandono === null
+      ? `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`
+      : `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_${seccion.toUpperCase()}_ABANDON_AFTER_MINUTES:-${abandono}}`;
 
     const rutas = caps.flatMap((c) => [
       `      ${seccion}__Capabilities__${c}__BaseUrl: "http://api-${c}:8080"`,
@@ -168,7 +224,9 @@ function entornoExtra(proyecto, disponibles) {
       '      # queda visible en /v1/compensations con alertedAtUtc en nulo — degrada,',
       '      # no rompe, pero nadie se entera.',
       `      ${seccion}__Sweep__IntervalSeconds: \${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}`,
-      `      ${seccion}__Sweep__AbandonAfterMinutes: \${SYNERGOS_ABANDON_AFTER_MINUTES:-60}`,
+      '      # El abandono: el que declare el orquestador en su appsettings.json, con su',
+      '      # propia variable; si no declara, la base comun (NP-1, 002-produccion).',
+      lineaAbandono,
       '',
       '      # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).',
       '      # Va en todos los orquestadores a proposito: elegir uno obligaria a decir',
@@ -214,8 +272,8 @@ function entornoExtra(proyecto, disponibles) {
       '      #',
       '      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir',
       '      # identidades y no puede es peor que uno caido, porque parece que funciona.',
-      `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}`,
-      '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+      `      IdentityTokens__Keys__${KID_DE_IDENTIDAD}: \${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}`,
+      `      IdentityTokens__ActiveKeyId: ${KID_DE_IDENTIDAD}`,
       '      IdentityTokens__LifetimeMinutes: \${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}',
       '      IdentityTokens__MaxSessionMinutes: \${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}',
     ].join('\n');

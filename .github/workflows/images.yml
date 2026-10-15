@@ -92,6 +92,10 @@ jobs:
             PROJECT_DIR=${{ matrix.servicio.ruta }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
+          # La base (`aspnet:10.0`) se baja SIEMPRE: cada despliegue lleva el
+          # último parche de .NET aunque el constructor tuviera una copia vieja
+          # (DECISIONES.md lote 1 #3; lo vigila SalidaAProduccionTests).
+          pull: true
           # El caché es por servicio: todos compartiendo una entrada se
           # pisarían y ninguno acertaría nunca.
           cache-from: type=gha,scope=${{ matrix.servicio.nombre }}
@@ -131,6 +135,10 @@ jobs:
           build-args: VERSION=${{ github.sha }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.REGISTRY }}/${{ steps.nombre.outputs.imagen }}:${{ github.sha }}
+          # La base `aspnet:8.0` al último parche en CADA despliegue: el CMS no se
+          # migra antes de salir y corre sobre .NET 8 hasta el fin de su soporte
+          # (2026-11-10) — DECISIONES.md lote 1 #3.
+          pull: true
           cache-from: type=gha,scope=cms
           cache-to: type=gha,mode=max,scope=cms
 
@@ -164,6 +172,7 @@ jobs:
             PROJECT=${{ matrix.servicio.nombre }}
             PROJECT_DIR=${{ matrix.servicio.ruta }}
           load: true
+          pull: true
           tags: prueba:local
           cache-from: type=gha,scope=${{ matrix.servicio.nombre }}
 

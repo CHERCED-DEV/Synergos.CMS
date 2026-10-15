@@ -15,11 +15,20 @@ Synergos.CMS.Web/umbraco/Logs/
 Synergos.CMS.Web/umbraco/mediacache/
 Synergos.CMS.Web/umbraco/models/
 Synergos.CMS.Web/App_Data/
-Synergos.CMS.Web/wwwroot/media/
 Synergos.CMS.Web/uSync/uSync.History/
 Synergos.CMS.Web/uSync/uSync.Logs/
-Synergos.CMS.Web/uSync/v9/Content/
-Synergos.CMS.Web/uSync/v9/Media/
+
+# ⚠️ Lo que esta lista decía y ya no vale (medido el 2026-10-15, 002-produccion):
+# excluía `uSync/v9/Content/`, `uSync/v9/Media/` y `wwwroot/media/` como «datos del
+# arquitecto». Desde la ADR 0129 son la vitrina VERSIONADA —96 nodos, 192 ítems de
+# media y sus 218 ficheros (~48 MB)—, y la decisión 002-P2 la manda a producción.
+# Excluidos, la imagen no la llevaba: el import del servidor nuevo procesaba 1240
+# ítems (todo menos esos 288) y la portada se quedaba en el cartel vacío de Umbraco.
+#
+# Que la imagen la LLEVE no es que la importe: nada la importa al arrancar
+# (ElContenidoVersionadoNoSeImportaSoloTests); la trae `importar-schema.sh
+# --con-contenido`, a mano y una vez. Las imágenes de producción se construyen en
+# CI desde un checkout limpio, así que sólo viajan los ficheros versionados.
 
 # Secretos locales — no deben quedar en una capa de la imagen.
 **/appsettings.Local.json

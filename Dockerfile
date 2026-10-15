@@ -70,9 +70,22 @@ COPY --from=build /app/publish ./
 COPY --from=build /src/Synergos.CMS.Web/uSync/v9 ./uSync/v9
 COPY --from=build /src/Synergos.CMS.Web/App_Plugins ./App_Plugins
 
+# Los ficheros de la vitrina versionada (ADR 0129), también explícitos: los targets
+# de Umbraco sacan `wwwroot/media` del `publish` (es estado de runtime en un sitio
+# cualquiera), y medido en el ensayo (002-produccion) la imagen salía con 0.
+COPY --from=build /src/Synergos.CMS.Web/wwwroot/media ./wwwroot/media
+
 # Directorios de estado. Se crean acá para que existan aunque se arranque
 # sin volúmenes; con volúmenes, Docker los monta encima. Nada se siembra
-# en boot (ADR 0013) — son carpetas vacías.
+# en boot (ADR 0013) — son carpetas vacías, MENOS una:
+#
+# `wwwroot/media` trae los ficheros de la vitrina versionada (ADR 0129; llegan con
+# `dotnet publish`, como cualquier fichero de wwwroot). Un fichero en la imagen no
+# es una siembra: no escribe en la base ni publica nada. Docker los copia al
+# volumen `cms-media` sólo cuando lo crea vacío —un servidor nuevo— y nunca pisa
+# lo que ya tenga; `importar-schema.sh --con-contenido` los repone si faltan.
+# Hasta el 2026-10-15 el `.dockerignore` los dejaba fuera y la imagen de
+# producción no llevaba la vitrina (002-produccion).
 #
 # DataProtection-Keys es la ruta que ASP.NET elige sola en contenedor. Sin
 # persistirla, cada `docker compose up --build` invalida las cookies del

@@ -99,7 +99,11 @@ jobs:
             const sha = process.env.SHA;
             const yoMismo = context.workflow;
 
-            for (let intento = 1; intento <= 20; intento++) {
+            // 25 min y no 10: desde 002-produccion esta puerta espera también al
+            // «Ensayo del despliegue» del mismo commit, que arranca a la vez que
+            // esto y dura ~8 min en master. Con 10 un ensayo lento dejaba el
+            // despliegue en rojo sin que nada estuviera mal.
+            for (let intento = 1; intento <= 50; intento++) {
               const { data } = await github.rest.checks.listForRef({
                 ...context.repo, ref: sha, per_page: 100,
               });
@@ -125,7 +129,7 @@ jobs:
               core.info(`esperando a ${pendientes.length}: ${pendientes.map(c => c.name).join(', ')}`);
               await new Promise(r => setTimeout(r, 30000));
             }
-            core.setFailed('A los 10 min seguía habiendo comprobaciones sin terminar.');
+            core.setFailed('A los 25 min seguía habiendo comprobaciones sin terminar.');
 
       # ── 2. El acceso al servidor ─────────────────────────────────────────
       - name: Preparar SSH
@@ -195,7 +199,7 @@ jobs:
           scp -i ~/.ssh/id_deploy -o BatchMode=yes \
             compose.prod.yml Caddyfile tools/deploy-remoto.sh \
             tools/respaldo.sh tools/enviar-respaldo.sh tools/restaurar.sh \
-            tools/importar-schema.sh tools/provisionar.sh \
+            tools/importar-schema.sh tools/provisionar.sh tools/provisionar-en-la-red.sh \
             tools/provisionar.recursos.json tools/provisionar.plantillas.json \
             "$USUARIO@$HOST:/opt/synergos/"
 

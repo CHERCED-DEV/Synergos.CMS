@@ -24,6 +24,66 @@ set -euo pipefail
 USUARIO="${SYNERGOS_USER:-despliegue}"
 DIR="/opt/synergos"
 
+# ── El esqueleto del .env ────────────────────────────────────────────────────
+#
+# Todas las que `compose.prod.yml` EXIGE (`${X:?…}`) salen de acá ya generadas,
+# menos el dominio, que es lo único que pone el arquitecto. Lo cruza un gate
+# (SalidaAProduccionTests): hasta 2026-10-15 faltaban SYNERGOS_ADMIN_PASSWORD y
+# SYNERGOS_IDENTITY_SIGNING_KEY, y el primer `compose pull` del servidor recién
+# pagado habría muerto con «required variable … is missing a value», con este
+# mismo script diciendo que sólo faltaban el dominio y el correo.
+#
+# La contraseña del backoffice lleva mayúscula, minúscula, dígito y símbolo al
+# final porque Umbraco los exige; el resto es azar. Hay que apuntarla: es la del
+# usuario de la instalación desatendida.
+#
+# Las firmas OPCIONALES (QR de entradas, contrato de alquiler, id de diploma) NO
+# se generan, y es a propósito: vacías, el host genera la llave y la guarda
+# cifrada en el volumen `cms-dpkeys`, que SÍ va en el respaldo. Puestas acá
+# vivirían sólo en este `.env`, que el respaldo no lleva (docs/despliegue §6.5).
+#
+# Se crea con umask 077: los secretos no son legibles por nadie más ni durante
+# el instante entre crearlo y el chmod.
+escribir_env() {
+  local destino="$1" umask_antes
+  if [ -f "$destino" ]; then
+    echo "   $destino ya existe — no se toca (tiene los secretos)"
+    return 0
+  fi
+  umask_antes="$(umask)"
+  umask 077
+  cat > "$destino" <<ENV
+# Rellenar y NO commitear. La plantilla comentada está en .env.example del repo.
+SYNERGOS_REGISTRY=ghcr.io/cherced-dev
+SYNERGOS_TAG=
+SYNERGOS_DOMAIN=
+SYNERGOS_API_KEY=$(openssl rand -hex 32)
+SYNERGOS_CART_SECRET=$(openssl rand -hex 32)
+SYNERGOS_ADMIN_PASSWORD=$(openssl rand -base64 24 | tr -d '\n')Aa1!
+SYNERGOS_IDENTITY_SIGNING_KEY=$(openssl rand -hex 32)
+SYNERGOS_CDN_MODE=Http
+SYNERGOS_CDN_URL=https://synergos-ui.synergos-labs.workers.dev
+Notifications__Resend__ApiKey=
+Notifications__Resend__From=
+Notifications__Resend__WebhookSecret=
+ENV
+  umask "$umask_antes"
+  chmod 600 "$destino"
+  echo "   $destino creado con llaves nuevas. FALTA: SYNERGOS_DOMAIN (y, para el correo, las tres de Resend)."
+}
+
+# ── Sólo el .env, sin ser root y sin instalar nada ───────────────────────────
+#
+#   bash bootstrap-servidor.sh --solo-env <fichero>
+#
+# Es lo que usa el ensayo del despliegue (.github/workflows/ensayo-despliegue.yml)
+# para tener EXACTAMENTE el `.env` que deja un servidor recién preparado. Va antes
+# de exigir root: este camino no toca apt, ni el firewall, ni sshd.
+if [ "${1:-}" = "--solo-env" ]; then
+  escribir_env "${2:?uso: bootstrap-servidor.sh --solo-env <fichero>}"
+  exit 0
+fi
+
 [ "$(id -u)" -eq 0 ] || { echo "✗ corré esto como root en el servidor recién creado."; exit 1; }
 
 echo "══ 1. Paquetes base"
@@ -83,28 +143,8 @@ fi
 echo "══ 4. El directorio"
 install -o "$USUARIO" -g "$USUARIO" -m 755 -d "$DIR"
 
-if [ -f "$DIR/.env" ]; then
-  echo "   .env ya existe — no se toca (tiene los secretos)"
-else
-  # Se deja el esqueleto con las llaves ya generadas: son las dos que se pueden
-  # inventar acá sin pedirle nada a nadie, y las dos tienen que ser largas.
-  cat > "$DIR/.env" <<ENV
-# Rellenar y NO commitear. La plantilla comentada está en .env.example del repo.
-SYNERGOS_REGISTRY=ghcr.io/cherced-dev
-SYNERGOS_TAG=
-SYNERGOS_DOMAIN=
-SYNERGOS_API_KEY=$(openssl rand -hex 32)
-SYNERGOS_CART_SECRET=$(openssl rand -hex 32)
-SYNERGOS_CDN_MODE=Http
-SYNERGOS_CDN_URL=https://synergos-ui.synergos-labs.workers.dev
-Notifications__Resend__ApiKey=
-Notifications__Resend__From=
-Notifications__Resend__WebhookSecret=
-ENV
-  chown "$USUARIO:$USUARIO" "$DIR/.env"
-  chmod 600 "$DIR/.env"
-  echo "   .env creado con llaves nuevas. FALTA: SYNERGOS_DOMAIN y las de Resend."
-fi
+escribir_env "$DIR/.env"
+chown "$USUARIO:$USUARIO" "$DIR/.env"
 
 echo "══ 5. El respaldo, programado"
 #
@@ -148,7 +188,8 @@ systemctl reload ssh 2>/dev/null || systemctl reload sshd
 
 echo
 echo "✓ El servidor está listo. Lo que falta, y no lo puede hacer este script:"
-echo "  1. Rellenar SYNERGOS_DOMAIN (y Resend) en $DIR/.env"
+echo "  1. Rellenar SYNERGOS_DOMAIN (y Resend) en $DIR/.env — y apuntar en tu gestor la"
+echo "     contraseña del backoffice: grep SYNERGOS_ADMIN_PASSWORD $DIR/.env"
 echo "  2. Los secretos en GitHub: DEPLOY_HOST=$(curl --silent --max-time 5 ifconfig.me || echo '<ip>')"
 echo "     DEPLOY_USER=$USUARIO, DEPLOY_SSH_KEY=<la privada>"
 echo "  3. La variable SYNERGOS_DOMAIN en GitHub (Variables, no Secrets)"
