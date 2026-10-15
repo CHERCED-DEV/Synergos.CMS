@@ -64,6 +64,23 @@ public sealed class StubEquipmentRentalServiceTests
         public override DateTimeOffset GetUtcNow() => new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
     }
 
+    /// <summary>
+    /// Sumar <c>Declared</c> no cambia el significado de los alquileres que el motor ya guardó.
+    /// </summary>
+    /// <remarks>
+    /// El motor guarda el estado como NÚMERO (sus opciones de JSON no llevan conversor de enum). Un estado
+    /// nuevo metido en medio correría los demás, y un alquiler guardado como devuelto se leería declarado:
+    /// con la garantía otra vez «retenida» y el botón de declarar ofrecido sobre algo ya cerrado.
+    /// </remarks>
+    [Fact]
+    public void Sumar_un_estado_no_cambia_el_numero_de_los_ya_guardados()
+    {
+        Assert.Equal(0, (int)RentalState.Reserved);
+        Assert.Equal(1, (int)RentalState.Returned);
+        Assert.Equal(2, (int)RentalState.Cancelled);
+        Assert.Equal(3, (int)RentalState.Declared);
+    }
+
     // Tarifa base 40 000; a 7 días 30 000; a 28 días 24 000. Los tres distintos a propósito.
     private static RentalEquipment Equipo(int units = 2, int minDays = 1, int maxDays = 30)
         => new(

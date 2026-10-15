@@ -38,6 +38,10 @@ public sealed record RentalQuote(
 /// (<c>a_state_with_no_writer_cannot_be_tested_through_the_seam</c>).
 /// <para><b>El disparador para añadirlo</b>: el día que exista una operación que registre que el
 /// equipo salió del almacén. Ahí «devolver» deja de ser legal desde <c>Reserved</c>.</para>
+/// <para><b><see cref="Declared"/> sí tiene camino de entrada</b>: lo escribe el inquilino al declarar
+/// la devolución (decisión 5 del lote 1, #203), y lo deja sin mover plata. Va AL FINAL y no entre los
+/// otros: el motor en proceso guarda el estado como número, y metiéndolo en medio un alquiler guardado
+/// como devuelto se leería declarado.</para>
 /// </remarks>
 public enum RentalState
 {
@@ -49,6 +53,12 @@ public enum RentalState
 
     /// <summary>No llegó a salir.</summary>
     Cancelled,
+
+    /// <summary>
+    /// El inquilino declaró que devolvió el equipo; la garantía sigue retenida hasta que el personal
+    /// confirme la devolución con el daño.
+    /// </summary>
+    Declared,
 }
 
 /// <summary>Un alquiler tal como este árbol lo conoce.</summary>

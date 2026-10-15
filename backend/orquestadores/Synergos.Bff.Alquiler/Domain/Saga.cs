@@ -63,6 +63,9 @@ public sealed record UnitHold(string HoldId, string ResourceId, string? Reservat
 /// costó verlo: cancelar también cancela las reservas, así que deducirlo de «¿tiene reservas?»
 /// habría contestado «devuelto» de todo alquiler cancelado — una fabricación que sale de datos
 /// reales y por eso no se ve rara (<c>a_fabrication_can_be_a_derivation</c>).
+/// Antes de cerrarse puede valer <c>declared</c>: el inquilino declaró la devolución y el personal
+/// todavía no la confirmó (decisión 5 del lote 1). Ahí <paramref name="Settled"/> sigue en falso y la
+/// garantía, retenida.
 /// </param>
 /// <param name="Compensations">Lo que queda por deshacer.</param>
 /// <param name="LastError">El último rechazo, para que alguien lo lea.</param>

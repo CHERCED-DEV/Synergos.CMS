@@ -198,6 +198,25 @@ public sealed class RentalCompensationTests : RentalLiquidacionBase
         Assert.Null(proyectada.DepositHeld);
     }
 
+    /// <summary>Una devolución declarada se proyecta <c>declared</c>, y la garantía sigue retenida.</summary>
+    /// <remarks>
+    /// Declarar no mueve plata (decisión 5 del lote 1): mientras el personal no confirme, lo que el CMS lee
+    /// tiene que seguir diciendo cuánto se retiene. Cero ahí diría «ya te liberamos la garantía» de algo que
+    /// nadie liberó.
+    /// </remarks>
+    [Fact]
+    public async Task Una_devolucion_declarada_se_proyecta_declarada_y_sigue_retenida()
+    {
+        var c = Imperativo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        var declarada = c.Sagas.Find("alq-1")! with { SettledAs = "declared" };
+
+        var proyectada = RentalResponse.From(declarada);
+        Assert.Equal("declared", proyectada.State);
+        Assert.Equal(400000m, proyectada.DepositHeld);
+    }
+
     /// <summary>Un total de cero se rechaza; no se acepta como «gratis».</summary>
     /// <remarks>
     /// <para>Cero es un precio VÁLIDO que no falla en ninguna parte hasta que alguien mira la factura
