@@ -164,6 +164,14 @@ fi
 PROCESADOS="$(printf '%s' "$RESUMEN" | sed -n 's/.*processed \([0-9]*\) items.*/\1/p')"
 echo "── $RESUMEN"
 
+# Los avisos, a la vista. uSync registra un ítem que NO pudo importar como `WRN`,
+# no como `ERR` (CMS#205): contar sólo `ERR` da por bueno un import con huecos.
+AVISOS="$(grep --count ' WRN\]' "$LOG" || true)"
+if [ "$AVISOS" != "0" ]; then
+  echo "── $AVISOS avisos (WRN) durante el import; los primeros:"
+  grep ' WRN\]' "$LOG" | head -n 15 | cut -c1-240 | sed 's/^/   /'
+fi
+
 if [ "$ERRORES" != "0" ]; then
   echo "✗ el import terminó con $ERRORES líneas [ERR] — parece verde y dejó huecos. Log: $LOG"
   exit 1

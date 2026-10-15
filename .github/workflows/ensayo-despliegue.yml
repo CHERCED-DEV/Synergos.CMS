@@ -224,6 +224,14 @@ jobs:
             docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s http://cms:8080/ | grep -o '<title>[^<]*' | head -1
           }
           echo "── portada, directa al CMS:"; portada
+          echo "── lo que hay en la base (documentos, publicados, caché de contenido, idiomas):"
+          docker run --rm -v synergos_cms-db:/d:ro alpine:3 sh -c \
+            'apk add --no-cache --quiet sqlite >/dev/null 2>&1; sqlite3 /d/Umbraco.sqlite.db \
+             "select '\''documentos'\'', count(*) from umbracoDocument;
+              select '\''publicados'\'', count(*) from umbracoDocument where published = 1;
+              select '\''contentNu'\'', count(*) from cmsContentNu;
+              select '\''idioma'\'', languageISOCode, isDefaultVariantLang from umbracoLanguage;
+              select '\''raiz'\'', n.text, d.published from umbracoNode n join umbracoDocument d on d.nodeId = n.id where n.level = 1;"' || true
           echo "── la caché en disco:"
           $C exec -T cms sh -c 'ls -la /app/umbraco/Data/TEMP/NuCache /app/umbraco/Data/TEMP/DistCache 2>&1 | head -20' || true
           echo "── el log del CMS sobre la caché:"
