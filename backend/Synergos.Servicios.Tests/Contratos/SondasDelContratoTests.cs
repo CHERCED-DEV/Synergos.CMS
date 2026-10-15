@@ -68,6 +68,9 @@ public sealed class SondasDelContratoTests
         ["GrantConsent"] = """{"subjectKind":"sonda.titular","subjectId":"t-1","purpose":"sonda"}""",
         ["RevokeConsent"] = """{"subjectKind":"sonda.titular","subjectId":"t-1","purpose":"sonda"}""",
         ["ForgetSubject"] = """{"subjectKind":"sonda.titular","subjectId":"t-1"}""",
+
+        // Abrir una canasta resuelve al dueño después de comprobar que lo nombra: con `{}`, `cart.bad_owner`.
+        ["OpenCart"] = """{"ownerKind":"sonda.dueno","ownerId":"d-1"}""",
     };
 
     /// <summary>Lo que se manda en la cabecera de identidad para ver si el endpoint la lee: no es un token.</summary>

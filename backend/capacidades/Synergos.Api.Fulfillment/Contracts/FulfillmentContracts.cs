@@ -6,14 +6,15 @@ namespace Synergos.Api.Fulfillment.Contracts;
 
 /// <summary>Una dirección tal como llega o sale.</summary>
 public sealed record AddressDto(
-    string? Line1, string? Line2, string? City, string? Region, string? PostalCode, string? Country, string? Contact);
+    string? Line1 = null, string? Line2 = null, string? City = null, string? Region = null, string? PostalCode = null,
+    string? Country = null, string? Contact = null);
 
 /// <summary>Registrar un envío.</summary>
 public sealed record CreateShipmentRequest(
-    string? ForKind, string? ForId, AddressDto? To, string? Carrier, string? TrackingCode);
+    string? ForKind = null, string? ForId = null, AddressDto? To = null, string? Carrier = null, string? TrackingCode = null);
 
 /// <summary>Reportar un evento de la transportadora.</summary>
-public sealed record TrackRequest(string? Status, string? Note);
+public sealed record TrackRequest(string? Status = null, string? Note = null);
 
 /// <summary>Un evento del rastro.</summary>
 public sealed record TrackingEventResponse(string Status, string? Note, DateTimeOffset AtUtc);

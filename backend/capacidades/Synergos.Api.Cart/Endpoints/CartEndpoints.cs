@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Api.Cart.Contracts;
 using Synergos.Api.Cart.Domain;
 using Synergos.Core;
@@ -6,6 +7,12 @@ using Synergos.Shared;
 namespace Synergos.Api.Cart.Endpoints;
 
 /// <summary>El ruteo de la canasta.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO, su nombre con <c>WithName</c> y lo que lee
+/// de la petición —la llave, el token de identidad— con su metadato (núcleo N2, el molde F2 de la ADR
+/// 0140): de ahí sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Api.Cart.json</c>).
+/// Las rutas, los estados y los cuerpos son los de antes.
+/// </remarks>
 public static class CartEndpoints
 {
     public static IEndpointRouteBuilder MapCartEndpoints(this IEndpointRouteBuilder app)
@@ -16,7 +23,7 @@ public static class CartEndpoints
         // llegan con el identificador de una canasta que ya sabe de quién es. Hasta acá, quien
         // tuviera la llave compartida abría canastas a nombre de cualquiera y nadie podía notarlo
         // después: es el defecto #42 sobre el dato que decide de quién es lo que se va a comprar.
-        app.MapPost("/v1/carts", (
+        app.MapPost("/v1/carts", Results<Created<CartResponse>, ProblemHttpResult> (
             OpenCartRequest req, HttpRequest http, CartService svc,
             IdentityTokenGate identidad, TimeProvider clock) =>
         {
@@ -30,13 +37,12 @@ public static class CartEndpoints
 
             var ttl = req.TtlHours is { } h ? TimeSpan.FromHours(h) : (TimeSpan?)null;
 
-            return svc.Open(owner, ttl, key, assertion.Value).Match(
-                c => Results.Created($"/v1/carts/{c.Id}", CartResponse.From(c, clock.GetUtcNow())),
-                bad => bad.ToProblem());
-        });
+            return svc.Open(owner, ttl, key, assertion.Value)
+                .Map(c => CartResponse.From(c, clock.GetUtcNow())).ToCreated(c => $"/v1/carts/{c.Id}");
+        }).WithName("OpenCart").ConLlaveDeIdempotencia().ConTokenDeIdentidad();
 
         app.MapGet("/v1/carts/{id}", (string id, CartService svc, TimeProvider clock) =>
-            svc.Get(id).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp());
+            svc.Get(id).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp()).WithName("GetCart");
 
         app.MapGet("/v1/carts", (string? ownerKind, string? ownerId, int? offset, int? limit, CartService svc, TimeProvider clock) =>
         {
@@ -45,7 +51,7 @@ public static class CartEndpoints
                 .Map(p => new PageResponse<CartResponse>(
                     p.Items.Select(c => CartResponse.From(c, ahora)).ToList(), p.Total, p.Offset, p.HasMore))
                 .ToHttp();
-        });
+        }).WithName("ListCarts");
 
         // LO QUE SIGUE NO NOMBRA A NADIE, y por eso no resuelve identidad.
         //
@@ -60,24 +66,27 @@ public static class CartEndpoints
         // reintento tras un timeout no duplique: con semántica de suma, el cliente termina con
         // seis unidades de algo que pidió dos veces. Por eso tampoco lleva Idempotency-Key:
         // la operación ya es idempotente por diseño.
-        app.MapPost("/v1/carts/{id}/lines", (string id, CartLineRequest req, CartService svc, TimeProvider clock) =>
+        app.MapPost("/v1/carts/{id}/lines", Results<Ok<CartResponse>, ProblemHttpResult> (string id, CartLineRequest req, CartService svc, TimeProvider clock) =>
         {
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
 
             return svc.SetLine(id, subject, req.Quantity ?? 0).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp();
-        });
+        }).WithName("SetCartLine");
 
-        app.MapPost("/v1/carts/{id}/lines/remove", (string id, CartLineRequest req, CartService svc, TimeProvider clock) =>
+        app.MapPost("/v1/carts/{id}/lines/remove", Results<Ok<CartResponse>, ProblemHttpResult> (string id, CartLineRequest req, CartService svc, TimeProvider clock) =>
         {
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
 
             return svc.RemoveLine(id, subject).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp();
-        });
+        }).WithName("RemoveCartLine");
 
+        // Cerrar la canasta no lee llave: cerrarla otra vez se rechaza (`cart.already_checked_out`), así
+        // que repetir no duplica nada. Bff.Tienda manda una igualmente; el contrato no la declara porque
+        // el endpoint no la mira.
         app.MapPost("/v1/carts/{id}/checkout", (string id, CartService svc, TimeProvider clock) =>
-            svc.CheckOut(id).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp());
+            svc.CheckOut(id).Map(c => CartResponse.From(c, clock.GetUtcNow())).ToHttp()).WithName("CheckOutCart");
 
         return app;
     }
@@ -118,6 +127,6 @@ public static class CartEndpoints
             CartRules.CodePrefix);
     }
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CartRules.CodePrefix}.{code}", message).ToProblem();
 }

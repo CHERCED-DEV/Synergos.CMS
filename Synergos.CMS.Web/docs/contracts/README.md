@@ -87,6 +87,9 @@ ensamblado, igual que su `info.title`.
 | [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Booking.json`](openapi/Synergos.Api.Booking.json) | La capacidad de agenda: recursos, apartados y reservas (núcleo N1). La ruta combinada `GET v1/resources` queda fuera del documento, declarada en `RutasFueraDelContratoTests`; la reemplaza `GET v1/resources/por-sujeto`. | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 | [`openapi/Synergos.Api.Consent.json`](openapi/Synergos.Api.Consent.json) | La capacidad de consentimiento: otorgar, consultar, revocar y el derecho al olvido (núcleo N2). Consultar es POST con un cuerpo propio (`CheckConsentRequest`) porque sujeto y propósito juntos son un dato personal. | CMS: los cuatro gates de abajo |
+| [`openapi/Synergos.Api.Cart.json`](openapi/Synergos.Api.Cart.json) | La capacidad de canastas (núcleo N2). Sólo abrir lee la llave y la identidad del dueño; cerrar no lee llave (cerrar dos veces se rechaza). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
+| [`openapi/Synergos.Api.Orders.json`](openapi/Synergos.Api.Orders.json) | La capacidad de pedidos (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
+| [`openapi/Synergos.Api.Fulfillment.json`](openapi/Synergos.Api.Fulfillment.json) | La capacidad de despachos y su rastro (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 
 Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 
