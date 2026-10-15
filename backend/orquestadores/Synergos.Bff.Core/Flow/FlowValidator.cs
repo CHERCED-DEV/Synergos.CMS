@@ -234,6 +234,23 @@ public static class FlowValidator
         foreach (var paso in flujo.Pasos.Values.Where(p => p.AlFallar is not null))
         {
             var aqui = $"«{paso.Id}» declara «al_fallar»";
+
+            // soltar (NV-2): sólo en el cierre por ítem de un bloque sobre las reservas que cierra. Ahí hay un ítem
+            // que soltar con su «antes»; en cualquier otro sitio no habría qué soltar ni a quién preguntar.
+            if (paso.SueltaSiFalla)
+            {
+                if (paso.CierraReserva is not { } cierra)
+                {
+                    errores.Add($"«{paso.Id}» declara «al_fallar: soltar» y no cierra ninguna reserva: no hay ítem que soltar.");
+                }
+                else if (!donde.TryGetValue(paso.Id, out var dondeSuelta)
+                         || !string.Equals(dondeSuelta.Bloque?.Fuente, Reservas + cierra, StringComparison.Ordinal))
+                {
+                    errores.Add($"«{paso.Id}» declara «al_fallar: soltar» fuera de un bloque sobre «{Reservas}{cierra}»: "
+                        + "sólo ahí hay un ítem de esa reserva que soltar y seguir con los demás.");
+                }
+                continue;
+            }
             if (paso.Reserva is not null)
             {
                 errores.Add($"{aqui} y reserva: seguir dejaría la saga a medias.");

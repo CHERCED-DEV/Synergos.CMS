@@ -129,6 +129,26 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
     TSaga ConCierre(TSaga saga, string reservante, HoldLeg cerrada, string? objetivo) => saga;
 
     /// <summary>
+    /// Si ESTA saga admite soltar un ítem cuyo cierre falló y seguir con los demás: la confirmación parcial
+    /// (núcleo N2, NV-2 de Viajes, 006-P2 forma A). Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// La política la guarda el dominio al abrir, desde la configuración del sitio; la definición sólo declara
+    /// <c>al_fallar: soltar</c> y no evalúa nada. Sin un sí, el paso aborta como siempre.
+    /// </remarks>
+    bool SueltaSiFalla(TSaga saga) => false;
+
+    /// <summary>
+    /// Lo que el dominio hace con un ítem que se soltó (NV-2): marcarlo no cumplido, sacarlo de su ranura para
+    /// que repetir la fase no lo reintente y, si hace falta, armar compensaciones NUEVAS para él (la devolución
+    /// de su parte). El intérprete ejecuta en el acto las nuevas; las que fallan quedan pendientes.
+    /// </summary>
+    /// <param name="saga">La saga, con la compensación de ese ítem ya intentada.</param>
+    /// <param name="reservante">El paso cuya reserva se soltó.</param>
+    /// <param name="soltada">La reserva del ítem.</param>
+    TSaga ConItemSoltado(TSaga saga, string reservante, HoldLeg soltada) => saga;
+
+    /// <summary>
     /// Los tipos de valor con que este binding lee y guarda (núcleo N1): sólo un binding genérico los
     /// tiene. Con ellos, el validador cruza además las reglas del modo genérico.
     /// </summary>

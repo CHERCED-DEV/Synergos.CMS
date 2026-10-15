@@ -122,13 +122,26 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         public FlowContext Ctx { get; }
         public TSaga? Saga { get; set; }
         public bool SinGuardar { get; set; }
+
+        /// <summary>
+        /// Las compensaciones de ítems soltados que no salieron (NV-2): completar no las marca hechas, porque
+        /// marcarlas perdería en silencio el cupo que no se pudo soltar.
+        /// </summary>
+        public HashSet<string> Vivas { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>Cómo terminó un paso o un bloque.</summary>
-    private readonly record struct Desenlace(PasoResultado Control, Rejection? Rechazo, string? Motivo)
+    private readonly record struct Desenlace(PasoResultado Control, Rejection? Rechazo, string? Motivo, bool Soltado = false)
     {
         public static Desenlace Sigue => new(PasoResultado.Continuar, null, null);
+
+        /// <summary>El paso falló y su ítem se soltó: el bloque sigue con el siguiente.</summary>
+        public static Desenlace SeSolto => new(PasoResultado.Continuar, null, null, Soltado: true);
     }
+
+    /// <summary>El código cuando un bloque con <c>al_fallar: soltar</c> soltó TODOS sus ítems.</summary>
+    /// <remarks>La fachada del dominio lo traduce al suyo (<c>viajes.nothing_fulfilled</c>).</remarks>
+    public const string NadaCumplido = "flow.nada_cumplido";
 
     /// <summary>
     /// Ejecuta una fase. La primera ABRE la saga <paramref name="sagaId"/>; las demás la continúan.
@@ -336,13 +349,29 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // recorrer la lista nueva cada vez haría depender el recorrido de lo que el propio bloque
         // va cambiando.
         var items = Items(bloque, corrida);
+        var soltados = 0;
         for (var indice = 0; indice < items.Count; indice++)
         {
             foreach (var id in bloque.Pasos)
             {
                 var desenlace = await PasoAsync(_flujo.Pasos[id], corrida, bloque.Como, items[indice], indice, ct);
+
+                // El ítem salió del bloque (NV-2): lo que le quedaba por hacer no corre.
+                if (desenlace.Soltado)
+                {
+                    soltados++;
+                    break;
+                }
                 if (desenlace.Rechazo is not null || desenlace.Control == PasoResultado.SaltarFase) return desenlace;
             }
+        }
+
+        // Soltarlos TODOS no es una confirmación parcial: es una que falló, y se deshace entera. Dejarla
+        // completada diría que se entregó algo.
+        if (items.Count > 0 && soltados == items.Count)
+        {
+            return new Desenlace(PasoResultado.Abortar,
+                Rejection.Conflict(NadaCumplido, "No se pudo cumplir ninguno de los ítems."), "no se pudo cumplir ningún ítem");
         }
 
         return Desenlace.Sigue;
@@ -408,6 +437,17 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                     _flujo.Clave, definicion.Id, corrida.SagaId, rechazo.Code);
                 return Desenlace.Sigue;
             }
+
+            // La confirmación parcial (NV-2): la definición declara que este cierre puede soltar su ítem, y el
+            // dominio dice si ESTA saga lo admite. La definición no evalúa nada.
+            if (definicion.SueltaSiFalla && item is not null && corrida.Saga is { } enCurso && _binding.SueltaSiFalla(enCurso))
+            {
+                _log.LogWarning("El flujo {Flujo} suelta un ítem de «{Paso}» en la saga {Saga}: {Codigo}.",
+                    _flujo.Clave, definicion.Id, corrida.SagaId, rechazo.Code);
+                await SoltarAsync(corrida, definicion, item, ct);
+                return Desenlace.SeSolto;
+            }
+
             return new Desenlace(PasoResultado.Abortar, rechazo, definicion.Motivo ?? $"falló el paso «{definicion.Id}»");
         }
 
@@ -428,6 +468,45 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
 
         return new Desenlace(salida.Control, null, null);
+    }
+
+    /// <summary>
+    /// Suelta el ítem de un cierre que falló (NV-2): deshace en el acto ESA reserva con su <c>antes</c>, le
+    /// avisa al enlace, y ejecuta lo nuevo que el enlace arme. Lo que no sale queda pendiente y vivo.
+    /// </summary>
+    /// <remarks>
+    /// <b>Se suelta AQUÍ y no al completar</b>: completar marca hecho lo armado, y dejarlo para entonces
+    /// convertiría el apartado de este ítem en cupo retenido que ya no suelta nadie. Si soltar falla, su
+    /// compensación queda pendiente (<see cref="Corrida.Vivas"/>) en vez de darse por hecha.
+    /// </remarks>
+    private async Task SoltarAsync(Corrida corrida, PasoDef definicion, FlowContext item, CancellationToken ct)
+    {
+        var reservante = definicion.CierraReserva!;
+        var reserva = _flujo.Pasos[reservante].Reserva!;
+        var soltada = new HoldLeg(item.Get<string>(HoldLeg.CampoHold), item.Get<string>(HoldLeg.CampoCierre));
+        var saga = corrida.Saga!;
+
+        if (saga.Compensations.FirstOrDefault(c => c.Kind == reserva.Antes && c.IsPending && c.TargetId == soltada.HoldId) is { } suya)
+        {
+            saga = await IntentarAsync(corrida, saga, suya, ct);
+        }
+
+        var yaEstaban = saga.Compensations.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        saga = _binding.ConItemSoltado(saga, reservante, soltada);
+        foreach (var nueva in saga.Compensations.Where(c => !yaEstaban.Contains(c.Id) && c.IsPending).ToList())
+        {
+            saga = await IntentarAsync(corrida, saga, nueva, ct);
+        }
+
+        Guardar(corrida, saga);
+    }
+
+    /// <summary>Intenta una compensación ahora; si no sale, queda pendiente y viva.</summary>
+    private async Task<TSaga> IntentarAsync(Corrida corrida, TSaga saga, Compensation pendiente, CancellationToken ct)
+    {
+        var intentada = await _motor.DeshacerUnaAsync(saga, pendiente, ct);
+        if (intentada.IsPending) corrida.Vivas.Add(intentada.Id);
+        return saga.WithCompensations(saga.Compensations.Select(c => c.Id == pendiente.Id ? intentada : c).ToList());
     }
 
     /// <summary>Guarda lo reservado en la saga y su compensación ARMADA, en la misma escritura.</summary>
@@ -516,14 +595,16 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // Salió: ya no hay nada que deshacer. Lo armado se marca hecho para que el barrido no lo
         // intente — armada no es pendiente, pero una saga completada tampoco tiene nada armado.
         //
-        // Todo lo armado, sin excepciones, y eso deja fuera a propósito la confirmación PARCIAL de
-        // Viajes (#40): allí el apartado de un ítem no cumplido que no se pudo soltar sigue
-        // pendiente al completar, para que el barrido lo reintente. Expresarlo exige que el dominio
-        // marque qué compensaciones siguen vivas; queda diferido hasta portar ese flujo.
+        // Con UNA excepción (#40, NV-2): la compensación de un ítem soltado que no salió sigue siendo trabajo
+        // de verdad. Marcarla hecha porque «la saga salió» perdería ese cupo en silencio. Es lo mismo que hace
+        // TripFlow, con su misma limitación: hoy el barrido sólo recoge sagas que se están deshaciendo
+        // (IsUnwinding), así que nadie reintenta una viva sobre una saga completada.
         var ahora = _reloj.GetUtcNow();
         Guardar(corrida, _binding.ConError(saga
             .WithStatus(SagaStatus.Completed)
-            .WithCompensations(saga.Compensations.Select(c => c.IsPending ? c with { DoneAtUtc = ahora } : c).ToList()),
+            .WithCompensations(saga.Compensations
+                .Select(c => c.IsPending && !corrida.Vivas.Contains(c.Id) ? c with { DoneAtUtc = ahora } : c)
+                .ToList()),
             null));
         return Result.Ok(corrida.Saga!);
     }
