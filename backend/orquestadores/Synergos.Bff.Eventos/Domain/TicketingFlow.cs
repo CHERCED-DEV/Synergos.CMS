@@ -49,10 +49,12 @@ public sealed record CotizacionDeCompra(
 /// entrada no se envía. El artefacto —el e-ticket con su QR— lo emite el CMS después de que esto
 /// conteste que sí, porque el firmante vive allá y un QR no es cupo ni es plata.</para>
 ///
-/// <para><b>Lo que se queda acá, y por qué:</b> la llave (<c>Abrir</c>, del motor, antes de tocar
-/// nada) y las guardas de confirmar, que contestan con los códigos de ESTE dominio
-/// (<c>eventos.purchase_not_found</c>, <c>eventos.not_confirmable</c>). El intérprete no los
-/// conoce, y no tiene por qué.</para>
+/// <para><b>Lo que se queda acá, y por qué:</b> los códigos y las palabras de ESTE dominio
+/// (<c>eventos.purchase_not_found</c>, <c>eventos.not_confirmable</c>, «cancelada por el
+/// comprador»), la forma de la cotización y la firma que llaman los endpoints y los tests. La llave
+/// (abrir con su dueño antes de tocar nada) y las guardas de confirmar, que estaban escritas acá y
+/// copiadas en cada orquestador, son de <see cref="FachadaDeFlujo{TSaga}"/> desde el núcleo N1: la
+/// misma regla para todos, con los códigos de cada uno.</para>
 /// </remarks>
 public sealed class TicketingFlow
 {
@@ -82,22 +84,27 @@ public sealed class TicketingFlow
     /// </remarks>
     public static IReadOnlyList<string> Fases { get; } = new[] { Abrir, Cerrar };
 
-    private readonly SagaEngine<TicketingSaga> _sagas;
-    private readonly FlowRunner<TicketingSaga> _flujo;
+    /// <summary>Lo que la compra contesta con sus códigos: la que no existe, la que no se puede confirmar y por qué se cancela.</summary>
+    private static readonly ReglasDeLaFachada Reglas = new(
+        NoExiste,
+        estado => Rejection.Conflict("eventos.not_confirmable", $"La compra está {estado}."),
+        "cancelada por el comprador");
+
+    private readonly FachadaDeFlujo<TicketingSaga> _fachada;
 
     /// <remarks>
-    /// <b>La firma es la de siempre y arma el intérprete por dentro</b>: los tests de la compra la
-    /// construyen a mano, sin contenedor, y tienen que seguir pasando sin tocarlos. Si la definición
-    /// no valida contra estos pasos, este binding y estas fases, construirla lanza — igual que el
-    /// arranque con <c>ValidateOnStart</c>, que valida lo mismo.
+    /// <b>La firma es la de siempre y arma el intérprete y la fachada por dentro</b>: los tests de la
+    /// compra la construyen a mano, sin contenedor, y tienen que seguir pasando sin tocarlos. Si la
+    /// definición no valida contra estos pasos, este binding y estas fases, construirla lanza — igual
+    /// que el arranque con <c>ValidateOnStart</c>, que valida lo mismo.
     /// </remarks>
     public TicketingFlow(
         EventosCapabilities caps, SagaEngine<TicketingSaga> sagas,
         TimeProvider clock, ILogger<TicketingFlow> log)
     {
-        _sagas = sagas;
-        _flujo = new FlowRunner<TicketingSaga>(
+        var flujo = new FlowRunner<TicketingSaga>(
             sagas, EventosPasos.Registro(caps), EventosFlujos.Compra, new EventosFlowBinding(), Fases, clock, log);
+        _fachada = new FachadaDeFlujo<TicketingSaga>(sagas, flujo, EventosFlujos.Compra, Reglas);
     }
 
     /// <summary>Aparta el aforo y autoriza el cobro, sin comisión de servicio.</summary>
@@ -120,32 +127,21 @@ public sealed class TicketingFlow
     /// descuento lo calcula Pricing al cotizar, y lo que se autoriza es el total que resulta; la
     /// comisión sigue siendo sobre el subtotal de las entradas, antes del descuento (la regla de la
     /// ADR 0137 no cambia: es la que el carrito muestra).</param>
-    public async Task<Result<TicketingSaga>> BuyAsync(
+    /// <remarks>
+    /// La saga existe ANTES de tocar nada, y una llave que ya usó OTRO no le devuelve su compra
+    /// (#41, ADR 0140 F3): lo hace <see cref="FachadaDeFlujo{TSaga}.AbrirAsync"/>.
+    /// </remarks>
+    public Task<Result<TicketingSaga>> BuyAsync(
         string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
         string? promocion, string sagaId, CancellationToken ct)
-    {
-        // La saga existe ANTES de tocar nada. Si el proceso se cae después del primer paso, lo
-        // que se hizo queda escrito con su identificador — y como las llaves derivan de él,
-        // repetir la llamada con el mismo sagaId no duplica nada.
-        //
-        // Pero encontrar la llave NO siempre significa «esto ya pasó»: si la compra anterior se
-        // deshizo entera, no queda nada que duplicar y el comprador tiene derecho a reintentar.
-        // Quién decide eso vive en el motor, no acá — estas líneas estaban copiadas en los dos
-        // orquestadores y el defecto #41 también (encerraba al comprador para siempre).
-        // Con el comprador: una llave que ya usó OTRO no le devuelve su compra (ADR 0140 F3).
-        var slot = _sagas.Abrir(sagaId, buyer);
-        if (slot.Reusar is not null) return Result.Ok(slot.Reusar);
-
-        return await _flujo.EjecutarFaseAsync(
-            Abrir, slot.Id, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct);
-    }
+        => _fachada.AbrirAsync(sagaId, buyer, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct);
 
     /// <summary>
     /// Si abrir con esta llave devolvería una compra de <paramref name="buyer"/> que ya existe, sin
     /// cotizar otra vez: la misma regla que <see cref="BuyAsync(string, Ref, IReadOnlyList{TicketLine}, decimal, string?, string, CancellationToken)"/>,
     /// sin escribir nada.
     /// </summary>
-    public bool DevolveriaLaMisma(string sagaId, Ref buyer) => _sagas.Abrir(sagaId, buyer).Reusar is not null;
+    public bool DevolveriaLaMisma(string sagaId, Ref buyer) => _fachada.DevolveriaLaMisma(sagaId, buyer);
 
     /// <summary>Captura el cobro y consume el aforo, sin avisar a nadie.</summary>
     public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, CancellationToken ct)
@@ -162,47 +158,29 @@ public sealed class TicketingFlow
     /// <param name="contacto">Adónde avisar, que pone la puerta: entra como efímero de «cerrar» y
     /// no se guarda. Nulo si nadie pidió el aviso, y entonces el paso no avisa.</param>
     /// <param name="ct">Cancelación.</param>
-    public async Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Ref? dueno, Contacto? contacto, CancellationToken ct)
-    {
-        var saga = dueno is null ? _sagas.Find(sagaId) : _sagas.FindDe(sagaId, dueno);
-        if (saga is null)
-        {
-            return Rejection.NotFound("eventos.purchase_not_found", $"No existe la compra {sagaId}.");
-        }
-        if (saga.Status == SagaStatus.Completed) return Result.Ok(saga);   // idempotente
-        if (saga.Status != SagaStatus.Running)
-        {
-            return Rejection.Conflict("eventos.not_confirmable", $"La compra está {saga.Status}.");
-        }
-
-        // NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
-        // donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
-        // allá de sus sagas, y entonces sería una capacidad mal cortada.
-        var cerrada = await _flujo.EjecutarFaseAsync(Cerrar, sagaId, EventosFlowBinding.EntradaDeCerrar(contacto), ct);
-
-        // Otro «cerrar» de la misma compra terminó entre la guarda de arriba y el turno de éste: es
-        // el doble clic, y contesta lo mismo que si hubiera llegado después.
-        if (cerrada.Rejection?.Code == FlowRunner<TicketingSaga>.NoEnCurso
-            && _sagas.Find(sagaId) is { Status: SagaStatus.Completed } hecha)
-        {
-            return Result.Ok(hecha);
-        }
-        return cerrada;
-    }
+    /// <remarks>
+    /// <para>Las guardas (la de otro o la que no existe, la ya completada que vuelve tal cual, la que
+    /// no está en curso y el doble clic) son las de <see cref="FachadaDeFlujo{TSaga}.ContinuarAsync"/>,
+    /// con los códigos de <see cref="Reglas"/>.</para>
+    ///
+    /// <para>NO se emite el e-ticket al terminar, y no es un olvido: el QR lo firma el CMS, que es
+    /// donde vive el firmante. Un orquestador que emitiera artefactos tendría estado propio más
+    /// allá de sus sagas, y entonces sería una capacidad mal cortada.</para>
+    /// </remarks>
+    public Task<Result<TicketingSaga>> ConfirmAsync(string sagaId, Ref? dueno, Contacto? contacto, CancellationToken ct)
+        => _fachada.ContinuarAsync(Cerrar, sagaId, dueno, EventosFlowBinding.EntradaDeCerrar(contacto), ct);
 
     /// <summary>Cancela una compra todavía sin confirmar.</summary>
     public Task<Result<TicketingSaga>> CancelAsync(string sagaId, CancellationToken ct)
-        => _sagas.CompensateAsync(sagaId, "cancelada por el comprador", ct);
+        => _fachada.CancelarAsync(sagaId, null, ct);
 
     /// <summary>Cancela una compra de <paramref name="dueno"/> todavía sin confirmar.</summary>
     public Task<Result<TicketingSaga>> CancelAsync(string sagaId, Ref dueno, CancellationToken ct)
-        => _sagas.FindDe(sagaId, dueno) is null
-            ? Task.FromResult<Result<TicketingSaga>>(NoExiste(sagaId))
-            : CancelAsync(sagaId, ct);
+        => _fachada.CancelarAsync(sagaId, dueno, ct);
 
     /// <summary>Vuelve a intentar lo que se había rendido.</summary>
     public Task<Result<TicketingSaga>> RetryStuckAsync(string sagaId, CancellationToken ct)
-        => _sagas.RetryStuckAsync(sagaId, ct);
+        => _fachada.ReintentarAsync(sagaId, ct);
 
     /// <summary>
     /// Lo que costaría la compra —con su descuento y su comisión— sin apartar ni autorizar nada: la
@@ -217,8 +195,8 @@ public sealed class TicketingFlow
     public async Task<Result<CotizacionDeCompra>> CotizarAsync(
         string eventId, Ref buyer, IReadOnlyList<TicketLine> lineas, decimal comisionPorcentaje,
         string? promocion, CancellationToken ct)
-        => (await _flujo.AnticiparAsync(
-                Abrir, EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct))
+        => (await _fachada.AnticiparAsync(
+                EventosFlowBinding.Entrada(eventId, buyer, lineas, comisionPorcentaje, promocion), ct))
             .Map(ctx =>
             {
                 var cotizacion = ctx.Get<QuoteView>(EventosFlowBinding.Cotizacion);
@@ -228,17 +206,15 @@ public sealed class TicketingFlow
                     ctx.Get<string?>(EventosFlowBinding.Promocion));
             });
 
-    public Result<TicketingSaga> Get(string id)
-        => _sagas.Find(id) is { } s ? Result.Ok(s) : NoExiste(id);
+    public Result<TicketingSaga> Get(string id) => _fachada.Consultar(id, null);
 
     /// <summary>La compra si es de <paramref name="dueno"/>; una de otro no existe para él.</summary>
-    public Result<TicketingSaga> Get(string id, Ref dueno)
-        => _sagas.FindDe(id, dueno) is { } s ? Result.Ok(s) : NoExiste(id);
+    public Result<TicketingSaga> Get(string id, Ref dueno) => _fachada.Consultar(id, dueno);
 
     private static Rejection NoExiste(string id)
         => Rejection.NotFound("eventos.purchase_not_found", $"No existe la compra {id}.");
 
-    public IReadOnlyList<TicketingSaga> PendingCompensations() => _sagas.PendingCompensations();
+    public IReadOnlyList<TicketingSaga> PendingCompensations() => _fachada.Pendientes();
 
     /// <summary>Lo que una compra de entradas tiene que cumplir.</summary>
     /// <remarks>Lo ejecuta el paso <c>eventos.revisar-lineas</c>, antes de que exista la saga.</remarks>

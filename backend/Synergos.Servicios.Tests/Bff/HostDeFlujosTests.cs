@@ -232,6 +232,28 @@ public sealed class HostDeFlujosTests
     }
 
     [Fact]
+    public async Task Una_llave_cuya_saga_se_deshizo_abre_otra_y_una_viva_devuelve_esa()
+    {
+        // #41 y #166 por la fachada común: con la saga deshecha, la misma llave deja reintentar. El espejo
+        // va porque «no devuelve la deshecha» lo pasaría también quien perdió la idempotencia entera.
+        using var banco = new Banco();
+        var fachada = banco.Fachada();
+        banco.Puertos.RechazaAutorizar = true;
+        Assert.False((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        Assert.False(fachada.DevolveriaLaMisma("cita-1", Paciente));
+
+        banco.Puertos.RechazaAutorizar = false;
+        var reintento = await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+
+        Assert.True(reintento.IsOk, reintento.Rejection?.ToString());
+        Assert.True(reintento.Value.Status == SagaStatus.Running,
+            $"{reintento.Value.Id} {reintento.Value.Status} {reintento.Value.LastError} | {string.Join(" · ", banco.Puertos.Llamadas)}");
+        Assert.True(fachada.DevolveriaLaMisma("cita-1", Paciente));
+        var otraVez = await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+        Assert.Equal(reintento.Value.Id, otraVez.Value.Id);
+    }
+
+    [Fact]
     public async Task Gratis_no_cobra_y_la_saga_completa_igual()
     {
         using var banco = new Banco();

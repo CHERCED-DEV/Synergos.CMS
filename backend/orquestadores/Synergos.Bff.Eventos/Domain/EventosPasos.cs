@@ -44,7 +44,7 @@ public static class EventosPasos
 /// <summary>Los flujos que este orquestador declara, leídos de sus recursos.</summary>
 public static class EventosFlujos
 {
-    private static readonly Lazy<FlujoDef> _compra = new(() => Leer("flujos/eventos.compra.json"));
+    private static readonly Lazy<FlujoDef> _compra = new(() => FlujosDeclarados.Incrustado(typeof(EventosFlujos).Assembly, "flujos/eventos.compra.json"));
 
     /// <summary>
     /// <c>eventos.compra</c>: apartar y autorizar al abrir; capturar y consumir al cerrar.
@@ -54,14 +54,6 @@ public static class EventosFlujos
     /// binario de una versión y la definición de otra.
     /// </remarks>
     public static FlujoDef Compra => _compra.Value;
-
-    private static FlujoDef Leer(string recurso)
-    {
-        using var flujo = typeof(EventosFlujos).Assembly.GetManifestResourceStream(recurso)
-            ?? throw new InvalidOperationException($"Falta el recurso «{recurso}» en {typeof(EventosFlujos).Assembly.GetName().Name}.");
-        using var lector = new StreamReader(flujo);
-        return FlujoDef.Leer(lector.ReadToEnd());
-    }
 }
 
 /// <summary><c>eventos.revisar-lineas</c>: lo que una compra de entradas tiene que cumplir. Sin HTTP.</summary>
