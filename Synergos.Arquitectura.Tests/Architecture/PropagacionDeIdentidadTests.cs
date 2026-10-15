@@ -256,8 +256,14 @@ public sealed class PropagacionDeIdentidadTests
 
         // Que el gate haya MIRADO algo. Sin esto, un cambio en cómo se declara una saga lo
         // dejaría contando cero ficheros y pasando en verde para siempre.
-        Assert.True(vistas == 5,
-            $"Se esperaban 5 records de saga (Tienda, Salud, Eventos, Viajes, Alquiler) y se vieron {vistas}. "
+        //
+        // La sexta es la genérica de Bff.Core (`SagaDeFlujo`, núcleo N1). Sus parámetros están limpios,
+        // pero lo que guarda va en `Datos` POR NOMBRE, y los nombres los pone cada definición: ahí el
+        // «campo nuevo del record» es una palabra en un JSON que este barrido no lee. Por eso la misma
+        // lista de olores vive en `FlowValidator.HuelenACredencial` y un flujo genérico que guarde algo
+        // que se llame así no arranca (`HostDeFlujosTests.Lo_que_se_guarda_no_se_llama_como_una_credencial`).
+        Assert.True(vistas == 6,
+            $"Se esperaban 6 records de saga (Tienda, Salud, Eventos, Viajes, Alquiler y la genérica de Bff.Core) y se vieron {vistas}. "
             + "Si nació un orquestador, súmalo; si cambió cómo se declara una saga, este gate dejó "
             + "de mirar y hay que arreglarlo — contar cero y pasar en verde es el peor resultado.");
 
