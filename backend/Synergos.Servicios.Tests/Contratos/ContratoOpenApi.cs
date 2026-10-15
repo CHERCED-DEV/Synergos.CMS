@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
 using Synergos.CMS.Tests.Architecture;
 using Synergos.Core;
 using Synergos.Shared;
@@ -136,18 +137,133 @@ internal static class ContratoOpenApi
             return id;
         };
 
+        var flujos = new EsquemasDeFlujos();
+
         o.AddSchemaTransformer(Numeros);
         o.AddOperationTransformer(Llave);
         o.AddOperationTransformer(Identidad);
         o.AddOperationTransformer(Puerta);
         o.AddOperationTransformer(Flujo);
         o.AddOperationTransformer(Rechazos);
+        o.AddOperationTransformer(flujos.Operacion);
         o.AddDocumentTransformer((doc, ctx, ct) =>
         {
+            flujos.Documento(doc);
             Normalizar(doc, titulo);
             return Task.CompletedTask;
         });
     };
+
+    /// <summary>
+    /// El cuerpo y la salida tipados de un flujo genérico (núcleo N1), desde el metadato
+    /// <see cref="ContratoDeLaOperacion"/> del endpoint por convención.
+    /// </summary>
+    /// <remarks>
+    /// <para>El tipo de retorno de un endpoint genérico no puede decir la forma de un flujo concreto
+    /// (<c>RespuestaDeFlujo.Datos</c> es un diccionario): la dice su definición. El host la cuelga como
+    /// metadato y aquí se publica como esquemas propios del flujo (<c>{Flujo}Entrada</c>,
+    /// <c>{Flujo}Respuesta</c>, <c>{Flujo}Cotizacion</c>), que el generador del UI traduce como cualquier
+    /// otro. Los genéricos que reemplazan dejan de publicarse.</para>
+    /// </remarks>
+    private sealed class EsquemasDeFlujos
+    {
+        public Dictionary<string, OpenApiSchema> Propios { get; } = new(StringComparer.Ordinal);
+
+        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "JsonElement"];
+
+        public Task Operacion(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
+        {
+            if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<ContratoDeLaOperacion>().FirstOrDefault() is not { } contrato)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (contrato.Cuerpo is { } cuerpo)
+            {
+                var nombre = contrato.Nombre + "Entrada";
+                Propios[nombre] = Esquema(cuerpo);
+                op.RequestBody = new OpenApiRequestBody
+                {
+                    Required = true,
+                    Content = new Dictionary<string, OpenApiMediaType>(StringComparer.Ordinal)
+                    {
+                        ["application/json"] = new OpenApiMediaType { Schema = new OpenApiSchemaReference(nombre, ctx.Document) },
+                    },
+                };
+            }
+
+            foreach (var (_, respuesta) in (op.Responses ?? new OpenApiResponses()).Where(r => r.Key.StartsWith('2')))
+            {
+                if (respuesta.Content is null || !respuesta.Content.TryGetValue("application/json", out var json)) continue;
+
+                var cotiza = op.OperationId?.EndsWith("Cotizar", StringComparison.Ordinal) == true;
+                var nombre = contrato.Nombre + (cotiza ? "Cotizacion" : "Respuesta");
+                Propios[nombre] = cotiza ? Cotizacion(contrato.Datos) : Respuesta(contrato.Datos);
+                json.Schema = new OpenApiSchemaReference(nombre, ctx.Document);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Pone los esquemas propios y quita los genéricos que reemplazaron.</summary>
+        public void Documento(OpenApiDocument doc)
+        {
+            if (Propios.Count == 0) return;
+            doc.Components ??= new OpenApiComponents();
+            doc.Components.Schemas ??= new Dictionary<string, IOpenApiSchema>(StringComparer.Ordinal);
+            foreach (var r in Reemplazados) doc.Components.Schemas.Remove(r);
+            foreach (var (nombre, esquema) in Propios) doc.Components.Schemas[nombre] = esquema;
+        }
+
+        private static OpenApiSchema Respuesta(JsonObject datos) => Objeto(new()
+        {
+            ["id"] = Texto(), ["flujo"] = Texto(), ["numero"] = Texto(), ["estado"] = Texto(),
+            ["datos"] = Esquema(datos),
+            ["compensacionesPendientes"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["error"] = new OpenApiSchema { Type = JsonSchemaType.String | JsonSchemaType.Null },
+            ["deshaciendo"] = new OpenApiSchema { Type = JsonSchemaType.Boolean },
+        });
+
+        private static OpenApiSchema Cotizacion(JsonObject datos) => Objeto(new() { ["flujo"] = Texto(), ["datos"] = Esquema(datos) });
+
+        private static OpenApiSchema Texto() => new() { Type = JsonSchemaType.String };
+
+        private static OpenApiSchema Objeto(Dictionary<string, IOpenApiSchema> props) => new()
+        {
+            Type = JsonSchemaType.Object,
+            Required = new HashSet<string>(props.Keys, StringComparer.Ordinal),
+            Properties = props,
+        };
+
+        /// <summary>Un esquema JSON de los que emite el host (type, format, properties, required, items, oneOf) a su modelo.</summary>
+        internal static OpenApiSchema Esquema(JsonObject s)
+        {
+            var r = new OpenApiSchema();
+            if (s["type"] is JsonValue un) r.Type = Tipo((string)un!);
+            else if (s["type"] is JsonArray varios) r.Type = varios.Select(t => Tipo((string)t!)).Aggregate((a, b) => a | b);
+            if (s["format"] is JsonValue f) r.Format = (string)f!;
+            if (s["properties"] is JsonObject props)
+            {
+                r.Properties = props.ToDictionary(p => p.Key, p => (IOpenApiSchema)Esquema(p.Value!.AsObject()), StringComparer.Ordinal);
+            }
+            if (s["required"] is JsonArray req) r.Required = new HashSet<string>(req.Select(x => (string)x!), StringComparer.Ordinal);
+            if (s["items"] is JsonObject items) r.Items = Esquema(items);
+            if (s["oneOf"] is JsonArray uno) r.OneOf = uno.Select(x => (IOpenApiSchema)Esquema(x!.AsObject())).ToList();
+            return r;
+        }
+
+        private static JsonSchemaType Tipo(string t) => t switch
+        {
+            "string" => JsonSchemaType.String,
+            "integer" => JsonSchemaType.Integer,
+            "number" => JsonSchemaType.Number,
+            "boolean" => JsonSchemaType.Boolean,
+            "object" => JsonSchemaType.Object,
+            "array" => JsonSchemaType.Array,
+            "null" => JsonSchemaType.Null,
+            _ => throw new InvalidOperationException($"El host emitió un tipo de esquema que no se traduce: «{t}»."),
+        };
+    }
 
     /// <summary>Serializa el documento como lo escribe el fichero comiteado.</summary>
     public static async Task<string> Serializar(OpenApiDocument doc)
