@@ -187,7 +187,23 @@ while kill -0 "$IMPORT" 2>/dev/null; do
   sleep 2
 done
 grep --extended-regexp "uSync Import:|uSync: Startup Complete| ERR\]" "$LOG" | sed 's/^/   /' || true
-$COMPOSE rm --stop --force cms >/dev/null 2>&1 || true
+
+# ⚠️ El contenedor del import se PARA y se QUITA acá, y no es limpieza: cortar la
+# lectura del log no para el `compose run`, y `compose rm cms` no toca los
+# contenedores one-off. Medido en el ensayo del despliegue (002-produccion,
+# 2026-10-15): el import seguía vivo —un segundo Umbraco sobre la misma base, lo
+# que la cabecera de este script dice que hay que evitar— hasta que el CMS que
+# arranca después le ganaba MainDom; y su contenedor muerto quedaba en el
+# proyecto, donde `restaurar.sh` lo contaba como «hay stack que arrancar».
+kill -INT "$IMPORT" 2>/dev/null || true
+for _ in $(seq 1 30); do kill -0 "$IMPORT" 2>/dev/null || break; sleep 2; done
+kill -KILL "$IMPORT" 2>/dev/null || true
+wait "$IMPORT" 2>/dev/null || true
+PROYECTO_IMPORT="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
+docker ps --all --quiet \
+  --filter "label=com.docker.compose.project=${PROYECTO_IMPORT:-synergos}" \
+  --filter "label=com.docker.compose.service=cms" \
+  --filter "label=com.docker.compose.oneoff=True" | xargs -r docker rm --force >/dev/null 2>&1 || true
 set -e
 
 # ── El veredicto ─────────────────────────────────────────────────────────────

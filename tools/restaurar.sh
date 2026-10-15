@@ -129,7 +129,14 @@ done
 # un fallo donde había una restauración buena. Medido en el ensayo del despliegue
 # (002-produccion, 2026-10-15). Sin contenedores se dice cómo levantarlo, y lo
 # levanta `deploy-remoto.sh`, que es quien sabe qué versión poner.
-if [ -n "$($COMPOSE ps --all --quiet 2>/dev/null || true)" ]; then
+#
+# Se cuentan sólo los contenedores de SERVICIO: uno one-off (un `compose run` que
+# quedó, como el que dejaba el import) no es un stack que arrancar, y contarlo
+# hacía fallar el `start` igual.
+CONTENEDORES="$(docker ps --all --quiet \
+  --filter "label=com.docker.compose.project=$PROYECTO" \
+  --filter "label=com.docker.compose.oneoff=False" 2>/dev/null || true)"
+if [ -n "$CONTENEDORES" ]; then
   echo "  arrancando…"
   $COMPOSE start >/dev/null
 else

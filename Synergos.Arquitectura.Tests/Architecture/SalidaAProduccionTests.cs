@@ -155,6 +155,13 @@ public sealed class SalidaAProduccionTests
         var respaldo = Leer("tools", "respaldo.sh");
         Assert.DoesNotMatch(@"sha=\$\(grep[^\n]*SYNERGOS_TAG", respaldo);
         Assert.Contains("sha=${VERSION", respaldo, StringComparison.Ordinal);
+
+        // Y restaurar en un servidor PERDIDO —sin contenedores— no puede acabar en rojo con los datos
+        // ya devueltos: `compose start` sin contenedores sale 1 (medido en el ensayo).
+        Assert.Contains("com.docker.compose.oneoff=False", Leer("tools", "restaurar.sh"), StringComparison.Ordinal);
+
+        // Y el import no deja vivo su contenedor efímero: un segundo Umbraco sobre la misma base.
+        Assert.Contains("com.docker.compose.oneoff=True", Leer("tools", "importar-schema.sh"), StringComparison.Ordinal);
     }
 
     // ── El abandono que declara un orquestador llega a producción (NP-1) ────
