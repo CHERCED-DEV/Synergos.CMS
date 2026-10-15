@@ -499,10 +499,20 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 ### 5.bis.1 El schema de uSync
 
 ```bash
-tools/importar-schema.sh          # en el servidor, con el stack levantado
+./importar-schema.sh --con-contenido   # en /opt/synergos, UNA vez, en un servidor NUEVO
+./importar-schema.sh                   # después: sólo schema (traer tipos nuevos sin tocar contenido)
 ```
 
-Para el CMS, importa en un contenedor efímero y lo vuelve a levantar. Es **idempotente** —uSync
+> ⚠️ **Lo que esta sección decía y ya no vale (medido el 2026-10-15 en el ensayo, §8).** El import
+> procesaba **1240 ítems** —todo uSync menos `Content` (96) y `Media` (192)— y dejaba la base con
+> **0 documentos**: la imagen no llevaba la vitrina (el `.dockerignore` la excluía) y los handlers de
+> contenido no se encendían. Hoy la imagen la lleva, y `--con-contenido` la trae con sus medios:
+> **1528 ítems, 0 errores, 96 documentos (95 publicados), ~1 min**, y la portada es «SynergosLabs».
+> Sin la bandera, sólo schema: volver a importar el contenido revertiría lo que publiquen los
+> editores. El conteo de «se saltó algo» se hace ahora contra los `.config` **de la imagen**: sin
+> árbol al lado no comparaba nada, y 1240 de 1528 salía verde.
+
+Para el CMS, importa en un contenedor efímero —que para y quita al terminar— y lo vuelve a levantar. Es **idempotente** —uSync
 compara y aplica lo que difiere— y comprueba lo mismo que el gate de reconstrucción: que termine,
 sin líneas `[ERR]`, y que procese al menos tantos ítems como ficheros `.config` hay. Medido en el
 stack compuesto: **896 ítems, 355 cambios, 0 errores, ~28 s**.
@@ -532,6 +542,12 @@ Así que **ADR 0008 se queda como está**, y lo que cambia es que el import deja
 backoffice imposible en un VPS sin pantalla: es un comando.
 
 ### 5.bis.2 El contenido — la portada de arranque
+
+> ⚠️ **Lo que esta sección cuenta es la historia hasta la ADR 0129**: desde entonces `uSync/v9/Content/`
+> **no está vacía** —es la vitrina SynergosLabs versionada, 96 nodos y 192 medios con sus 218
+> ficheros— y la decisión 002-P2 (`specs/DECISIONES.md`, lote 2) la manda a producción. En un
+> servidor nuevo la trae `./importar-schema.sh --con-contenido` (§5.bis.1). Lo de abajo sigue
+> valiendo para sembrar y exportar una portada propia.
 
 Con el schema importado, la portada **sigue diciendo «No published content»** hasta que alguien
 publique un nodo. No es un fallo del import: es que `uSync/v9/Content/` **está vacía en el repo**
@@ -923,8 +939,14 @@ Lo que hace, en el orden de esta guía y con los mismos ficheros:
 >   registro de la CDN): con la CDN en `Http`, cada despliegue habría vuelto atrás.
 > - **El respaldo anotaba `sha=` vacío**, y su ensayo de restauración habría pedido imágenes sin
 >   etiqueta.
+> - **El `.env` del bootstrap no traía dos de las cinco obligatorias.**
+> - **La imagen no llevaba la vitrina**: el import salía verde con la base vacía (§5.bis.1).
+> - **El contenedor del import seguía vivo** junto al CMS: dos Umbraco sobre la misma base.
+> - **`provisionar.sh` no alcanzaba las capacidades** desde el servidor (§5.bis.3).
+> - **`restaurar.sh` salía en rojo en un servidor perdido**, con los datos ya devueltos.
 >
-> Los cuatro están arreglados y con su gate (`SalidaAProduccionTests`).
+> Los nueve están arreglados y con su gate (`SalidaAProduccionTests`). La primera corrida entera en
+> verde: `38790612898`, 6 min 50 s.
 
 ## 9. La vigilancia
 
