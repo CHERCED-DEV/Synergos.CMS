@@ -1,5 +1,10 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Pasos;
+using Synergos.CMS.Tests.Bff.FlujoDeMuestra;
 using Synergos.Core;
 
 namespace Synergos.CMS.Tests.Bff;
@@ -9,6 +14,35 @@ namespace Synergos.CMS.Tests.Bff;
 /// </summary>
 public sealed class PasosDeFormaYCargaTests
 {
+    [Fact]
+    public void El_orquestador_declarado_levanta_la_maquina_compartida_con_sus_barridos_y_su_arriendo()
+    {
+        // Lo que `BarridoSegregationTests` vigila sobre `AddSagaMachinery` vale para el host genérico sólo si
+        // entra por ahí (núcleo N1, T022): un `AddOrquestadorDeclarado` que registrara la saga a mano
+        // arrancaría sano y pasaría su /health, pero no reintentaría lo que quedó sin deshacer, no barrería
+        // los avisos y, con dos réplicas, compensaría dos veces.
+        var raiz = Path.Combine(Path.GetTempPath(), "syn-declarado-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var builder = WebApplication.CreateBuilder();
+            builder.Configuration["muestra:Storage:Root"] = raiz;
+            builder.AddOrquestadorDeclarado(ArranqueDeLaMuestra.Vocabulario, typeof(ArranqueDeLaMuestra).Assembly);
+
+            var deFondo = builder.Services.Where(d => d.ServiceType == typeof(IHostedService)).Select(d => d.ImplementationType).ToList();
+            Assert.Contains(typeof(CompensationSweeper<SagaDeFlujo>), deFondo);
+            Assert.Contains(typeof(DeliverySweeper), deFondo);
+
+            using var proveedor = builder.Services.BuildServiceProvider();
+            Assert.IsType<FileSystemSagaLease>(proveedor.GetRequiredService<ISagaLease>());
+            Assert.NotNull(proveedor.GetRequiredService<SagaEngine<SagaDeFlujo>>());
+        }
+        finally
+        {
+            try { if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true); }
+            catch (IOException) { /* un temporal */ }
+        }
+    }
+
     private sealed class Precios : IPricingPort
     {
         public Rejection? Rechaza { get; set; }
