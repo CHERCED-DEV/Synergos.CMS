@@ -92,6 +92,8 @@ internal sealed class CitaDeSaludReal : IDisposable
     private async Task Aprovisionar(decimal? precio)
     {
         await Post("booking", "v1/resources", new { subjectKind = "salud.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC" }, "agenda");
+        // La agenda de OTRO vertical en la misma capacidad: la cita no la puede nombrar (NR-1).
+        await Post("booking", "v1/resources", new { subjectKind = "realty.listado", subjectId = "casa-1", capacity = 1, timeZoneId = "UTC" }, "agenda-ajena");
         if (precio is { } p)
         {
             await Post("pricing", "v1/prices", new
@@ -135,18 +137,18 @@ internal sealed class CitaDeSaludReal : IDisposable
         return peticion;
     }
 
-    private static object Pedido() => new
+    private static object Pedido(string profesionalId = "dra-1") => new
     {
-        profesional = new { kind = "salud.profesional", id = "dra-1" },
+        profesionalId,
         ventana = new { start = Inicio, end = Inicio.AddMinutes(30) },
     };
 
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cotizar(string sujeto = "u-1")
         => Enviar(ConNegocio(DeLaPuerta(HttpMethod.Post, "v1/flujos/salud.cita/cotizar", sujeto, Pedido())));
 
-    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "cita-1", string sujeto = "u-1")
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "cita-1", string sujeto = "u-1", string profesionalId = "dra-1")
     {
-        var peticion = ConNegocio(DeLaPuerta(HttpMethod.Post, "v1/flujos/salud.cita", sujeto, Pedido()));
+        var peticion = ConNegocio(DeLaPuerta(HttpMethod.Post, "v1/flujos/salud.cita", sujeto, Pedido(profesionalId)));
         peticion.Headers.Add("Idempotency-Key", llave);
         return Enviar(peticion);
     }
@@ -324,6 +326,22 @@ public sealed class CitaDeSaludTests
         Assert.NotEqual(HttpStatusCode.Created, estado);
         Assert.Equal("consent.not_granted", cuerpo.GetProperty("code").GetString());
         Assert.DoesNotContain(c.Llamadas, l => l == "POST /v1/holds" || l == "POST /v1/payments" || l == "POST /v1/quotes");
+    }
+
+    [Theory]
+    [InlineData("realty.listado:casa-1")]
+    [InlineData("casa-1")]
+    public async Task Un_miembro_no_puede_apartar_la_agenda_de_otro_vertical(string profesionalId)
+    {
+        // NR-1: Booking es una sola agenda para todos los verticales. La cita sólo nombra profesionales de
+        // salud; lo que mande el navegador es un id, y la clase la pone el orquestador.
+        using var c = new CitaDeSaludReal();
+
+        var (estado, cuerpo) = await c.Abrir(profesionalId: profesionalId);
+
+        Assert.NotEqual(HttpStatusCode.Created, estado);
+        Assert.Equal("booking.resource_not_found", cuerpo.GetProperty("code").GetString());
+        Assert.Equal(0, c.Veces("POST /v1/holds"));
     }
 
     [Fact]

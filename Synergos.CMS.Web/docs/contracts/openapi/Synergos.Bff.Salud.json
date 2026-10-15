@@ -1667,25 +1667,13 @@
       },
       "SaludCitaEntrada": {
         "required": [
-          "profesional",
+          "profesionalId",
           "ventana"
         ],
         "type": "object",
         "properties": {
-          "profesional": {
-            "required": [
-              "kind",
-              "id"
-            ],
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              }
-            }
+          "profesionalId": {
+            "type": "string"
           },
           "ventana": {
             "required": [

@@ -67,9 +67,11 @@ if (declarado)
 {
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
-    // El permiso de agenda, provisional hasta consent.verificar (N2; NN-3).
+    // El permiso de agenda, provisional hasta consent.verificar (N2; NN-3), y el profesional con su clase
+    // fija, interino hasta que la definición declare la clase de una referencia (NR-1; NN-16).
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
-        sp.GetRequiredService<PuertosHttp>(), new PasoPermisoDeAgenda(sp.GetRequiredService<SaludCapabilities>())));
+        sp.GetRequiredService<PuertosHttp>(), new PasoPermisoDeAgenda(sp.GetRequiredService<SaludCapabilities>()),
+        new PasoProfesionalDeSalud()));
 
     // Dos máquinas de saga en un orquestador (NN-15), hasta que Bff.Core lo resuelva: la saga
     // genérica en su propia carpeta —la tipada no se mueve: sus datos ya están desplegados— y la
