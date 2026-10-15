@@ -85,6 +85,7 @@ ensamblado, igual que su `info.title`.
 | [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
+| [`openapi/Synergos.Api.Booking.json`](openapi/Synergos.Api.Booking.json) | La capacidad de agenda: recursos, apartados y reservas (núcleo N1). La ruta combinada `GET v1/resources` queda fuera del documento, declarada en `RutasFueraDelContratoTests`; la reemplaza `GET v1/resources/por-sujeto`. | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 
 Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 
