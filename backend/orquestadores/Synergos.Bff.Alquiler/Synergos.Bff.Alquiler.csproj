@@ -18,4 +18,12 @@
     <ProjectReference Include="..\Synergos.Bff.Pasos\Synergos.Bff.Pasos.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Los flujos declarados viajan DENTRO del ensamblado (ADR 0140): un despliegue no puede
+         quedar con el binario de una versión y la definición de otra. Fuera de Content, que el
+         SDK Web le pone a todo .json, para que no salgan además sueltos en la publicación. -->
+    <Content Remove="flujos\**" />
+    <EmbeddedResource Include="flujos\*.json" LogicalName="flujos/%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

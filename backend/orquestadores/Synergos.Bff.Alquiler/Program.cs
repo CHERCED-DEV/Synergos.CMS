@@ -1,7 +1,11 @@
+using Microsoft.Extensions.Options;
 using Synergos.Bff.Alquiler.Clients;
 using Synergos.Bff.Alquiler.Domain;
 using Synergos.Bff.Alquiler.Endpoints;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
+using Synergos.Bff.Pasos.Http;
 using Synergos.Shared;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +41,13 @@ using Synergos.Shared;
 //      {desde} y {pendientes}.
 // Sin las dos, una compensación rendida queda en /v1/compensations con
 // alertedAtUtc en nulo: degrada, no rompe, y nadie se entera.
+//
+// LA RENTA DECLARADA (ADR 0140, línea 005-alquiler-renta). flujos/alquiler.renta.json
+// la declara y el host genérico la sirve en las rutas de la puerta
+// (/v1/flujos/alquiler.renta/…). RentalFlow se queda en /v1/rentals*, que es lo
+// que usa la ruta directa del CMS: dos motores en rutas distintas, y el
+// interruptor alquiler:Flujos:Modo dice si corre el declarado («declarado» por
+// defecto en las rutas de la puerta: lote 2, matiz 1).
 // ─────────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,12 +55,13 @@ var builder = WebApplication.CreateBuilder(args);
 // El hilo que permite seguir un alquiler por los procesos (HU #28).
 builder.AddCorrelation();
 
+// En minúscula porque es el prefijo de los códigos de rechazo (alquiler.rental_not_found),
+// y sirve además de raíz de configuración: las claves de IConfiguration no distinguen
+// mayúsculas, así que "alquiler:Alerts" encuentra "Alquiler:Alerts" del appsettings.
+var vocabulario = new SagaVocabulary("alquiler", "el alquiler de equipos");
+
 builder.AddSagaMachinery<RentalSaga, AlquilerCompensationExecutor>(
-    // En minúscula porque es el prefijo de los códigos de rechazo (alquiler.rental_not_found),
-    // y sirve además de raíz de configuración: las claves de IConfiguration no distinguen
-    // mayúsculas, así que "alquiler:Alerts" encuentra "Alquiler:Alerts" del appsettings.
-    new SagaVocabulary("alquiler", "el alquiler de equipos"),
-    AlquilerCapabilities.Booking, AlquilerCapabilities.Payments, AlquilerCapabilities.Pricing);
+    vocabulario, AlquilerCapabilities.Booking, AlquilerCapabilities.Payments, AlquilerCapabilities.Pricing);
 
 builder.Services.AddSingleton<AlquilerCapabilities>();
 builder.Services.AddSingleton<RentalFlow>();
@@ -57,11 +69,41 @@ builder.Services.AddSingleton<RentalFlow>();
 // La oferta de cada equipo (línea 005): lo que la renta por la puerta cotiza en vez de un total del navegador.
 builder.Services.AddSingleton<OfertaDeAlquiler>();
 
+var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
+if (declarado)
+{
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
+
+    // El tramo (la regla del alquiler) y las dos salidas propias, provisionales hasta el núcleo (NN-3, NN-4).
+    var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
+    builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
+        sp.GetRequiredService<PuertosHttp>(),
+        [.. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias),
+         .. AlquilerSalidasPropias.Pasos(sp.GetRequiredService<PuertosHttp>())]));
+
+    // Dos máquinas de saga en un orquestador (NN-17; NN-15 de Salud, T053 del núcleo en N2), hasta que
+    // Bff.Core lo resuelva: la saga genérica en su propia carpeta —la tipada no se mueve: sus datos ya
+    // están desplegados— y la llave UNA vez en los clientes que configuran las dos (dos veces es «k,k» y
+    // la capacidad contesta 401).
+    builder.Services.AddSingleton<ISagaStore<SagaDeFlujo>>(sp => new FileSystemSagaStore<SagaDeFlujo>(Options.Create(
+        new SagaStorageOptions { Root = Path.Combine(sp.GetRequiredService<IOptions<SagaStorageOptions>>().Value.Root, "flujos") })));
+    foreach (var capacidad in PuertosHttp.Capacidades)
+    {
+        var llave = builder.Configuration[$"{vocabulario.Origin}:Capabilities:{capacidad}:ApiKey"];
+        builder.Services.AddHttpClient(capacidad).ConfigureHttpClient(http =>
+        {
+            http.DefaultRequestHeaders.Remove(SharedKeyAuth.HeaderName);
+            if (llave is { Length: > 0 }) http.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, llave);
+        });
+    }
+}
+
 var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Alquiler:ApiKey"]);
 app.MapAlquilerEndpoints();
+if (declarado) app.MapFlujosDeclarados();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

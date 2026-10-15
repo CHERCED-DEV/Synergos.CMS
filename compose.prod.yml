@@ -907,7 +907,7 @@ services:
       Alquiler__Sweep__IntervalSeconds: ${SYNERGOS_SWEEP_INTERVAL_SECONDS:-60}
       # El abandono: el que declare el orquestador en su appsettings.json, con su
       # propia variable; si no declara, la base comun (NP-1, 002-produccion).
-      Alquiler__Sweep__AbandonAfterMinutes: ${SYNERGOS_ABANDON_AFTER_MINUTES:-60}
+      Alquiler__Sweep__AbandonAfterMinutes: ${SYNERGOS_ALQUILER_ABANDON_AFTER_MINUTES:-15}
 
       # Cuantas veces se reintenta un AVISO colgado antes de rendirse (HU #29).
       # Va en todos los orquestadores a proposito: elegir uno obligaria a decir
