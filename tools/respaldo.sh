@@ -66,6 +66,16 @@ if [ -f "$DIR/.env" ]; then
   set +a
 fi
 
+# La versión que corre, y que ESCRIBIÓ estos datos. El `.env` deja `SYNERGOS_TAG`
+# vacía a propósito; la que vale es `tag.actual`, que escribe `deploy-remoto.sh`.
+# Esto leía el `.env`, así que el MANIFIESTO salía con `sha=` vacío y el ensayo de
+# restauración —que levanta «la versión que escribió esos datos»— pedía imágenes
+# sin etiqueta (002-produccion, 2026-10-15). Va exportada porque el compose la
+# necesita para nombrar las imágenes también al parar y arrancar.
+VERSION="${SYNERGOS_TAG:-}"
+[ -n "$VERSION" ] || VERSION="$(cat "$DIR/tag.actual" 2>/dev/null || true)"
+export SYNERGOS_TAG="$VERSION"
+
 # Cuántos días se quedan las copias EN EL SERVIDOR. Es otra decisión que la de
 # fuera —y más corta— porque cumplen cosas distintas: la local es la que se
 # restaura rápido cuando alguien se lleva por delante una tabla esta mañana; la
@@ -139,7 +149,7 @@ done
 # se desempaca «bien» hasta el byte que falta.
 {
   echo "sello=$SELLO"
-  echo "sha=$(grep -E '^SYNERGOS_TAG=' "$DIR/.env" 2>/dev/null | cut -d= -f2- || echo desconocido)"
+  echo "sha=${VERSION:-desconocida}"
   echo "volumenes=${#PRESENTES[@]}"
   for v in "${PRESENTES[@]}"; do
     echo "vol=$v sha256=$(sha256sum "$TMP/$v.tar.gz" | cut -d' ' -f1) bytes=$(stat -c %s "$TMP/$v.tar.gz")"

@@ -129,6 +129,34 @@ public sealed class SalidaAProduccionTests
             + "literal y la configuración que iba ahí no llega. Se corrige en tools/compose-gen.mjs.");
     }
 
+    // ── Los scripts del servidor saben qué versión corre ───────────────────
+
+    /// <summary>
+    /// Lo que opera el stack fuera de <c>deploy-remoto.sh</c> toma la versión de <c>tag.actual</c>,
+    /// no del <c>.env</c>.
+    /// </summary>
+    /// <remarks>
+    /// En el servidor, <c>SYNERGOS_TAG</c> sólo existe mientras corre <c>deploy-remoto.sh</c>: el
+    /// <c>.env</c> la deja vacía a propósito y la versión queda escrita en <c>tag.actual</c>. Medido en
+    /// el ensayo (2026-10-15): <c>importar-schema.sh</c> no podía nombrar la imagen del CMS, y
+    /// <c>respaldo.sh</c> escribía <c>sha=</c> vacío en el MANIFIESTO — con lo que el ensayo de
+    /// restauración, que levanta «la versión que escribió esos datos», pedía imágenes sin etiqueta.
+    /// </remarks>
+    [Fact]
+    public void Los_scripts_del_servidor_saben_que_version_corre()
+    {
+        foreach (var script in new[] { "importar-schema.sh", "respaldo.sh", "restaurar.sh" })
+        {
+            Assert.True(Leer("tools", script).Contains("tag.actual", StringComparison.Ordinal),
+                $"tools/{script} opera el stack y no lee tag.actual: en el servidor SYNERGOS_TAG está "
+                + "vacía fuera de deploy-remoto.sh, y el compose no sabría qué imágenes nombrar.");
+        }
+
+        var respaldo = Leer("tools", "respaldo.sh");
+        Assert.DoesNotMatch(@"sha=\$\(grep[^\n]*SYNERGOS_TAG", respaldo);
+        Assert.Contains("sha=${VERSION", respaldo, StringComparison.Ordinal);
+    }
+
     // ── El ensayo despliega como el despliegue ──────────────────────────────
 
     /// <summary>

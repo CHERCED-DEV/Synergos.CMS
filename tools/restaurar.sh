@@ -38,6 +38,11 @@ DIR="${SYNERGOS_DIR:-/opt/synergos}"
 PROYECTO="${SYNERGOS_COMPOSE_PROJECT:-${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}}"
 COMPOSE="docker compose --file $DIR/compose.prod.yml --project-directory $DIR --project-name $PROYECTO"
 
+# La versión que corre, para que el compose sepa nombrar las imágenes al parar y
+# arrancar: en el servidor sólo está en `tag.actual` (el `.env` la deja vacía).
+# Quien llama puede ponerla, como hace `prueba-restauracion.sh`.
+export SYNERGOS_TAG="${SYNERGOS_TAG:-$(cat "$DIR/tag.actual" 2>/dev/null || true)}"
+
 [ -f "$ARCHIVO" ] || { echo "✗ no existe $ARCHIVO" >&2; exit 1; }
 
 TMP="$(mktemp -d)"

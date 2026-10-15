@@ -65,6 +65,24 @@ done
 
 [ -f "$COMPOSE_FILE" ] || { echo "✗ no existe $COMPOSE_FILE — corré esto desde donde vive el compose" >&2; exit 1; }
 
+# ── La versión que corre ─────────────────────────────────────────────────────
+#
+# El compose nombra cada imagen por `${SYNERGOS_TAG}`, y en el servidor esa
+# variable SÓLO existe mientras corre `deploy-remoto.sh`: el `.env` la deja vacía
+# a propósito (la versión no es configuración) y lo que queda escrito es
+# `tag.actual`. Sin esto, `compose run cms` pedía `…/synergos-cms:` —sin
+# etiqueta— en el servidor, que es justo donde la guía manda correr esto.
+if [ -z "${SYNERGOS_TAG:-}" ]; then
+  TAG_ACTUAL="$(dirname "$COMPOSE_FILE")/tag.actual"
+  SYNERGOS_TAG="$(cat "$TAG_ACTUAL" 2>/dev/null || true)"
+  if [ -z "$SYNERGOS_TAG" ]; then
+    echo "✗ no hay $TAG_ACTUAL: no se sabe qué versión corre. Desplegá primero" >&2
+    echo "  (deploy-remoto.sh <sha>, o el workflow «Despliegue») y corré esto después." >&2
+    exit 1
+  fi
+fi
+export SYNERGOS_TAG
+
 COMPOSE="docker compose --file $COMPOSE_FILE"
 LOG="$(mktemp)"
 
@@ -126,10 +144,20 @@ ERRORES="$(grep --count ' ERR]' "$LOG" || true)"
 # que `usync-rebuild-check.mjs` consigue con `git ls-files '…/**/*.config'`,
 # que tampoco casa un fichero de la raíz; acá no se puede usar git porque en el
 # servidor no hay clon.
-ESPERADOS="$(find "$(dirname "$0")/../Synergos.CMS.Web/uSync/v9" -mindepth 2 -name '*.config' 2>/dev/null | wc -l | tr -d ' ')"
+#
+# ⚠️ Y el `|| true` dentro es lo que hace que esto funcione EN EL SERVIDOR, que es
+# donde se corre. Sin él, con `set -o pipefail`, un `find` sobre un árbol que no
+# está sale 1, la tubería sale 1, la asignación sale 1 y `set -e` mata el script
+# EN SILENCIO —sin ninguno de los mensajes de abajo— justo en el caso que el
+# párrafo de abajo dice manejar. Lo destapó el ensayo del despliegue
+# (002-produccion, 2026-10-15): el import moría siempre que no se corría desde un
+# clon, o sea siempre que se corría donde la guía lo manda.
+ESPERADOS="$({ find "$(dirname "$0")/../Synergos.CMS.Web/uSync/v9" -mindepth 2 -name '*.config' 2>/dev/null || true; } | wc -l | tr -d ' ')"
 
 if [ -z "$RESUMEN" ]; then
-  echo "✗ el import no llegó a terminar. El log completo está en $LOG"
+  echo "✗ el import no llegó a terminar. Lo último que dijo:"
+  tail -n 25 "$LOG" | sed 's/^/   /'
+  echo "  El log completo está en $LOG"
   exit 1
 fi
 
