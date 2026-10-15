@@ -18,7 +18,16 @@ namespace Synergos.Bff.Pasos;
 /// calcula la capacidad sobre el subtotal, antes del impuesto.</param>
 /// <param name="Impuesto">El impuesto, sobre lo ya descontado.</param>
 /// <param name="Total">Lo que se cobra por las líneas cotizadas: el subtotal menos el descuento más el impuesto.</param>
-public sealed record QuoteView(Money Subtotal, Money Descuento, Money Impuesto, Money Total);
+/// <param name="Lineas">El precio unitario de cada línea cotizada, por sujeto (núcleo N2, N-1 de Tienda): el
+/// pedido congela el de cada renglón (#122), y la parte de cada ítem sale de aquí (006-P6). Vacío si quien
+/// cotizó no lo dio: <c>EventosPorts</c> no lo da y Eventos no lo usa.</param>
+public sealed record QuoteView(
+    Money Subtotal, Money Descuento, Money Impuesto, Money Total,
+    IReadOnlyList<(Ref Sujeto, Money PrecioUnitario)>? Lineas = null)
+{
+    /// <summary>El precio unitario de cada línea cotizada; vacío si no se dio.</summary>
+    public IReadOnlyList<(Ref Sujeto, Money PrecioUnitario)> Lineas { get; init; } = Lineas ?? [];
+}
 
 /// <summary>Cotizar contra <c>Api.Pricing</c>.</summary>
 public interface IPricingPort

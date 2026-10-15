@@ -58,7 +58,8 @@ public sealed class PuertosHttp : CapabilityClients,
             Money.Of(q.Subtotal.Amount, q.Subtotal.Currency),
             q.Discount is { } descuento ? Money.Of(descuento.Amount, descuento.Currency) : Money.Zero(q.Total.Currency),
             Money.Of(q.Tax.Amount, q.Tax.Currency),
-            Money.Of(q.Total.Amount, q.Total.Currency)));
+            Money.Of(q.Total.Amount, q.Total.Currency),
+            q.Lines?.Select(l => (Ref.Create(l.SubjectKind, l.SubjectId), Money.Of(l.UnitPrice.Amount, l.UnitPrice.Currency))).ToList()));
 
     // ── Inventory ───────────────────────────────────────────────────────────
 
@@ -327,7 +328,9 @@ public sealed class PuertosHttp : CapabilityClients,
 // el esquema de la respuesta comiteada.
 
 public sealed record DineroDto(decimal Amount, string Currency);
-public sealed record CotizacionDto(DineroDto Subtotal, DineroDto Tax, DineroDto Total, DineroDto? Discount = null);
+public sealed record CotizacionDto(
+    DineroDto Subtotal, DineroDto Tax, DineroDto Total, DineroDto? Discount = null, IReadOnlyList<LineaCotizadaDto>? Lines = null);
+public sealed record LineaCotizadaDto(string SubjectKind, string SubjectId, DineroDto UnitPrice);
 public sealed record ExistenciaDto(string Id);
 public sealed record ApartadoDto(string Id);
 public sealed record CobroDto(string Id, DineroDto Refundable);
