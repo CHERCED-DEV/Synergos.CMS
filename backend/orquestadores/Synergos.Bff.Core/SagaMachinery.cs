@@ -73,8 +73,15 @@ public static class SagaMachinery
 
         // Un cliente nombrado POR capacidad: cada una con su URL, su llave y su timeout.
         // Mezclarlas haría que subir el timeout de Payments se lo subiera a todas.
-        foreach (var cap in capabilities.Append(CompensationAlert.Capability).Distinct(StringComparer.Ordinal))
+        //
+        // UNA vez por capacidad aunque se llame dos veces (núcleo N2, NN-15): un orquestador con su saga
+        // tipada y la genérica registra la máquina de cada una, y cada AddHttpClient con el mismo nombre
+        // SUMA su configuración. La llave salía dos veces («k,k») y la capacidad contestaba 401.
+        foreach (var cap in capabilities.Append(CompensationAlert.Capability).Distinct(StringComparer.Ordinal)
+                     .Where(c => !builder.Services.Any(d => d.ImplementationInstance is ClienteDeCapacidad ya && ya.Nombre == c))
+                     .ToList())
         {
+            builder.Services.AddSingleton(new ClienteDeCapacidad(cap));
             var seccion = builder.Configuration.GetSection($"{raiz}:Capabilities:{cap}");
             builder.Services.AddHttpClient(cap, http =>
             {
@@ -96,3 +103,10 @@ public static class SagaMachinery
         return builder;
     }
 }
+
+/// <summary>La marca de que el cliente de una capacidad ya está configurado en este orquestador (núcleo N2, NN-15).</summary>
+/// <remarks>
+/// Si la llamada que llega segunda trae otro vocabulario, el cliente se queda con la sección de la primera: las
+/// dos máquinas de un orquestador comparten su raíz de configuración.
+/// </remarks>
+public sealed record ClienteDeCapacidad(string Nombre);

@@ -23,10 +23,16 @@ namespace Synergos.Bff.Pasos;
 /// </code>
 /// <para><b>Los flujos tipados no pasan por aquí</b> (Eventos): su saga está fijada byte a byte y su
 /// orquestador los registra con su binding, como siempre. Un orquestador con los dos tipos de saga
-/// registra la máquina de cada una.</para>
+/// registra la máquina de cada una (núcleo N2, NN-15): la genérica guarda en su propia subcarpeta
+/// (<see cref="CarpetaDeLosFlujos"/>) y la tipada sigue en la raíz con sus datos de producción. Los clientes
+/// de las capacidades comunes se configuran una sola vez, con la llave puesta una vez. Lo prueba
+/// <c>DosMaquinasTests</c>.</para>
 /// </remarks>
 public static class OrquestadorDeclarado
 {
+    /// <summary>La subcarpeta de la raíz del almacén donde vive la saga genérica.</summary>
+    public const string CarpetaDeLosFlujos = "flujos";
+
     /// <summary>
     /// Registra la máquina de la saga genérica con el deshacer común, los adaptadores HTTP de las
     /// capacidades, los pasos comunes más <paramref name="propios"/>, y los flujos genéricos del ensamblado.
@@ -36,6 +42,7 @@ public static class OrquestadorDeclarado
     {
         ArgumentNullException.ThrowIfNull(builder);
         builder.AddSagaMachinery<SagaDeFlujo, DeshacerComun>(vocabulario, [.. PuertosHttp.Capacidades]);
+        builder.Services.AddSingleton(new CarpetaDeSagas<SagaDeFlujo>(CarpetaDeLosFlujos));
 
         builder.Services.AddSingleton<PuertosHttp>();
         builder.Services.AddSingleton<IPricingPort>(sp => sp.GetRequiredService<PuertosHttp>());
