@@ -123,8 +123,21 @@ for v in "${VOLUMENES[@]}"; do
   restaurados=$((restaurados + 1))
 done
 
-echo "  arrancando…"
-$COMPOSE start >/dev/null
+# Arrancar lo que había — si había algo. En un servidor PERDIDO, que es el caso
+# para el que existe esto, no hay contenedores: `compose start` salía 1 («service
+# … has no container to start») con los datos ya devueltos, y el operador leía
+# un fallo donde había una restauración buena. Medido en el ensayo del despliegue
+# (002-produccion, 2026-10-15). Sin contenedores se dice cómo levantarlo, y lo
+# levanta `deploy-remoto.sh`, que es quien sabe qué versión poner.
+if [ -n "$($COMPOSE ps --all --quiet 2>/dev/null || true)" ]; then
+  echo "  arrancando…"
+  $COMPOSE start >/dev/null
+else
+  VERSION_RESPALDO="$(sed -n 's/^sha=//p' "$TMP/MANIFIESTO" | head -1)"
+  echo "  no hay contenedores que arrancar (servidor nuevo o perdido): levantalo con la"
+  echo "  versión que escribió estos datos:"
+  echo "    ./deploy-remoto.sh ${VERSION_RESPALDO:-<sha: no viene en el MANIFIESTO>}"
+fi
 
 echo "✓ $restaurados volúmenes restaurados."
 echo
