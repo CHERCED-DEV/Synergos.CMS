@@ -5,7 +5,9 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="Servicio">Qué se agenda en el sitio (003-salud-cita): la puerta lo manda a la cita declarada
 /// en <c>X-Synergos-Negocio</c>, así que el navegador no lo elige ni lo cambia. Su precio publicado es el
 /// copago.</param>
-public sealed record NegocioDeEhr(string ApiBase, ServicioAgendable Servicio);
+/// <param name="AppointmentPath">Por dónde agenda el elemento si el despliegue lo DECLARA (<c>puerta</c> o
+/// <c>directa</c>, ya normalizado); nulo si decide la regla de <see cref="CaminoDeCompra"/> (003-salud-cita).</param>
+public sealed record NegocioDeEhr(string ApiBase, ServicioAgendable Servicio, string? AppointmentPath = null);
 
 /// <summary>
 /// El servicio que se agenda, con la forma de un <c>Ref</c> del backend (<c>{ kind, id }</c>): es como lo lee

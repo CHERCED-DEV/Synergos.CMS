@@ -2,10 +2,13 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Puerta;
+using Synergos.CMS.Web.Services.SynHost;
+using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -117,6 +120,67 @@ public sealed class PuertaDeLaCitaTests
         var ajustes = new EhrFeatureSettings { ServiceId = " " };
 
         Assert.Contains(ajustes.Problemas(), p => p.Contains("ServiceKind y ServiceId", StringComparison.Ordinal));
+    }
+
+    // ── El camino de la cita (T021) y la vista que coloca el coordinador (T022) ─────────────────────
+
+    private static string Camino(EhrFeatureSettings ajustes, bool laPuertaAbre, Guid? sitio = null)
+    {
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeEhr>>();
+        negocio.Actual().Returns(ajustes.Para(sitio));
+        var puerta = Substitute.For<IPuertaDeLosFlujos>();
+        puerta.Abre(EhrResolutor.FlujoDeLaCita).Returns(laPuertaAbre);
+
+        return new EhrResolutor(negocio, puerta).Resolver(Substitute.For<IPublishedElement>()).Props.AppointmentPath;
+    }
+
+    [Fact]
+    public void Sin_override_la_cita_va_por_la_puerta_si_abre_y_si_no_por_la_directa()
+    {
+        Assert.Equal(CaminoDeCompra.Puerta, Camino(new EhrFeatureSettings(), laPuertaAbre: true));
+        Assert.Equal(CaminoDeCompra.Directa, Camino(new EhrFeatureSettings(), laPuertaAbre: false));
+    }
+
+    [Fact]
+    public void El_override_de_negocio_gana_en_los_dos_sentidos_y_por_sitio()
+    {
+        var sitio = Guid.Parse("f289c6d5-4f6c-407f-8c35-ce7e0dec7b22");
+
+        Assert.Equal(CaminoDeCompra.Directa, Camino(new EhrFeatureSettings { AppointmentPath = "directa" }, laPuertaAbre: true));
+        Assert.Equal(CaminoDeCompra.Puerta, Camino(new EhrFeatureSettings { AppointmentPath = " Puerta " }, laPuertaAbre: false));
+
+        var porSitio = new EhrFeatureSettings
+        {
+            AppointmentPath = "puerta",
+            Sitios = new(StringComparer.OrdinalIgnoreCase) { [sitio.ToString()] = new EhrFeatureSitio { AppointmentPath = "directa" } },
+        };
+        Assert.Equal(CaminoDeCompra.Directa, Camino(porSitio, laPuertaAbre: true, sitio));
+        Assert.Equal(CaminoDeCompra.Puerta, Camino(porSitio, laPuertaAbre: false));
+
+        var sitioVacio = new EhrFeatureSettings
+        {
+            AppointmentPath = "directa",
+            Sitios = new(StringComparer.OrdinalIgnoreCase) { [sitio.ToString()] = new EhrFeatureSitio { AppointmentPath = "" } },
+        };
+        Assert.Equal(CaminoDeCompra.Puerta, Camino(sitioVacio, laPuertaAbre: true, sitio));
+    }
+
+    [Fact]
+    public void Un_camino_mal_escrito_no_deja_arrancar()
+    {
+        Assert.Contains(new EhrFeatureSettings { AppointmentPath = "puerto" }.Problemas(), p => p.Contains("AppointmentPath", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void La_vista_coloca_el_coordinador_de_la_cita_con_la_clave_que_abre_la_puerta()
+    {
+        var vista = File.ReadAllText(Path.Combine(Raiz(), "Synergos.CMS.Web", "Views", "Partials", "blockgrid", "Components", "elementSynEhr.cshtml"));
+        var coordinador = System.Text.RegularExpressions.Regex.Match(vista, @"<synergos-flujo\s+flujo=""([^""]+)""\s+style=""display:contents"">");
+
+        Assert.True(coordinador.Success, "elementSynEhr.cshtml no coloca <synergos-flujo flujo=… style=\"display:contents\">.");
+        Assert.Equal(EhrResolutor.FlujoDeLaCita, coordinador.Groups[1].Value);
+        Assert.True(LaDelAppsettings().Flujos.ContainsKey(coordinador.Groups[1].Value));
+        Assert.NotEmpty(TablaDeLaPuerta.Incrustada().DelFlujo(coordinador.Groups[1].Value));
     }
 
     private static byte[] DeBase64Url(string texto)

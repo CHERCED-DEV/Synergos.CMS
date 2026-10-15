@@ -33,24 +33,34 @@ internal sealed class CitaDeSaludReal : IDisposable
 
     /// <param name="precio">El copago publicado; nulo, sin precio publicado.</param>
     /// <param name="permiso">Nulo: el permiso está vigente. Un código: <c>grants/check</c> lo rechaza con él.</param>
-    /// <param name="cae">Las rutas (<c>METODO /ruta</c>) que contestan 503, como una capacidad caída.</param>
+    /// <param name="cae">Las rutas (<c>METODO /ruta</c>, «*» un segmento) que contestan 503, como una capacidad caída.</param>
+    /// <param name="rechaza">Las que contestan 409 con un rechazo definitivo (no transitorio).</param>
+    /// <param name="reloj">El reloj del orquestador (el del abandono); nulo, el del sistema.</param>
+    /// <param name="conRecogida">Notifications deja cada correo como <c>.eml</c> en <see cref="Buzon"/>: el aviso se verifica
+    /// abriendo el correo, nunca con el log.</param>
     public CitaDeSaludReal(decimal? precio = 50_000m, string? permiso = null, IReadOnlyCollection<string>? cae = null,
-        IReadOnlyDictionary<string, string>? ajustes = null)
+        IReadOnlyDictionary<string, string>? ajustes = null, TimeProvider? reloj = null, bool conRecogida = false,
+        IReadOnlyCollection<string>? rechaza = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking")
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
             .Levanta<Synergos.Api.Payments.Contracts.PaymentResponse>("payments")
-            .Levanta<Synergos.Api.Notifications.Contracts.SaveTemplateRequest>("notifications");
+            .Levanta<Synergos.Api.Notifications.Contracts.SaveTemplateRequest>(
+                "notifications", conRecogida ? [("Notifications:Pickup:Directory", Buzon)] : []);
         Aprovisionar(precio).GetAwaiter().GetResult();
 
-        var cable = new Cable(Capacidades, permiso, cae ?? []);
+        var cable = new Cable(Capacidades, permiso, cae ?? [], rechaza ?? []);
         _fabrica = new WebApplicationFactory<AppointmentResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("salud:Storage:Root", Raiz);
             b.UseSetting("Salud:ApiKey", Llave);
             foreach (var (clave, valor) in ajustes ?? new Dictionary<string, string>()) b.UseSetting(clave, valor);
-            b.ConfigureTestServices(s => s.AddSingleton<IHttpClientFactory>(cable));
+            b.ConfigureTestServices(s =>
+            {
+                s.AddSingleton<IHttpClientFactory>(cable);
+                if (reloj is not null) s.AddSingleton(reloj);
+            });
         });
         Orquestador = _fabrica.CreateClient();
         Orquestador.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, Llave);
@@ -67,6 +77,8 @@ internal sealed class CitaDeSaludReal : IDisposable
     public IReadOnlyList<string> Llamadas { get; }
 
     public string Raiz => Path.Combine(_raiz, "salud");
+
+    public string Buzon => Path.Combine(_raiz, "buzon");
 
     public void Dispose()
     {
@@ -87,11 +99,15 @@ internal sealed class CitaDeSaludReal : IDisposable
                 subjectKind = "salud.servicio", subjectId = "consulta", amount = new { amount = p, currency = "COP" }, taxRateBasisPoints = 0,
             }, "precio");
         }
+        // La plantilla de VERDAD, la que publica provisionar.sh: el correo que se abre es el que recibiría el paciente.
+        using var plantillas = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            Synergos.CMS.Tests.Architecture.Proyectos.Raiz(), "tools", "provisionar.plantillas.json")));
+        var cita = plantillas.RootElement.EnumerateArray()
+            .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == "salud.cita.confirmada");
         await Post("notifications", "v1/templates", new
         {
-            key = "salud.cita.confirmada", channel = "Email",
-            subject = "Tu cita {numero} quedó confirmada",
-            body = "<p>Hola {nombre}: tu cita {numero} en {sitio} quedó confirmada. Copago: {total}. {enlace}</p>",
+            key = cita.GetProperty("key").GetString(), channel = cita.GetProperty("channel").GetString(),
+            subject = cita.GetProperty("subject").GetString(), body = cita.GetProperty("body").GetString(),
         }, "plantilla");
     }
 
@@ -148,6 +164,18 @@ internal sealed class CitaDeSaludReal : IDisposable
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Consultar(string id, string sujeto = "u-1")
         => Enviar(DeLaPuerta(HttpMethod.Get, $"v1/flujos/salud.cita/{id}", sujeto));
 
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cancelar(string id, string sujeto = "u-1")
+        => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/salud.cita/{id}/cancelar", sujeto));
+
+    /// <summary>Una vuelta del barrido de la saga genérica, como la da el proceso cada minuto.</summary>
+    public Task Barrer()
+    {
+        var barrido = Servicios.GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<CompensationSweeper<SagaDeFlujo>>().Single();
+        return barrido.UnaVueltaAsync(Servicios.GetRequiredService<SagaEngine<SagaDeFlujo>>(), CancellationToken.None);
+    }
+
+    public int Veces(string llamada) => Llamadas.Count(l => l == llamada);
+
     public async Task<JsonElement> Leer(string capacidad, string ruta)
     {
         using var http = Capacidades.CreateClient(capacidad);
@@ -165,13 +193,21 @@ internal sealed class CitaDeSaludReal : IDisposable
     }
 
     /// <summary>Las capacidades reales, con el permiso guionado y las caídas pedidas.</summary>
-    private sealed class Cable(IHttpClientFactory real, string? permiso, IReadOnlyCollection<string> cae) : IHttpClientFactory
+    private sealed class Cable(IHttpClientFactory real, string? permiso, IReadOnlyCollection<string> cae, IReadOnlyCollection<string> rechaza)
+        : IHttpClientFactory
     {
         public List<string> Llamadas { get; } = [];
 
         private string? Permiso { get; } = permiso;
 
         private IReadOnlyCollection<string> Cae { get; } = cae;
+
+        private IReadOnlyCollection<string> Rechaza { get; } = rechaza;
+
+        /// <summary>«*» es un segmento de la ruta: «POST /v1/holds/*/confirm».</summary>
+        private static bool Coincide(string patron, string ruta)
+            => System.Text.RegularExpressions.Regex.IsMatch(ruta,
+                "^" + System.Text.RegularExpressions.Regex.Escape(patron).Replace("\\*", "[^/]+", StringComparison.Ordinal) + "$");
 
         public HttpClient CreateClient(string name)
         {
@@ -192,7 +228,8 @@ internal sealed class CitaDeSaludReal : IDisposable
                         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { id = "g1", active = true }) }
                         : Problema(HttpStatusCode.Forbidden, cable.Permiso);
                 }
-                if (cable.Cae.Contains(ruta)) return Problema(HttpStatusCode.ServiceUnavailable, "guion.caida");
+                if (cable.Cae.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.ServiceUnavailable, "guion.caida");
+                if (cable.Rechaza.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.Conflict, "guion.rechazo");
 
                 using var copia = new HttpRequestMessage(r.Method, r.RequestUri) { Content = r.Content };
                 foreach (var h in r.Headers) copia.Headers.TryAddWithoutValidation(h.Key, h.Value);
@@ -300,6 +337,181 @@ public sealed class CitaDeSaludTests
 
         Assert.True(Directory.Exists(Path.Combine(c.Raiz, "flujos", "sagas")), "la saga declarada no está en flujos/sagas");
         Assert.False(Directory.Exists(Path.Combine(c.Raiz, "sagas")), "la saga declarada cayó en la carpeta de las imperativas");
+    }
+
+    private sealed class RelojFalso(DateTimeOffset inicio) : TimeProvider
+    {
+        private DateTimeOffset _ahora = inicio;
+        public override DateTimeOffset GetUtcNow() => _ahora;
+        public void Avanzar(TimeSpan d) => _ahora += d;
+    }
+
+    private static async Task<(string Apartado, string Cobro)> Reservado(CitaDeSaludReal c, string id)
+    {
+        var saga = c.Servicios.GetRequiredService<SagaEngine<SagaDeFlujo>>().Find(id)!;
+        return (saga.Datos["apartadoId"].Valor!.Value.GetString()!, saga.Datos["cobroId"].Valor!.Value.GetString()!);
+    }
+
+    [Fact]
+    public async Task Una_cita_abandonada_se_deshace_a_los_15_minutos_y_no_antes()
+    {
+        // T018 (S-13): el apartado de Booking vence a los 10 minutos; la autorización del copago no vence
+        // sola. Con el plazo de 60 de siempre, quedaba 50 minutos reservada en la tarjeta del paciente.
+        var reloj = new RelojFalso(DateTimeOffset.UtcNow);
+        using var c = new CitaDeSaludReal(reloj: reloj);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (apartado, cobro) = await Reservado(c, id);
+
+        reloj.Avanzar(TimeSpan.FromMinutes(14));
+        await c.Barrer();
+        Assert.Equal("Running", (await c.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
+
+        reloj.Avanzar(TimeSpan.FromMinutes(2));
+        await c.Barrer();
+
+        Assert.Equal("Compensated", (await c.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
+        Assert.True((await c.Leer("booking", $"v1/holds/{apartado}")).GetProperty("released").GetBoolean());
+        Assert.Equal("Voided", (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Cancelar_por_la_puerta_suelta_la_franja_y_anula_y_una_confirmada_no_se_cancela()
+    {
+        // T019: cancelar es deshacer una cita PENDIENTE. Una confirmada se anula con su política (la ficha
+        // F4), no con una compensación que devolvería el copago saltándosela.
+        using var c = new CitaDeSaludReal();
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (apartado, cobro) = await Reservado(c, id);
+
+        var (cancelo, cancelada) = await c.Cancelar(id);
+
+        Assert.True(cancelo == HttpStatusCode.OK, cancelada.ToString());
+        Assert.Equal("Compensated", cancelada.GetProperty("estado").GetString());
+        Assert.True((await c.Leer("booking", $"v1/holds/{apartado}")).GetProperty("released").GetBoolean());
+        Assert.Equal("Voided", (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
+
+        var (_, otra) = await c.Abrir(llave: "cita-2", sujeto: "u-2");
+        var otraId = otra.GetProperty("id").GetString()!;
+        await c.Cerrar(otraId, sujeto: "u-2");
+        var (noCancelo, _) = await c.Cancelar(otraId, sujeto: "u-2");
+
+        Assert.NotEqual(HttpStatusCode.OK, noCancelo);
+        Assert.Equal("Completed", (await c.Consultar(otraId, sujeto: "u-2")).Cuerpo.GetProperty("estado").GetString());
+    }
+
+    [Fact]
+    public async Task Una_cita_ajena_no_existe_y_repetir_no_aparta_ni_cobra_dos_veces()
+    {
+        // T020 (US4): la misma intención es la misma cita; la de otro, la misma respuesta que una que no existe.
+        using var c = new CitaDeSaludReal();
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+
+        Assert.Equal(HttpStatusCode.NotFound, (await c.Consultar(id, sujeto: "u-2")).Estado);
+        Assert.Equal(HttpStatusCode.NotFound, (await c.Cerrar(id, sujeto: "u-2")).Estado);
+        Assert.Equal(HttpStatusCode.NotFound, (await c.Cancelar(id, sujeto: "u-2")).Estado);
+
+        var (_, otraVez) = await c.Abrir();
+        Assert.Equal(id, otraVez.GetProperty("id").GetString());
+        Assert.Equal(1, c.Veces("POST /v1/holds"));
+
+        await c.Cerrar(id);
+        var (_, segunda) = await c.Cerrar(id);
+        Assert.Equal("Completed", segunda.GetProperty("estado").GetString());
+        Assert.Equal(1, c.Llamadas.Count(l => l.EndsWith("/capture", StringComparison.Ordinal)));
+        Assert.Equal(1, (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task El_correo_de_la_cita_lleva_numero_total_y_enlace_y_el_contacto_no_queda_en_la_saga()
+    {
+        // T024 (US5): se abre el .eml, no el log. La plantilla es la de provisionar.plantillas.json.
+        using var c = new CitaDeSaludReal(conRecogida: true);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var numero = abierta.GetProperty("numero").GetString()!;
+
+        var (cerro, _) = await c.Cerrar(id);
+
+        Assert.Equal(HttpStatusCode.OK, cerro);
+        var eml = File.ReadAllText(Assert.Single(Directory.GetFiles(c.Buzon, "*.eml")));
+        var (asunto, cuerpo) = Correo(eml);
+        Assert.Contains("paciente@ejemplo.co", eml, StringComparison.Ordinal);
+        Assert.Contains(numero, asunto, StringComparison.Ordinal);
+        Assert.Contains("50.000 COP", cuerpo, StringComparison.Ordinal);
+        Assert.Contains($"healthcare/?cita={id}", cuerpo, StringComparison.Ordinal);
+
+        var guardado = string.Concat(Directory.EnumerateFiles(Path.Combine(c.Raiz, "flujos"), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
+        Assert.Contains(id, guardado, StringComparison.Ordinal);
+        Assert.DoesNotContain("paciente@ejemplo.co", guardado, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Si_la_captura_falla_se_anula_la_autorizacion_y_se_suelta_la_franja()
+    {
+        // US3: antes de mover plata, deshacer es barato — anular, no devolver.
+        using var c = new CitaDeSaludReal(rechaza: ["POST /v1/payments/*/capture"]);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (apartado, cobro) = await Reservado(c, id);
+
+        var (cerro, _) = await c.Cerrar(id);
+
+        Assert.NotEqual(HttpStatusCode.OK, cerro);
+        Assert.Equal("Compensated", (await c.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
+        Assert.Equal("Voided", (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
+        Assert.True((await c.Leer("booking", $"v1/holds/{apartado}")).GetProperty("released").GetBoolean());
+        Assert.DoesNotContain(c.Llamadas, l => l.EndsWith("/refund", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Si_confirmar_la_franja_falla_tras_cobrar_se_devuelve_el_copago_entero()
+    {
+        // US3, el caso que justifica todo: se cobró y la cita no existe. Capturar va ANTES de confirmar
+        // justamente para que este fallo deje plata cobrada sin cita, que se devuelve sola.
+        using var c = new CitaDeSaludReal(rechaza: ["POST /v1/holds/*/confirm"]);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (apartado, cobro) = await Reservado(c, id);
+
+        var (cerro, _) = await c.Cerrar(id);
+
+        Assert.NotEqual(HttpStatusCode.OK, cerro);
+        Assert.Equal("Compensated", (await c.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
+        Assert.Equal(0m, (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refundable").GetProperty("amount").GetDecimal());
+        Assert.True((await c.Leer("booking", $"v1/holds/{apartado}")).GetProperty("released").GetBoolean());
+        Assert.Equal(1, c.Llamadas.Count(l => l.EndsWith("/refund", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Si_el_aviso_no_sale_la_cita_sigue_confirmada_y_el_copago_cobrado()
+    {
+        // Un correo que no sale no devuelve la plata (al_fallar: seguir): la cita existe y está pagada.
+        using var c = new CitaDeSaludReal(cae: ["POST /v1/deliveries"]);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (_, cobro) = await Reservado(c, id);
+
+        var (cerro, cerrada) = await c.Cerrar(id);
+
+        Assert.True(cerro == HttpStatusCode.OK, cerrada.ToString());
+        Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
+        Assert.Equal("Captured", (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
+        Assert.DoesNotContain(c.Llamadas, l => l.EndsWith("/refund", StringComparison.Ordinal));
+    }
+
+    /// <summary>El asunto y el cuerpo de un .eml de la recogida: asunto en palabras codificadas UTF-8, cuerpo en Base64.</summary>
+    private static (string Asunto, string Cuerpo) Correo(string eml)
+    {
+        var corte = eml.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        var cabeceras = eml[..corte];
+        var asunto = System.Text.RegularExpressions.Regex.Match(cabeceras, @"(?im)^Subject:\s*(.+(?:\r\n[ \t].+)*)").Groups[1].Value;
+        asunto = System.Text.RegularExpressions.Regex.Replace(asunto, @"=\?utf-8\?B\?([^?]+)\?=\s*",
+            m => Encoding.UTF8.GetString(Convert.FromBase64String(m.Groups[1].Value)), System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var cuerpo = Encoding.UTF8.GetString(Convert.FromBase64String(string.Concat(eml[(corte + 4)..].Where(ch => !char.IsWhiteSpace(ch)))));
+        return (asunto, cuerpo);
     }
 
     [Fact]

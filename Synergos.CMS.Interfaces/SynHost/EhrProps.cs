@@ -16,7 +16,14 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// paciente de demo escrito a mano— y el portal lo mandaba de vuelta en cada petición, que es como
 /// cualquiera leía la historia de otro. Hoy el servidor resuelve el paciente desde la sesión del
 /// miembro y no lee el que mande el navegador, así que el elemento no tiene nada que recibir.</para>
+///
+/// <para><b>Y por dónde agenda</b> (<c>AppointmentPath</c>, 003-salud-cita): la puerta (<c>salud.cita</c>) o la
+/// ruta directa <c>/api/ehr/appointment</c>, que se conservan las dos. Lo DECLARA el CMS con la regla de
+/// <see cref="CaminoDeCompra"/> —el override de <c>Synergos:Features:Ehr:AppointmentPath</c>, o la puerta
+/// cuando abre <c>salud.cita</c>, o la directa—, como el camino de compra de Eventos; el elemento no lo
+/// adivina.</para>
 /// </remarks>
 [ElementoSynHost("ehr", TipoDeColocable.Funcionalidad)]
 public sealed record EhrProps(
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath);

@@ -1129,11 +1129,18 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "appointmentPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
-        "apiBase": "/api/ehr"
+        "apiBase": "/api/ehr",
+        "appointmentPath": "directa"
       }
     },
     {

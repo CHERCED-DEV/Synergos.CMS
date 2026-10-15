@@ -28,17 +28,26 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
     /// <summary>El identificador de ese servicio; por defecto el de <see cref="SaludSettings.ServiceId"/>.</summary>
     public string ServiceId { get; init; } = new SaludSettings().ServiceId;
 
+    /// <summary>
+    /// El override de negocio del camino de la cita (003-salud-cita, P5): <c>puerta</c> o <c>directa</c>. Vacío,
+    /// decide la regla de <see cref="CaminoDeCompra"/> —la puerta si abre <c>salud.cita</c>, si no la directa—,
+    /// la misma que Eventos. Un valor mal escrito no deja arrancar.
+    /// </summary>
+    public string? AppointmentPath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeEhr Fusionar(EhrFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
-            Servicio: new ServicioAgendable(propio?.ServiceKind ?? ServiceKind, propio?.ServiceId ?? ServiceId));
+            Servicio: new ServicioAgendable(propio?.ServiceKind ?? ServiceKind, propio?.ServiceId ?? ServiceId),
+            AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEhr negocio)
         => new[]
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            ReglasDeNegocio.Camino("AppointmentPath", negocio.AppointmentPath),
             string.IsNullOrWhiteSpace(negocio.Servicio.Kind) || string.IsNullOrWhiteSpace(negocio.Servicio.Id)
                 ? "ServiceKind y ServiceId: el servicio que se agenda no puede quedar vacío (sin él la cita no tiene copago que cotizar)."
                 : null,
@@ -58,4 +67,7 @@ public sealed class EhrFeatureSitio
 
     /// <inheritdoc cref="EhrFeatureSettings.ServiceId"/>
     public string? ServiceId { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.AppointmentPath"/>
+    public string? AppointmentPath { get; init; }
 }
