@@ -484,6 +484,7 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 |---|---|---|
 | `tools/importar-schema.sh` | **el servidor** | importa el árbol de uSync en un contenedor efímero |
 | `tools/provisionar.sh` | **el servidor** | publica definiciones, la plantilla del aviso, recursos y precios; reconcilia |
+| `tools/provisionar-en-la-red.sh` | **el servidor** | corre `provisionar.sh` dentro de la red de Docker, que es donde resuelven los nombres de las capacidades |
 
 > **Los dos los COPIA el despliegue**, junto con los dos ficheros de datos de `provisionar.sh`:
 > `tools/provisionar.recursos.json` y `tools/provisionar.plantillas.json`. No es un
@@ -651,8 +652,21 @@ siembre nada en el servidor.
 ### 5.bis.3 El estado que las capacidades exigen
 
 ```bash
-tools/provisionar.sh --verificar   # qué falta, sin escribir nada
-tools/provisionar.sh               # lo publica
+./provisionar-en-la-red.sh --verificar   # en /opt/synergos: qué falta, sin escribir nada
+./provisionar-en-la-red.sh               # lo publica
+```
+
+> ⚠️ **Lo que este documento decía y no funcionaba** (medido el 2026-10-15 en el ensayo, §8):
+> «`tools/provisionar.sh` en el servidor». `provisionar.sh` habla con las capacidades por su nombre
+> de servicio (`http://api-workflow:8080`…), que **sólo resuelve dentro de la red de Docker**: desde
+> el servidor no llega a ninguna. `provisionar-en-la-red.sh` lo corre en un contenedor efímero
+> enganchado a esa red, con la llave por entorno y las herramientas GNU (con las de BusyBox un precio
+> de 320000 salía «no numérico»). El ensayo lo corre así en cada pasada: `--verificar`, publicar y
+> `--verificar` otra vez.
+
+```bash
+# directo, sólo desde dentro de la red (lo que hace el envoltorio por vos):
+tools/provisionar.sh --verificar
 ```
 
 Cinco cosas, y las cinco se rechazan con su motivo si faltan —`definition_not_found`,

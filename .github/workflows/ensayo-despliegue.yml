@@ -66,6 +66,7 @@ on:
       - tools/enviar-respaldo.sh
       - tools/restaurar.sh
       - tools/provisionar.sh
+      - tools/provisionar-en-la-red.sh
       - tools/provisionar.*.json
       - tools/humo-publico.sh
       - tools/bootstrap-servidor.sh
@@ -286,24 +287,17 @@ jobs:
       # `provisionar.sh` habla con las capacidades por su nombre de servicio,
       # que sólo resuelve DENTRO de la red de Docker. Se corre como se correría
       # en el servidor: en un contenedor efímero sobre `synergos_interna`.
-      - name: provisionar.sh dentro de la red
+      - name: provisionar-en-la-red.sh
         working-directory: /opt/synergos
         run: |
           set -euo pipefail
-          set -a; . ./.env; set +a
-          provisionar() {
-            docker run --rm --network synergos_interna \
-              -v /opt/synergos:/opt/synergos:ro -w /opt/synergos \
-              -e SYNERGOS_API_KEY python:3.12-alpine \
-              sh -c 'apk add --no-cache --quiet bash curl >/dev/null && bash ./provisionar.sh "$@"' _ "$@"
-          }
           echo "── --verificar (en un servidor nuevo, tiene que decir qué falta)"
-          provisionar --verificar || true
+          ./provisionar-en-la-red.sh --verificar || true
           echo "── publicar"
-          provisionar
+          ./provisionar-en-la-red.sh
           echo "── --verificar otra vez (tiene que pasar)"
-          provisionar --verificar
-          echo "| \`provisionar.sh\` publicar + verificar, dentro de \`synergos_interna\` | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          ./provisionar-en-la-red.sh --verificar
+          echo "| \`provisionar-en-la-red.sh\`: verificar, publicar, verificar | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── 5. Respaldo, pérdida y restauración ─────────────────────────────
       - name: respaldo.sh

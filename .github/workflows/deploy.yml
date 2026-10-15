@@ -195,7 +195,7 @@ jobs:
           scp -i ~/.ssh/id_deploy -o BatchMode=yes \
             compose.prod.yml Caddyfile tools/deploy-remoto.sh \
             tools/respaldo.sh tools/enviar-respaldo.sh tools/restaurar.sh \
-            tools/importar-schema.sh tools/provisionar.sh \
+            tools/importar-schema.sh tools/provisionar.sh tools/provisionar-en-la-red.sh \
             tools/provisionar.recursos.json tools/provisionar.plantillas.json \
             "$USUARIO@$HOST:/opt/synergos/"
 

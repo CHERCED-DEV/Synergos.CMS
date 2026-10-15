@@ -70,6 +70,11 @@ COPY --from=build /app/publish ./
 COPY --from=build /src/Synergos.CMS.Web/uSync/v9 ./uSync/v9
 COPY --from=build /src/Synergos.CMS.Web/App_Plugins ./App_Plugins
 
+# Los ficheros de la vitrina versionada (ADR 0129), también explícitos: los targets
+# de Umbraco sacan `wwwroot/media` del `publish` (es estado de runtime en un sitio
+# cualquiera), y medido en el ensayo (002-produccion) la imagen salía con 0.
+COPY --from=build /src/Synergos.CMS.Web/wwwroot/media ./wwwroot/media
+
 # Directorios de estado. Se crean acá para que existan aunque se arranque
 # sin volúmenes; con volúmenes, Docker los monta encima. Nada se siembra
 # en boot (ADR 0013) — son carpetas vacías, MENOS una:

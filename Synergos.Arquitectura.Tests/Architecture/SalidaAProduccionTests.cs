@@ -157,6 +157,67 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("sha=${VERSION", respaldo, StringComparison.Ordinal);
     }
 
+    // ── El abandono que declara un orquestador llega a producción (NP-1) ────
+
+    /// <summary>Un hijo de un objeto JSON sin distinguir mayúsculas, como <c>IConfiguration</c>.</summary>
+    private static System.Text.Json.JsonElement? Hijo(System.Text.Json.JsonElement? padre, string clave)
+    {
+        if (padre is not { ValueKind: System.Text.Json.JsonValueKind.Object } objeto) return null;
+        foreach (var p in objeto.EnumerateObject())
+        {
+            if (string.Equals(p.Name, clave, StringComparison.OrdinalIgnoreCase)) return p.Value;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Si un orquestador declara <c>&lt;Sección&gt;:Sweep:AbandonAfterMinutes</c> en su
+    /// <c>appsettings.json</c>, el compose de producción lo lleva como default de su propia variable;
+    /// si no, la base común de 60.
+    /// </summary>
+    /// <remarks>
+    /// NP-1 (línea 005, decidido el 2026-10-15): el compose ponía a los cinco
+    /// <c>${SYNERGOS_ABANDON_AFTER_MINUTES:-60}</c>, y una variable de entorno PISA el
+    /// <c>appsettings.json</c>. El abandono de 15 minutos de Alquiler y Salud quedaba en 60 en
+    /// producción: dos autorizaciones vivas 50 minutos de más, sin que nada fallara.
+    /// </remarks>
+    [Fact]
+    public void El_abandono_que_declara_un_orquestador_llega_a_produccion()
+    {
+        var compose = Leer("compose.prod.yml");
+        var orquestadores = Directory.GetDirectories(Proyectos.Ruta("backend", "orquestadores"), "Synergos.Bff.*")
+            .Where(d => File.Exists(Path.Combine(d, "Program.cs"))
+                        && File.ReadAllText(Path.Combine(d, "Program.cs")).Contains("AddSagaMachinery", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(orquestadores.Count >= 5,
+            $"Sólo se encontraron {orquestadores.Count} orquestadores con AddSagaMachinery: el descubrimiento está roto.");
+
+        foreach (var dir in orquestadores)
+        {
+            var seccion = Path.GetFileName(dir)["Synergos.Bff.".Length..];
+            int? declarado = null;
+            var ajustes = Path.Combine(dir, "appsettings.json");
+            if (File.Exists(ajustes))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(ajustes).TrimStart('﻿'),
+                    new System.Text.Json.JsonDocumentOptions { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true });
+                if (Hijo(Hijo(Hijo(doc.RootElement, seccion), "Sweep"), "AbandonAfterMinutes") is { ValueKind: System.Text.Json.JsonValueKind.Number } valor)
+                {
+                    declarado = valor.GetInt32();
+                }
+            }
+
+            var esperado = declarado is int minutos
+                ? $"{seccion}__Sweep__AbandonAfterMinutes: ${{SYNERGOS_{seccion.ToUpperInvariant()}_ABANDON_AFTER_MINUTES:-{minutos}}}"
+                : $"{seccion}__Sweep__AbandonAfterMinutes: ${{SYNERGOS_ABANDON_AFTER_MINUTES:-60}}";
+
+            Assert.True(compose.Contains(esperado, StringComparison.Ordinal),
+                $"{Path.GetFileName(dir)} {(declarado is null ? "no declara abandono" : $"declara {declarado} min de abandono")} "
+                + $"y compose.prod.yml no lleva «{esperado}». Se regenera con `node tools/compose-gen.mjs`.");
+        }
+    }
+
     // ── La vitrina viaja en la imagen y entra sólo a propósito ─────────────
 
     /// <summary>Un patrón de <c>.dockerignore</c> como expresión regular: <c>**/</c>, <c>*</c> y <c>?</c>.</summary>
@@ -238,7 +299,8 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("bootstrap-servidor.sh --solo-env", ensayo, StringComparison.Ordinal);
 
         foreach (var paso in new[] { "./deploy-remoto.sh", "./importar-schema.sh", "./respaldo.sh",
-                                     "./restaurar.sh", "--si-estoy-seguro", "./tools/humo-publico.sh" })
+                                     "./restaurar.sh", "--si-estoy-seguro", "./tools/humo-publico.sh",
+                                     "./provisionar-en-la-red.sh" })
         {
             Assert.Contains(paso, ensayo, StringComparison.Ordinal);
         }
