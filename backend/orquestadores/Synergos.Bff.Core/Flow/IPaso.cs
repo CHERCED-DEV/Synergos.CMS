@@ -42,6 +42,17 @@ public interface IPaso
     /// </remarks>
     bool UsaPlantilla => false;
 
+    /// <summary>
+    /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
+    /// declara (por defecto).
+    /// </summary>
+    /// <remarks>
+    /// Lo necesita una saga genérica (núcleo N1) para saber, AL ARRANCAR, si puede guardar lo que este
+    /// paso escribe cuando una fase posterior lo lee. Los pasos comunes lo declaran todos
+    /// (<c>TiposDeEscrituraTests</c>); uno de un dominio con saga tipada no lo necesita.
+    /// </remarks>
+    IReadOnlyList<Type>? TiposDeEscritura => null;
+
     Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct);
 }
 
@@ -81,7 +92,8 @@ public enum PasoResultado
 /// compensación mientras no se consuma.</param>
 /// <param name="CierreId">El objetivo una vez consumido, si cambia: devolver aforo consumido es un
 /// ajuste sobre el POZO, no sobre el apartado, que ya no existe. <c>null</c> si es el mismo.</param>
-public sealed record Reservado(string Id, string? CierreId = null);
+/// <param name="Cantidad">Cuántas unidades reservó, si importa para deshacer (reponer existencias).</param>
+public sealed record Reservado(string Id, string? CierreId = null, int? Cantidad = null);
 
 /// <summary>Lo que un paso recibe: su definición, la saga y dónde leer.</summary>
 public sealed class EntradaDePaso

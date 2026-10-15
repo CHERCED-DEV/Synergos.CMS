@@ -96,6 +96,32 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
 
     /// <summary>La saga con qué falló, o sin error al completarse.</summary>
     TSaga ConError(TSaga saga, string? falla);
+
+    /// <summary>
+    /// La saga justo antes de cada escritura, con el contexto de ese instante. Por defecto, la MISMA.
+    /// </summary>
+    /// <remarks>
+    /// <para>Es lo que deja a una saga genérica (núcleo N1) guardar lo que un paso acaba de escribir —el
+    /// cobro que se autorizó— en la MISMA escritura que su compensación: si el proceso se cae después,
+    /// la fase que cierra tiene de dónde leerlo.</para>
+    ///
+    /// <para>Una saga tipada no lo necesita: guarda lo suyo en <see cref="Crear"/> y
+    /// <see cref="ConReserva"/>. Por eso por defecto devuelve la misma instancia, y el intérprete sólo
+    /// escribe de más si el binding devolvió otra: el fichero de una compra de entradas no cambia.</para>
+    /// </remarks>
+    TSaga AlGuardar(TSaga saga, FlowContext ctx) => saga;
+
+    /// <summary>
+    /// Los tipos de valor con que este binding lee y guarda (núcleo N1): sólo un binding genérico los
+    /// tiene. Con ellos, el validador cruza además las reglas del modo genérico.
+    /// </summary>
+    TiposDeValor? Tipos => null;
+
+    /// <summary>
+    /// Los tipos de compensación que sabe deshacer el ejecutor de esta saga, si se conocen: el validador
+    /// cruza contra ellos el <c>antes</c> y el <c>despues</c> de cada reserva.
+    /// </summary>
+    IReadOnlyCollection<string>? Deshacer => null;
 }
 
 /// <summary>Si un paso reserva una vez por saga o una vez por ítem.</summary>
@@ -118,6 +144,9 @@ public enum FormaDeReserva
 /// <param name="Reservas">Las reservas que la saga sabe guardar, por paso.</param>
 /// <param name="Saga">El tipo de saga: tiene que tener la ranura que el intérprete lee.</param>
 /// <param name="Efimera">Lo que la fachada pone, por fase, sólo para esa llamada.</param>
+/// <param name="Tipos">Los tipos de valor de un binding genérico; con ellos se cruzan las reglas del modo
+/// genérico (núcleo N1). Nulo en una saga tipada.</param>
+/// <param name="Deshacer">Los tipos de compensación que sabe deshacer el ejecutor, si se conocen.</param>
 /// <remarks>
 /// <b>Existe porque el JSON y el C# se escriben en sitios distintos.</b> La definición nombra fases,
 /// campos y pasos que algún código tiene que poner; si los dos se desvían, el lector y el
@@ -130,7 +159,9 @@ public sealed record ContratoDelFlujo(
     IReadOnlyDictionary<string, IReadOnlyCollection<string>> CamposDeItem,
     IReadOnlyDictionary<string, FormaDeReserva> Reservas,
     Type Saga,
-    IReadOnlyDictionary<string, IReadOnlyCollection<string>>? Efimera = null)
+    IReadOnlyDictionary<string, IReadOnlyCollection<string>>? Efimera = null,
+    TiposDeValor? Tipos = null,
+    IReadOnlyCollection<string>? Deshacer = null)
 {
     /// <summary>Ninguna fase con nada efímero.</summary>
     public static IReadOnlyDictionary<string, IReadOnlyCollection<string>> SinEfimera { get; } =
@@ -147,6 +178,6 @@ public sealed record ContratoDelFlujo(
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(fases);
         return new(fases, binding.PoneAlAbrir, binding.Reconstruye, binding.CamposDeItem, binding.Reservas, typeof(TSaga),
-            binding.Efimera);
+            binding.Efimera, binding.Tipos, binding.Deshacer);
     }
 }

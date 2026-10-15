@@ -6,11 +6,13 @@ namespace Synergos.Bff.Core.Flow;
 /// <param name="HoldId">Lo reservado en la capacidad: el apartado, la autorización, el pedido.</param>
 /// <param name="CloseTargetId">Sobre qué se deshace una vez consumida (el pozo, no el apartado).
 /// Igual a <paramref name="HoldId"/> si no cambia.</param>
+/// <param name="Cantidad">Cuántas unidades, si el paso que reservó lo dijo: reponer existencias ya
+/// consumidas lo necesita (núcleo N1, saga genérica). Una saga tipada no la usa.</param>
 /// <remarks>
 /// Dentro de un bloque <c>para_cada: reservas:&lt;paso&gt;</c> cada una es un ítem con dos campos,
 /// <see cref="CampoHold"/> y <see cref="CampoCierre"/>: es lo que un paso de cierre puede leer.
 /// </remarks>
-public sealed record HoldLeg(string HoldId, string CloseTargetId)
+public sealed record HoldLeg(string HoldId, string CloseTargetId, int? Cantidad = null)
 {
     /// <summary>El campo del ítem con <see cref="HoldId"/>.</summary>
     public const string CampoHold = "holdId";

@@ -55,8 +55,122 @@ public static class FlowValidator
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
         RevisarOmitirSiCero(flujo, errores);
+        RevisarModoGenerico(flujo, registro, contrato, errores);
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
+    }
+
+    /// <summary>Los nombres de fase que chocarían con las rutas que el host mapea por convención.</summary>
+    public static readonly IReadOnlyList<string> FasesReservadas = ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones"];
+
+    /// <summary>
+    /// Lo que no se guarda en una saga genérica por su NOMBRE: el mismo olfato que
+    /// <c>PropagacionDeIdentidadTests.Ninguna_saga_guarda_una_credencial</c> aplica a los parámetros de un record de saga.
+    /// </summary>
+    /// <remarks>
+    /// En la saga genérica, «añadir un campo al record» es añadir una palabra a la definición: el gate de la
+    /// fuente no la ve, así que la regla vive aquí y corre al arrancar.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> HuelenACredencial = ["Token", "Bearer", "Credential", "Credencial", "Jwt"];
+
+    /// <summary>
+    /// Las reglas de un flujo GENÉRICO (núcleo N1): el host lee su entrada y guarda su saga con los tipos
+    /// que declara, así que lo que falte o no cuadre se dice al arrancar.
+    /// </summary>
+    /// <remarks>
+    /// Sólo corre si el contrato trae los tipos de valor del orquestador (<see cref="ContratoDelFlujo.Tipos"/>),
+    /// que es lo que pone el binding derivado. Un flujo tipado (Eventos) no las cumple ni las necesita.
+    /// </remarks>
+    private static void RevisarModoGenerico(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato, List<string> errores)
+    {
+        if (contrato.Tipos is not { } tipos) return;
+
+        var declarados = flujo.Tipos ?? new Dictionary<string, TipoDeclarado>(StringComparer.Ordinal);
+        var efimeros = (flujo.Efimera ?? new Dictionary<string, IReadOnlyList<string>>())
+            .SelectMany(e => e.Value).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var nombre in flujo.Entrada.Concat(efimeros).Where(n => !declarados.ContainsKey(n)).Distinct(StringComparer.Ordinal))
+        {
+            errores.Add($"«{nombre}» entra y no declara su tipo en «tipos»: el host no sabría de dónde leerlo ni cómo.");
+        }
+
+        foreach (var (nombre, tipo) in declarados.OrderBy(d => d.Key, StringComparer.Ordinal))
+        {
+            var esEntrada = flujo.Entrada.Contains(nombre, StringComparer.Ordinal);
+            if (!esEntrada && !efimeros.Contains(nombre))
+            {
+                errores.Add($"declara el tipo de «{nombre}», que no es una entrada ni algo efímero.");
+            }
+
+            foreach (var declarado in tipo.EsLista ? tipo.Campos!.Values : [tipo.Tipo!])
+            {
+                if (tipos.Resolver(declarado) is null)
+                {
+                    errores.Add($"el tipo de «{nombre}» es «{declarado}», y ese tipo de valor no está registrado.");
+                }
+            }
+
+            switch (tipo.Origen)
+            {
+                case OrigenDelValor.Contacto when !efimeros.Contains(nombre) || esEntrada:
+                    errores.Add($"«{nombre}» es el contacto del aviso y no es sólo efímero: un dato personal acabaría en la saga.");
+                    break;
+                case OrigenDelValor.Sujeto or OrigenDelValor.Negocio when !esEntrada:
+                    errores.Add($"«{nombre}» viene de la puerta ({tipo.Origen}) y no es una entrada: sólo la fase que abre lo recibe.");
+                    break;
+            }
+        }
+
+        var sujetos = flujo.Entrada.Count(n => declarados.GetValueOrDefault(n)?.Origen == OrigenDelValor.Sujeto);
+        if (sujetos != 1)
+        {
+            errores.Add($"la entrada tiene que traer exactamente un sujeto ({{ \"de\": \"sujeto\" }}), que es el dueño de la saga, y trae {sujetos}.");
+        }
+
+        foreach (var fase in flujo.Fases.Where(f => FasesReservadas.Contains(f.Nombre, StringComparer.Ordinal)))
+        {
+            errores.Add($"la fase «{fase.Nombre}» se llama como una operación del host ({string.Join(", ", FasesReservadas)}): su ruta chocaría.");
+        }
+
+        var escritos = flujo.Pasos.Values.SelectMany(p => p.Escribe).ToHashSet(StringComparer.Ordinal);
+        foreach (var nombre in flujo.LoQueSale.Where(n => !escritos.Contains(n) && !flujo.Entrada.Contains(n, StringComparer.Ordinal)))
+        {
+            errores.Add($"la salida nombra «{nombre}», que ningún paso escribe y no entra: saldría siempre vacía.");
+        }
+
+        foreach (var nombre in contrato.Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal))
+        {
+            if (HuelenACredencial.FirstOrDefault(o => nombre.Contains(o, StringComparison.OrdinalIgnoreCase)) is { } olor)
+            {
+                errores.Add($"«{nombre}» se guarda en la saga y se llama como una credencial («{olor}»): el almacén de "
+                    + "sagas se respalda, y un bearer ahí convierte la copia de datos en un llavero. Si de verdad hace "
+                    + "falta, que sea efímero de la fase que lo usa.");
+            }
+
+            var tipo = BindingDeFlujo.TipoDe(flujo, tipos, registro, nombre);
+            if (tipo is null)
+            {
+                errores.Add($"«{nombre}» se guarda en la saga (lo lee una fase que continúa o sale) y no se sabe su tipo: "
+                    + "ni entra con tipo ni lo escribe un paso que declare el suyo, o lo escriben dos con tipos distintos.");
+            }
+            else if (!tipo.Tipo.Guardable)
+            {
+                errores.Add($"«{nombre}» se guarda en la saga y su tipo, «{tipo.Declarado}», no se puede guardar.");
+            }
+        }
+
+        if (contrato.Deshacer is { } conocidos)
+        {
+            foreach (var paso in flujo.Pasos.Values.Where(p => p.Reserva is not null).OrderBy(p => p.Id, StringComparer.Ordinal))
+            {
+                foreach (var tipo in new[] { paso.Reserva!.Antes, paso.Reserva.Despues }.OfType<string>()
+                             .Where(t => !conocidos.Contains(t, StringComparer.Ordinal)))
+                {
+                    errores.Add($"la reserva de «{paso.Id}» se deshace con «{tipo}», y nadie sabe deshacer ese tipo "
+                        + $"(se conocen: {string.Join(", ", conocidos.Order(StringComparer.Ordinal))}).");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -237,6 +351,20 @@ public static class FlowValidator
                     : $"el paso «{paso.Id}» declara una plantilla y «{paso.Tipo}» no avisa: quien la lea creerá que ese "
                       + "paso manda algo.");
             }
+        }
+
+        // Dos pasos con la misma llave son, para la capacidad, UNA llamada: la segunda devuelve lo que hizo la
+        // primera, que es la idempotencia funcionando. Una renta con la garantía y el alquiler bajo la misma
+        // llave apartaría el equipo y cobraría una sola vez (NN-2 de 005).
+        foreach (var repetida in flujo.Pasos.Values
+                     .Where(p => (p.Llave ?? p.LlaveBase) is not null)
+                     .GroupBy(p => (p.Llave ?? p.LlaveBase)!, StringComparer.Ordinal)
+                     .Where(g => g.Count() > 1)
+                     .OrderBy(g => g.Key, StringComparer.Ordinal))
+        {
+            var pasos = string.Join(" y ", repetida.Select(p => $"«{p.Id}»").Order(StringComparer.Ordinal));
+            errores.Add($"los pasos {pasos} declaran la misma llave «{repetida.Key}»: para la capacidad son una sola "
+                + "llamada, y la segunda devolvería lo que hizo la primera.");
         }
     }
 

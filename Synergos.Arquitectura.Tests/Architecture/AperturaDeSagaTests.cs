@@ -60,6 +60,27 @@ public sealed class AperturaDeSagaTests
     /// <summary>Lo que hay que llamar.</summary>
     private const string Apertura = ".Abrir(";
 
+    /// <summary>La fachada común de los flujos declarados (núcleo N1), que llama a <c>Abrir</c> por ellos.</summary>
+    private const string Fachada = "FachadaDeFlujo<";
+
+    /// <summary>Cómo se abre por la fachada.</summary>
+    private const string AperturaPorLaFachada = ".AbrirAsync(";
+
+    /// <summary>
+    /// Si un flujo (sin comentarios) abre su saga por <c>Abrir</c>: llamándolo, o abriendo por la fachada
+    /// común que lo llama.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Delegar no afloja el gate</b> (núcleo N1, T022): <c>TicketingFlow</c> dejó de escribir la
+    /// apertura porque la escribe <c>FachadaDeFlujo</c>, una vez para todos. Que la fachada llame a
+    /// <c>Abrir</c> lo vigila <see cref="La_fachada_comun_abre_por_Abrir"/>; que el flujo abra POR ella, y
+    /// no la tenga a mano y abra con otra cosa (con <c>ContinuarAsync</c> sobre una saga que no existe,
+    /// por ejemplo), lo exige pedir las dos piezas.</para>
+    /// </remarks>
+    internal static bool AbrePorAbrir(string codigo)
+        => codigo.Contains(Apertura, StringComparison.Ordinal)
+            || (codigo.Contains(Fachada, StringComparison.Ordinal) && codigo.Contains(AperturaPorLaFachada, StringComparison.Ordinal));
+
     /// <summary>
     /// Los flujos de cada orquestador, derivados del disco.
     /// </summary>
@@ -111,7 +132,7 @@ public sealed class AperturaDeSagaTests
     public void Todo_flujo_abre_su_saga_por_Abrir()
     {
         var sinApertura = Flujos()
-            .Where(f => !f.Codigo.Contains(Apertura, StringComparison.Ordinal))
+            .Where(f => !AbrePorAbrir(f.Codigo))
             .Select(f => $"{f.Orquestador}/{Path.GetFileName(f.Fichero)}")
             .ToList();
 
@@ -119,6 +140,59 @@ public sealed class AperturaDeSagaTests
             "abren saga sin pasar por `SagaEngine.Abrir`, así que una saga Compensated se " +
             "devuelve tal cual y encierra a quien la pidió (#41, #166): " +
             string.Join(", ", sinApertura));
+    }
+
+    /// <summary>
+    /// El cuerpo del miembro público <paramref name="metodo"/>: desde su firma hasta el siguiente miembro del
+    /// tipo (sangría de cuatro espacios). Nulo si no está.
+    /// </summary>
+    internal static string? CuerpoDe(string codigo, string metodo)
+    {
+        var firma = Regex.Match(codigo, @"\bpublic\b[^\n]*\b" + Regex.Escape(metodo) + @"\(");
+        if (!firma.Success) return null;
+        var resto = codigo[(firma.Index + firma.Length)..];
+        var siguiente = Regex.Match(resto, @"\n    (public|private|internal|protected)\b");
+        return siguiente.Success ? resto[..siguiente.Index] : resto;
+    }
+
+    [Fact]
+    public void La_fachada_comun_abre_por_Abrir()
+    {
+        // El diente que hace que delegar no sea un hueco: si la fachada común deja de llamar a `Abrir`,
+        // todos los flujos que abren por ella vuelven a #166 a la vez y el gate de arriba no lo vería.
+        //
+        // Mira el CUERPO de `AbrirAsync` y no el fichero (lo que el tercer diente de abajo no hizo, aquí sí
+        // se puede: es un fichero y un método conocidos). Medido: con el fichero entero, una `AbrirAsync`
+        // que vuelve al `Find` de #166 pasa en VERDE, porque `DevolveriaLaMisma` sigue llamando a `Abrir`.
+        var fichero = Path.Combine(Proyectos.Dir(Motor, "Flow"), "FachadaDeFlujo.cs");
+        Assert.True(File.Exists(fichero), $"no está {fichero}: la fachada común se movió y este diente dejó de mirar.");
+
+        var cuerpo = CuerpoDe(Desnuda(File.ReadAllText(fichero)), "AbrirAsync");
+        Assert.True(cuerpo is not null, "FachadaDeFlujo ya no tiene `AbrirAsync`: este diente dejó de mirar; apuntalo al método que abre.");
+        Assert.True(cuerpo.Contains(Apertura, StringComparison.Ordinal),
+            "FachadaDeFlujo.AbrirAsync no abre por `SagaEngine.Abrir`: todo flujo que delega en ella devuelve una "
+            + "saga Compensated tal cual y encierra a quien la pidió (#41, #166).");
+    }
+
+    [Fact]
+    public void El_cuerpo_de_un_metodo_termina_en_el_siguiente_miembro()
+    {
+        const string Tipo = "public sealed class X\n{\n    public async Task<R> AbrirAsync(string a)\n    {\n        var s = _m.Find(a);\n    }\n\n"
+            + "    public bool Otra() => _m.Abrir(a);\n}\n";
+        var cuerpo = CuerpoDe(Tipo, "AbrirAsync");
+        Assert.NotNull(cuerpo);
+        Assert.Contains("_m.Find(a)", cuerpo, StringComparison.Ordinal);
+        Assert.DoesNotContain(Apertura, cuerpo, StringComparison.Ordinal);
+        Assert.Null(CuerpoDe(Tipo, "Cerrar"));
+    }
+
+    [Fact]
+    public void Abrir_por_la_fachada_cuenta_y_tenerla_sin_abrir_por_ella_no()
+    {
+        Assert.True(AbrePorAbrir("var slot = _sagas.Abrir(sagaId, buyer);"));
+        Assert.True(AbrePorAbrir("_fachada = new FachadaDeFlujo<TicketingSaga>(s, f, d, r); … => _fachada.AbrirAsync(id, quien, e, ct);"));
+        Assert.False(AbrePorAbrir("_fachada = new FachadaDeFlujo<TicketingSaga>(s, f, d, r); … => _fachada.ContinuarAsync(\"abrir\", id, quien, e, ct);"));
+        Assert.False(AbrePorAbrir("var previa = _sagas.Find(sagaId); … _otra.AbrirAsync(x);"));
     }
 
     // ── EL TERCER DIENTE QUE NO SE ESCRIBIÓ, Y POR QUÉ ──────────────────────

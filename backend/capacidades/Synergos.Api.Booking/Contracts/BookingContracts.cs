@@ -13,26 +13,31 @@ namespace Synergos.Api.Booking.Contracts;
 // qué falta — y el llamador se queda sin saber cuál de siete campos era.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// En lo que llega en el CUERPO de una petición, todo anulable lleva `= null` (el molde F2 de la ADR
+// 0140, núcleo N1): no cambia cómo se liga —si falta el campo, System.Text.Json ya ponía null—, cambia
+// lo que se publica. Sin él, ASP.NET marca `required` todo parámetro posicional y el contrato exigiría
+// campos que el dominio no exige (lo vigila el suelo del contrato).
+
 /// <summary>Una franja de apertura tal como llega.</summary>
-public sealed record OpeningRuleDto(string? Day, string? From, string? To);
+public sealed record OpeningRuleDto(string? Day = null, string? From = null, string? To = null);
 
 /// <summary>Registrar un recurso reservable.</summary>
 public sealed record CreateResourceRequest(
-    string? SubjectKind,
-    string? SubjectId,
-    int? Capacity,
-    string? TimeZoneId,
-    IReadOnlyList<OpeningRuleDto>? Opening,
-    int? CancellationNoticeMinutes);
+    string? SubjectKind = null,
+    string? SubjectId = null,
+    int? Capacity = null,
+    string? TimeZoneId = null,
+    IReadOnlyList<OpeningRuleDto>? Opening = null,
+    int? CancellationNoticeMinutes = null);
 
 /// <summary>Tomar un bloqueo temporal sobre una ventana.</summary>
 public sealed record CreateHoldRequest(
-    string? ResourceId,
-    DateTimeOffset? Start,
-    DateTimeOffset? End,
-    string? HeldForKind,
-    string? HeldForId,
-    int? TtlMinutes);
+    string? ResourceId = null,
+    DateTimeOffset? Start = null,
+    DateTimeOffset? End = null,
+    string? HeldForKind = null,
+    string? HeldForId = null,
+    int? TtlMinutes = null);
 
 /// <summary>Cómo sale un recurso.</summary>
 public sealed record ResourceResponse(

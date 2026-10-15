@@ -1712,6 +1712,67 @@ de la página; el elemento vivo la seguía y saltaba al carrito con la compra co
 la lista y destruye el elemento, con su mutante fiel visto en rojo; después, 32 de 32 corridas en
 verde y `npm test` 6/6 tres veces seguidas.
 
+## Núcleo N1 — un flujo del caso común es su JSON (2026-10-15)
+
+> Línea `001-nucleo` (rama `linea/nucleo`, desde `4fb190bd`; spec en `specs/001-nucleo/`). El
+> arquitecto dio esta ADR por **aceptada** en el lote 1 de decisiones (2026-10-15); el «Estado» de
+> arriba lo cambia la integración, no esta línea.
+
+**Lo que cambió.**
+
+- La definición declara el **tipo y el origen** de lo que entra (`tipos`: del cuerpo, `sujeto`,
+  `negocio` o `contacto`) y **lo que sale** (`salida`). Son datos y no expresiones (supuesto P1). Los
+  tipos de valor (`texto`, `entero`, `decimal`, `booleano`, `instante`, `ref`, `dinero`, `ventana`, sus
+  anulables y listas) leen, escriben y publican su esquema desde una sola fuente.
+- **Saga genérica** (`SagaDeFlujo`), que guarda cada valor con su tipo. El **binding sale de la
+  definición** (`BindingDeFlujo`), y la **fachada** (`FachadaDeFlujo<TSaga>`) escribe una vez lo que cada
+  `*Flow.cs` copiaba:
+  - abrir por `SagaEngine.Abrir` con su dueño;
+  - las guardas de continuar y el doble clic;
+  - cancelar y consultar, sólo para el dueño.
+- **Endpoints por convención** `/v1/flujos/{clave}` y sus operaciones (cotizar, cancelar, consultar,
+  reintentar, compensaciones). Su contrato va tipado desde la definición
+  (`{Flujo}Entrada/Respuesta/Cotizacion`), así que el generador del UI lo traduce como cualquier otro.
+- **Booking publica su contrato** (`Synergos.Api.Booking.json`), con su par de compatibilidad.
+  - La ruta combinada `GET v1/resources` queda fuera, declarada con su razón; la reemplaza
+    `v1/resources/por-sujeto`.
+  - Puerto `IBookingPort`.
+  - Pasos `booking.hallar`, `apartar`, `apartar-por-item`, `confirmar`, `confirmar-por-item` y
+    `liberar`.
+  - Deshacer común: `inventory.soltar/reponer`, `payments.anular/devolver` y `booking.liberar/cancelar`.
+- **Interruptor** `{Origen}:Flujos:Modo` (`declarado`/`imperativo`) para el vertical que conserve su
+  flujo imperativo junto al declarado (superset). Un gate exige que lo lea quien tenga los dos.
+- **Eventos delega en la fachada común sin cambiar de comportamiento.** Los 189 tests de la compra
+  siguen en verde sin tocarlos, y su contrato sale idéntico byte a byte.
+
+**La medida (SC-001, SC-002).** La muestra `muestra.cita` (cotizar, desglose, hallar la agenda,
+apartar, autorizar | capturar, confirmar, avisar) cuesta **22 líneas de C#** (su arranque) más su JSON,
+en **2 ficheros**. Antes un flujo declarado costaba ~316 líneas de pegamento (informe 81).
+`MetricaDelFlujoDeMuestraTests` sostiene ≤ 60 líneas y ≤ 4 ficheros. De Eventos salieron 31 líneas de
+lógica: `TicketingFlow` pasó de 132 a 108 y `EventosPasos` de 106 a 99.
+
+**Lo que no cambió, y por qué.** `TicketingSaga` y `EventosFlowBinding` siguen tipados. La saga está
+fijada byte a byte en disco (`TicketingSagaPersistidaTests`), y pasarla a la genérica cambiaría la
+persistencia sin ganar nada en el piloto. Lo común es la fachada: Eventos conserva sus códigos
+(`eventos.purchase_not_found`, `eventos.not_confirmable`) en `ReglasDeLaFachada`.
+
+**Gates nuevos o ampliados.**
+
+- `AperturaDeSagaTests` reconoce abrir **por** la fachada común y mira el **cuerpo** de
+  `FachadaDeFlujo.AbrirAsync`. Medido: mirando el fichero entero, un regreso a `Find` pasaba en verde,
+  porque `DevolveriaLaMisma` sigue llamando a `Abrir`.
+- `ModoDelOrquestadorTests`.
+- `RutasFueraDelContratoTests`: toda ruta excluida del contrato se declara.
+- `ContratoDeFlujosGenericosTests`, `TiposDeEscrituraTests` y `MetricaDelFlujoDeMuestraTests`.
+- Una prueba de que `AddOrquestadorDeclarado` entra por `AddSagaMachinery`, con sus dos barridos y su
+  arriendo.
+
+**Lo que sigue (N2, N3).**
+
+- **N2:** Consent, Cart, Orders y Fulfillment, con contrato y gate, y sus puertos y pasos.
+- **N3:** el envoltorio tipado de cada flujo en el front; los avisos derivados del contrato;
+  `<synergos-flujo>` colocado por declaración del editor; el selector puerta/proceso con su gate.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la

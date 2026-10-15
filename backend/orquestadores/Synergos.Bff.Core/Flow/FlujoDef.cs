@@ -25,17 +25,31 @@ namespace Synergos.Bff.Core.Flow;
 /// del dominio en C#. Si portar un flujo exigiera expresiones, la definición se estaría volviendo
 /// un lenguaje de programación, y eso es el criterio de reapertura de la ADR, no algo que se añade
 /// en silencio.</para>
+///
+/// <para><b>Los tipos y la salida son datos, no expresiones</b> (núcleo N1, supuesto P1). Dicen qué
+/// forma tiene cada valor que entra y de dónde viene, y qué se devuelve; ninguno calcula nada. Son lo
+/// que deja a un flujo sin fachada propia: el host convierte el cuerpo y las cabeceras de la puerta
+/// en los valores que leen los pasos, y publica el contrato tipado desde la misma fuente. Una
+/// definición sin <see cref="Tipos"/> sigue siendo válida: se registra con su binding tipado, como
+/// Eventos.</para>
 /// </remarks>
+/// <param name="Tipos">Por nombre de la entrada o de lo efímero, su tipo y su origen. Opcional.</param>
+/// <param name="Salida">Lo que el flujo devuelve al abrir, consultar, cotizar y continuar. Opcional.</param>
 public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
     IReadOnlyList<FaseDef> Fases,
     IReadOnlyDictionary<string, PasoDef> Pasos,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? Efimera = null)
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Efimera = null,
+    IReadOnlyDictionary<string, TipoDeclarado>? Tipos = null,
+    IReadOnlyList<string>? Salida = null)
 {
     /// <summary>Lo efímero de una fase: vacío si no declara nada.</summary>
     public IReadOnlyList<string> EfimeraDe(string fase)
         => Efimera?.GetValueOrDefault(fase) ?? Array.Empty<string>();
+
+    /// <summary>Lo que devuelve: vacío si no declara nada.</summary>
+    public IReadOnlyList<string> LoQueSale => Salida ?? Array.Empty<string>();
 
     /// <summary>La fase con ese nombre, o rechaza: una fase que no existe es un defecto del llamador.</summary>
     public FaseDef Fase(string nombre)
@@ -129,6 +143,46 @@ public sealed record PasoDef(
 /// </remarks>
 public sealed record ReservaDef(string ConsumadoPor, string Antes, string? Despues, string? Motivo);
 
+/// <summary>De dónde viene un valor que entra al flujo.</summary>
+public enum OrigenDelValor
+{
+    /// <summary>Del cuerpo de la petición, por su nombre.</summary>
+    Cuerpo,
+
+    /// <summary>El sujeto que pone la puerta del CMS (<c>X-Synergos-Sujeto</c>): el dueño de la saga.</summary>
+    Sujeto,
+
+    /// <summary>Un campo de la configuración de negocio que pone la puerta (<c>X-Synergos-Negocio</c>).</summary>
+    Negocio,
+
+    /// <summary>El contacto del aviso que pone la puerta (<c>X-Synergos-Contacto</c>). Sólo efímero.</summary>
+    Contacto,
+}
+
+/// <summary>El tipo declarado de un valor que entra al flujo, y su origen.</summary>
+/// <param name="Origen">De dónde viene.</param>
+/// <param name="Tipo">El nombre del tipo de valor (<c>texto</c>, <c>dinero?</c>…), salvo en una lista.
+/// En <see cref="OrigenDelValor.Sujeto"/> es <c>ref</c> y en <see cref="OrigenDelValor.Contacto"/>,
+/// <c>contacto</c>: los pone el lector.</param>
+/// <param name="Campos">Si es una lista de ítems, el tipo de cada campo del ítem; si no, nulo.</param>
+/// <param name="Campo">En <see cref="OrigenDelValor.Negocio"/>, el campo de la configuración que se lee.</param>
+/// <remarks>
+/// El lector sólo comprueba la FORMA; que el nombre del tipo exista lo comprueba el validador contra el
+/// registro de tipos del orquestador, que es ampliable (<c>Bff.Pasos</c> registra <c>contacto</c>).
+/// </remarks>
+public sealed record TipoDeclarado(
+    OrigenDelValor Origen, string? Tipo, IReadOnlyDictionary<string, string>? Campos = null, string? Campo = null)
+{
+    /// <summary>El tipo con que el lector declara un sujeto.</summary>
+    public const string TipoDelSujeto = "ref";
+
+    /// <summary>El tipo con que el lector declara un contacto.</summary>
+    public const string TipoDelContacto = "contacto";
+
+    /// <summary>Si es una lista de ítems.</summary>
+    public bool EsLista => Campos is not null;
+}
+
 /// <summary>Lee el JSON de un flujo con la forma exacta que el intérprete ejecuta.</summary>
 /// <remarks>
 /// <para><b>Estricto con los campos que no conoce.</b> Un campo que el intérprete no lee es una
@@ -160,7 +214,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -194,9 +248,86 @@ internal static class LectorDeFlujo
                 }
             }
 
-            return new FlujoDef(clave, entrada, fases, pasos, efimera);
+            Dictionary<string, TipoDeclarado>? tipos = null;
+            if (raiz.TryGetProperty("tipos", out var nodoTipos))
+            {
+                Objeto(nodoTipos, $"{donde}, «tipos»");
+                tipos = new Dictionary<string, TipoDeclarado>(StringComparer.Ordinal);
+                foreach (var t in nodoTipos.EnumerateObject())
+                {
+                    tipos[t.Name] = Tipo(t.Value, $"{donde}, el tipo de «{t.Name}»");
+                }
+            }
+
+            IReadOnlyList<string>? salida = null;
+            if (raiz.TryGetProperty("salida", out _))
+            {
+                salida = Textos(raiz, "salida", donde);
+                if (salida.GroupBy(n => n, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1) is { } repetida)
+                {
+                    throw new FormatException($"{donde}: «salida» nombra «{repetida.Key}» dos veces.");
+                }
+            }
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida);
         }
     }
+
+    /// <summary>
+    /// Un tipo declarado: un texto (el nombre del tipo, del cuerpo) o un objeto con su forma exacta.
+    /// </summary>
+    /// <remarks>
+    /// Los orígenes son una lista cerrada: uno que no está es un valor que nadie pondría, y el paso que lo
+    /// lea lanzaría con quien compra esperando. Que el NOMBRE del tipo exista no se mira aquí: el registro
+    /// de tipos es del orquestador y lo cruza el validador.
+    /// </remarks>
+    private static TipoDeclarado Tipo(JsonElement nodo, string donde)
+    {
+        if (nodo.ValueKind == JsonValueKind.String)
+        {
+            return new TipoDeclarado(OrigenDelValor.Cuerpo, NombreDeTipo(nodo, donde));
+        }
+
+        if (nodo.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException($"{donde}: tiene que ser el nombre de un tipo o un objeto con su forma.");
+        }
+        if (nodo.TryGetProperty("lista", out var lista))
+        {
+            SoloEstos(nodo, donde, "lista");
+            Objeto(lista, $"{donde}, «lista»");
+            var campos = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var c in lista.EnumerateObject())
+            {
+                campos[c.Name] = NombreDeTipo(c.Value, $"{donde}, el campo «{c.Name}»");
+            }
+            if (campos.Count == 0) throw new FormatException($"{donde}: una «lista» sin campos no trae nada que leer.");
+            return new TipoDeclarado(OrigenDelValor.Cuerpo, null, campos);
+        }
+
+        var de = Texto(nodo, "de", donde);
+        switch (de)
+        {
+            case "sujeto":
+                SoloEstos(nodo, donde, "de");
+                return new TipoDeclarado(OrigenDelValor.Sujeto, TipoDeclarado.TipoDelSujeto);
+            case "contacto":
+                SoloEstos(nodo, donde, "de");
+                return new TipoDeclarado(OrigenDelValor.Contacto, TipoDeclarado.TipoDelContacto);
+            case "negocio":
+                SoloEstos(nodo, donde, "de", "campo", "tipo");
+                return new TipoDeclarado(OrigenDelValor.Negocio,
+                    NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"), null, Texto(nodo, "campo", donde));
+            default:
+                throw new FormatException(
+                    $"{donde}: «de» admite «sujeto», «negocio» o «contacto», y trae «{de}». Lo que viene en el cuerpo se declara con el nombre del tipo.");
+        }
+    }
+
+    private static string NombreDeTipo(JsonElement nodo, string donde)
+        => nodo.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(nodo.GetString())
+            ? nodo.GetString()!
+            : throw new FormatException($"{donde}: tiene que ser el nombre de un tipo (un texto no vacío).");
 
     private static FaseDef Fase(string nombre, JsonElement nodo, string donde)
     {

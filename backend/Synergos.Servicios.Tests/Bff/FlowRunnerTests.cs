@@ -109,6 +109,30 @@ public sealed class FlowRunnerTests
         "\"llave\": \"auth\", \"motivo\": \"no autorizó\",",
         "\"llave\": \"auth\", \"motivo\": \"no autorizó\", \"omitir_si_cero\": \"precio\",", StringComparison.Ordinal);
 
+    /// <summary>
+    /// Un paso DESPUÉS de la última reserva de «abrir»: lo que escribe sólo lo guarda una saga genérica si
+    /// el intérprete vuelve a escribir al terminar la fase (núcleo N1, el gancho <c>AlGuardar</c>).
+    /// </summary>
+    private const string ConPasoTrasReservar = """
+        {
+          "clave": "prueba.datos",
+          "entrada": ["monto"],
+          "fases": {
+            "abrir": ["cotizar", "autorizar", "despues"],
+            "cerrar": ["capturar"]
+          },
+          "pasos": {
+            "cotizar": { "tipo": "t.cotizar", "lee": ["monto"], "escribe": ["precio"] },
+            "autorizar": {
+              "tipo": "t.autorizar", "lee": ["precio"], "escribe": ["cobro"], "llave": "auth",
+              "reserva": { "consumado_por": "capturar", "antes": "Anular", "despues": "Devolver" }
+            },
+            "despues": { "tipo": "t.extra", "escribe": ["extra"] },
+            "capturar": { "tipo": "t.capturar", "lee": ["cobro"], "llave": "cap", "cierra_reserva": "autorizar" }
+          }
+        }
+        """;
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> NotaEnCerrar =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal) { ["cerrar"] = new[] { "nota" } };
 
@@ -201,6 +225,19 @@ public sealed class FlowRunnerTests
             };
 
         public SagaDePrueba ConError(SagaDePrueba saga, string? falla) => saga with { Falla = falla };
+
+        /// <summary>
+        /// Si <see cref="AlGuardar"/> anota en la saga lo que ve: «vio-cobro» con el cobro en el contexto y
+        /// «vio-extra» con lo que escribe el paso de después de reservar. Es lo que haría una saga genérica.
+        /// </summary>
+        public bool AnotaLoQueVe { get; init; }
+
+        public SagaDePrueba AlGuardar(SagaDePrueba saga, FlowContext ctx)
+        {
+            if (!AnotaLoQueVe) return saga;
+            var visto = ctx.Has("extra") ? "vio-extra" : ctx.Has("cobro") ? "vio-cobro" : null;
+            return visto is null || saga.Falla == visto ? saga : saga with { Falla = visto };
+        }
     }
 
     private sealed class Banco
@@ -251,6 +288,8 @@ public sealed class FlowRunnerTests
                     if (AvisarLanza is { } excepcion) throw excepcion;
                     return SalidaDePaso.Sigue();
                 }, e => e.Lee<string?>(0) ?? "-"),
+                Paso("t.extra", 0, 1, LlaveRequerida.Ninguna, _ => SalidaDePaso.Sigue("x")),
+                Paso("t.revienta", 0, 0, LlaveRequerida.Ninguna, _ => throw new InvalidOperationException("el proceso se cae")),
             });
             Runner = new FlowRunner<SagaDePrueba>(Motor, Registro, Flujo, Binding, Fases, Reloj, Log);
         }
@@ -376,6 +415,44 @@ public sealed class FlowRunnerTests
     private sealed class RelojFijo : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(2026, 10, 7, 9, 0, 0, TimeSpan.Zero);
+    }
+
+    // ── El gancho AlGuardar (núcleo N1) ─────────────────────────────────────
+
+    [Fact]
+    public async Task Lo_que_el_binding_toma_del_contexto_viaja_en_la_MISMA_escritura_que_la_reserva()
+    {
+        // El proceso se cae justo después de autorizar: lo único guardado es lo de esa escritura, y ahí
+        // tiene que estar el cobro, o la fase que cierra no tendría de dónde leerlo.
+        var banco = new Banco(
+            ConPasoTrasReservar.Replace("\"tipo\": \"t.extra\", \"escribe\": [\"extra\"]", "\"tipo\": \"t.revienta\"", StringComparison.Ordinal),
+            new BindingDePrueba { AnotaLoQueVe = true });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => banco.AbrirPor(10m));
+
+        Assert.Equal("vio-cobro", banco.Sagas.Find("s1")!.Falla);
+    }
+
+    [Fact]
+    public async Task Lo_que_una_fase_escribe_despues_de_su_ultima_reserva_se_guarda_si_el_binding_lo_toma()
+    {
+        var banco = new Banco(ConPasoTrasReservar, new BindingDePrueba { AnotaLoQueVe = true });
+
+        Assert.True((await banco.AbrirPor(10m)).IsOk);
+
+        Assert.Equal("vio-extra", banco.Sagas.Find("s1")!.Falla);
+    }
+
+    [Fact]
+    public async Task Un_binding_que_no_toma_nada_no_anade_ninguna_escritura()
+    {
+        // Es el caso de toda saga tipada (Eventos): el gancho devuelve la misma saga y el intérprete
+        // escribe lo que escribía antes, ni una vez más.
+        var banco = new Banco(ConPasoTrasReservar);
+
+        Assert.True((await banco.AbrirPor(10m)).IsOk);
+
+        Assert.Single(banco.Escrituras);
     }
 
     // ── Abrir ───────────────────────────────────────────────────────────────

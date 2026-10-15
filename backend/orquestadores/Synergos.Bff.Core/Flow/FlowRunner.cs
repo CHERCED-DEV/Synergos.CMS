@@ -436,7 +436,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             ?? throw new InvalidOperationException(
                 $"El paso «{definicion.Id}» declara una reserva y «{definicion.Tipo}» no dijo qué reservó.");
 
-        var saga = _binding.ConReserva(corrida.Saga!, definicion.Id, new HoldLeg(hecho.Id, hecho.CierreId ?? hecho.Id), item);
+        var saga = _binding.ConReserva(corrida.Saga!, definicion.Id, new HoldLeg(hecho.Id, hecho.CierreId ?? hecho.Id, hecho.Cantidad), item);
 
         Guardar(corrida, saga.WithCompensations(saga.Compensations
             .Append(Compensation.For(reserva.Antes, hecho.Id, reserva.Motivo ?? $"{_flujo.Clave} no se completó"))
@@ -470,8 +470,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             .ToList()));
     }
 
+    /// <summary>
+    /// Escribe la saga, con lo que el binding le añada del contexto de este instante
+    /// (<see cref="IFlowBinding{TSaga}.AlGuardar"/>): lo que guarda una saga genérica viaja en la MISMA
+    /// escritura que la compensación que lo acompaña.
+    /// </summary>
     private void Guardar(Corrida corrida, TSaga saga)
     {
+        saga = _binding.AlGuardar(saga, corrida.Ctx);
         corrida.Saga = saga;
         corrida.SinGuardar = false;
         _motor.Put(saga);
@@ -482,7 +488,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         var saga = corrida.Saga!;
         if (!ultima)
         {
-            if (corrida.SinGuardar) Guardar(corrida, saga);
+            // Una fase que siguió escribiendo después de su última reserva deja en el contexto algo que
+            // una saga genérica guarda: se escribe si el binding cambió la saga. Una tipada devuelve la
+            // MISMA instancia, y no hay escritura de más.
+            if (corrida.SinGuardar || !ReferenceEquals(_binding.AlGuardar(saga, corrida.Ctx), saga)) Guardar(corrida, saga);
             return Result.Ok(corrida.Saga!);
         }
 
@@ -525,7 +534,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         if (corrida.Saga is not { } saga) return Result.Rejected<TSaga>(rechazo);
 
         _log.LogWarning("El flujo {Flujo} deshace la saga {Saga} ({Motivo}): {Error}", _flujo.Clave, saga.Id, motivo, rechazo);
-        _motor.Put(_binding.ConError(saga, rechazo.ToString()));
+        _motor.Put(_binding.AlGuardar(_binding.ConError(saga, rechazo.ToString()), corrida.Ctx));
 
         // Con el turno que ya tiene esta fase: el arriendo no es reentrante, y pedirlo otra vez
         // dejaría la compensación en línea esperándose a sí misma hasta que la hiciera el barrido.

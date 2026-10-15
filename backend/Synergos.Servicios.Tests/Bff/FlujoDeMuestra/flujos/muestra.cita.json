@@ -1,0 +1,78 @@
+{
+  "clave": "muestra.cita",
+  "entrada": ["paciente", "profesional", "ventana", "servicio", "promocion"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "profesional": "ref",
+    "ventana": "ventana",
+    "servicio": "ref",
+    "promocion": "texto?",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["total", "reservaId"],
+  "efimera": { "cerrar": ["contacto"] },
+  "fases": {
+    "abrir": ["lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
+    "cerrar": ["capturar", "confirmar", "avisar"]
+  },
+  "pasos": {
+    "lineas": { "tipo": "forma.una-linea", "lee": ["servicio"], "escribe": ["aCotizar"] },
+    "cotizar": { "tipo": "pricing.cotizar", "lee": ["aCotizar", "promocion"], "escribe": ["cotizacion"] },
+    "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
+    "hallar": {
+      "tipo": "booking.hallar",
+      "lee": ["profesional"],
+      "escribe": ["recursoId"],
+      "motivo": "el profesional no tiene agenda"
+    },
+    "apartar": {
+      "tipo": "booking.apartar",
+      "lee": ["recursoId", "ventana", "paciente"],
+      "escribe": ["apartadoId"],
+      "llave": "hold",
+      "motivo": "no se pudo apartar la hora",
+      "reserva": {
+        "consumado_por": "confirmar",
+        "antes": "booking.liberar",
+        "despues": "booking.cancelar",
+        "motivo": "cita no confirmada"
+      }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["paciente", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "cita no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "confirmar": {
+      "tipo": "booking.confirmar",
+      "lee": ["apartadoId"],
+      "escribe": ["reservaId"],
+      "llave": "confirm",
+      "cierra_reserva": "apartar",
+      "motivo": "no se pudo confirmar la hora"
+    },
+    "avisar": {
+      "tipo": "notifications.avisar",
+      "lee": ["paciente", "contacto", "total"],
+      "llave": "avisar",
+      "plantilla": "muestra.cita.confirmada",
+      "al_fallar": "seguir"
+    }
+  }
+}
