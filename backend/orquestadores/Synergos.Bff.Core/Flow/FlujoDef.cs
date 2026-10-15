@@ -97,14 +97,18 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// nombra en <c>consumado_por</c>: cada reserva tiene un solo cierre.</param>
 /// <param name="Motivo">Con qué motivo se deshace la saga si este paso falla.</param>
 /// <param name="AlFallar"><c>seguir</c>: si el paso rechaza o lanza, se anota y la fase sigue, sin
-/// deshacer nada. Sólo vale después del último cierre de la última fase, en un paso que no
-/// reserva, no cierra ni escribe: lo que ya se cobró y se consumió no se devuelve porque un aviso
-/// no salió.</param>
+/// deshacer nada. Sólo vale después del último cierre de la última fase, en un paso que no reserva ni
+/// escribe, o en el cierre de una reserva sin <c>despues</c>: lo que ya se cobró y se consumió no se
+/// devuelve porque un aviso no salió. <c>soltar</c> (núcleo N2, NV-2 de Viajes): en el cierre por ítem de
+/// un bloque sobre <c>reservas:&lt;paso&gt;</c>, si el paso rechaza y el dominio admite la confirmación
+/// parcial, se deshace en el acto ESA reserva y la fase sigue con el siguiente ítem.</param>
 /// <param name="OmitirSiCero">Un <c>Money</c> que el paso lee: si vale cero, el paso no corre ni
 /// reserva nada, y su cierre se salta solo porque no hay reserva que cerrar. Es lo gratis: un cobro
 /// de cero no es un cobro, y <c>Api.Payments</c> lo rechaza.</param>
 /// <param name="Plantilla">La clave de la plantilla con que avisa un paso de aviso: el texto lo
 /// escribe el dominio y vive en <c>Api.Notifications</c>, el flujo sólo dice cuál.</param>
+/// <param name="Proposito">Para qué propósito comprueba el permiso un paso de consentimiento. Es un dato
+/// de la definición, como la plantilla del aviso, y no del C# (núcleo N2, NN-3 de Salud).</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -117,13 +121,20 @@ public sealed record PasoDef(
     string? Motivo,
     string? AlFallar = null,
     string? OmitirSiCero = null,
-    string? Plantilla = null)
+    string? Plantilla = null,
+    string? Proposito = null)
 {
-    /// <summary>El único valor de <c>al_fallar</c>.</summary>
+    /// <summary><c>al_fallar: seguir</c>: el fallo se anota y la fase sigue.</summary>
     public const string Seguir = "seguir";
+
+    /// <summary><c>al_fallar: soltar</c>: el ítem se suelta y el bloque sigue, si el dominio lo admite.</summary>
+    public const string Soltar = "soltar";
 
     /// <summary>Si un fallo de este paso se anota y la fase sigue.</summary>
     public bool SigueSiFalla => string.Equals(AlFallar, Seguir, StringComparison.Ordinal);
+
+    /// <summary>Si un fallo de este paso suelta su ítem y el bloque sigue (cuando el dominio lo admite).</summary>
+    public bool SueltaSiFalla => string.Equals(AlFallar, Soltar, StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -188,7 +199,7 @@ public sealed record TipoDeclarado(
 /// <para><b>Estricto con los campos que no conoce.</b> Un campo que el intérprete no lee es una
 /// regla que nadie cumple: quien escribe <c>"si"</c> creería haber declarado una condición, y la
 /// primera compra le enseñaría que no. Mejor que no arranque. Lo mismo con un valor que no
-/// conoce: <c>al_fallar</c> admite <c>seguir</c> y nada más.</para>
+/// conoce: <c>al_fallar</c> admite <c>seguir</c> y <c>soltar</c>, y nada más.</para>
 ///
 /// <para><b>Y con los que se repiten</b>, por la misma razón. JSON los admite y
 /// <see cref="JsonDocument"/> también: en <c>pasos</c> ganaría el último sin aviso, y en
@@ -358,12 +369,12 @@ internal static class LectorDeFlujo
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
-            "omitir_si_cero", "plantilla");
+            "omitir_si_cero", "plantilla", "proposito");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
-        if (alFallar is not null && !string.Equals(alFallar, PasoDef.Seguir, StringComparison.Ordinal))
+        if (alFallar is not null && alFallar is not (PasoDef.Seguir or PasoDef.Soltar))
         {
-            throw new FormatException($"{aqui}: «al_fallar» sólo admite «{PasoDef.Seguir}», y trae «{alFallar}».");
+            throw new FormatException($"{aqui}: «al_fallar» sólo admite «{PasoDef.Seguir}» o «{PasoDef.Soltar}», y trae «{alFallar}».");
         }
 
         ReservaDef? reserva = null;
@@ -389,7 +400,8 @@ internal static class LectorDeFlujo
             Opcional(nodo, "motivo", aqui),
             alFallar,
             Opcional(nodo, "omitir_si_cero", aqui),
-            Opcional(nodo, "plantilla", aqui));
+            Opcional(nodo, "plantilla", aqui),
+            Opcional(nodo, "proposito", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

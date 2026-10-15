@@ -1,0 +1,60 @@
+{
+  "clave": "muestra.compra",
+  "entrada": ["comprador", "canasta"],
+  "tipos": {
+    "comprador": { "de": "sujeto" },
+    "canasta": "texto",
+    "direccion": "direccion",
+    "transportadora": "texto"
+  },
+  "salida": ["total", "pedido", "envio"],
+  "efimera": { "cerrar": ["direccion", "transportadora"] },
+  "fases": {
+    "abrir": ["leer", "cotizar", "desglose", "precios", "pedir", "autorizar"],
+    "cerrar": ["capturar", "despachar", "cumplir", "cerrar-canasta"]
+  },
+  "pasos": {
+    "leer": { "tipo": "cart.leer", "lee": ["canasta", "comprador"], "escribe": ["lineas"] },
+    "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["lineas"], "escribe": ["cotizacion"] },
+    "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
+    "precios": { "tipo": "pricing.precios-por-linea", "lee": ["lineas", "cotizacion"], "escribe": ["lineasDelPedido"] },
+    "pedir": {
+      "tipo": "orders.crear",
+      "lee": ["comprador", "lineasDelPedido", "total"],
+      "escribe": ["pedido"],
+      "llave": "order",
+      "motivo": "no se pudo registrar el pedido",
+      "reserva": { "consumado_por": "cumplir", "antes": "orders.cancelar", "motivo": "compra no confirmada" }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["comprador", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "compra no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "despachar": {
+      "tipo": "fulfillment.despachar",
+      "lee": ["pedido", "direccion", "transportadora"],
+      "escribe": ["envio"],
+      "llave": "ship",
+      "motivo": "no se pudo despachar tras cobrar"
+    },
+    "cumplir": { "tipo": "orders.cumplir", "lee": ["pedido"], "cierra_reserva": "pedir", "al_fallar": "seguir" },
+    "cerrar-canasta": { "tipo": "cart.cerrar", "lee": ["canasta"], "al_fallar": "seguir" }
+  }
+}

@@ -25,6 +25,9 @@ public static class TiposDeDeshacer
 
     /// <summary>Cancelar una reserva de la agenda ya confirmada.</summary>
     public const string CancelarReserva = "booking.cancelar";
+
+    /// <summary>Anular un pedido que no se cumplió (núcleo N2).</summary>
+    public const string CancelarPedido = "orders.cancelar";
 }
 
 /// <summary>Cómo se deshace UN tipo de compensación de una saga genérica.</summary>
@@ -65,10 +68,11 @@ public sealed class DeshacerComun : ICompensationExecutor<SagaDeFlujo>, IConoceS
     /// <summary>Los estándar sobre los puertos de deshacer, más los del dominio (<paramref name="propios"/>).</summary>
     /// <exception cref="InvalidOperationException">Si dos dicen deshacer el mismo tipo.</exception>
     public DeshacerComun(
-        IDeshacerExistencias existencias, IDeshacerCobros cobros, IDeshacerAgenda agenda, IEnumerable<IDeshaceUnTipo> propios)
+        IDeshacerExistencias existencias, IDeshacerCobros cobros, IDeshacerAgenda agenda, IDeshacerPedidos pedidos,
+        IEnumerable<IDeshaceUnTipo> propios)
     {
         ArgumentNullException.ThrowIfNull(propios);
-        foreach (var t in Estandar(existencias, cobros, agenda).Concat(propios))
+        foreach (var t in Estandar(existencias, cobros, agenda, pedidos).Concat(propios))
         {
             if (!_tipos.TryAdd(t.Tipo, t)) throw new InvalidOperationException($"Hay dos que deshacen «{t.Tipo}».");
         }
@@ -86,7 +90,8 @@ public sealed class DeshacerComun : ICompensationExecutor<SagaDeFlujo>, IConoceS
     }
 
     /// <summary>Los estándar, sobre los puertos de deshacer.</summary>
-    private static IReadOnlyList<IDeshaceUnTipo> Estandar(IDeshacerExistencias existencias, IDeshacerCobros cobros, IDeshacerAgenda agenda)
+    private static IReadOnlyList<IDeshaceUnTipo> Estandar(
+        IDeshacerExistencias existencias, IDeshacerCobros cobros, IDeshacerAgenda agenda, IDeshacerPedidos pedidos)
         =>
         [
             new Deshace(TiposDeDeshacer.SoltarExistencias, (_, c, ct) => Envolver(existencias.SoltarAsync(c.TargetId, ct))),
@@ -95,6 +100,7 @@ public sealed class DeshacerComun : ICompensationExecutor<SagaDeFlujo>, IConoceS
             new Deshace(TiposDeDeshacer.DevolverCobro, (s, c, ct) => DevolverAsync(cobros, s, c, ct)),
             new Deshace(TiposDeDeshacer.LiberarAgenda, (_, c, ct) => Envolver(agenda.LiberarAsync(c.TargetId, ct))),
             new Deshace(TiposDeDeshacer.CancelarReserva, (_, c, ct) => Envolver(agenda.CancelarAsync(c.TargetId, ct))),
+            new Deshace(TiposDeDeshacer.CancelarPedido, (_, c, ct) => Envolver(pedidos.CancelarAsync(c.TargetId, ct))),
         ];
 
     /// <summary>

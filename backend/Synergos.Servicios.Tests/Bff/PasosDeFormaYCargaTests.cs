@@ -60,6 +60,71 @@ public sealed class PasosDeFormaYCargaTests
         => new("s-1", Ref.Create("prueba.flujo", "s-1"), new PasoDef("p", tipo, lee, [], null, null, null, null, null), ctx, null, null);
 
     [Fact]
+    public async Task Los_precios_por_linea_se_cruzan_por_SUJETO_y_no_por_posicion()
+    {
+        var a = Ref.Create("prueba.producto", "a");
+        var b = Ref.Create("prueba.producto", "b");
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas = [(a, 2), (b, 1)];
+        // La cotización contesta en OTRO orden: un cruce por posición le pondría a «a» el precio de «b».
+        var cotizacion = new QuoteView(Money.Of(500m, "COP"), Money.Zero("COP"), Money.Zero("COP"), Money.Of(500m, "COP"),
+            [(b, Money.Of(300m, "COP")), (a, Money.Of(100m, "COP"))]);
+
+        var salida = await new PasoPreciosPorLinea().EjecutarAsync(
+            Entrada("pricing.precios-por-linea", new FlowContext().Set("l", lineas).Set("c", cotizacion), "l", "c"), CancellationToken.None);
+
+        var pedido = Assert.IsAssignableFrom<IReadOnlyList<LineaDePedido>>(Assert.Single(salida.Valores));
+        Assert.Equal(new[] { new LineaDePedido(a, 2, Money.Of(100m, "COP")), new LineaDePedido(b, 1, Money.Of(300m, "COP")) }, pedido);
+    }
+
+    [Fact]
+    public async Task Una_linea_sin_precio_se_rechaza_y_no_se_rellena()
+    {
+        var a = Ref.Create("prueba.producto", "a");
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas = [(a, 1)];
+        var sinLineas = new QuoteView(Money.Of(100m, "COP"), Money.Zero("COP"), Money.Zero("COP"), Money.Of(100m, "COP"));
+
+        var salida = await new PasoPreciosPorLinea().EjecutarAsync(
+            Entrada("pricing.precios-por-linea", new FlowContext().Set("l", lineas).Set("c", sinLineas), "l", "c"), CancellationToken.None);
+
+        Assert.Equal(PasoPreciosPorLinea.SinPrecioDeLinea, salida.Rechazo?.Code);
+        Assert.Empty(sinLineas.Lineas);
+    }
+
+    [Fact]
+    public async Task El_adaptador_trae_el_precio_de_cada_linea_si_Pricing_lo_da()
+    {
+        const string ConLineas = """
+            {"subtotal":{"amount":500,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":500,"currency":"COP"},
+             "lines":[{"subjectKind":"prueba.producto","subjectId":"b","quantity":1,"unitPrice":{"amount":300,"currency":"COP"}}]}
+            """;
+        IPricingPort conPrecios = new Synergos.Bff.Pasos.Http.PuertosHttp(new Contesta(ConLineas));
+        IPricingPort sinPrecios = new Synergos.Bff.Pasos.Http.PuertosHttp(new Contesta(
+            """{"subtotal":{"amount":0,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":0,"currency":"COP"}}"""));
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas = [(Ref.Create("prueba.producto", "b"), 1)];
+
+        var con = await conPrecios.CotizarAsync(lineas, null, CancellationToken.None);
+        var sin = await sinPrecios.CotizarAsync(lineas, null, CancellationToken.None);
+
+        Assert.Equal((Ref.Create("prueba.producto", "b"), Money.Of(300m, "COP")), Assert.Single(con.Value.Lineas));
+        Assert.Empty(sin.Value.Lineas);
+    }
+
+    /// <summary>Un <see cref="IHttpClientFactory"/> que contesta siempre lo mismo.</summary>
+    private sealed class Contesta(string json) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new Cable(json)) { BaseAddress = new Uri("http://capacidad.local/") };
+
+        private sealed class Cable(string json) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+                => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+                });
+        }
+    }
+
+    [Fact]
     public async Task Una_linea_es_el_sujeto_con_cantidad_uno()
     {
         var servicio = Ref.Create("prueba.servicio", "consulta");

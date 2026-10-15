@@ -121,6 +121,53 @@ public sealed class PasoAgendaConfirmarPorItem(IBookingPort agenda) : IPaso
 }
 
 /// <summary>
+/// <c>booking.apartar-por-indice</c>: el apartado de un ítem de un bloque, con la llave POR POSICIÓN
+/// (<c>{saga}|hold:{i}</c>), la que arma <c>TripFlow</c> (núcleo N2, NV-1 de Viajes).
+/// </summary>
+/// <remarks>
+/// <para><b>Para la paridad entre motores</b>: con el interruptor declarado/imperativo, un viaje abierto por un
+/// motor puede confirmarse por el otro, y <c>Api.Booking</c> sólo devuelve el mismo apartado ante la MISMA
+/// llave.</para>
+///
+/// <para><b>Por posición es seguro donde abrir corre una sola vez por saga</b> (un intento nuevo es otra saga,
+/// con otras llaves) y el dominio rechaza dos ítems iguales. Dos ítems idénticos tienen aquí llaves
+/// distintas, que es justo lo que <c>booking.apartar-por-item</c> no da (NN-3 de Alquiler).</para>
+/// </remarks>
+public sealed class PasoAgendaApartarPorIndice(IBookingPort agenda) : IPaso
+{
+    public string Tipo => "booking.apartar-por-indice";
+    public int Lecturas => 3;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.PorItem;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        return PasosDeAgenda.ApartarAsync(agenda, entrada, entrada.LlavePara(PasosDeAgenda.Posicion(entrada)), ct);
+    }
+}
+
+/// <summary>
+/// <c>booking.confirmar-por-indice</c>: el cierre de un bloque <c>reservas:&lt;paso&gt;</c> con la llave POR
+/// POSICIÓN (<c>{saga}|confirm:{i}</c>), la de <c>TripFlow</c> (NV-1 de Viajes).
+/// </summary>
+public sealed class PasoAgendaConfirmarPorIndice(IBookingPort agenda) : IPaso
+{
+    public string Tipo => "booking.confirmar-por-indice";
+    public int Lecturas => 1;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.PorItem;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        return PasosDeAgenda.ConfirmarAsync(agenda, entrada, entrada.LlavePara(PasosDeAgenda.Posicion(entrada)), ct);
+    }
+}
+
+/// <summary>
 /// <c>booking.liberar</c>: lee el apartado y lo suelta. CIERRA la reserva SIN consumirla: una fase que
 /// abandona la franja a propósito (la definición no le declara <c>despues</c>).
 /// </summary>
@@ -149,6 +196,12 @@ public static class PasosDeAgenda
         var texto = string.Create(CultureInfo.InvariantCulture, $"{recurso}|{ventana.Start.UtcDateTime:O}|{ventana.End.UtcDateTime:O}");
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(texto)))[..32];
     }
+
+    /// <summary>La posición del ítem como discriminante; un paso por índice fuera de un bloque es un defecto de la definición.</summary>
+    internal static string Posicion(EntradaDePaso entrada)
+        => entrada.Indice is { } i
+            ? i.ToString(CultureInfo.InvariantCulture)
+            : throw new InvalidOperationException($"El paso «{entrada.Paso.Id}» ({entrada.Paso.Tipo}) va por posición y no está dentro de un bloque.");
 
     internal static async Task<SalidaDePaso> ApartarAsync(IBookingPort agenda, EntradaDePaso entrada, IdempotencyKey llave, CancellationToken ct)
     {

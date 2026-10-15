@@ -211,6 +211,17 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
         => CompensarAsync(sagaId, reason, ct);
 
     /// <summary>
+    /// Intenta UNA compensación ahora, con el turno que ya tiene quien llama: la de un ítem que se suelta en
+    /// una confirmación parcial (núcleo N2, NV-2). Devuelve cómo queda; no escribe la saga.
+    /// </summary>
+    /// <remarks>
+    /// Es el mismo intento que hace el barrido (<see cref="Compensator{TSaga}.TryAsync"/>): hecha si salió, y si
+    /// no, pendiente con su intento contado y su retroceso.
+    /// </remarks>
+    internal Task<Compensation> DeshacerUnaAsync(TSaga saga, Compensation pendiente, CancellationToken ct)
+        => _compensator.TryAsync(saga, pendiente, ct);
+
+    /// <summary>
     /// Que alguien más tiene la saga AHORA —otra compensación, o una fase del flujo—. Transitorio,
     /// no un no rotundo (#34).
     /// </summary>
