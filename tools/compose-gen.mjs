@@ -122,6 +122,26 @@ function capacidadesDe(proyecto) {
   return [...new Set([...nombres, 'notifications'])].sort();
 }
 
+/**
+ * El `kid` de la llave de identidad: LITERAL, y no `${SYNERGOS_IDENTITY_ACTIVE_KID}`.
+ *
+ * Compose interpola VALORES, no NOMBRES. Esto decia
+ * `IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: …`, y el contenedor
+ * recibia una variable que se llamaba literalmente asi, con el `${…}` dentro.
+ * .NET parte ese nombre por el `:` de `:-k1`, el mapa de llaves quedaba VACIO y:
+ *   · Api.Identity moria al arrancar, en bucle («IdentityTokens:Keys está vacío»);
+ *   · los verificadores arrancaban SANOS y sin poder verificar ningun token.
+ * Lo destapo el ensayo del despliegue (CMS 002-produccion, 2026-10-15): es la
+ * primera vez que el stack de produccion se levanto entero. Ningun gate de texto
+ * lo veia porque cada linea, leida sola, estaba bien.
+ *
+ * Rotar la llave desde `.env` exige otra forma de pasarla (ver
+ * specs/002-produccion/necesidades-del-nucleo.md); hasta entonces, una sola llave
+ * con nombre fijo. Lo vigila SalidaAProduccionTests: ningun NOMBRE de variable
+ * del compose lleva `${`.
+ */
+const KID_DE_IDENTIDAD = 'k1';
+
 /** La llave con la que una capacidad VERIFICA tokens de identidad, si los verifica. */
 function entornoIdentidad(proyecto) {
   if (!verificaIdentidad(proyecto)) return '';
@@ -134,8 +154,8 @@ function entornoIdentidad(proyecto) {
     '      # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del',
     '      # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token',
     '      # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.',
-    `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
-    '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+    `      IdentityTokens__Keys__${KID_DE_IDENTIDAD}: \${SYNERGOS_IDENTITY_SIGNING_KEY:-}`,
+    `      IdentityTokens__ActiveKeyId: ${KID_DE_IDENTIDAD}`,
   ].join('\n');
 }
 
@@ -214,8 +234,8 @@ function entornoExtra(proyecto, disponibles) {
       '      #',
       '      # Sin llave el servicio NO arranca — un Api.Identity que dice emitir',
       '      # identidades y no puede es peor que uno caido, porque parece que funciona.',
-      `      IdentityTokens__Keys__\${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: \${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}`,
-      '      IdentityTokens__ActiveKeyId: \${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}',
+      `      IdentityTokens__Keys__${KID_DE_IDENTIDAD}: \${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}`,
+      `      IdentityTokens__ActiveKeyId: ${KID_DE_IDENTIDAD}`,
       '      IdentityTokens__LifetimeMinutes: \${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}',
       '      IdentityTokens__MaxSessionMinutes: \${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}',
     ].join('\n');

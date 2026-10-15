@@ -21,6 +21,37 @@
 {$SYNERGOS_DOMAIN} {
 	encode zstd gzip
 
+	# ── Las cabeceras de seguridad, para TODO lo que sale (002-produccion) ─────
+	#
+	# Medido el 2026-10-15: CERO cabeceras de seguridad, ni acá ni en el CMS.
+	# Van en el portero y no en el CMS porque acá cubren todo lo que sale —el
+	# sitio, el backoffice, los webhooks— en un solo sitio.
+	#
+	# El `?` es «sólo si no vino ya»: si el CMS pone una más estricta para una
+	# respuesta concreta (`GovController` pone su `nosniff`), gana la suya. `defer`
+	# las aplica al escribir la respuesta, después del proxy; sin él, las del CMS
+	# se SUMARÍAN a éstas en vez de reemplazarlas.
+	#
+	# La CSP es la MÍNIMA que no puede romper nada: quién puede enmarcar el sitio,
+	# a dónde apunta un <base> y nada de <object>. No restringe scripts ni estilos
+	# a propósito — el sitio carga bundles de la CDN, un import map en línea y el
+	# backoffice de Umbraco 13; restringir eso sin medirlo en un navegador, con
+	# los siete temas, es arriesgar la salida por una cabecera (P5 de
+	# specs/002-produccion/preguntas.md). HSTS sin `includeSubDomains` ni
+	# `preload`: esos dos comprometen otros subdominios y no se deshacen rápido.
+	#
+	# El humo público (`tools/humo-publico.sh`) exige exactamente éstas, y
+	# SalidaAProduccionTests cruza las dos listas.
+	header {
+		defer
+		?Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options "nosniff"
+		?Referrer-Policy "strict-origin-when-cross-origin"
+		?X-Frame-Options "SAMEORIGIN"
+		?Content-Security-Policy "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+		-Server
+	}
+
 	# ── Los caminos de vuelta de los proveedores ──────────────────────────────
 	#
 	# Son los ÚNICOS endpoints del árbol de servicios alcanzables desde fuera, y

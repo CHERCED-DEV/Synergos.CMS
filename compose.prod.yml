@@ -318,8 +318,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -375,8 +375,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -432,8 +432,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -561,8 +561,8 @@ services:
       #
       # Sin llave el servicio NO arranca — un Api.Identity que dice emitir
       # identidades y no puede es peor que uno caido, porque parece que funciona.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:?falta SYNERGOS_IDENTITY_SIGNING_KEY}
+      IdentityTokens__ActiveKeyId: k1
       IdentityTokens__LifetimeMinutes: ${SYNERGOS_IDENTITY_TOKEN_MINUTES:-15}
       IdentityTokens__MaxSessionMinutes: ${SYNERGOS_IDENTITY_SESSION_MINUTES:-480}
     volumes:
@@ -620,8 +620,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -746,8 +746,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
@@ -862,8 +862,8 @@ services:
       # Sin `:?` a proposito: quien solo verifica arranca sin llave — es el camino del
       # clon limpio. Y arranca SIN PODER verificar, que no es verificando mal: un token
       # presentado ahi se rechaza con identity.token_not_verifiable, no se ignora.
-      IdentityTokens__Keys__${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
-      IdentityTokens__ActiveKeyId: ${SYNERGOS_IDENTITY_ACTIVE_KID:-k1}
+      IdentityTokens__Keys__k1: ${SYNERGOS_IDENTITY_SIGNING_KEY:-}
+      IdentityTokens__ActiveKeyId: k1
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se

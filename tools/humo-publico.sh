@@ -43,6 +43,7 @@ echo "── la portada"
 # real de por medio —`200` más un fallo posterior— la comparación de abajo
 # habría dado `200000` y el humo habría gritado por una portada que estaba bien.
 CODIGO="$(curl --silent --show-error --location --max-time 30 \
+          --dump-header /tmp/portada.cabeceras \
           --output /tmp/portada.html --write-out '%{http_code}' "$BASE/" || true)"
 
 if [ "$CODIGO" = "200" ]; then
@@ -126,6 +127,22 @@ for ruta in /v1/booking/slots /v1/orders /v1/sessions/search; do
     falla "$ruta contestó $CODIGO — hay una capacidad alcanzable desde internet"
   else
     paso "$ruta → $CODIGO (no enrutada, como debe ser)"
+  fi
+done
+
+# ── 4. Las cabeceras de seguridad del portero ────────────────────────────────
+#
+# Las pone el Caddyfile (bloque `header`) y SalidaAProduccionTests exige que esta
+# lista y la del Caddyfile sean la misma. Se miran en la respuesta de VERDAD y no
+# en el fichero: un `header` que alguien quite a mano en el servidor, o un proxy
+# en medio que las coma, no se ven en el repo. Medido el 2026-10-15: antes de
+# esto no había ninguna.
+echo "── las cabeceras de seguridad"
+for cabecera in Strict-Transport-Security X-Content-Type-Options Referrer-Policy X-Frame-Options Content-Security-Policy; do
+  if grep --quiet --ignore-case "^${cabecera}:" /tmp/portada.cabeceras 2>/dev/null; then
+    paso "$cabecera"
+  else
+    falla "falta $cabecera en la portada — el portero no la puso (Caddyfile, bloque header)"
   fi
 done
 

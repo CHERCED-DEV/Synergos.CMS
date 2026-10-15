@@ -1,0 +1,94 @@
+name: Humo programado
+
+# 002-produccion — que alguien se entere si el sitio se cae.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# El humo del despliegue (`deploy.yml`) mira el sitio UNA vez: justo después de
+# ponerlo. Lo que pase después —un certificado que no se renovó (Cloudflare da
+# 526), un disco lleno, un contenedor que murió de memoria, alguien que abrió un
+# puerto a mano— no lo ve nadie hasta que lo ve un cliente.
+#
+# Esto corre el MISMO humo (`tools/humo-publico.sh`, el que no puede decir
+# `localhost`) contra el dominio público cada seis horas. Si sale rojo, GitHub
+# avisa por correo como con cualquier workflow programado que falla.
+#
+# La versión que se exige es la del último «Despliegue» que de verdad desplegó
+# —corrió «Copiar y ejecutar» y terminó en verde—. Un despliegue que volvió atrás
+# termina en ROJO, así que la versión que queda es la del anterior en verde, que
+# es justo la que está corriendo.
+#
+# Sin `SYNERGOS_DOMAIN` (o sin ningún despliegue real todavía) se SALTA en verde
+# diciendo por qué, como `deploy.yml`: un rojo permanente que todos saben ignorar
+# entrena a ignorar los rojos de verdad.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # Cada seis horas, a los 17 minutos: lejos de la hora en punto, que es
+    # cuando GitHub retrasa los programados.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: humo-programado
+  cancel-in-progress: false
+
+jobs:
+  humo:
+    name: El sitio público sigue en pie
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - id: config
+        name: ¿Hay sitio que vigilar?
+        env:
+          DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          saltar() {
+            echo "listo=no" >> "$GITHUB_OUTPUT"
+            { echo "### Humo programado: nada que vigilar todavía"; echo; echo "$1"; } >> "$GITHUB_STEP_SUMMARY"
+            echo "$1"
+          }
+          if [ -z "$DOMINIO" ]; then
+            saltar "Falta la variable \`SYNERGOS_DOMAIN\`. Esto NO es un fallo: se enciende solo cuando exista."
+            exit 0
+          fi
+
+          # La versión que está corriendo: el último «Despliegue» verde que de
+          # verdad copió y ejecutó (no uno que se saltó por falta de servidor).
+          VERSION=""
+          for id in $(gh run list -R "$REPO" --workflow deploy.yml --branch master --status success \
+                        --limit 20 --json databaseId --jq '.[].databaseId'); do
+            copio="$(gh run view "$id" -R "$REPO" --json jobs \
+                      --jq '[.jobs[].steps[] | select(.name == "Copiar y ejecutar") | .conclusion][0] // ""')"
+            if [ "$copio" = "success" ]; then
+              VERSION="$(gh run view "$id" -R "$REPO" --json headSha --jq .headSha)"
+              break
+            fi
+          done
+          if [ -z "$VERSION" ]; then
+            saltar "Hay dominio pero ningún «Despliegue» desplegó todavía: no hay versión que exigir."
+            exit 0
+          fi
+
+          echo "listo=si" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - if: steps.config.outputs.listo == 'si'
+        uses: actions/checkout@v4
+
+      - if: steps.config.outputs.listo == 'si'
+        name: Humo contra la URL pública
+        env:
+          DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
+          VERSION: ${{ steps.config.outputs.version }}
+        run: |
+          chmod +x tools/humo-publico.sh
+          ./tools/humo-publico.sh "$DOMINIO" "$VERSION"
