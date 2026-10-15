@@ -302,9 +302,20 @@ jobs:
           echo "| humo con la versión anterior | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
           df -h / | tail -1
 
+      # Toda pieza que no esté corriendo y sana: su log y los NOMBRES de sus
+      # variables de entorno — nunca los valores, aunque acá sean de usar y tirar.
       - name: Qué pasó, si algo falló
         if: failure()
         working-directory: /opt/synergos
         run: |
           docker compose --file compose.prod.yml --project-directory . ps -a || true
-          docker compose --file compose.prod.yml --project-directory . logs --tail 80 cms proxy || true
+          for c in $(docker ps -a --format '{{.Names}}'); do
+            estado="$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}sin-chequeo{{end}}' "$c")"
+            case "$estado" in "running healthy"|"running sin-chequeo") continue ;; esac
+            echo "════ $c — $estado"
+            docker logs --tail 60 "$c" 2>&1 || true
+            echo "── sus variables (sólo nombres):"
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$c" | cut -d= -f1 | grep -v '^$' | sort | tr '\n' ' '
+            echo
+          done
+          docker compose --file compose.prod.yml --project-directory . logs --tail 40 cms proxy || true
