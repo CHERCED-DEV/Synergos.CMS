@@ -351,6 +351,14 @@ public static class FlowValidator
                     : $"el paso «{paso.Id}» declara una plantilla y «{paso.Tipo}» no avisa: quien la lea creerá que ese "
                       + "paso manda algo.");
             }
+
+            if (registro.Para(paso.Tipo) is { } pide && pide.UsaProposito != paso.Proposito is not null)
+            {
+                errores.Add(pide.UsaProposito
+                    ? $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que comprueba un permiso con «proposito», y no lo declara."
+                    : $"el paso «{paso.Id}» declara un propósito y «{paso.Tipo}» no comprueba permisos: quien lo lea creerá "
+                      + "que ese paso pide permiso.");
+            }
         }
 
         // Dos pasos con la misma llave son, para la capacidad, UNA llamada: la segunda devuelve lo que hizo la

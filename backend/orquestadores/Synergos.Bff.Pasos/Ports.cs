@@ -98,6 +98,62 @@ public interface IBookingPort
     Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct);
 }
 
+/// <summary>Comprobar en <c>Api.Consent</c> que hay un permiso vigente (núcleo N2).</summary>
+public interface IConsentPort
+{
+    /// <summary>
+    /// El permiso vigente de <paramref name="sujeto"/> para <paramref name="proposito"/>. Si no lo hay —nunca
+    /// se dio, se retiró o venció—, el rechazo de la capacidad tal cual (<c>consent.not_granted</c>…).
+    /// </summary>
+    Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct);
+}
+
+/// <summary>Una canasta como la ve quien la compra: de quién es, qué trae y si se puede cerrar.</summary>
+/// <param name="Dueno">Quién la abrió.</param>
+/// <param name="Lineas">Qué y cuántas: lo que se cotiza y se aparta.</param>
+/// <param name="Cerrada">Si ya se convirtió en pedido.</param>
+/// <param name="Abierta">Si todavía admite cambios (no cerrada ni vencida).</param>
+public sealed record CanastaView(Ref Dueno, IReadOnlyList<(Ref Sujeto, int Cantidad)> Lineas, bool Cerrada, bool Abierta);
+
+/// <summary>Leer y cerrar una canasta de <c>Api.Cart</c> (núcleo N2).</summary>
+public interface ICartPort
+{
+    /// <summary>La canasta: la única fuente de qué se compra.</summary>
+    Task<Result<CanastaView>> LeerAsync(string canasta, CancellationToken ct);
+
+    /// <summary>
+    /// La cierra: deja de admitir cambios. Sin llave, porque la capacidad no la lee: cerrarla otra vez se
+    /// rechaza (<c>cart.already_checked_out</c>), así que repetir no duplica nada.
+    /// </summary>
+    Task<Result<string>> CerrarAsync(string canasta, CancellationToken ct);
+}
+
+/// <summary>Una línea del pedido con el precio que cotizó <c>Api.Pricing</c>: el pedido congela el de cada renglón.</summary>
+public sealed record LineaDePedido(Ref Sujeto, int Cantidad, Money PrecioUnitario);
+
+/// <summary>Registrar y cumplir un pedido en <c>Api.Orders</c> (núcleo N2).</summary>
+public interface IOrdersPort
+{
+    /// <summary>Registra el pedido de <paramref name="comprador"/> y devuelve su identificador.</summary>
+    Task<Result<string>> CrearAsync(
+        Ref comprador, IReadOnlyList<LineaDePedido> lineas, Money total, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>Lo da por cumplido. Desde ahí la capacidad ya no deja anularlo.</summary>
+    Task<Result<string>> CumplirAsync(string pedido, CancellationToken ct);
+}
+
+/// <summary>Adónde se despacha. Es un dato personal: entra efímero y no se guarda en la saga.</summary>
+public sealed record DireccionDeEnvio(
+    string Linea1, string? Linea2, string Ciudad, string? Region, string? CodigoPostal, string Pais, string? Contacto);
+
+/// <summary>Despachar en <c>Api.Fulfillment</c> (núcleo N2).</summary>
+public interface IFulfillmentPort
+{
+    /// <summary>Registra el envío de <paramref name="paraQue"/> y devuelve su identificador.</summary>
+    Task<Result<string>> DespacharAsync(
+        Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct);
+}
+
 // ── Los puertos de deshacer ─────────────────────────────────────────────────
 // Separados de los de avance a propósito: los de avance los cumple también `EventosPorts`, cuyo
 // oráculo los construye a mano, y su deshacer sigue yendo por `EventosCompensationExecutor`
@@ -135,4 +191,11 @@ public interface IDeshacerAgenda
 
     /// <summary>Cancela una reserva ya confirmada.</summary>
     Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct);
+}
+
+/// <summary>Deshacer en <c>Api.Orders</c>.</summary>
+public interface IDeshacerPedidos
+{
+    /// <summary>Anula un pedido que no se cumplió.</summary>
+    Task<Result<string>> CancelarAsync(string pedido, CancellationToken ct);
 }

@@ -46,8 +46,13 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IDeshacerExistencias>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerCobros>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerAgenda>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IConsentPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<ICartPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IOrdersPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
 
-        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto()));
+        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion()));
         builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), propios));
         return builder.AddFlujosGenericos(vocabulario, ensamblado);
     }
@@ -66,6 +71,8 @@ public static class PasosComunes
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAvisar(puertos), new PasoUnaLinea(),
+            new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
+            new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
         ];
 
     /// <summary>El registro con los comunes y los del dominio. Un tipo repetido no arranca.</summary>
@@ -118,5 +125,64 @@ public sealed class TipoContacto : ITipoDeValor
             ["enlace"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
             ["sitio"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
         },
+    };
+}
+
+/// <summary>
+/// <c>direccion</c>: adónde se despacha, <c>{ linea1, linea2?, ciudad, region?, codigoPostal?, pais, contacto? }</c>
+/// (núcleo N2). Sólo efímero: NO se guarda (es un dato personal), como el contacto del aviso.
+/// </summary>
+public sealed class TipoDireccion : ITipoDeValor
+{
+    private static readonly string[] Campos = ["linea1", "linea2", "ciudad", "region", "codigoPostal", "pais", "contacto"];
+    private static readonly string[] Obligatorios = ["linea1", "ciudad", "pais"];
+
+    public string Nombre => "direccion";
+    public Type Clr => typeof(DireccionDeEnvio);
+    public bool Guardable => false;
+
+    public object Leer(JsonElement valor, string donde)
+    {
+        if (valor.ValueKind != JsonValueKind.Object)
+        {
+            throw new FormatException($"{donde}: tiene que ser un objeto {{ {string.Join(", ", Campos)} }}.");
+        }
+        foreach (var p in valor.EnumerateObject().Where(p => !Campos.Contains(p.Name, StringComparer.Ordinal)))
+        {
+            throw new FormatException($"{donde}: trae «{p.Name}», y sólo admite {string.Join(", ", Campos)}.");
+        }
+        foreach (var falta in Obligatorios.Where(c => string.IsNullOrWhiteSpace(Texto(valor, c))))
+        {
+            throw new FormatException($"{donde}: sin «{falta}» no hay adónde despachar.");
+        }
+
+        return new DireccionDeEnvio(
+            Texto(valor, "linea1")!, Texto(valor, "linea2"), Texto(valor, "ciudad")!, Texto(valor, "region"),
+            Texto(valor, "codigoPostal"), Texto(valor, "pais")!, Texto(valor, "contacto"));
+
+        string? Texto(JsonElement o, string campo)
+            => !o.TryGetProperty(campo, out var v) || v.ValueKind == JsonValueKind.Null ? null
+                : v.ValueKind == JsonValueKind.String ? v.GetString()
+                : throw new FormatException($"{donde}.{campo}: tiene que ser un texto.");
+    }
+
+    public JsonNode Escribir(object valor)
+    {
+        var d = (DireccionDeEnvio)valor;
+        return new JsonObject
+        {
+            ["linea1"] = d.Linea1, ["linea2"] = d.Linea2, ["ciudad"] = d.Ciudad, ["region"] = d.Region,
+            ["codigoPostal"] = d.CodigoPostal, ["pais"] = d.Pais, ["contacto"] = d.Contacto,
+        };
+    }
+
+    public JsonObject Esquema() => new()
+    {
+        ["type"] = "object",
+        ["required"] = new JsonArray(Obligatorios.Select(c => (JsonNode?)c).ToArray()),
+        ["properties"] = new JsonObject(Campos.Select(c => KeyValuePair.Create(c, (JsonNode?)new JsonObject
+        {
+            ["type"] = Obligatorios.Contains(c, StringComparer.Ordinal) ? (JsonNode)"string" : new JsonArray("string", "null"),
+        }))),
     };
 }

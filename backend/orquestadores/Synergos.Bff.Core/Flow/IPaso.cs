@@ -42,6 +42,13 @@ public interface IPaso
     /// </remarks>
     bool UsaPlantilla => false;
 
+    /// <summary>Si comprueba un permiso con el <c>proposito</c> que declara su definición. Por defecto, no.</summary>
+    /// <remarks>
+    /// Se cruza como la plantilla, en los dos sentidos: sin propósito no hay qué comprobar, y uno declarado
+    /// en un paso que no lo usa haría creer que ese paso pide permiso.
+    /// </remarks>
+    bool UsaProposito => false;
+
     /// <summary>
     /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
     /// declara (por defecto).

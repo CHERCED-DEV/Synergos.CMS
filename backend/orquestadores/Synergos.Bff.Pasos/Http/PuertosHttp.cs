@@ -15,22 +15,28 @@ namespace Synergos.Bff.Pasos.Http;
 /// ve, y no hace falta, porque no hablan con nadie.</para>
 ///
 /// <para><b>Los nombres de cliente son los de siempre</b> (<c>pricing</c>, <c>inventory</c>,
-/// <c>payments</c>, <c>booking</c>, <c>notifications</c>): los registra <c>AddSagaMachinery</c> con su
+/// <c>payments</c>, <c>booking</c>, <c>notifications</c>, y desde N2 <c>consent</c>, <c>cart</c>, <c>orders</c> y <c>fulfillment</c>): los registra <c>AddSagaMachinery</c> con su
 /// URL, su llave y su timeout por capacidad. Lo compartido con Eventos manda los mismos cuerpos que
 /// <c>EventosCapabilities</c>, que sigue siendo el de Eventos (supuesto P5).</para>
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
-    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda
+    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort,
+    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos
 {
     public const string Pricing = "pricing";
     public const string Inventory = "inventory";
     public const string Payments = "payments";
     public const string Booking = "booking";
     public const string Notifications = CompensationAlert.Capability;
+    public const string Consent = "consent";
+    public const string Cart = "cart";
+    public const string Orders = "orders";
+    public const string Fulfillment = "fulfillment";
 
     /// <summary>Las capacidades con las que habla: las que registra el arranque.</summary>
-    public static IReadOnlyList<string> Capacidades { get; } = [Pricing, Inventory, Payments, Booking, Notifications];
+    public static IReadOnlyList<string> Capacidades { get; } =
+        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment];
 
     public PuertosHttp(IHttpClientFactory clients) : base(clients) { }
 
@@ -213,6 +219,106 @@ public sealed class PuertosHttp : CapabilityClients,
         Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
         IdempotencyKey llave, CancellationToken ct)
         => (await PedirAvisoAsync(destinatario, direccion, plantilla, valores, llave, ct)).Map(d => d.Id);
+
+    // ── Consent ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// El permiso vigente para un propósito. Por POST y con el sujeto en el cuerpo: sujeto y propósito juntos
+    /// son un dato personal y no van en la URL.
+    /// </summary>
+    public Task<Result<PermisoDto>> VerificarPermisoAsync(Ref sujeto, string proposito, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Post<PermisoDto>(Consent, "v1/grants/check",
+            new { subjectKind = sujeto.Kind, subjectId = sujeto.Id, purpose = proposito }, null, ct);
+    }
+
+    async Task<Result<string>> IConsentPort.VerificarAsync(Ref sujeto, string proposito, CancellationToken ct)
+        => (await VerificarPermisoAsync(sujeto, proposito, ct)).Map(p => p.Id);
+
+    // ── Cart ────────────────────────────────────────────────────────────────
+
+    public Task<Result<CanastaDto>> LeerCanastaAsync(string canasta, CancellationToken ct)
+        => Get<CanastaDto>(Cart, $"v1/carts/{canasta}", ct);
+
+    public Task<Result<CanastaDto>> CerrarCanastaAsync(string canasta, CancellationToken ct)
+        => Post<CanastaDto>(Cart, $"v1/carts/{canasta}/checkout", null, null, ct);
+
+    async Task<Result<CanastaView>> ICartPort.LeerAsync(string canasta, CancellationToken ct)
+        => (await LeerCanastaAsync(canasta, ct)).Map(c => new CanastaView(
+            Ref.Create(c.OwnerKind, c.OwnerId),
+            c.Lines.Select(l => (Ref.Create(l.SubjectKind, l.SubjectId), l.Quantity)).ToList(),
+            c.CheckedOut, c.Open));
+
+    async Task<Result<string>> ICartPort.CerrarAsync(string canasta, CancellationToken ct)
+        => (await CerrarCanastaAsync(canasta, ct)).Map(c => c.Id);
+
+    // ── Orders ──────────────────────────────────────────────────────────────
+
+    public Task<Result<PedidoDto>> CrearPedidoAsync(
+        Ref comprador, IReadOnlyList<LineaDePedido> lineas, Money total, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(comprador);
+        ArgumentNullException.ThrowIfNull(lineas);
+        return Post<PedidoDto>(Orders, "v1/orders", new
+        {
+            buyerKind = comprador.Kind,
+            buyerId = comprador.Id,
+            lines = lineas.Select(l => new
+            {
+                subjectKind = l.Sujeto.Kind,
+                subjectId = l.Sujeto.Id,
+                quantity = l.Cantidad,
+                unitPrice = new { amount = l.PrecioUnitario.Amount, currency = l.PrecioUnitario.Currency },
+            }),
+            total = new { amount = total.Amount, currency = total.Currency },
+        }, llave, ct);
+    }
+
+    public Task<Result<PedidoDto>> CumplirPedidoAsync(string pedido, CancellationToken ct)
+        => Post<PedidoDto>(Orders, $"v1/orders/{pedido}/fulfill", null, null, ct);
+
+    public Task<Result<PedidoDto>> CancelarPedidoAsync(string pedido, CancellationToken ct)
+        => Post<PedidoDto>(Orders, $"v1/orders/{pedido}/cancel", null, null, ct);
+
+    async Task<Result<string>> IOrdersPort.CrearAsync(
+        Ref comprador, IReadOnlyList<LineaDePedido> lineas, Money total, IdempotencyKey llave, CancellationToken ct)
+        => (await CrearPedidoAsync(comprador, lineas, total, llave, ct)).Map(o => o.Id);
+
+    async Task<Result<string>> IOrdersPort.CumplirAsync(string pedido, CancellationToken ct)
+        => (await CumplirPedidoAsync(pedido, ct)).Map(o => o.Id);
+
+    async Task<Result<string>> IDeshacerPedidos.CancelarAsync(string pedido, CancellationToken ct)
+        => (await CancelarPedidoAsync(pedido, ct)).Map(o => o.Id);
+
+    // ── Fulfillment ─────────────────────────────────────────────────────────
+
+    public Task<Result<EnvioDto>> DespacharEnvioAsync(
+        Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(paraQue);
+        ArgumentNullException.ThrowIfNull(direccion);
+        return Post<EnvioDto>(Fulfillment, "v1/shipments", new
+        {
+            forKind = paraQue.Kind,
+            forId = paraQue.Id,
+            to = new
+            {
+                line1 = direccion.Linea1,
+                line2 = direccion.Linea2,
+                city = direccion.Ciudad,
+                region = direccion.Region,
+                postalCode = direccion.CodigoPostal,
+                country = direccion.Pais,
+                contact = direccion.Contacto,
+            },
+            carrier = transportadora,
+        }, llave, ct);
+    }
+
+    async Task<Result<string>> IFulfillmentPort.DespacharAsync(
+        Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct)
+        => (await DespacharEnvioAsync(paraQue, direccion, transportadora, llave, ct)).Map(s => s.Id);
 }
 
 // ── Las formas mínimas que se leen de cada capacidad ────────────────────────
@@ -229,3 +335,8 @@ public sealed record EntregaDto(string Id);
 public sealed record RecursoDto(string Id);
 public sealed record ApartadoDeAgendaDto(string Id);
 public sealed record ReservaDto(string Id);
+public sealed record PermisoDto(string Id);
+public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);
+public sealed record CanastaDto(string Id, string OwnerKind, string OwnerId, IReadOnlyList<LineaDeCanastaDto> Lines, bool CheckedOut, bool Open);
+public sealed record PedidoDto(string Id);
+public sealed record EnvioDto(string Id);
