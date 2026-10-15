@@ -1,11 +1,19 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Alquiler.Contracts;
 using Synergos.Bff.Alquiler.Domain;
+using Synergos.Bff.Core;
 using Synergos.Core;
 using Synergos.Shared;
 
 namespace Synergos.Bff.Alquiler.Endpoints;
 
 /// <summary>El borde del orquestador de Alquiler.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c>: de ahí sale el
+/// contrato publicado (<c>docs/contracts/openapi/Synergos.Bff.Alquiler.json</c>, ADR 0140), que el CMS cruza
+/// y el UI convierte en tipos. Estas rutas son las del flujo imperativo (<c>RentalFlow</c>), las que usa la
+/// ruta directa del CMS con <c>Synergos:Alquiler:Mode=Bff</c>; ninguna lleva marca de la puerta.
+/// </remarks>
 public static class AlquilerEndpoints
 {
     /// <summary>El prefijo de los códigos de rechazo de este borde.</summary>
@@ -16,7 +24,7 @@ public static class AlquilerEndpoints
     /// <returns>El mismo router.</returns>
     public static IEndpointRouteBuilder MapAlquilerEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/rentals", async (
+        app.MapPost("/v1/rentals", async Task<Results<Created<RentalResponse>, ProblemHttpResult>> (
             ReserveRentalRequest req, HttpRequest http, RentalFlow flow, CancellationToken ct) =>
         {
             // La llave es obligatoria: reservar retiene plata, y un reintento sin llave la
@@ -51,16 +59,16 @@ public static class AlquilerEndpoints
                 renter, req.EquipmentId ?? string.Empty, req.Quantity ?? 1,
                 TimeWindow.Of(req.Start.Value, req.End.Value), total, garantia, key.Value, ct);
 
-            return r.Match(
-                s => Results.Created($"/v1/rentals/{s.Id}", RentalResponse.From(s)),
-                bad => bad.ToProblem());
-        });
+            return r.Map(RentalResponse.From).ToCreated(s => $"/v1/rentals/{s.RentalId}");
+        }).WithName("ReserveRental").ConLlaveDeSaga();
 
-        app.MapGet("/v1/rentals/{id}", (string id, RentalFlow flow) =>
-            flow.Get(id).Map(RentalResponse.From).ToHttp());
+        app.MapGet("/v1/rentals/{id}", Results<Ok<RentalResponse>, ProblemHttpResult> (string id, RentalFlow flow) =>
+            flow.Get(id).Map(RentalResponse.From).ToHttp()).WithName("GetRental");
 
-        app.MapPost("/v1/rentals/{id}/return", async (
-            string id, SettleRentalRequest? req, RentalFlow flow, CancellationToken ct) =>
+        // Devolver y cancelar exigen el cuerpo, aunque su monto pueda faltar (cero es legítimo): el CMS
+        // siempre lo manda, y un cuerpo opcional no se puede traducir a un tipo en el UI.
+        app.MapPost("/v1/rentals/{id}/return", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, SettleRentalRequest req, RentalFlow flow, CancellationToken ct) =>
         {
             if (!TryMonto(req, out var monto, out var malo))
             {
@@ -68,10 +76,10 @@ public static class AlquilerEndpoints
             }
 
             return (await flow.ReturnAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
-        });
+        }).WithName("ReturnRental");
 
-        app.MapPost("/v1/rentals/{id}/cancel", async (
-            string id, SettleRentalRequest? req, RentalFlow flow, CancellationToken ct) =>
+        app.MapPost("/v1/rentals/{id}/cancel", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, SettleRentalRequest req, RentalFlow flow, CancellationToken ct) =>
         {
             if (!TryMonto(req, out var monto, out var malo))
             {
@@ -79,13 +87,13 @@ public static class AlquilerEndpoints
             }
 
             return (await flow.CancelAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
-        });
+        }).WithName("CancelRental");
 
         return app;
     }
 
     /// <summary>Cero es legítimo —devolver sin daño— así que la ausencia no se rechaza.</summary>
-    private static bool TryMonto(SettleRentalRequest? req, out Money monto, out IResult? malo)
+    private static bool TryMonto(SettleRentalRequest? req, out Money monto, out ProblemHttpResult? malo)
     {
         if (req?.Amount is null)
         {
@@ -104,7 +112,7 @@ public static class AlquilerEndpoints
     /// No se cae a cero: «cero» es un precio válido que no falla en ninguna parte hasta que
     /// alguien mira la factura (<c>bash_ifs_whitespace_shifts_fields</c>, el mismo corte).
     /// </remarks>
-    private static bool TryMoney(MoneyPayload? m, out Money monto, out IResult? malo)
+    private static bool TryMoney(MoneyPayload? m, out Money monto, out ProblemHttpResult? malo)
     {
         monto = Money.Zero(Money.Cop);
         malo = null;
@@ -120,6 +128,6 @@ public static class AlquilerEndpoints
         return true;
     }
 
-    private static IResult Invalid(string code, string detail)
+    private static ProblemHttpResult Invalid(string code, string detail)
         => Rejection.Invalid($"{CodePrefix}.{code}", detail).ToProblem();
 }

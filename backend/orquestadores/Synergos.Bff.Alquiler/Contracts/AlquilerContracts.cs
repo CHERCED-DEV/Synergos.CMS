@@ -6,7 +6,7 @@ namespace Synergos.Bff.Alquiler.Contracts;
 /// <summary>Dinero, como llega y como sale.</summary>
 /// <param name="Amount">El monto.</param>
 /// <param name="Currency">La moneda.</param>
-public sealed record MoneyPayload(decimal? Amount, string? Currency);
+public sealed record MoneyPayload(decimal? Amount = null, string? Currency = null);
 
 /// <summary>Lo que se pide para reservar un alquiler.</summary>
 /// <remarks>
@@ -22,18 +22,18 @@ public sealed record MoneyPayload(decimal? Amount, string? Currency);
 /// <param name="RentalTotal">Lo que se cobra.</param>
 /// <param name="Deposit">Lo que se retiene.</param>
 public sealed record ReserveRentalRequest(
-    string? EquipmentId,
-    int? Quantity,
-    DateTimeOffset? Start,
-    DateTimeOffset? End,
-    string? RenterKind,
-    string? RenterId,
-    MoneyPayload? RentalTotal,
-    MoneyPayload? Deposit);
+    string? EquipmentId = null,
+    int? Quantity = null,
+    DateTimeOffset? Start = null,
+    DateTimeOffset? End = null,
+    string? RenterKind = null,
+    string? RenterId = null,
+    MoneyPayload? RentalTotal = null,
+    MoneyPayload? Deposit = null);
 
 /// <summary>Lo que se pide para cerrar un alquiler.</summary>
 /// <param name="Amount">El daño o la penalidad, ya calculado por quien recibió.</param>
-public sealed record SettleRentalRequest(MoneyPayload? Amount);
+public sealed record SettleRentalRequest(MoneyPayload? Amount = null);
 
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>

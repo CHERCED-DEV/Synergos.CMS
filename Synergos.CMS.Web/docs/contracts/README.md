@@ -82,6 +82,7 @@ ensamblado, igual que su `info.title`.
 | Fichero | Pieza | Quién lo ejecuta |
 |---|---|---|
 | [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Bff.Alquiler.json`](openapi/Synergos.Bff.Alquiler.json) | El orquestador de Alquiler: las rutas del flujo imperativo (`/v1/rentals*`, las que usa la ruta directa del CMS con `Synergos:Alquiler:Mode=Bff`) y, con la línea 005, el flujo declarado `alquiler.renta`, la oferta y lo posterior al cierre. | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
 | [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
