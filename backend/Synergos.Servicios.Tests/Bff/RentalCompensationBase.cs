@@ -328,6 +328,28 @@ public abstract class RentalReservaBase
         // Y sólo DOS cobros, no uno por unidad: se alquila un lote, no dos alquileres.
         Assert.Equal(2, c.Caps.VecesEn("POST", "/v1/payments"));
     }
+
+    /// <summary>
+    /// Las llaves de apartar y confirmar son las MISMAS en los dos motores: <c>hold:{i}</c> y <c>confirm:{i}</c>,
+    /// desde 0.
+    /// </summary>
+    /// <remarks>
+    /// <c>Api.Booking</c> sólo devuelve el mismo apartado ante la misma llave: con el interruptor entre motores,
+    /// uno tiene que reconocer lo que apartó el otro. Las dos unidades son IDÉNTICAS (mismo recurso, mismas
+    /// fechas), así que la llave sólo puede distinguirlas por su posición (NN-3 de la línea 005, NV-1 de N2).
+    /// </remarks>
+    [Fact]
+    public async Task Las_llaves_de_las_unidades_son_las_mismas_en_los_dos_motores()
+    {
+        var c = Nuevo(FelizEstricto());
+
+        Assert.True((await c.ReservarAsync(unidades: 2)).Ok);
+
+        Assert.Equal(["alq-1|hold:0", "alq-1|hold:1"],
+            c.Caps.Llamadas.Where(l => l.Method == "POST" && l.Path.EndsWith("/v1/holds", StringComparison.Ordinal)).Select(l => l.Key));
+        Assert.Equal(["alq-1|confirm:0", "alq-1|confirm:1"],
+            c.Caps.Llamadas.Where(l => l.Method == "POST" && l.Path.EndsWith("/confirm", StringComparison.Ordinal)).Select(l => l.Key));
+    }
 }
 
 /// <summary>

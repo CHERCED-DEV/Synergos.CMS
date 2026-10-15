@@ -1,48 +1,21 @@
 using Synergos.Bff.Core.Flow;
-using Synergos.Bff.Pasos;
-using Synergos.Core;
 
 namespace Synergos.Bff.Alquiler.Domain;
 
 /// <summary>
-/// Las dos salidas que la renta declarada escribe mientras el núcleo no las tenga (línea 005, T011): apartar N
-/// unidades idénticas sin que compartan llave (NN-3) y cerrar la garantía sin capturarla (NN-4). Cuentan como
-/// pegamento atribuido a esas necesidades; cuando el núcleo las dé, se reemplazan por las comunes y quedan
-/// declaradas.
+/// La salida que la renta declarada escribe mientras el núcleo no la tenga (línea 005, T011): cerrar la garantía
+/// sin capturarla (NN-4). Cuenta como pegamento atribuido a esa necesidad; cuando el núcleo la dé (la forma
+/// genérica de T051), se reemplaza por la común y queda declarada.
 /// </summary>
+/// <remarks>
+/// La otra salida de T011 —apartar N unidades idénticas con llaves distintas (NN-3)— se retiró con N2: el flujo
+/// usa <c>booking.apartar-por-indice</c> y <c>booking.confirmar-por-indice</c>, con las llaves de
+/// <c>RentalFlow</c> (<c>hold:{i}</c>, <c>confirm:{i}</c>).
+/// </remarks>
 public static class AlquilerSalidasPropias
 {
     /// <summary>Las salidas, para sumarlas a los pasos propios del orquestador.</summary>
-    public static IPaso[] Pasos(IBookingPort agenda) => [new PasoApartarUnidad(agenda), new PasoConservarGarantia()];
-}
-
-/// <summary>
-/// <c>alquiler.apartar-unidad</c>: aparta UNA unidad del equipo en la ventana, con la llave de SU número
-/// (<c>{saga}|hold:{unidad}</c>). RESERVA.
-/// </summary>
-/// <remarks>
-/// Es <c>booking.apartar-por-item</c> con otro discriminante (NN-3 de la línea 005, T047 del núcleo): aquél resume
-/// el recurso y la ventana, y N unidades del mismo equipo en las mismas fechas son N ítems IDÉNTICOS que
-/// compartirían llave —la segunda devolvería el apartado de la primera—.
-/// </remarks>
-public sealed class PasoApartarUnidad(IBookingPort agenda) : IPaso
-{
-    public string Tipo => "alquiler.apartar-unidad";
-    public int Lecturas => 4;
-    public int Escrituras => 1;
-    public LlaveRequerida Llave => LlaveRequerida.PorItem;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
-
-    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(entrada);
-        var unidad = entrada.Lee<int>(3).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var apartado = await agenda.ApartarAsync(
-            entrada.Lee<string>(0), entrada.Lee<TimeWindow>(1), entrada.Lee<Ref>(2), entrada.LlavePara(unidad), ct);
-        return apartado.IsOk
-            ? SalidaDePaso.Reserva(new Reservado(apartado.Value), apartado.Value)
-            : SalidaDePaso.Rechaza(apartado.Rejection!);
-    }
+    public static IPaso[] Pasos() => [new PasoConservarGarantia()];
 }
 
 /// <summary>

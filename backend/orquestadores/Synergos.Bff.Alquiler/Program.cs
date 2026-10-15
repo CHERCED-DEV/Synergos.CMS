@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 using Synergos.Bff.Alquiler.Clients;
 using Synergos.Bff.Alquiler.Domain;
 using Synergos.Bff.Alquiler.Endpoints;
@@ -74,28 +73,11 @@ if (declarado)
 {
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
-    // El tramo (la regla del alquiler) y las dos salidas propias, provisionales hasta el núcleo (NN-3, NN-4).
+    // El tramo (la regla del alquiler) y la salida propia de la garantía, provisional hasta el núcleo (NN-4).
     var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
         sp.GetRequiredService<PuertosHttp>(),
-        [.. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias),
-         .. AlquilerSalidasPropias.Pasos(sp.GetRequiredService<PuertosHttp>())]));
-
-    // Dos máquinas de saga en un orquestador (NN-17; NN-15 de Salud, T053 del núcleo en N2), hasta que
-    // Bff.Core lo resuelva: la saga genérica en su propia carpeta —la tipada no se mueve: sus datos ya
-    // están desplegados— y la llave UNA vez en los clientes que configuran las dos (dos veces es «k,k» y
-    // la capacidad contesta 401).
-    builder.Services.AddSingleton<ISagaStore<SagaDeFlujo>>(sp => new FileSystemSagaStore<SagaDeFlujo>(Options.Create(
-        new SagaStorageOptions { Root = Path.Combine(sp.GetRequiredService<IOptions<SagaStorageOptions>>().Value.Root, "flujos") })));
-    foreach (var capacidad in PuertosHttp.Capacidades)
-    {
-        var llave = builder.Configuration[$"{vocabulario.Origin}:Capabilities:{capacidad}:ApiKey"];
-        builder.Services.AddHttpClient(capacidad).ConfigureHttpClient(http =>
-        {
-            http.DefaultRequestHeaders.Remove(SharedKeyAuth.HeaderName);
-            if (llave is { Length: > 0 }) http.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, llave);
-        });
-    }
+        [.. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias), .. AlquilerSalidasPropias.Pasos()]));
 }
 
 var app = builder.Build();

@@ -57,8 +57,6 @@ public sealed class RentalCompensationDeclaradaTests : RentalReservaBase, IDispo
         Assert.Equal(HttpStatusCode.Created, primero.Estado);
         Assert.Equal(HttpStatusCode.Created, segundo.Estado);
         Assert.Equal(2, c.Caps.VecesEn("POST", "/v1/holds"));
-        Assert.Equal(["alq-1|hold:1", "alq-1|hold:2"],
-            c.Caps.Llamadas.Where(l => l.Method == "POST" && l.Path.EndsWith("/v1/holds", StringComparison.Ordinal)).Select(l => l.Key));
     }
 
     /// <summary>Cancelar un alquiler pendiente anula las dos autorizaciones y suelta las unidades.</summary>

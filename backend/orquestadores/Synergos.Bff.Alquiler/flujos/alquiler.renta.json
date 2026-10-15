@@ -58,8 +58,8 @@
       "motivo": "ese equipo no tiene unidades publicadas para alquilar"
     },
     "apartar": {
-      "tipo": "alquiler.apartar-unidad",
-      "lee": ["recursoId", "ventana", "inquilino", "u.unidad"],
+      "tipo": "booking.apartar-por-indice",
+      "lee": ["recursoId", "ventana", "inquilino"],
       "escribe": ["u.apartadoId"],
       "llave_base": "hold",
       "motivo": "no quedan unidades del equipo en esas fechas",
@@ -104,7 +104,7 @@
       "motivo": "no se pudo cobrar el alquiler"
     },
     "confirmar": {
-      "tipo": "booking.confirmar-por-item",
+      "tipo": "booking.confirmar-por-indice",
       "lee": ["apartado.holdId"],
       "escribe": ["apartado.reservaId"],
       "llave_base": "confirm",
