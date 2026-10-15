@@ -117,6 +117,30 @@ trap levantar_de_vuelta EXIT
 echo "── parando el CMS (dos Umbraco sobre la misma base se matan por MainDom)…"
 $COMPOSE stop cms >/dev/null
 
+# La imagen que corre: de ella salen los ficheros de la vitrina y la cuenta de lo
+# que el import debería procesar.
+IMAGEN="$($COMPOSE config --images 2>/dev/null | grep '/synergos-cms:' | head -1 || true)"
+
+# ── Los ficheros de la vitrina, al volumen de medios si faltan ──────────────
+#
+# Los trae la imagen en `wwwroot/media` (ADR 0129) y Docker los copia al volumen
+# `cms-media` sólo cuando lo crea vacío. Si el volumen ya existía —un servidor que
+# se desplegó con una imagen anterior— los ítems de media se importarían apuntando
+# a ficheros que no están. Se copian sin pisar NADA de lo que haya (`-n`): lo que
+# un editor subió se queda como está.
+if [ "$CONTENIDO" = "true" ]; then
+  PROYECTO="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
+  VOLUMEN="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
+               --filter "label=com.docker.compose.volume=cms-media" | head -1 || true)"
+  if [ -n "$VOLUMEN" ] && [ -n "$IMAGEN" ]; then
+    echo "── los ficheros de la vitrina al volumen de medios (sin pisar nada)…"
+    docker run --rm --user 0 --entrypoint sh --volume "$VOLUMEN:/destino" "$IMAGEN" -c \
+      'cp -rn /app/wwwroot/media/. /destino/ 2>/dev/null || true; echo "   $(find /destino -type f | wc -l) ficheros en el volumen"'
+  else
+    echo "⚠ no se encontró el volumen cms-media o la imagen: los ficheros de la vitrina NO se repusieron." >&2
+  fi
+fi
+
 if [ "$CONTENIDO" = "true" ]; then
   echo "── importando el schema Y EL CONTENIDO versionado (--con-contenido) en un contenedor efímero…"
 else
@@ -181,14 +205,27 @@ ERRORES="$(grep --count ' ERR]' "$LOG" || true)"
 # que tampoco casa un fichero de la raíz; acá no se puede usar git porque en el
 # servidor no hay clon.
 #
-# ⚠️ Y el `|| true` dentro es lo que hace que esto funcione EN EL SERVIDOR, que es
-# donde se corre. Sin él, con `set -o pipefail`, un `find` sobre un árbol que no
-# está sale 1, la tubería sale 1, la asignación sale 1 y `set -e` mata el script
-# EN SILENCIO —sin ninguno de los mensajes de abajo— justo en el caso que el
-# párrafo de abajo dice manejar. Lo destapó el ensayo del despliegue
-# (002-produccion, 2026-10-15): el import moría siempre que no se corría desde un
-# clon, o sea siempre que se corría donde la guía lo manda.
-ESPERADOS="$({ find "$(dirname "$0")/../Synergos.CMS.Web/uSync/v9" -mindepth 2 -name '*.config' 2>/dev/null || true; } | wc -l | tr -d ' ')"
+# ⚠️ En el SERVIDOR no hay clon, y esto hacía dos cosas mal, las dos medidas en el
+# ensayo del despliegue (002-produccion, 2026-10-15):
+#   · con `set -o pipefail`, el `find` sobre un árbol que no está salía 1 y
+#     `set -e` mataba el script EN SILENCIO, sin ninguno de los mensajes de abajo;
+#   · y aun sin eso, sin árbol no se comparaba nada: 1240 procesados de 1528 —sin
+#     el contenido— salían «✓ 0 errores» con la base vacía de documentos.
+# Hoy se cuenta el árbol que se IMPORTA: el de al lado si se corre desde un clon, y
+# si no, el de DENTRO de la imagen. Sin `--con-contenido` no cuentan Content ni
+# Media, que es justo lo que ese import no trae.
+FILTRO=(-mindepth 2 -name '*.config')
+[ "$CONTENIDO" = "true" ] || FILTRO+=(-not -path '*/Content/*' -not -path '*/Media/*')
+ARBOL="$(dirname "$0")/../Synergos.CMS.Web/uSync/v9"
+ESPERADOS=0
+DE_DONDE="ningún sitio"
+if [ -d "$ARBOL" ]; then
+  ESPERADOS="$(find "$ARBOL" "${FILTRO[@]}" | wc -l | tr -d ' ')"
+  DE_DONDE="el árbol de al lado"
+elif [ -n "$IMAGEN" ]; then
+  ESPERADOS="$({ docker run --rm --entrypoint find "$IMAGEN" /app/uSync/v9 "${FILTRO[@]}" 2>/dev/null || true; } | wc -l | tr -d ' ')"
+  DE_DONDE="la imagen"
+fi
 
 if [ -z "$RESUMEN" ]; then
   echo "✗ el import no llegó a terminar. Lo último que dijo:"
@@ -213,17 +250,16 @@ if [ "$ERRORES" != "0" ]; then
   exit 1
 fi
 
-# El conteo esperado sólo se puede calcular si el árbol uSync está al lado (o
-# sea, si esto se corre desde un clon). En el servidor puede no estarlo, y
-# entonces no se inventa un número: se dice que no se pudo cruzar.
+# Si no hubo de dónde contar (ni árbol ni imagen), no se inventa un número: se
+# dice que no se pudo cruzar.
 if [ "$ESPERADOS" -gt 0 ] 2>/dev/null; then
   if [ "$PROCESADOS" -lt "$ESPERADOS" ]; then
-    echo "✗ procesó $PROCESADOS de $ESPERADOS ficheros .config — se saltó algo. Log: $LOG"
+    echo "✗ procesó $PROCESADOS de $ESPERADOS ficheros .config de $DE_DONDE — se saltó algo. Log: $LOG"
     exit 1
   fi
-  echo "✓ $PROCESADOS ítems, 0 errores (hay $ESPERADOS ficheros .config en el árbol)"
+  echo "✓ $PROCESADOS ítems, 0 errores ($ESPERADOS ficheros .config en $DE_DONDE)"
 else
-  echo "✓ $PROCESADOS ítems, 0 errores (sin árbol uSync al lado: no se cruzó el conteo)"
+  echo "✓ $PROCESADOS ítems, 0 errores (no hubo de dónde contar los .config: no se cruzó el conteo)"
 fi
 
 rm -f "$LOG"

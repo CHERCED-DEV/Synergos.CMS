@@ -58,6 +58,8 @@ on:
     paths:
       - compose.prod.yml
       - Caddyfile
+      - Dockerfile
+      - .dockerignore
       - tools/deploy-remoto.sh
       - tools/importar-schema.sh
       - tools/respaldo.sh
@@ -198,6 +200,29 @@ jobs:
           t=$SECONDS
           ./deploy-remoto.sh "$SHA"
           echo "| en pie con \`${SHA:0:7}\` (\`deploy-remoto.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+      # En una RAMA, la imagen del CMS se construye de la rama: el `Dockerfile` y el
+      # `.dockerignore` son piezas del despliegue, y una imagen de master no ensaya
+      # lo que la rama cambia en ellos (medido: la de master no lleva la vitrina).
+      # Lleva la MISMA etiqueta y la misma versión, así que el humo la reconoce; y
+      # `compose up` recrea el CMS con ella sin tocar el volumen de medios, que ya
+      # existe — el caso que `importar-schema.sh --con-contenido` repone.
+      - name: En una rama, la imagen del CMS sale de la rama
+        if: github.event_name == 'push'
+        env:
+          SHA: ${{ steps.etiquetas.outputs.sha }}
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          docker build --quiet --build-arg VERSION="$SHA" --tag "$REGISTRO/synergos-cms:$SHA" .
+          cd /opt/synergos
+          SYNERGOS_TAG="$SHA" docker compose --file compose.prod.yml --project-directory . up --detach cms
+          for i in $(seq 1 60); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' "$(SYNERGOS_TAG="$SHA" docker compose --file compose.prod.yml --project-directory . ps --quiet cms)")" = healthy ] && break
+            [ "$i" -eq 60 ] && { echo "✗ el CMS de la rama no quedó sano"; exit 1; }
+            sleep 5
+          done
+          echo "| imagen del CMS construida de la rama | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: importar-schema.sh
         working-directory: /opt/synergos

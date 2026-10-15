@@ -157,6 +157,57 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("sha=${VERSION", respaldo, StringComparison.Ordinal);
     }
 
+    // ── La vitrina viaja en la imagen y entra sólo a propósito ─────────────
+
+    /// <summary>Un patrón de <c>.dockerignore</c> como expresión regular: <c>**/</c>, <c>*</c> y <c>?</c>.</summary>
+    private static Regex PatronDocker(string patron)
+    {
+        var p = patron.Trim().TrimEnd('/');
+        var re = Regex.Escape(p).Replace(@"\*\*/", "(.*/)?").Replace(@"\*", "[^/]*").Replace(@"\?", "[^/]");
+        return new Regex("^" + re + "(/.*)?$");
+    }
+
+    /// <summary>
+    /// La imagen del CMS LLEVA la vitrina versionada (ADR 0129, decisión 002-P2) y sólo
+    /// <c>importar-schema.sh --con-contenido</c> la importa.
+    /// </summary>
+    /// <remarks>
+    /// Medido en el ensayo (2026-10-15): el <c>.dockerignore</c> excluía <c>uSync/v9/Content</c>,
+    /// <c>uSync/v9/Media</c> y <c>wwwroot/media</c> desde antes de que el contenido se versionara. El
+    /// import del servidor procesaba 1240 ítems —todo menos esos 288—, salía verde y la base quedaba con
+    /// 0 documentos: la portada, el cartel vacío de Umbraco. Y aun con la imagen bien, el import no
+    /// encendía los handlers de contenido, que sí enciende el gate que prueba que la base es derivable.
+    /// </remarks>
+    [Fact]
+    public void La_imagen_lleva_la_vitrina_y_solo_la_importa_quien_lo_pide()
+    {
+        var patrones = File.ReadAllLines(Proyectos.Ruta(".dockerignore"))
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith('#') && !l.StartsWith('!'))
+            .ToList();
+
+        foreach (var ruta in new[]
+                 {
+                     "Synergos.CMS.Web/uSync/v9/Content/inicio.config",
+                     "Synergos.CMS.Web/uSync/v9/Media/foto.config",
+                     "Synergos.CMS.Web/wwwroot/media/abc/foto.png",
+                 })
+        {
+            var excluye = patrones.Where(p => PatronDocker(p).IsMatch(ruta)).ToList();
+            Assert.True(excluye.Count == 0,
+                $".dockerignore deja fuera de la imagen {ruta} ({string.Join(", ", excluye)}): la vitrina "
+                + "versionada no llegaría al servidor y su import saldría verde con la base vacía.");
+        }
+
+        var importar = Leer("tools", "importar-schema.sh");
+        Assert.Contains("--con-contenido", importar, StringComparison.Ordinal);
+        Assert.Contains("ContentHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
+        Assert.Contains("MediaHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
+
+        // El ensayo importa con contenido: es lo que hace el arquitecto en un servidor nuevo.
+        Assert.Contains("./importar-schema.sh --con-contenido", Leer(".github", "workflows", "ensayo-despliegue.yml"), StringComparison.Ordinal);
+    }
+
     // ── El ensayo despliega como el despliegue ──────────────────────────────
 
     /// <summary>
