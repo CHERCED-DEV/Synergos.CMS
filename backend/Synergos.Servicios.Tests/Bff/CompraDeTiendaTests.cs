@@ -39,10 +39,13 @@ internal sealed class CompraDeTiendaReal : IDisposable
     /// <param name="pierdeLaPrimera">La primera petición cuya ruta termina así LLEGA a la capacidad y su respuesta se
     /// pierde: el orquestador ve una caída.</param>
     /// <param name="ajustes">Configuración del orquestador, además de la del arnés (<c>Tienda:Cupon:…</c>).</param>
+    /// <param name="reloj">El reloj del orquestador (el de sus sagas y sus barridos); sin él, el del sistema.</param>
+    /// <param name="envolver">Una envoltura sobre el cable hacia las capacidades (la compuerta de los turnos).</param>
     public CompraDeTiendaReal(
         IReadOnlyDictionary<string, int>? existencias = null, IReadOnlyDictionary<string, decimal>? precios = null,
         IReadOnlyCollection<string>? cae = null, IReadOnlyCollection<string>? rechaza = null, bool conRecogida = false,
-        string? pierdeLaPrimera = null, IReadOnlyDictionary<string, string>? ajustes = null)
+        string? pierdeLaPrimera = null, IReadOnlyDictionary<string, string>? ajustes = null, TimeProvider? reloj = null,
+        Func<IHttpClientFactory, IHttpClientFactory>? envolver = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
@@ -58,12 +61,18 @@ internal sealed class CompraDeTiendaReal : IDisposable
             .GetAwaiter().GetResult();
 
         var cable = new Cable(Capacidades, cae ?? [], rechaza ?? [], pierdeLaPrimera);
+        _cable = cable;
+        var fabrica = envolver?.Invoke(cable) ?? cable;
         _fabrica = new WebApplicationFactory<PurchaseResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("tienda:Storage:Root", Raiz);
             b.UseSetting("Tienda:ApiKey", Llave);
             foreach (var (clave, valor) in ajustes ?? new Dictionary<string, string>()) b.UseSetting(clave, valor);
-            b.ConfigureTestServices(s => s.AddSingleton<IHttpClientFactory>(cable));
+            b.ConfigureTestServices(s =>
+            {
+                s.AddSingleton(fabrica);
+                if (reloj is not null) s.AddSingleton(reloj);
+            });
         });
         Orquestador = _fabrica.CreateClient();
         Orquestador.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, Llave);
@@ -83,6 +92,11 @@ internal sealed class CompraDeTiendaReal : IDisposable
     public IReadOnlyList<string> Llamadas => _llamadas.Where(l => l != "GET /v1/deliveries/queued").ToList();
 
     private readonly IReadOnlyList<string> _llamadas;
+
+    private readonly Cable _cable;
+
+    /// <summary>La capacidad caída vuelve: la ruta deja de contestar 503.</summary>
+    public void Encender(string ruta) => _cable.Encender(ruta);
 
     /// <summary>El ítem de existencias de cada producto.</summary>
     public Dictionary<string, string> Items { get; } = new(StringComparer.Ordinal);
@@ -120,13 +134,17 @@ internal sealed class CompraDeTiendaReal : IDisposable
         // La plantilla de VERDAD, la que publica provisionar.sh: el correo que se abre es el que recibiría quien compra.
         using var plantillas = JsonDocument.Parse(File.ReadAllText(Path.Combine(
             Synergos.CMS.Tests.Architecture.Proyectos.Raiz(), "tools", "provisionar.plantillas.json")));
-        var aviso = plantillas.RootElement.EnumerateArray()
-            .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == "tienda.compra.confirmada");
-        await Post("notifications", "v1/templates", new
+        // Y la de la guardia (la de una compensación que se rindió), la misma que publica provisionar.sh.
+        foreach (var clave in new[] { "tienda.compra.confirmada", "bff.compensacion.colgada" })
         {
-            key = aviso.GetProperty("key").GetString(), channel = aviso.GetProperty("channel").GetString(),
-            subject = aviso.GetProperty("subject").GetString(), body = aviso.GetProperty("body").GetString(),
-        }, "plantilla");
+            var aviso = plantillas.RootElement.EnumerateArray()
+                .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == clave);
+            await Post("notifications", "v1/templates", new
+            {
+                key = aviso.GetProperty("key").GetString(), channel = aviso.GetProperty("channel").GetString(),
+                subject = aviso.GetProperty("subject").GetString(), body = aviso.GetProperty("body").GetString(),
+            }, "plantilla-" + clave);
+        }
     }
 
     private async Task<JsonElement> Post(string capacidad, string ruta, object cuerpo, string llave)
@@ -266,11 +284,21 @@ internal sealed class CompraDeTiendaReal : IDisposable
     {
         private int _perdidas;
 
+        private readonly HashSet<string> _caidas = new(cae, StringComparer.Ordinal);
+
         public List<string> Llamadas { get; } = [];
+
+        public void Encender(string ruta)
+        {
+            lock (_caidas) _caidas.Remove(ruta);
+        }
 
         private string? PierdeLaPrimera { get; } = pierdeLaPrimera;
 
-        private IReadOnlyCollection<string> Cae { get; } = cae;
+        private bool Cae(string ruta)
+        {
+            lock (_caidas) return _caidas.Any(c => Coincide(c, ruta));
+        }
 
         private IReadOnlyCollection<string> Rechaza { get; } = rechaza;
 
@@ -291,7 +319,7 @@ internal sealed class CompraDeTiendaReal : IDisposable
                 var ruta = $"{r.Method.Method} {r.RequestUri!.AbsolutePath}";
                 lock (cable.Llamadas) cable.Llamadas.Add(ruta);
 
-                if (cable.Cae.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.ServiceUnavailable, "guion.caida");
+                if (cable.Cae(ruta)) return Problema(HttpStatusCode.ServiceUnavailable, "guion.caida");
                 if (cable.Rechaza.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.Conflict, "guion.rechazo");
 
                 using var copia = new HttpRequestMessage(r.Method, r.RequestUri) { Content = r.Content };
