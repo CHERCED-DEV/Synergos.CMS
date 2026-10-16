@@ -44,6 +44,32 @@ public sealed class EquipmentAgreementLedger
             JsonSerializer.Serialize(agreement, Json), cancellationToken);
     }
 
+    /// <summary>
+    /// Anota el sello de un contrato que quedó pendiente, sobre lo que el registro tiene AHORA (línea 005, T022).
+    /// </summary>
+    /// <remarks>
+    /// Relee justo antes de escribir y sólo cambia el sello: el sello pudo tardar una llamada de red, y en ese rato
+    /// otra operación pudo anotar el estado del alquiler. Escribir el contrato leído antes lo pisaría.
+    /// </remarks>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="sello">El sello que por fin se obtuvo.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato sellado, o null si ya no consta.</returns>
+    public async Task<RentalAgreement?> AnotarSelloAsync(
+        string rentalId, SelloDelContrato sello, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sello);
+        var actual = await GetAsync(rentalId, cancellationToken).ConfigureAwait(false);
+        if (actual is null)
+        {
+            return null;
+        }
+
+        var sellado = actual with { Seal = sello.Valor, SelladoPor = sello.SelladoPor, SelloPendiente = sello.Pendiente };
+        await RecordAsync(sellado, cancellationToken).ConfigureAwait(false);
+        return sellado;
+    }
+
     /// <summary>El contrato de un alquiler, o null.</summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>

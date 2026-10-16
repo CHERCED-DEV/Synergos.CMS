@@ -64,10 +64,35 @@ public sealed partial class SeamComposer
         services.AddSingleton<AgreementSigningKeyProvider>();
         services.AddSingleton<IAgreementSigner, LazyAgreementSigner>();
         services.AddSingleton(sp => new EquipmentAgreementLedger(sp.GetRequiredService<IJsonEntityStore>()));
-        services.AddSingleton(sp => new EquipmentAgreementIssuer(
-            sp.GetRequiredService<EquipmentAgreementLedger>(),
-            sp.GetRequiredService<IAgreementSigner>(),
-            sp.GetRequiredService<TimeProvider>()));
+
+        // El sello conmuta sin invalidar nada (research R11 de la línea 005): sella el del interruptor y comprueba el
+        // que registra cada contrato. El LOCAL se registra en los dos modos —comprueba todo lo anterior al
+        // interruptor—, y el de Api.Signing también con Mode=Local si su sección sigue puesta, para comprobar lo que
+        // selló. Con Api.Signing caído el contrato sale con el sello pendiente: nunca se cae a la llave local.
+        services.AddSingleton(sp => new SelladorLocal(sp.GetRequiredService<IAgreementSigner>()));
+        var seccionDelSello = builder.Config.GetSection("Synergos:Alquiler:Agreement:Signing");
+        if (Interruptor.Encendido(builder.Config, "Synergos:Alquiler:Agreement:Mode", "Api", new AgreementSettings().Mode))
+        {
+            RegistrarSelladorDeApiSigning(services, seccionDelSello);
+            services.AddSingleton(sp => new EquipmentAgreementIssuer(
+                sp.GetRequiredService<EquipmentAgreementLedger>(),
+                sp.GetRequiredService<HttpAgreementSealer>(),
+                sp.GetRequiredService<TimeProvider>(),
+                [sp.GetRequiredService<SelladorLocal>()]));
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(seccionDelSello["BaseUrl"]))
+            {
+                RegistrarSelladorDeApiSigning(services, seccionDelSello);
+            }
+
+            services.AddSingleton(sp => new EquipmentAgreementIssuer(
+                sp.GetRequiredService<EquipmentAgreementLedger>(),
+                sp.GetRequiredService<SelladorLocal>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetService<HttpAgreementSealer>() is { } api ? [api] : []));
+        }
 
         // ── EJE 2 · la transacción ──────────────────────────────────────────────────
         //
@@ -121,5 +146,19 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
             sp.GetRequiredService<ILogger<HttpAlquilerDeLaPuerta>>(),
             hayOrquestadorDeAlquiler));
+    }
+
+    /// <summary>
+    /// El sellador de <c>Api.Signing</c> para los contratos, con su cliente por la pieza del árbol: sella con
+    /// <c>Mode=Api</c>, y con <c>Mode=Local</c> comprueba lo que selló mientras estuvo encendido.
+    /// </summary>
+    private static void RegistrarSelladorDeApiSigning(IServiceCollection services, IConfiguration seccionDelSello)
+    {
+        services.AddClienteDelArbolDeServicios(
+            HttpAgreementSealer.ClientName, DestinoDelArbol.De(seccionDelSello, "http://127.0.0.1:5218/", 10));
+        services.AddSingleton(sp => new HttpAgreementSealer(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<AgreementSettings>>(),
+            sp.GetRequiredService<ILogger<HttpAgreementSealer>>()));
     }
 }

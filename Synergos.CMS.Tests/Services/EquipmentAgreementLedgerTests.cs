@@ -69,8 +69,8 @@ public sealed class EquipmentAgreementLedgerTests
         Assert.Equal(RentalState.Reserved, leido.Estado);
         Assert.Null(leido.Desenlace);
 
-        var emisor = new EquipmentAgreementIssuer(new EquipmentAgreementLedger(almacen), firmante, new RelojFijo());
-        Assert.True(emisor.Verify(leido));
+        var emisor = new EquipmentAgreementIssuer(new EquipmentAgreementLedger(almacen), new SelladorLocal(firmante), new RelojFijo());
+        Assert.True(await emisor.ComprobarAsync(leido));
     }
 
     [Fact]

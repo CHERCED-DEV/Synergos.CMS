@@ -192,6 +192,16 @@ services:
       # entonces NO se puede rotar ni llevar a otra instalacion.
       Synergos__Alquiler__Agreement__SigningSecret: ${SYNERGOS_ALQUILER_AGREEMENT_SECRET:-}
 
+      # Quien custodia la llave del contrato (linea 005, research R11). Local por
+      # defecto: la de arriba. Api sella en Api.Signing con su PROPIO proposito y
+      # el local sigue comprobando los contratos de antes. Con Api.Signing caido el
+      # contrato sale con el sello pendiente y se sella al leerlo, nunca con la
+      # llave local. La seccion Signing va puesta en los dos modos: asi, de vuelta
+      # a Local, lo que sello Api.Signing se sigue comprobando — ver .env.example.
+      Synergos__Alquiler__Agreement__Mode: ${SYNERGOS_ALQUILER_AGREEMENT_MODE:-Local}
+      Synergos__Alquiler__Agreement__Signing__BaseUrl: "http://api-signing:8080"
+      Synergos__Alquiler__Agreement__Signing__ApiKey: ${SYNERGOS_API_KEY}
+
       # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
       # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que
       # deshacer si algo falla. Un orquestador seria una saga de un paso.

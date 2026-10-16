@@ -39,3 +39,45 @@ public interface IAgreementSigner
     /// <returns><c>true</c> sólo si coinciden.</returns>
     bool Matches(string? sealValue, AgreementSubject subject);
 }
+
+/// <summary>Lo que devuelve sellar un contrato: el sello y quién lo selló, o «pendiente».</summary>
+/// <param name="Valor">El sello, opaco; vacío si quedó pendiente.</param>
+/// <param name="SelladoPor">
+/// Quién lo selló (<c>local</c>, <c>api:{llave}</c>), o quién tiene que sellarlo si quedó pendiente (<c>api</c>). Es lo
+/// que el contrato registra y con lo que se comprueba siempre.
+/// </param>
+/// <param name="Pendiente">
+/// El servicio de firma no contestó: el contrato sale sin sello y se sella al volver, con el mismo que debía sellarlo.
+/// </param>
+public sealed record SelloDelContrato(string Valor, string SelladoPor, bool Pendiente = false);
+
+/// <summary>
+/// Sella y comprueba contratos de alquiler con la custodia que el despliegue eligió (research R11 de la línea 005).
+/// </summary>
+/// <remarks>
+/// <para><b>Asíncrono y con tres respuestas al comprobar</b>, al revés que <see cref="IAgreementSigner"/>: cuando la llave
+/// la custodia <c>Api.Signing</c>, «no sé» (el servicio no contestó) es una respuesta distinta de «no cuadra», y darla por
+/// <c>false</c> diría que un contrato bueno es falso.</para>
+///
+/// <para><b>Cuál gana</b>: para sellar, el del interruptor <c>Synergos:Alquiler:Agreement:Mode</c>; para comprobar, el que
+/// registra el contrato en <c>SelladoPor</c> (vacío = local, el de todos los contratos anteriores al interruptor). Así
+/// conmutar no deja sin comprobar nada ya emitido.</para>
+/// </remarks>
+public interface ISelladorDeContratos
+{
+    /// <summary>Quién es: lo que <c>SelladoPor</c> lleva antes de los dos puntos (<c>local</c>, <c>api</c>).</summary>
+    string Nombre { get; }
+
+    /// <summary>Sella el contrato.</summary>
+    /// <param name="subject">Lo que queda afirmado.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El sello y quién lo selló, o pendiente si el servicio de firma no contestó.</returns>
+    Task<SelloDelContrato> SellarAsync(AgreementSubject subject, CancellationToken cancellationToken = default);
+
+    /// <summary>¿Este sello corresponde a este contrato?</summary>
+    /// <param name="sello">El sello que el contrato registra.</param>
+    /// <param name="subject">Contra qué se comprueba.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns><c>true</c> si cuadra, <c>false</c> si no, <c>null</c> si no se pudo comprobar.</returns>
+    Task<bool?> ComprobarAsync(string? sello, AgreementSubject subject, CancellationToken cancellationToken = default);
+}

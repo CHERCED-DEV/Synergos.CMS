@@ -162,7 +162,7 @@ public sealed class AlquilerControllerTests
             new StubEquipmentCatalogProvider(),
             new RentalServiceFalso(resultado),
             new PuertaFalsa(resultado),
-            new EquipmentAgreementIssuer(ledger, firmante, new RelojFijo()),
+            new EquipmentAgreementIssuer(ledger, firmante is null ? null : new SelladorLocal(firmante), new RelojFijo()),
             ledger,
             new PuertaDeMiembro(conSesion ? Miembro : null),
             NullLogger<AlquilerController>.Instance);

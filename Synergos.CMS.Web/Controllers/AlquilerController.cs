@@ -138,7 +138,7 @@ public sealed class AlquilerController : ControllerBase
             .IssueAsync(resultado.Rental, equipo?.Name ?? resultado.Rental.EquipmentId, ct)
             .ConfigureAwait(false);
 
-        return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
+        return Ok(RentalDto.From(resultado.Rental, contrato, await _issuer.ComprobarAsync(contrato, ct).ConfigureAwait(false)));
     }
 
     /// <summary>
@@ -233,7 +233,7 @@ public sealed class AlquilerController : ControllerBase
         }
 
         var declaradas = await _ledger.ListByStateAsync(RentalState.Declared, ct).ConfigureAwait(false);
-        return Ok(declaradas.Select(a => AgreementDto.From(a, _issuer.Verify(a))).ToList());
+        return Ok(await ProyectarAsync(declaradas, ct).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -292,7 +292,7 @@ public sealed class AlquilerController : ControllerBase
         }
 
         var contratos = await _ledger.ListForAsync(quien, ct).ConfigureAwait(false);
-        return Ok(contratos.Select(a => AgreementDto.From(a, _issuer.Verify(a))).ToList());
+        return Ok(await ProyectarAsync(contratos, ct).ConfigureAwait(false));
     }
 
     /// <summary>El comprobante de un alquiler, con su sello comprobado.</summary>
@@ -303,7 +303,13 @@ public sealed class AlquilerController : ControllerBase
     public async Task<ActionResult<AgreementDto>> Agreement(string rentalId, CancellationToken ct)
     {
         var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
-        return contrato is null ? NotFound() : Ok(AgreementDto.From(contrato, _issuer.Verify(contrato)));
+        if (contrato is null)
+        {
+            return NotFound();
+        }
+
+        var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
+        return Ok(AgreementDto.From(leido.Contrato, leido.Comprobado));
     }
 
     // ── Fontanería ──────────────────────────────────────────────────────────
@@ -334,7 +340,23 @@ public sealed class AlquilerController : ControllerBase
             await _ledger.RecordAsync(contrato, ct).ConfigureAwait(false);
         }
 
-        return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
+        return Ok(RentalDto.From(resultado.Rental, contrato, await _issuer.ComprobarAsync(contrato, ct).ConfigureAwait(false)));
+    }
+
+    /// <summary>
+    /// Los contratos de una bandeja, cada uno con su sello comprobado por quien lo selló (y sellado, si quedó pendiente).
+    /// </summary>
+    private async Task<List<AgreementDto>> ProyectarAsync(
+        IEnumerable<RentalAgreement> contratos, CancellationToken ct)
+    {
+        var dtos = new List<AgreementDto>();
+        foreach (var contrato in contratos)
+        {
+            var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
+            dtos.Add(AgreementDto.From(leido.Contrato, leido.Comprobado));
+        }
+
+        return dtos;
     }
 
     /// <summary>Lo que sólo hace el personal: sin sesión 401, sin el rol 403 (<c>alquiler.staff_required</c>).</summary>
@@ -628,7 +650,7 @@ public sealed record RentalDto(
     /// <c>an_omitted_key_can_be_an_assertion</c> con la clave presente.
     /// </param>
     /// <returns>El DTO.</returns>
-    public static RentalDto From(Rental r, RentalAgreement? a, bool comprobado)
+    public static RentalDto From(Rental r, RentalAgreement? a, bool? comprobado)
         => new(r.RentalId, r.EquipmentId, r.Quantity, r.Start, r.End,
             r.State.ToString().ToLowerInvariant(), QuoteDto.From(r.Quote),
             r.DepositHeld, r.DamageCharged,
@@ -648,17 +670,20 @@ public sealed record RentalDto(
 /// <param name="Verified">
 /// Si el sello COMPRUEBA contra lo que el comprobante afirma. <c>false</c> con sello vacío es la
 /// verdad: sin sellador no se da por bueno, porque comprobar es lo único que impide que quien
-/// escriba en el almacén fabrique un comprobante con la cifra que quiera (#45).
+/// escriba en el almacén fabrique un comprobante con la cifra que quiera (#45). <c>null</c> es «no se pudo
+/// comprobar» (el sello está pendiente, o quien lo selló no contestó): el elemento lo pinta distinto de «no cuadra».
 /// </param>
+/// <param name="SealPending">El servicio de firma no contestó al emitirlo: se sella al volver.</param>
 public sealed record AgreementDto(
     string RentalId, string EquipmentName, int Quantity, DateOnly Start, DateOnly End,
-    decimal RentalTotal, decimal DepositHeld, string Currency, DateTimeOffset IssuedUtc, string Seal, bool Verified)
+    decimal RentalTotal, decimal DepositHeld, string Currency, DateTimeOffset IssuedUtc, string Seal, bool? Verified,
+    bool SealPending = false)
 {
     /// <summary>Proyecta un comprobante.</summary>
     /// <param name="a">El comprobante.</param>
-    /// <param name="comprobado">Si su sello comprobó.</param>
+    /// <param name="comprobado">Si su sello comprobó; null si no se pudo comprobar.</param>
     /// <returns>El DTO.</returns>
-    public static AgreementDto From(RentalAgreement a, bool comprobado)
+    public static AgreementDto From(RentalAgreement a, bool? comprobado)
         => new(a.RentalId, a.EquipmentName, a.Quantity, a.Start, a.End,
-            a.RentalTotal, a.DepositHeld, a.Currency, a.IssuedUtc, a.Seal, comprobado);
+            a.RentalTotal, a.DepositHeld, a.Currency, a.IssuedUtc, a.Seal, comprobado, a.SelloPendiente);
 }
