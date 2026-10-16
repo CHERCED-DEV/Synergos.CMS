@@ -1,0 +1,54 @@
+{
+  "clave": "propiedades.visita",
+  "entrada": ["interesado", "inmueble", "ventana", "modalidad"],
+  "tipos": {
+    "interesado": { "de": "sujeto" },
+    "inmueble": { "tipo": "ref", "kind": "realty.listado" },
+    "ventana": "ventana",
+    "modalidad": "texto?",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["inmueble", "ventana", "modo"],
+  "efimera": { "cerrar": ["contacto"] },
+  "fases": {
+    "abrir": ["validar", "hallar", "apartar"],
+    "cerrar": ["confirmar", "avisar"]
+  },
+  "pasos": {
+    "validar": { "tipo": "propiedades.validar-visita", "lee": ["ventana", "modalidad"], "escribe": ["modo"] },
+    "hallar": {
+      "tipo": "booking.hallar",
+      "lee": ["inmueble"],
+      "escribe": ["recursoId"],
+      "motivo": "el inmueble no recibe visitas en línea"
+    },
+    "apartar": {
+      "tipo": "booking.apartar",
+      "lee": ["recursoId", "ventana", "interesado"],
+      "escribe": ["apartadoId"],
+      "llave": "hold",
+      "motivo": "no se pudo apartar la franja",
+      "reserva": {
+        "consumado_por": "confirmar",
+        "antes": "booking.liberar",
+        "despues": "booking.cancelar",
+        "motivo": "visita no confirmada"
+      }
+    },
+    "confirmar": {
+      "tipo": "booking.confirmar",
+      "lee": ["apartadoId"],
+      "escribe": ["reservaId"],
+      "llave": "confirm",
+      "cierra_reserva": "apartar",
+      "motivo": "no se pudo confirmar la visita"
+    },
+    "avisar": {
+      "tipo": "propiedades.avisar-visita",
+      "lee": ["interesado", "contacto", "ventana", "modo"],
+      "llave": "avisar",
+      "plantilla": "propiedades.visita.confirmada",
+      "al_fallar": "seguir"
+    }
+  }
+}
