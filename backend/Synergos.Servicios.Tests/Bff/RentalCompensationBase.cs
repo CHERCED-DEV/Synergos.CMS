@@ -356,11 +356,15 @@ public abstract class RentalReservaBase
 }
 
 /// <summary>
-/// El oráculo de la RESERVA y de lo que pasa días después: devolver y cancelar, por cualquier motor.
+/// El oráculo de la RESERVA y de la DEVOLUCIÓN días después —declarar y confirmar con el daño—, por cualquier motor.
 /// </summary>
-public abstract class RentalLiquidacionBase : RentalReservaBase
+/// <remarks>
+/// Partido de <see cref="RentalLiquidacionBase"/> (línea 005, T017) para que el camino declarado herede la
+/// devolución cuando la tiene y la cancelación cuando la tenga (T020), sin <c>Skip</c> entre medias.
+/// </remarks>
+public abstract class RentalDevolucionBase : RentalReservaBase
 {
-    // ── Devolver y cancelar ────────────────────────────────────────────────
+    // ── Devolver ───────────────────────────────────────────────────────────
 
     /// <summary>Devolver sin daño ANULA la garantía: nunca fue un cobro.</summary>
     [Fact]
@@ -442,37 +446,6 @@ public abstract class RentalLiquidacionBase : RentalReservaBase
         Assert.Equal(1, c.Caps.Veces("POST", "/v1/payments/pg-dep/refund"));
     }
 
-    /// <summary>
-    /// Cancelar CANCELA las reservas; devolver no.
-    /// </summary>
-    /// <remarks>
-    /// <b>Y el estado sale distinto</b>, que es lo que costó ver: los dos caminos dejan
-    /// <c>ReservationId</c> puestos, así que derivar el estado de «¿tiene reservas?» habría
-    /// contestado «devuelto» de todo alquiler cancelado — una fabricación que sale de datos reales
-    /// y por eso no se ve rara. Por eso el test exige los dos valores y no sólo uno.
-    /// </remarks>
-    [Fact]
-    public async Task Cancelar_libera_la_ventana_y_devolver_no()
-    {
-        var c = Nuevo(FelizEstricto());
-        Assert.True((await c.ReservarAsync()).Ok);
-
-        var cancelada = await c.CancelarAsync("alq-1", 50000m);
-
-        Assert.True(cancelada.Ok);
-        Assert.Equal("cancelled", cancelada.Estado);
-        Assert.Equal(1, c.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
-
-        // Y el mismo alquiler DEVUELTO no cancela nada: el equipo salió y volvió.
-        var otro = Nuevo(FelizEstricto());
-        Assert.True((await otro.ReservarAsync()).Ok);
-        var devuelta = await otro.DevolverAsync("alq-1", 0m);
-
-        Assert.True(devuelta.Ok);
-        Assert.Equal("returned", devuelta.Estado);
-        Assert.Equal(0, otro.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
-    }
-
     // ── Declarar y confirmar (decisión 5 del lote 1, #203) ─────────────────
 
     /// <summary>
@@ -520,5 +493,43 @@ public abstract class RentalLiquidacionBase : RentalReservaBase
         var tarde = await c.DeclararAsync("alq-1");
         Assert.False(tarde.Ok);
         Assert.Equal("alquiler.not_declarable", tarde.Codigo);
+    }
+}
+
+/// <summary>
+/// El oráculo entero de lo que pasa días después: la devolución (<see cref="RentalDevolucionBase"/>) y la
+/// cancelación, por cualquier motor.
+/// </summary>
+public abstract class RentalLiquidacionBase : RentalDevolucionBase
+{
+    /// <summary>
+    /// Cancelar CANCELA las reservas; devolver no.
+    /// </summary>
+    /// <remarks>
+    /// <b>Y el estado sale distinto</b>, que es lo que costó ver: los dos caminos dejan
+    /// <c>ReservationId</c> puestos, así que derivar el estado de «¿tiene reservas?» habría
+    /// contestado «devuelto» de todo alquiler cancelado — una fabricación que sale de datos reales
+    /// y por eso no se ve rara. Por eso el test exige los dos valores y no sólo uno.
+    /// </remarks>
+    [Fact]
+    public async Task Cancelar_libera_la_ventana_y_devolver_no()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        var cancelada = await c.CancelarAsync("alq-1", 50000m);
+
+        Assert.True(cancelada.Ok);
+        Assert.Equal("cancelled", cancelada.Estado);
+        Assert.Equal(1, c.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+
+        // Y el mismo alquiler DEVUELTO no cancela nada: el equipo salió y volvió.
+        var otro = Nuevo(FelizEstricto());
+        Assert.True((await otro.ReservarAsync()).Ok);
+        var devuelta = await otro.DevolverAsync("alq-1", 0m);
+
+        Assert.True(devuelta.Ok);
+        Assert.Equal("returned", devuelta.Estado);
+        Assert.Equal(0, otro.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
     }
 }

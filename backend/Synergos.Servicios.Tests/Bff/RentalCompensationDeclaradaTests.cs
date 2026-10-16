@@ -26,10 +26,11 @@ namespace Synergos.CMS.Tests.Bff;
 /// para este motor es la cotización: el total del alquiler y el de la garantía los calcula el servidor con la
 /// oferta publicada, y aquí los pone el guion de <c>Api.Pricing</c> con los mismos montos del imperativo.</para>
 ///
-/// <para><b>Los casos de liquidar no se heredan todavía</b> (devolver y cancelar lo confirmado): llegan con T017
-/// y T020, sin <c>Skip</c>, cuando haya con qué conducirlos.</para>
+/// <para><b>Hereda la devolución</b> (T017: declarar y confirmar con el daño, por las operaciones posteriores al
+/// cierre, <c>/v1/alquileres/{id}/…</c>). Cancelar lo confirmado llega con T020, sin <c>Skip</c>: entonces
+/// hereda <see cref="RentalLiquidacionBase"/>.</para>
 /// </remarks>
-public sealed class RentalCompensationDeclaradaTests : RentalReservaBase, IDisposable
+public sealed class RentalCompensationDeclaradaTests : RentalDevolucionBase, IDisposable
 {
     private readonly List<ConductorDeclarado> _conductores = [];
 
@@ -189,14 +190,37 @@ public sealed class RentalCompensationDeclaradaTests : RentalReservaBase, IDispo
             return Vista(cuerpo);
         }
 
-        public override Task<VistaDeRenta> DevolverAsync(string id, decimal danio)
-            => throw new NotSupportedException("Devolver por el camino declarado llega con T017.");
+        /// <summary>Confirmar la devolución: lo que hace el personal, por la operación posterior al cierre.</summary>
+        public override async Task<VistaDeRenta> DevolverAsync(string id, decimal danio)
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/confirmar-devolucion")
+            {
+                Content = JsonContent.Create(new { damage = new { amount = danio, currency = "COP" }, staffId = "staff-1" }),
+            };
+            peticion.Headers.Add("Idempotency-Key", $"confirmar-{Guid.NewGuid():N}");
+            return Liquidada(await EnviarAsync(peticion));
+        }
 
         public override Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad)
             => throw new NotSupportedException("Cancelar lo confirmado por el camino declarado llega con T020.");
 
-        public override Task<VistaDeRenta> DeclararAsync(string id)
-            => throw new NotSupportedException("Declarar por el camino declarado llega con T017.");
+        /// <summary>Declarar la devolución: lo que hace el inquilino, con su sujeto de la puerta.</summary>
+        public override async Task<VistaDeRenta> DeclararAsync(string id)
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/declarar-devolucion");
+            peticion.Headers.Add("Idempotency-Key", $"declarar-{Guid.NewGuid():N}");
+            return Liquidada(await EnviarAsync(peticion));
+        }
+
+        /// <summary>Lo que el oráculo mira de una liquidación, leído de <c>RentalSettlementResponse</c>.</summary>
+        private static VistaDeRenta Liquidada((HttpStatusCode Estado, JsonElement Cuerpo) r)
+        {
+            if (r.Estado != HttpStatusCode.OK) return Fallo(r.Cuerpo);
+            var c = r.Cuerpo;
+            return new VistaDeRenta(true, null, c.GetProperty("rentalId").GetString()!, null, null, [],
+                c.GetProperty("state").GetString(), c.GetProperty("depositHeld").GetDecimal(),
+                c.GetProperty("damageCharged") is { ValueKind: JsonValueKind.Number } d ? d.GetDecimal() : 0m);
+        }
 
         public override SagaStatus? Estado(string id) => Sagas.Find(id)?.Status;
 

@@ -180,6 +180,26 @@ internal sealed class RentaDeAlquilerReal : IDisposable
         return await Enviar(peticion);
     }
 
+    /// <summary>El inquilino declara la devolución (T017): con su sujeto de la puerta.</summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Declarar(string id, string? sujeto = null, string? llave = null)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/declarar-devolucion");
+        peticion.Headers.Add("Idempotency-Key", llave ?? $"declarar-{Guid.NewGuid():N}");
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto ?? Sujeto());
+        return await Enviar(peticion);
+    }
+
+    /// <summary>El personal confirma la devolución con el daño (T017).</summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Confirmar(string id, decimal danio, string? llave = null, string personal = "staff-1")
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/confirmar-devolucion")
+        {
+            Content = JsonContent.Create(new { damage = new { amount = danio, currency = "COP" }, staffId = personal }),
+        };
+        peticion.Headers.Add("Idempotency-Key", llave ?? $"confirmar-{Guid.NewGuid():N}");
+        return await Enviar(peticion);
+    }
+
     /// <summary>Reserva y confirma: <c>abrir</c> y <c>cerrar</c> con el contacto, como la puerta.</summary>
     public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Rentar(string llave = "alq-1", object? pedido = null)
     {

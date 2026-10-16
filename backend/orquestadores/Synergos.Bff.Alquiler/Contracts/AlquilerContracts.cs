@@ -86,6 +86,45 @@ public sealed record EquipmentOfferResponse(
 /// <param name="Amount">El daño o la penalidad, ya calculado por quien recibió.</param>
 public sealed record SettleRentalRequest(MoneyPayload? Amount = null);
 
+/// <summary>Confirmar la devolución de un alquiler de la puerta (línea 005, T017): el daño y quién confirma.</summary>
+/// <param name="Damage">Lo que se cobra de la garantía; cero la anula entera. Obligatorio: no se supone cero.</param>
+/// <param name="StaffId">El seudónimo del personal que recibió el equipo; su clase la pone el orquestador.</param>
+public sealed record ConfirmRentalReturnRequest(MoneyPayload? Damage = null, string? StaffId = null);
+
+/// <summary>Un alquiler de la puerta con lo que pasó después del cierre (la liquidación, data-model §2).</summary>
+/// <param name="RentalId">El alquiler: la saga de <c>alquiler.renta</c>.</param>
+/// <param name="State">En el vocabulario del CMS: <c>reserved</c>, <c>declared</c>, <c>returned</c> o <c>cancelled</c>.</param>
+/// <param name="Deposit">La garantía retenida al reservar.</param>
+/// <param name="DepositHeld">Cuánto sigue retenido: la garantía hasta que el personal confirme, cero después.</param>
+/// <param name="DamageCharged">Lo que se cobró de la garantía; nulo mientras no se confirma.</param>
+/// <param name="DepositReleased">Lo que se le soltó al inquilino; nulo es «no consta».</param>
+/// <param name="DeclaredAtUtc">Cuándo declaró el inquilino; nulo si no declaró.</param>
+/// <param name="ConfirmedAtUtc">Cuándo confirmó el personal.</param>
+public sealed record RentalSettlementResponse(
+    string RentalId,
+    string State,
+    MoneyPayload Deposit,
+    decimal DepositHeld,
+    decimal? DamageCharged,
+    decimal? DepositReleased,
+    DateTimeOffset? DeclaredAtUtc,
+    DateTimeOffset? ConfirmedAtUtc)
+{
+    /// <summary>Proyecta la vista de la liquidación a lo que el CMS lee.</summary>
+    /// <param name="v">La vista.</param>
+    /// <returns>La respuesta.</returns>
+    public static RentalSettlementResponse From(VistaDeLiquidacion v)
+        => new(
+            v.SagaId,
+            v.Estado,
+            new MoneyPayload(v.Garantia.Amount, v.Garantia.Currency),
+            v.GarantiaRetenida.Amount,
+            v.Registro?.Danio?.Amount,
+            v.Registro?.GarantiaLiberada?.Amount,
+            v.Registro?.DeclaradaUtc,
+            v.Registro?.ConfirmadaUtc);
+}
+
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>
 /// <param name="EquipmentId">Qué equipo.</param>

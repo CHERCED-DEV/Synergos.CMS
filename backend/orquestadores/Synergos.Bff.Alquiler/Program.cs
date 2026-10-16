@@ -78,6 +78,9 @@ if (declarado)
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
         sp.GetRequiredService<PuertosHttp>(),
         [.. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias), .. AlquilerSalidasPropias.Pasos()]));
+
+    // Lo que pasa después del cierre, fuera de la puerta hasta el núcleo (lote 3, 005-P9; T051).
+    builder.Services.AddSingleton<LiquidacionDeAlquiler>();
 }
 
 var app = builder.Build();
@@ -85,7 +88,11 @@ var app = builder.Build();
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Alquiler:ApiKey"]);
 app.MapAlquilerEndpoints();
-if (declarado) app.MapFlujosDeclarados();
+if (declarado)
+{
+    app.MapFlujosDeclarados();
+    app.MapLiquidacionDeAlquiler();
+}
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
