@@ -171,38 +171,40 @@ public sealed class AlquilerController : ControllerBase
             return NotFound();
         }
 
-        if (string.IsNullOrWhiteSpace(body?.IdempotencyKey))
-        {
-            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
-                "Declarar la devolución es una escritura: hace falta la llave.");
-        }
-
-        // Por donde salió el alquiler, no por donde el sitio venda hoy.
-        var resultado = contrato.Camino == CaminoDeCompra.Puerta
-            ? await _puerta.DeclareReturnAsync(contrato, body.IdempotencyKey, ct).ConfigureAwait(false)
-            : await _rentals.DeclareReturnAsync(rentalId, body.IdempotencyKey, ct).ConfigureAwait(false);
-
-        return await ResponderAsync(resultado, contrato, "declarar la devolución", ct).ConfigureAwait(false);
+        return await DeclararAsync(contrato, body?.IdempotencyKey, ct).ConfigureAwait(false);
     }
 
     /// <summary>
     /// El personal confirma la devolución con el daño: libera la garantía o cobra de ella. SÓLO el personal
     /// (decisión 5 del lote 1, #203): el inquilino declara, no confirma, aunque sea el dueño y aunque diga cero.
     /// </summary>
+    /// <remarks>
+    /// <b>El dueño que llama aquí DECLARA</b>: es el botón «Devolví el equipo» del elemento de antes de la puerta
+    /// (hasta T034 llama a esta ruta). Quien alquila no confirma —su daño se ignora y no se mueve plata—, pero lo que
+    /// dice el botón es exactamente declarar, así que no se le contesta 403. Uno ajeno no existe (404).
+    /// </remarks>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="body">El monto del daño, ya calculado por quien recibió.</param>
     /// <param name="ct">Cancelación del request.</param>
-    /// <returns>El alquiler devuelto, o el rechazo.</returns>
+    /// <returns>El alquiler devuelto (o declarado, si lo pide su dueño), o el rechazo.</returns>
     [HttpPost("rentals/{rentalId}/return")]
     public async Task<ActionResult<RentalDto>> Return(
         string rentalId, [FromBody] SettleRequest body, CancellationToken ct)
     {
-        if (NegarSiNoEsPersonal("confirmar la devolución de") is { } negado)
+        if (!_gate.IsAuthenticated)
         {
-            return negado;
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                "Hay que iniciar sesión para devolver un alquiler.");
         }
 
         var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        if (!_gate.HasAnyRole(PersonalCsv))
+        {
+            return contrato is null || !string.Equals(contrato.RenterId, QuienAlquila(), StringComparison.Ordinal)
+                ? NotFound()
+                : await DeclararAsync(contrato, body?.IdempotencyKey, ct).ConfigureAwait(false);
+        }
+
         if (contrato is null)
         {
             return NotFound();
@@ -395,6 +397,23 @@ public sealed class AlquilerController : ControllerBase
 
         var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
         return Ok(RentalDto.From(resultado.Rental, leido.Contrato, leido.Comprobado, leido.DesenlaceComprobado));
+    }
+
+    /// <summary>Declara la devolución de un contrato del dueño, por donde salió el alquiler.</summary>
+    private async Task<ActionResult<RentalDto>> DeclararAsync(RentalAgreement contrato, string? llave, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(llave))
+        {
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Declarar la devolución es una escritura: hace falta la llave.");
+        }
+
+        // Por donde salió el alquiler, no por donde el sitio venda hoy.
+        var resultado = contrato.Camino == CaminoDeCompra.Puerta
+            ? await _puerta.DeclareReturnAsync(contrato, llave, ct).ConfigureAwait(false)
+            : await _rentals.DeclareReturnAsync(contrato.RentalId, llave, ct).ConfigureAwait(false);
+
+        return await ResponderAsync(resultado, contrato, "declarar la devolución", ct).ConfigureAwait(false);
     }
 
     /// <summary>

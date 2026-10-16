@@ -364,26 +364,33 @@ public sealed class AlquilerControllerTests
         var cancelar = await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro))
             .Cancel("ALQ-1", TodaLaGarantia(), CancellationToken.None);
 
-        Assert.Equal(StatusCodes.Status403Forbidden, Problema(devolver.Result).Estado);
+        // Devolver uno ajeno no existe, como declararlo; cancelarlo es «no es tuyo».
+        Assert.IsType<NotFoundResult>(devolver.Result);
         Assert.Equal(StatusCodes.Status403Forbidden, Problema(cancelar.Result).Estado);
         Assert.Equal(0, seam.Cierres);
+        Assert.Equal(0, seam.Declaraciones);
     }
 
     [Fact]
-    public async Task El_dueno_NO_confirma_su_devolucion_ni_diciendo_cero()
+    public async Task El_dueno_que_devuelve_DECLARA_y_no_confirma_ni_diciendo_cero()
     {
-        // Decisión 5 del lote 1 (#203): quien alquila DECLARA; confirmar con el daño es del personal. Con cero,
-        // el dueño liberaba su propia garantía sin que nadie mirara el equipo.
-        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null));
+        // Decisión 5 del lote 1 (#203): quien alquila DECLARA; confirmar con el daño es del personal. Con cero, el
+        // dueño liberaba su propia garantía sin que nadie mirara el equipo. El botón «Devolví el equipo» del elemento
+        // de antes llama a /return: eso es declarar, y no se le contesta 403 (el botón sigue sirviendo hasta T034).
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, En(RentalState.Declared), null, null));
         var ledger = await ReservadoPorElDueno(seam);
 
-        var res = await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro))
+        var conCero = await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro))
             .Return("ALQ-1", new SettleRequest(0m, "cierre-1"), CancellationToken.None);
+        var conTodo = await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro))
+            .Return("ALQ-1", TodaLaGarantia(), CancellationToken.None);
 
-        var p = Problema(res.Result);
-        Assert.Equal(StatusCodes.Status403Forbidden, p.Estado);
-        Assert.Equal("alquiler.staff_required", p.Codigo);
+        Assert.Equal("declared", Assert.IsType<RentalDto>(Assert.IsType<OkObjectResult>(conCero.Result).Value).State);
+        Assert.IsType<OkObjectResult>(conTodo.Result);
         Assert.Equal(0, seam.Cierres);
+        Assert.Equal(2, seam.Declaraciones);
+        Assert.Equal(RentalState.Declared, (await ledger.GetAsync("ALQ-1"))!.Estado);
+        Assert.Null((await ledger.GetAsync("ALQ-1"))!.Desenlace);
     }
 
     // ── Declarar y confirmar (decisión 5 del lote 1; línea 005, T018) ──────
