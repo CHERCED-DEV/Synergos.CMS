@@ -357,6 +357,38 @@ public sealed class CompraDeTiendaTests
         Assert.True(captura < consumo && consumo < despacho && despacho < cumple, string.Join(" | ", t.Llamadas));
     }
 
+    /// <summary>
+    /// El aviso al comprador es UN correo de verdad (el <c>.eml</c> que deja Notifications, no una fila en un
+    /// log), con el número de la compra y el total cobrado; cerrar otra vez —el reintento de una respuesta
+    /// perdida— no manda otro (004-tienda-compra, T029).
+    /// </summary>
+    [Fact]
+    public async Task El_correo_sale_UNA_vez_con_el_numero_y_el_total_y_reconfirmar_no_manda_otro()
+    {
+        using var t = new CompraDeTiendaReal(conRecogida: true);
+        var (_, abierta) = await t.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+
+        Assert.Equal(HttpStatusCode.OK, (await t.Cerrar(id)).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await t.Cerrar(id)).Estado);
+
+        var correo = File.ReadAllText(Assert.Single(Directory.GetFiles(t.Buzon, "*.eml")));
+        Assert.Contains("comprador@ejemplo.co", correo, StringComparison.Ordinal);
+        // El cuerpo va en base64 (PickupNotificationSender): se lee lo que leería quien lo abre.
+        var cuerpo = CuerpoDelCorreo(correo);
+        Assert.Contains(abierta.GetProperty("numero").GetString()!, cuerpo, StringComparison.Ordinal);
+        Assert.Contains("95.000 COP", cuerpo, StringComparison.Ordinal);
+    }
+
+    /// <summary>El cuerpo de un <c>.eml</c> de la carpeta de recogida, que lo escribe en base64.</summary>
+    private static string CuerpoDelCorreo(string eml)
+    {
+        var inicio = eml.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        Assert.True(inicio > 0, "El .eml no separa las cabeceras del cuerpo.");
+        var base64 = string.Concat(eml[(inicio + 4)..].Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
+        return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+    }
+
     [Fact]
     public async Task Cotizar_dice_el_total_y_las_lineas_sin_apartar_ni_cobrar_nada()
     {
