@@ -85,7 +85,7 @@ public sealed class PropagacionDeIdentidadTests
     private static readonly string[] Orquestadores =
     {
         "Synergos.Bff.Core", "Synergos.Bff.Pasos", "Synergos.Bff.Tienda", "Synergos.Bff.Salud",
-        "Synergos.Bff.Eventos", "Synergos.Bff.Viajes", "Synergos.Bff.Alquiler",
+        "Synergos.Bff.Eventos", "Synergos.Bff.Viajes", "Synergos.Bff.Alquiler", "Synergos.Bff.Reservas",
     };
 
     private static string RepoRoot()

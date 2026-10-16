@@ -32,11 +32,48 @@ public sealed class FlujoDeLaPuertaSettings
     /// <summary>El <c>Kind</c> con que se nombra al sujeto (<c>eventos.comprador</c>); el id es el del miembro.</summary>
     public string? SujetoKind { get; init; }
 
+    /// <summary>
+    /// De qué sale el id del sujeto (núcleo N3, NE-4 de 007): <c>miembro</c> —la <c>MemberKey</c>, el valor por
+    /// defecto— o <c>correo</c>, el seudónimo del correo de la sesión, para un flujo que entrega algo a quien se
+    /// nombra por su correo (una credencial transferida).
+    /// </summary>
+    public string? SujetoDe { get; init; }
+
     /// <summary>Qué campos de qué sección de negocio adjunta, donde la operación los declara.</summary>
     public NegocioDelFlujoSettings? Negocio { get; init; }
 
     /// <summary>El enlace del aviso, donde la operación declara el contacto.</summary>
     public AvisoDelFlujoSettings? Aviso { get; init; }
+
+    /// <summary>
+    /// Por dónde va el flujo, si el despliegue lo declara: <c>puerta</c> o <c>directa</c> (núcleo N3). Sin
+    /// valor decide la regla: la puerta cuando la abre, y la directa si no. Lo que declara un sitio gana.
+    /// </summary>
+    public string? Camino { get; init; }
+
+    /// <summary>
+    /// Los avisos EN VIVO que publica la puerta cuando una operación del flujo sale bien (núcleo N3, NE-6 de
+    /// 007): las consolas que miran un canal ven el hecho al instante, como el check-in de Eventos.
+    /// </summary>
+    public List<AvisoEnVivoSettings> EnVivo { get; init; } = [];
+}
+
+/// <summary>Un aviso en vivo: tras qué operación, en qué canal y con qué nombre.</summary>
+/// <remarks>
+/// El canal lleva marcadores entre llaves (<c>eventos:checkin:{eventId}</c>) que se llenan con los
+/// parámetros de la operación o con los datos de su respuesta. Quién puede LEER el canal no se decide acá:
+/// lo declara el endpoint del realtime, que es fail-closed (un canal sin política no se abre).
+/// </remarks>
+public sealed class AvisoEnVivoSettings
+{
+    /// <summary>La operación de la puerta tras la que se avisa (<c>cerrar</c>).</summary>
+    public string? Operacion { get; init; }
+
+    /// <summary>El canal, con sus marcadores: <c>eventos:checkin:{eventId}</c>.</summary>
+    public string? Canal { get; init; }
+
+    /// <summary>El nombre con que sale en el canal (<c>checkin</c>).</summary>
+    public string? Nombre { get; init; }
 }
 
 /// <summary>Los campos de negocio que el flujo adjunta (ADR 0137): sólo éstos viajan.</summary>
@@ -61,6 +98,20 @@ public sealed class AvisoDelFlujoSettings
 {
     /// <summary>Ruta del sitio, con los parámetros de la operación entre llaves: <c>/eventos/?compra={id}</c>.</summary>
     public string? Ruta { get; init; }
+}
+
+/// <summary>De qué sale el id del sujeto que pone la puerta.</summary>
+public static class SujetoDeLaPuerta
+{
+    /// <summary>La <c>MemberKey</c> del miembro con sesión: el valor por defecto.</summary>
+    public const string Miembro = "miembro";
+
+    /// <summary>El seudónimo del correo de la sesión (el mismo que usa el resto del CMS para una persona).</summary>
+    public const string Correo = "correo";
+
+    /// <summary>Lo escrito, comparable: sin espacios y en minúsculas; vacío es el valor por defecto.</summary>
+    public static string Normalizar(string? valor)
+        => string.IsNullOrWhiteSpace(valor) ? Miembro : valor.Trim().ToLowerInvariant();
 }
 
 /// <summary>Quién puede pedir las operaciones de un flujo.</summary>

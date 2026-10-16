@@ -33,13 +33,13 @@ public sealed class NegocioDeAlquilerTests
     public void Sin_override_y_sin_puerta_el_alquiler_va_por_la_ruta_directa()
     {
         Assert.Equal(new NegocioDeAlquiler("/api/alquiler"), new AlquilerFeatureSettings().Para(null));
-        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Puerta(abierto: false, conDestino: false)).RentalPath);
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Caminos(abierto: false, conDestino: false)).RentalPath);
     }
 
     [Fact]
     public void Con_la_puerta_abierta_para_la_renta_va_por_la_puerta()
     {
-        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true)).RentalPath);
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(Fijo(null), Caminos(abierto: true, conDestino: true)).RentalPath);
     }
 
     /// <summary>
@@ -49,8 +49,8 @@ public sealed class NegocioDeAlquilerTests
     [Fact]
     public void Sin_orquestador_va_por_la_ruta_directa_aunque_el_flujo_este_abierto()
     {
-        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Puerta(abierto: true, conDestino: false)).RentalPath);
-        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Puerta(abierto: false, conDestino: true)).RentalPath);
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Caminos(abierto: true, conDestino: false)).RentalPath);
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Caminos(abierto: false, conDestino: true)).RentalPath);
     }
 
     /// <summary>Override: lo que declara el negocio gana a la regla, en los dos sentidos.</summary>
@@ -59,7 +59,20 @@ public sealed class NegocioDeAlquilerTests
     [InlineData(CaminoDeCompra.Puerta, false)]
     public void El_camino_declarado_en_el_negocio_gana_a_la_regla(string declarado, bool puertaAbierta)
     {
-        Assert.Equal(declarado, Resuelto(Fijo(declarado), Puerta(puertaAbierta, puertaAbierta)).RentalPath);
+        Assert.Equal(declarado, Resuelto(Fijo(declarado), Caminos(puertaAbierta, puertaAbierta)).RentalPath);
+    }
+
+    /// <summary>
+    /// Lo que declara <c>Synergos:Puerta:Flujos:alquiler.renta:Camino</c> (núcleo N3) va antes que la regla, y el
+    /// override del sitio gana sobre él.
+    /// </summary>
+    [Fact]
+    public void El_camino_declarado_en_la_puerta_va_antes_que_la_regla_y_el_del_sitio_gana()
+    {
+        var directaEnLaPuerta = Caminos(abierto: true, conDestino: true, camino: CaminoDeCompra.Directa);
+
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), directaEnLaPuerta).RentalPath);
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(Fijo(CaminoDeCompra.Puerta), directaEnLaPuerta).RentalPath);
     }
 
     /// <summary>
@@ -74,7 +87,7 @@ public sealed class NegocioDeAlquilerTests
         var lector = new NegocioDelSitio<AlquilerFeatureSettings, NegocioDeAlquiler>(
             sp.GetRequiredService<IOptionsMonitor<AlquilerFeatureSettings>>(), () => sitio,
             AlquilerFeatureSettings.Seccion, NullLogger.Instance);
-        var abierta = Puerta(abierto: true, conDestino: true);
+        var abierta = Caminos(abierto: true, conDestino: true);
 
         Assert.Equal(CaminoDeCompra.Directa, Resuelto(lector, abierta).RentalPath);
         sitio = Medellin;
@@ -126,21 +139,33 @@ public sealed class NegocioDeAlquilerTests
         return negocio;
     }
 
-    private static IPuertaDeLosFlujos Puerta(bool abierto, bool conDestino, string destino = "Alquiler")
+    private static (IPuertaDeLosFlujos Puerta, IOptionsMonitor<PuertaSettings> Ajustes) Abierta(
+        bool abierto, bool conDestino, string destino = "Alquiler", string? camino = null)
     {
         var ajustes = new PuertaSettings();
         if (abierto)
         {
-            ajustes.Flujos[AlquilerResolutor.FlujoDeLaRenta] = new FlujoDeLaPuertaSettings { Acceso = AccesoDeLaPuerta.Miembro };
+            ajustes.Flujos[AlquilerResolutor.FlujoDeLaRenta] =
+                new FlujoDeLaPuertaSettings { Acceso = AccesoDeLaPuerta.Miembro, Camino = camino };
         }
 
         var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         monitor.CurrentValue.Returns(ajustes);
-        return new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? [destino] : []));
+        return (new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? [destino] : [])), monitor);
     }
 
-    private static AlquilerProps Resuelto(INegocioDelSitio<NegocioDeAlquiler> negocio, IPuertaDeLosFlujos puerta)
-        => new AlquilerResolutor(ElementoFalso.Fallback, negocio, puerta, NullLogger<AlquilerResolutor>.Instance)
+    private static IPuertaDeLosFlujos Puerta(bool abierto, bool conDestino, string destino = "Alquiler")
+        => Abierta(abierto, conDestino, destino).Puerta;
+
+    /// <summary>El camino de la renta con la pieza del núcleo N3, sobre la puerta de <paramref name="abierto"/>/<paramref name="conDestino"/>.</summary>
+    private static ICaminoDeLosFlujos Caminos(bool abierto, bool conDestino, string? camino = null)
+    {
+        var (puerta, ajustes) = Abierta(abierto, conDestino, camino: camino);
+        return new CaminoDeLosFlujos(puerta, ajustes, NullLogger<CaminoDeLosFlujos>.Instance);
+    }
+
+    private static AlquilerProps Resuelto(INegocioDelSitio<NegocioDeAlquiler> negocio, ICaminoDeLosFlujos caminos)
+        => new AlquilerResolutor(ElementoFalso.Fallback, negocio, caminos, NullLogger<AlquilerResolutor>.Instance)
             .Resolver(ElementoFalso.Con(("heading", "Equipos"))).Props;
 
     /// <summary>Como lo registra el composer (<c>AddSeccionDeNegocio</c>); sin Umbraco, el sitio es ninguno.</summary>

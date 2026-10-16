@@ -419,7 +419,7 @@ el sitio caído es peor que uno rojo, porque nadie lo mira.
 | Fichero | Dónde corre | Qué hace |
 |---|---|---|
 | `.github/workflows/deploy.yml` | runner | espera los gates, copia, ordena, y decide |
-| `tools/deploy-remoto.sh` | **el servidor** | baja imágenes, para, arranca, comprueba etiquetas |
+| `tools/deploy-remoto.sh` | **el servidor** | repone los ficheros de una versión que ya estuvo, baja imágenes, para, arranca, comprueba etiquetas y guarda los ficheros de la versión en `versiones/<sha>/` |
 | `tools/humo-publico.sh` | **el runner** | prueba la URL pública como un visitante |
 
 > **El humo corre en el runner y no en el servidor, y esa es la parte que se suele hacer mal.**
@@ -924,7 +924,9 @@ Lo que hace, en el orden de esta guía y con los mismos ficheros:
 5. `provisionar.sh` dentro de la red de Docker (§5.bis.3).
 6. `respaldo.sh` → **borrar los volúmenes** → `restaurar.sh --si-estoy-seguro` → en pie → humo **sin
    reimportar** (si la base no volvió, Umbraco arranca vacío y el humo lo ve).
-7. `deploy-remoto.sh <la versión anterior>` → humo con esa versión: la vuelta atrás.
+7. `deploy-remoto.sh <la versión anterior>` → humo con esa versión: la vuelta atrás, con los ficheros
+   que esa versión dejó guardados en `versiones/<sha>/` (el ensayo los pone sacados de la historia, como
+   en el servidor que la tuvo en pie) y sin nada de la versión nueva corriendo.
 
 > **Por qué existe.** Hasta el 2026-10-15 el stack de producción **no se había levantado nunca**:
 > `deploy.yml` se salta sin servidor y esta máquina de trabajo no tiene Docker. Las primeras
@@ -947,6 +949,12 @@ Lo que hace, en el orden de esta guía y con los mismos ficheros:
 >
 > Los nueve están arreglados y con su gate (`SalidaAProduccionTests`). La primera corrida entera en
 > verde: `38790612898`, 6 min 50 s.
+>
+> **El décimo lo encontró el ensayo en master** (2026-10-16, corrida `38915340067`, el primer `master`
+> que sumó un servicio, `bff-reservas`): **la vuelta atrás no volvía**. Ponía las imágenes de la
+> versión anterior con el compose de la nueva, y el `pull` pedía `bff-reservas` con una etiqueta con la
+> que nunca se publicó. Hoy cada versión que queda en pie guarda su compose y su Caddyfile en
+> `versiones/<sha>/`, y volver a ella los repone antes de bajar nada (`DeployPipelineTests`).
 
 ## 9. La vigilancia
 

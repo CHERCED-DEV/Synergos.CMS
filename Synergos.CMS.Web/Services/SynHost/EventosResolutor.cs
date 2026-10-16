@@ -16,7 +16,9 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// <para><b>El camino de compra lo decide acá el CMS</b> (ADR 0140, <see cref="CaminoDeCompra.Decidir"/>): el
 /// override del sitio si lo hay; si no, la puerta cuando abre <see cref="FlujoDeLaCompra"/>; si no, la ruta
 /// directa. La pregunta a la puerta es la misma condición con que contesta 503, así que el elemento nunca
-/// va a una puerta cerrada ni deja de ir a una abierta.</para>
+/// va a una puerta cerrada ni deja de ir a una abierta. Desde el núcleo N3 la regla es la de cualquier
+/// flujo (<see cref="ICaminoDeLosFlujos"/>): el override del sitio sigue ganando, y lo que declare
+/// <c>Synergos:Puerta:Flujos:eventos.compra:Camino</c> va antes que la regla.</para>
 /// </remarks>
 public sealed class EventosResolutor : IResolutorSynHost<EventosProps>
 {
@@ -25,18 +27,18 @@ public sealed class EventosResolutor : IResolutorSynHost<EventosProps>
 
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeEventos> _negocio;
-    private readonly IPuertaDeLosFlujos _puerta;
+    private readonly ICaminoDeLosFlujos _caminos;
     private readonly ILogger<EventosResolutor> _log;
 
     public EventosResolutor(
         IPublishedValueFallback fallback,
         INegocioDelSitio<NegocioDeEventos> negocio,
-        IPuertaDeLosFlujos puerta,
+        ICaminoDeLosFlujos caminos,
         ILogger<EventosResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
-        _puerta = puerta;
+        _caminos = caminos;
         _log = log;
     }
 
@@ -52,6 +54,6 @@ public sealed class EventosResolutor : IResolutorSynHost<EventosProps>
             ApiBase: negocio.ApiBase,
             FeePercent: negocio.FeePercent,
             PlatformFeePercent: negocio.PlatformFeePercent,
-            PurchasePath: CaminoDeCompra.Decidir(negocio.PurchasePath, _puerta.Abre(FlujoDeLaCompra))));
+            PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath)));
     }
 }

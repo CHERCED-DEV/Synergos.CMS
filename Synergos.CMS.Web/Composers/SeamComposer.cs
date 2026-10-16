@@ -29,6 +29,7 @@ public sealed partial class SeamComposer : IComposer
         ComposeShop(builder);
         ComposeSocial(builder);
         ComposeAlquiler(builder);
+        ComposeReservas(builder);
         ComposeAcademy(builder);
         ComposeFormsSearchAndMemberAdmin(builder);
         ComposePlatformServicesAndHealthcare(builder);

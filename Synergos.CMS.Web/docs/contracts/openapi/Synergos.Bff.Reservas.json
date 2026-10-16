@@ -1,0 +1,1395 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Synergos.Bff.Reservas",
+    "version": "v1"
+  },
+  "paths": {
+    "/v1/flujos/compensaciones": {
+      "get": {
+        "operationId": "FlujosCompensaciones",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaDeFlujoOfCompensacionDeFlujo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          }
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio": {
+      "post": {
+        "operationId": "ReservasServicioAbrir",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 83,
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservasServicioEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "abrir"
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio/cotizar": {
+      "post": {
+        "operationId": "ReservasServicioCotizar",
+        "parameters": [
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservasServicioEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioCotizacion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "cotizar"
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio/{id}": {
+      "get": {
+        "operationId": "ReservasServicioConsultar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "consultar"
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio/{id}/cancelar": {
+      "post": {
+        "operationId": "ReservasServicioCancelar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "cancelar"
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio/{id}/cerrar": {
+      "post": {
+        "operationId": "ReservasServicioCerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          },
+          {
+            "name": "X-Synergos-Contacto",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "cerrar"
+        }
+      }
+    },
+    "/v1/flujos/reservas.servicio/{id}/reintentar": {
+      "post": {
+        "operationId": "ReservasServicioReintentar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ofertas": {
+      "post": {
+        "operationId": "PublishServiceOffer",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicarOfertaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfertaDeServicioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ofertas/{servicio}/retirar": {
+      "post": {
+        "operationId": "RetireServiceOffer",
+        "parameters": [
+          {
+            "name": "servicio",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfertaDeServicioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BloqueDeHorarioDto": {
+        "type": "object",
+        "properties": {
+          "dia": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "desde": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasta": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CompensacionDeFlujo": {
+        "required": [
+          "sagaId",
+          "flujo",
+          "kind",
+          "reason",
+          "attempts",
+          "nextAttemptUtc",
+          "lastError",
+          "stuck",
+          "alertedAtUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "sagaId": {
+            "type": "string"
+          },
+          "flujo": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextAttemptUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stuck": {
+            "type": "boolean"
+          },
+          "alertedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "OfertaDeServicioResponse": {
+        "required": [
+          "servicio",
+          "duracionMinutos",
+          "cupos",
+          "precio",
+          "moneda",
+          "retirada"
+        ],
+        "type": "object",
+        "properties": {
+          "servicio": {
+            "type": "string"
+          },
+          "duracionMinutos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cupos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "precio": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "moneda": {
+            "type": "string"
+          },
+          "retirada": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PaginaDeFlujoOfCompensacionDeFlujo": {
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompensacionDeFlujo"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PublicarOfertaRequest": {
+        "type": "object",
+        "properties": {
+          "servicio": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "duracionMinutos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "horario": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BloqueDeHorarioDto"
+            }
+          },
+          "cupos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "plazoCancelacionHoras": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "precio": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
+          },
+          "moneda": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "Rechazo": {
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "transient"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "enum": [
+              "Invalid",
+              "NotFound",
+              "Conflict",
+              "Forbidden",
+              "Expired",
+              "Unavailable"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "transient": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ReservasServicioCotizacion": {
+        "required": [
+          "flujo",
+          "datos"
+        ],
+        "type": "object",
+        "properties": {
+          "flujo": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "servicio",
+              "ventana",
+              "total"
+            ],
+            "type": "object",
+            "properties": {
+              "servicio": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "reservas.servicio"
+                        ],
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ventana": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "total": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "amount": {
+                        "type": "number",
+                        "format": "decimal"
+                      },
+                      "currency": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ReservasServicioEntrada": {
+        "required": [
+          "servicio",
+          "ventana"
+        ],
+        "type": "object",
+        "properties": {
+          "servicio": {
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "reservas.servicio"
+                ],
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "ventana": {
+            "required": [
+              "start",
+              "end"
+            ],
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "end": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "ReservasServicioRespuesta": {
+        "required": [
+          "id",
+          "flujo",
+          "numero",
+          "estado",
+          "datos",
+          "compensacionesPendientes",
+          "error",
+          "deshaciendo"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "flujo": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "servicio",
+              "ventana",
+              "total"
+            ],
+            "type": "object",
+            "properties": {
+              "servicio": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "reservas.servicio"
+                        ],
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ventana": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "total": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "amount": {
+                        "type": "number",
+                        "format": "decimal"
+                      },
+                      "currency": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "compensacionesPendientes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deshaciendo": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "llaveCompartida": {
+        "type": "apiKey",
+        "name": "X-Synergos-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "llaveCompartida": [ ]
+    }
+  ]
+}

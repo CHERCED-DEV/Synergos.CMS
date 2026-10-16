@@ -2436,6 +2436,103 @@
       }
     },
     {
+      "nombre": "reserva",
+      "tipo": "funcionalidad",
+      "record": "ReservaProps",
+      "diccionario": [
+        "Booking.Slot"
+      ],
+      "claves": [
+        "Booking.Slot.Alternative",
+        "Booking.Slot.Cancel",
+        "Booking.Slot.Cancelled",
+        "Booking.Slot.Check",
+        "Booking.Slot.Checking",
+        "Booking.Slot.Confirm",
+        "Booking.Slot.Confirmed",
+        "Booking.Slot.Day",
+        "Booking.Slot.Defaults.Heading",
+        "Booking.Slot.Duration",
+        "Booking.Slot.Errors.Busy",
+        "Booking.Slot.Errors.Expired",
+        "Booking.Slot.Errors.Generic",
+        "Booking.Slot.Errors.NotBookable",
+        "Booking.Slot.Errors.OutsideHours",
+        "Booking.Slot.Errors.Past",
+        "Booking.Slot.Errors.Payment",
+        "Booking.Slot.Errors.Taken",
+        "Booking.Slot.ManageWithBusiness",
+        "Booking.Slot.Minutes",
+        "Booking.Slot.NotConfigured",
+        "Booking.Slot.Number",
+        "Booking.Slot.Pending",
+        "Booking.Slot.Quoting",
+        "Booking.Slot.Reserve",
+        "Booking.Slot.SignIn",
+        "Booking.Slot.Time",
+        "Booking.Slot.Total",
+        "Booking.Slot.Unavailable"
+      ],
+      "campos": [
+        {
+          "nombre": "heading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "subheading",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "servicio",
+          "tipo": "ServicioReservable",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "enlaceAlternativo",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "contenido"
+        },
+        {
+          "nombre": "camino",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "zona",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        }
+      ],
+      "ejemplo": {
+        "culture": "es-CO",
+        "heading": "Reserva tu cita",
+        "subheading": "Elige el día y la hora",
+        "servicio": {
+          "id": "51e3c7f8-96f8-4458-a650-5adec6126174",
+          "nombre": "Masaje terapéutico · 60 min",
+          "duracionMinutos": 60,
+          "dias": [
+            "Monday",
+            "Wednesday",
+            "Friday"
+          ],
+          "abre": "08:00",
+          "cierra": "18:00"
+        },
+        "enlaceAlternativo": "/booking/reservar/",
+        "camino": "no-disponible",
+        "zona": "America/Bogota"
+      }
+    },
+    {
       "nombre": "rich-tooltip",
       "tipo": "pieza",
       "record": "RichTooltipProps",
@@ -3694,6 +3791,41 @@
           "nombre": "disabled",
           "tipo": "boolean",
           "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "ServicioReservable",
+      "campos": [
+        {
+          "nombre": "id",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "nombre",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "duracionMinutos",
+          "tipo": "number",
+          "opcional": false
+        },
+        {
+          "nombre": "dias",
+          "tipo": "string[]",
+          "opcional": false
+        },
+        {
+          "nombre": "abre",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "cierra",
+          "tipo": "string",
+          "opcional": false
         }
       ]
     },
