@@ -79,32 +79,25 @@ public sealed class ReservaDeServicioTests
     }
 
     [Fact]
-    public async Task Una_referencia_con_clase_del_navegador_no_se_admite()
-    {
-        using var r = await new ReservaDeServicioReal().ConOferta();
-
-        var (estado, _) = await r.Abrir(cuerpo: new
-        {
-            servicio = new { kind = "salud.profesional", id = "doc-demo-1" },
-            ventana = new { start = ReservaDeServicioReal.Inicio, end = ReservaDeServicioReal.Inicio.AddMinutes(60) },
-        });
-
-        Assert.Equal(HttpStatusCode.BadRequest, estado);
-        Assert.Equal(0, await Ocupadas(r));
-    }
-
-    [Fact]
-    public async Task Una_referencia_de_otra_clase_se_rechaza_sin_apartar_y_un_servicio_sin_oferta_no_se_reserva()
+    public async Task Una_referencia_de_otra_clase_la_rechaza_el_host_sin_apartar()
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
 
         // NR-1: el navegador no elige la clase. Un profesional de Salud con el precio de un servicio no entra.
-        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(clase: "salud.profesional"));
+        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "doc-demo-1", clase: "salud.profesional"));
+
         Assert.Equal(HttpStatusCode.BadRequest, estado);
         Assert.Equal("reservas.entrada_invalida", cuerpo.GetProperty("code").GetString());
+        Assert.Equal(0, await Ocupadas(r));
+    }
+
+    [Fact]
+    public async Task Una_clave_con_forma_de_ruta_no_alcanza_nada()
+    {
+        using var r = await new ReservaDeServicioReal().ConOferta();
 
         // Con la clase de la definición, una clave que la oferta nunca publicó no tiene duración ni recurso.
-        (estado, cuerpo) = await r.Abrir(llave: "reserva-2", cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
+        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
         Assert.Equal(HttpStatusCode.NotFound, estado);
         Assert.Equal("reservas.servicio_no_reservable", cuerpo.GetProperty("code").GetString());
         Assert.Equal(0, await Ocupadas(r));
