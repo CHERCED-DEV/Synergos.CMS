@@ -37,6 +37,12 @@ public sealed class FlujoDeLaPuertaSettings
 
     /// <summary>El enlace del aviso, donde la operación declara el contacto.</summary>
     public AvisoDelFlujoSettings? Aviso { get; init; }
+
+    /// <summary>
+    /// Por dónde va el flujo, si el despliegue lo declara: <c>puerta</c> o <c>directa</c> (núcleo N3). Sin
+    /// valor decide la regla: la puerta cuando la abre, y la directa si no. Lo que declara un sitio gana.
+    /// </summary>
+    public string? Camino { get; init; }
 }
 
 /// <summary>Los campos de negocio que el flujo adjunta (ADR 0137): sólo éstos viajan.</summary>

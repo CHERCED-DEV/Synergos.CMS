@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services.Puerta;
 
@@ -57,6 +58,13 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
 
             RevisarNegocio(donde, ops, flujo.Negocio, errores);
             RevisarAviso(donde, ops, flujo.Aviso, errores);
+
+            // Mal escrito no se ignora: caería a la regla y el flujo iría por un camino que nadie eligió.
+            if (!CaminoDelFlujo.EsValido(CaminoDelFlujo.Normalizar(flujo.Camino)))
+            {
+                errores.Add($"{donde}:Camino «{flujo.Camino}» tiene que ser «{CaminoDelFlujo.Puerta}» o «{CaminoDelFlujo.Directa}», "
+                    + "o no estar (y decide la regla: la puerta si la abre, y si no la directa).");
+            }
         }
 
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);

@@ -44,6 +44,8 @@ public sealed partial class SeamComposer
         services.AddSingleton<ReenvioDeLaPuerta>();
         // Lo que la puerta abre, para quien declara un camino de compra sin llamarla (ADR 0140).
         services.AddSingleton<Synergos.CMS.Interfaces.IPuertaDeLosFlujos, PuertaDeLosFlujos>();
+        // Y el camino de cada flujo por la misma regla, para el resolver de cualquier elemento (núcleo N3).
+        services.AddSingleton<Synergos.CMS.Interfaces.ICaminoDeLosFlujos, CaminoDeLosFlujos>();
         services.AddOptions<PuertaSettings>().Bind(builder.Config.GetSection(PuertaSettings.Seccion)).ValidateOnStart();
         services.AddSingleton<IValidateOptions<PuertaSettings>, ValidadorDeLaPuerta>();
     }

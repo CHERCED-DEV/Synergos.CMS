@@ -893,6 +893,8 @@ public sealed class ContratoSynHostTests
     private static ServiceProvider Proveedor()
         => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
             .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
+            .Configure<Synergos.CMS.Application.Configuration.PuertaSettings>(_ => { })
+            .AddSingleton<ICaminoDeLosFlujos, Synergos.CMS.Web.Services.Puerta.CaminoDeLosFlujos>()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
