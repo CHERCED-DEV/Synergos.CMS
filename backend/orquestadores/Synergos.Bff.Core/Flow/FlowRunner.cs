@@ -76,6 +76,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     private readonly TimeProvider _reloj;
     private readonly ILogger _log;
 
+    /// <summary>La entrada que es el dueño en un flujo genérico (el sujeto de la puerta); nula en uno tipado.</summary>
+    private readonly string? _sujeto;
+
     /// <param name="motor">La máquina de sagas del dominio.</param>
     /// <param name="pasos">Los pasos registrados.</param>
     /// <param name="flujo">La definición.</param>
@@ -104,7 +107,16 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         _binding = binding;
         _reloj = reloj;
         _log = log;
+        _sujeto = flujo.Entrada.FirstOrDefault(n => flujo.Tipos?.GetValueOrDefault(n)?.Origen == OrigenDelValor.Sujeto);
     }
+
+    /// <summary>
+    /// El dueño de la corrida, para el paso que lo necesita (lote 6, <c>flow.leer-original</c>): el de la saga si ya
+    /// nació, o el sujeto que entró si la fase que abre todavía no la sembró. Nulo sin saga ni sujeto (una lectura).
+    /// </summary>
+    private Ref? DuenoDe(Corrida corrida)
+        => corrida.Saga is ISagaConDueno conDueno ? conDueno.Dueno
+            : _sujeto is { } sujeto && corrida.Ctx.Has(sujeto) ? corrida.Ctx.Get<Ref>(sujeto) : null;
 
     /// <summary>Lo que una fase va llevando: la saga si ya nació, el contexto, y si hay algo sin guardar.</summary>
     private sealed class Corrida
@@ -452,7 +464,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         try
         {
             salida = await paso.EjecutarAsync(
-                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item, indice), ct);
+                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item, indice, _flujo, DuenoDe(corrida)), ct);
         }
         catch (Exception ex) when (definicion.SigueSiFalla && !(ex is OperationCanceledException && ct.IsCancellationRequested))
         {

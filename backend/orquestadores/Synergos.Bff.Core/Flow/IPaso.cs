@@ -82,6 +82,17 @@ public interface IPaso
     bool Conserva => false;
 
     /// <summary>
+    /// Si lee la saga original de una operación posterior al cierre (núcleo, P6 = A del lote 6): <c>flow.leer-original</c>.
+    /// Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// Se cruza con <c>posterior_a</c> en los dos sentidos, como la plantilla: un flujo posterior sin quien lea la original
+    /// no sabría sobre qué opera, y un lector sin <c>posterior_a</c> no sabría de qué flujo es. Lo que escribe es lo que la
+    /// definición declara <c>{ "de": "original" }</c>, con ese tipo.
+    /// </remarks>
+    bool LeeLaOriginal => false;
+
+    /// <summary>
     /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
     /// declara (por defecto).
     /// </summary>
@@ -141,7 +152,9 @@ public sealed class EntradaDePaso
     private readonly string? _alias;
     private readonly FlowContext? _item;
 
-    public EntradaDePaso(string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item, int? indice = null)
+    public EntradaDePaso(
+        string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item, int? indice = null,
+        FlujoDef? flujo = null, Ref? dueno = null)
     {
         SagaId = sagaId;
         Origen = origen;
@@ -150,7 +163,21 @@ public sealed class EntradaDePaso
         _alias = alias;
         _item = item;
         Indice = indice;
+        Flujo = flujo;
+        Dueno = dueno;
     }
+
+    /// <summary>
+    /// La definición del flujo que corre el paso (núcleo, lote 6): la necesita quien lee la original, para saber de qué
+    /// flujo es (<c>posterior_a</c>) y con qué tipo declara lo que lee. Nula fuera del intérprete.
+    /// </summary>
+    public FlujoDef? Flujo { get; }
+
+    /// <summary>
+    /// El dueño de la saga que corre el paso: el sujeto que puso la puerta (núcleo, lote 6). Nulo en una lectura sin
+    /// saga, que no tiene dueño, y fuera del intérprete.
+    /// </summary>
+    public Ref? Dueno { get; }
 
     /// <summary>La saga. Semilla de las llaves de idempotencia.</summary>
     public string SagaId { get; }

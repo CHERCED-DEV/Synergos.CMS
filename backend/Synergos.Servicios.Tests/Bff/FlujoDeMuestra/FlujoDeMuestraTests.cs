@@ -156,6 +156,18 @@ public sealed class FlujoDeMuestraTests
             return Enviar(peticion);
         }
 
+        /// <summary>Devolver una parte de una cita completada: la operación posterior, un flujo aparte (P6 = A).</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(string cita, decimal monto, string llave, string sujeto = "u-1")
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/muestra.devolucion")
+            {
+                Content = JsonContent.Create(new { cita, monto = new { amount = monto, currency = "COP" } }),
+            };
+            peticion.Headers.Add("Idempotency-Key", llave);
+            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
+            return Enviar(peticion);
+        }
+
         public async Task<JsonElement> Leer(string capacidad, string ruta)
         {
             using var http = Capacidades.CreateClient(capacidad);
@@ -286,6 +298,39 @@ public sealed class FlujoDeMuestraTests
         var (inventado, problema) = await m.Listar("?estado=Pagada");
         Assert.Equal((HttpStatusCode.BadRequest, "muestra.entrada_invalida"), (inventado, problema.GetProperty("code").GetString()));
         Assert.Equal(HttpStatusCode.BadRequest, (await m.Listar(sujeto: null)).Estado);
+    }
+
+    [Fact]
+    public async Task Lo_posterior_al_cierre_devuelve_una_parte_de_la_cita_una_vez_y_hasta_lo_cobrado()
+    {
+        // P6 = A del lote 6: devolver es un flujo aparte, posterior a muestra.cita, que lee su cobro con flow.leer-original
+        // y devuelve contra Payments real. La cita no se toca, y el tope acumulado lo pone la capacidad.
+        await using var m = await Muestra.Arrancar();
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+
+        var (antes, sinCerrar) = await m.Devolver(cita, 10_000m, "dev-0");
+        Assert.Equal((HttpStatusCode.Conflict, PasoLeerOriginal.NoCompletada), (antes, sinCerrar.GetProperty("code").GetString()));
+        Assert.Equal(HttpStatusCode.OK, (await m.Cerrar(cita)).Estado);
+        var cobro = m.Sagas.Find(cita)!.Datos["cobroId"].Valor!.Value.GetString()!;
+        async Task<decimal> Devuelto() => (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal();
+
+        var (devolvio, devolucion) = await m.Devolver(cita, 20_000m, "dev-1");
+        Assert.True(devolvio == HttpStatusCode.Created, devolucion.ToString());
+        Assert.Equal("Completed", devolucion.GetProperty("estado").GetString());
+        Assert.Equal(20_000m, await Devuelto());
+
+        Assert.Equal(HttpStatusCode.Created, (await m.Devolver(cita, 20_000m, "dev-1")).Estado);
+        Assert.Equal(20_000m, await Devuelto());
+
+        var (_, demas) = await m.Devolver(cita, 40_000m, "dev-2");
+        Assert.Equal("payments.refund_over_captured", demas.GetProperty("code").GetString());
+        Assert.Equal(20_000m, await Devuelto());
+
+        var (ajena, nada) = await m.Devolver(cita, 1_000m, "dev-3", sujeto: "u-2");
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (ajena, nada.GetProperty("code").GetString()));
+        Assert.Equal(20_000m, await Devuelto());
+        Assert.Equal(SagaStatus.Completed, m.Sagas.Find(cita)!.Status);
     }
 
     [Fact]

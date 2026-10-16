@@ -60,7 +60,10 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
 
         builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
-        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), propios));
+        // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
+        // de su original.
+        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(),
+            [new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), sp.GetRequiredService<TiposDeValor>()), .. propios]));
         return builder.AddFlujosGenericos(vocabulario, ensamblado);
     }
 }

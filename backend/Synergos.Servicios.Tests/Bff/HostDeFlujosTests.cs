@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -293,6 +294,7 @@ public sealed class HostDeFlujosTests
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
                 ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System,
                 logs?.CreateLogger<SagaEngine<SagaDeFlujo>>() ?? NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
+            var tipos = TiposDeValor.Con(new TipoContacto(), new TipoFranjas());
             Registro = new RegistroDePasos(
             [
                 new PasoAgendaApartar(Puertos), new PasoAgendaConfirmar(Puertos), new PasoPagosAutorizar(Puertos),
@@ -300,8 +302,9 @@ public sealed class HostDeFlujosTests
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
                 new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
+                new PasoLeerOriginal(almacen, tipos), new PasoPagosDevolver(Puertos),
             ]);
-            Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto(), new TipoFranjas()), Registro, deshacer.Tipos);
+            Binding = new BindingDeFlujo(Flujo, tipos, Registro, deshacer.Tipos);
         }
 
         public Falsos Puertos { get; } = new();
@@ -313,6 +316,9 @@ public sealed class HostDeFlujosTests
 
         public IReadOnlyList<string> Errores()
             => FlowValidator.Validar(Flujo, Registro, ContratoDelFlujo.De(Binding, Flujo.Fases.Select(f => f.Nombre).ToList()));
+
+        /// <summary>El flujo como lo ve el catálogo del orquestador, para cruzarlo con otro (lote 6).</summary>
+        public FlujoRegistrado Registrado() => new(Flujo, ContratoDelFlujo.De(Binding, Flujo.Fases.Select(f => f.Nombre).ToList()));
 
         public FachadaDeFlujo<SagaDeFlujo> Fachada()
         {
@@ -824,6 +830,138 @@ public sealed class HostDeFlujosTests
         using var banco = new Banco(MutarRenta(antes, despues, RentaConservada));
 
         Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
+    }
+
+    // ── Lo posterior al cierre (P6 = A del lote 6): un flujo aparte que lee su original ──────────
+
+    /// <summary>
+    /// Devolver una parte de una cita ya completada: un flujo aparte, posterior a <c>prueba.cita</c>, que lee su cobro con
+    /// <c>flow.leer-original</c> y devuelve el monto que pide.
+    /// </summary>
+    private const string Devolucion = """
+        {
+          "clave": "prueba.devolucion",
+          "posterior_a": "prueba.cita",
+          "entrada": ["paciente", "cita", "monto"],
+          "tipos": {
+            "paciente": { "de": "sujeto" },
+            "cita": "texto",
+            "monto": "dinero",
+            "cobroId": { "tipo": "texto", "de": "original" }
+          },
+          "salida": ["cita", "monto"],
+          "fases": { "devolver": ["original", "devolver"] },
+          "pasos": {
+            "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["cobroId"] },
+            "devolver": { "tipo": "payments.devolver", "lee": ["cobroId", "monto"], "llave": "refund" }
+          }
+        }
+        """;
+
+    private static string MutarDevolucion(string antes, string despues)
+    {
+        Assert.True(Devolucion.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la devolución ya no dice «{antes}». Revisar este test antes que el host.");
+        return Devolucion.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
+    /// <summary>Una cita como la deja completada el flujo de la cita: su cobro guardado con el tipo con que se guarda.</summary>
+    private static SagaDeFlujo Original(string id, Ref dueno, SagaStatus estado = SagaStatus.Completed, string flujo = "prueba.cita",
+        string? cobro = "pg-1")
+        => new(id, flujo, dueno, estado,
+            new Dictionary<string, ValorDeFlujo>(StringComparer.Ordinal)
+            {
+                ["cobroId"] = new("texto?", cobro is null ? null : JsonSerializer.SerializeToElement(cobro)),
+            },
+            new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(StringComparer.Ordinal), [], null, DateTimeOffset.UtcNow);
+
+    private static FlowContext EntradaDeDevolucion(string cita, decimal monto = 20_000m) => new FlowContext()
+        .Set("paciente", Paciente).Set("cita", cita).Set("monto", Money.Of(monto, "COP"));
+
+    [Fact]
+    public async Task Lo_posterior_lee_el_cobro_de_la_original_completada_del_mismo_dueno_y_devuelve_esa_parte()
+    {
+        using var banco = new Banco(Devolucion);
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("cita-1", Paciente));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Equal(["devolver pg-1"], banco.Puertos.Llamadas);
+        Assert.Equal(SagaStatus.Completed, banco.Motor.Find("cita-1")!.Status);
+    }
+
+    [Theory]
+    [InlineData("no-existe", "prueba.cita", "u-1")]
+    [InlineData("cita-1", "prueba.cita", "u-2")]
+    [InlineData("cita-1", "prueba.otra", "u-1")]
+    public async Task Una_original_que_no_existe_de_otro_dueno_o_de_otro_flujo_contesta_lo_mismo(string pedida, string flujo, string dueno)
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Ref.Create("prueba.paciente", dueno), flujo: flujo));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion(pedida), CancellationToken.None);
+
+        Assert.Equal((RejectionKind.NotFound, PasoLeerOriginal.NoEncontrada), (r.Rejection?.Kind, r.Rejection?.Code));
+        Assert.Empty(banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public async Task Sobre_una_original_sin_completar_no_hay_nada_posterior()
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Paciente, SagaStatus.Running));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.Equal(PasoLeerOriginal.NoCompletada, r.Rejection?.Code);
+        Assert.Empty(banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public async Task Un_dato_que_la_original_no_tiene_es_un_rechazo_salvo_que_se_declare_anulable()
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Paciente, cobro: null));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+        Assert.Equal(PasoLeerOriginal.SinDato, r.Rejection?.Code);
+    }
+
+    [Theory]
+    [InlineData("\"posterior_a\": \"prueba.cita\",", "", "«cobroId» viene de la original y el flujo no declara «posterior_a»")]
+    [InlineData("\"posterior_a\": \"prueba.cita\"", "\"posterior_a\": \"prueba.devolucion\"", "es «posterior_a» sí mismo")]
+    [InlineData("\"fases\": { \"devolver\": [\"original\", \"devolver\"] }",
+        "\"fases\": { \"abrir\": [\"devolver\"], \"leer\": [\"original\"] }",
+        "«original» lee la original fuera de la fase que abre")]
+    [InlineData("\"escribe\": [\"cobroId\"] }", "\"escribe\": [] }", "«cobroId» viene de la original y «original» no lo escribe")]
+    [InlineData("\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": \"texto\"",
+        "«original» escribe «cobroId», que no se declara")]
+    public void Una_operacion_posterior_mal_declarada_no_arranca(string antes, string despues, string mensaje)
+    {
+        using var banco = new Banco(MutarDevolucion(antes, despues));
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_que_lee_de_la_original_tiene_que_salir_en_su_salida_y_con_el_mismo_tipo()
+    {
+        using var cita = new Banco();
+        using var devolucion = new Banco(Devolucion);
+        Assert.Empty(FlowValidator.ValidarPosteriores([cita.Registrado(), devolucion.Registrado()], devolucion.Registro));
+
+        using var sinCobro = new Banco(Mutar("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"reservaId\"]"));
+        Assert.Contains(FlowValidator.ValidarPosteriores([sinCobro.Registrado(), devolucion.Registrado()], devolucion.Registro),
+            e => e.Contains("lee «cobroId» de «prueba.cita», que no lo tiene en su salida", StringComparison.Ordinal));
+
+        using var otroTipo = new Banco(MutarDevolucion("\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": { \"tipo\": \"dinero\", \"de\": \"original\" }"));
+        Assert.Contains(FlowValidator.ValidarPosteriores([cita.Registrado(), otroTipo.Registrado()], otroTipo.Registro),
+            e => e.Contains("lee «cobroId» de «prueba.cita» como «dinero», y allí es «texto?»", StringComparison.Ordinal));
+
+        Assert.Contains(FlowValidator.ValidarPosteriores([devolucion.Registrado()], devolucion.Registro),
+            e => e.Contains("es posterior a «prueba.cita», y este orquestador no tiene ese flujo", StringComparison.Ordinal));
     }
 
     // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────

@@ -11,7 +11,7 @@
     "desde": "instante",
     "hasta": "instante"
   },
-  "salida": ["total", "reservaId"],
+  "salida": ["total", "reservaId", "cobroId"],
   "lecturas": {
     "disponibilidad": { "entrada": ["profesional", "desde", "hasta"], "pasos": ["hallar", "franjas"], "salida": ["franjas"] }
   },

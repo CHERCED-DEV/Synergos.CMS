@@ -57,6 +57,7 @@ public static class FlowValidator
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
         RevisarConservadas(flujo, registro, errores);
+        RevisarPosterior(flujo, registro, donde, errores);
         RevisarOmitirSiCero(flujo, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
@@ -196,7 +197,7 @@ public static class FlowValidator
         foreach (var (nombre, tipo) in declarados.OrderBy(d => d.Key, StringComparer.Ordinal))
         {
             var esEntrada = flujo.Entrada.Contains(nombre, StringComparer.Ordinal);
-            if (!esEntrada && !efimeros.Contains(nombre) && !deLecturas.Contains(nombre))
+            if (!esEntrada && !efimeros.Contains(nombre) && !deLecturas.Contains(nombre) && tipo.Origen != OrigenDelValor.Original)
             {
                 errores.Add($"declara el tipo de «{nombre}», que no es una entrada, ni algo efímero, ni lo que entra en una lectura.");
             }
@@ -230,6 +231,9 @@ public static class FlowValidator
                     errores.Add($"«{nombre}» es el contacto del aviso y no es sólo efímero: un dato personal acabaría en la saga.");
                     break;
                 case OrigenDelValor.Negocio when !esEntrada && deLecturas.Contains(nombre):
+                    break;
+                case OrigenDelValor.Original when esEntrada || efimeros.Contains(nombre) || deLecturas.Contains(nombre):
+                    errores.Add($"«{nombre}» viene de la original y además entra: lo escribe quien la lee, al abrir.");
                     break;
                 case OrigenDelValor.Sujeto or OrigenDelValor.Negocio when !esEntrada && !deLecturas.Contains(nombre):
                     errores.Add($"«{nombre}» viene de la puerta ({tipo.Origen}) y no es una entrada: sólo la fase que abre lo recibe.");
@@ -459,6 +463,125 @@ public static class FlowValidator
                     + "sabría cuál liquidar.");
             }
         }
+    }
+
+    /// <summary>
+    /// Una operación posterior al cierre (P6 = A): un flujo aparte que lee su original con UN paso, al abrir, y declara
+    /// el tipo de lo que lee de ella.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Un solo lector, en la fase que abre y fuera de un bloque</b>: la original se lee una vez, antes de mover
+    /// nada. Leerla después sería decidir con un dato que pudo cambiar entre fases, y dos lectores, dos verdades.</para>
+    ///
+    /// <para><b>Lo que escribe es exactamente lo declarado <c>de: original</c></b>, y nadie más lo escribe: así el tipo de
+    /// cada dato está dicho en la definición, y ningún paso posterior lo pisa con otra cosa. Que la original lo tenga en
+    /// su salida, con ese tipo, se cruza al arrancar entre los flujos del orquestador
+    /// (<see cref="ValidarPosteriores"/>).</para>
+    /// </remarks>
+    private static void RevisarPosterior(
+        FlujoDef flujo, IRegistroDePasos registro, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
+    {
+        var deLaOriginal = (flujo.Tipos ?? new Dictionary<string, TipoDeclarado>(StringComparer.Ordinal))
+            .Where(t => t.Value.Origen == OrigenDelValor.Original).Select(t => t.Key).ToHashSet(StringComparer.Ordinal);
+        var lectores = flujo.Pasos.Values.Where(p => registro.Para(p.Tipo) is { LeeLaOriginal: true })
+            .OrderBy(p => p.Id, StringComparer.Ordinal).ToList();
+
+        if (flujo.PosteriorA is not { } original)
+        {
+            foreach (var nombre in deLaOriginal.Order(StringComparer.Ordinal))
+            {
+                errores.Add($"«{nombre}» viene de la original y el flujo no declara «posterior_a»: no hay de dónde leerlo.");
+            }
+            foreach (var lector in lectores)
+            {
+                errores.Add($"«{lector.Id}» lee la original y el flujo no declara «posterior_a»: no sabría de qué flujo es.");
+            }
+            return;
+        }
+
+        if (string.Equals(original, flujo.Clave, StringComparison.Ordinal))
+        {
+            errores.Add($"es «posterior_a» sí mismo: una operación posterior lee la saga de OTRO flujo.");
+        }
+        if (lectores.Count != 1)
+        {
+            errores.Add($"es «posterior_a: {original}» y {lectores.Count} pasos leen la original: tiene que ser uno, en la fase que abre.");
+        }
+
+        foreach (var lector in lectores)
+        {
+            if (!donde.TryGetValue(lector.Id, out var u) || u.Fase != 0 || u.Bloque is not null)
+            {
+                errores.Add($"«{lector.Id}» lee la original fuera de la fase que abre, o dentro de un bloque: se lee una vez, "
+                    + "al abrir, antes de mover nada.");
+            }
+            foreach (var nombre in deLaOriginal.Except(lector.Escribe, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+            {
+                errores.Add($"«{nombre}» viene de la original y «{lector.Id}» no lo escribe.");
+            }
+            foreach (var nombre in lector.Escribe.Where(n => !deLaOriginal.Contains(n)))
+            {
+                errores.Add($"«{lector.Id}» escribe «{nombre}», que no se declara {{ \"de\": \"original\" }} en «tipos»: no se sabría su tipo.");
+            }
+        }
+
+        foreach (var otro in flujo.Pasos.Values.Where(p => !lectores.Contains(p)).OrderBy(p => p.Id, StringComparer.Ordinal))
+        {
+            foreach (var nombre in otro.Escribe.Where(deLaOriginal.Contains))
+            {
+                errores.Add($"«{otro.Id}» escribe «{nombre}», que viene de la original: lo pisaría.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lo que cada flujo posterior (P6) le pide a su original, entre los flujos de un orquestador: que exista, que sea
+    /// genérica y que tenga en su salida, con el mismo tipo, cada dato que lee.
+    /// </summary>
+    /// <remarks>
+    /// Va aparte de <see cref="Validar"/> porque mira dos definiciones a la vez; lo llama el validador del catálogo al
+    /// arrancar. Anulable o no da igual aquí: lo que la original escribió con un paso se guarda anulable, y el posterior
+    /// decide si lo exige (<c>flow.original_sin_dato</c>) o lo acepta nulo.
+    /// </remarks>
+    public static IReadOnlyList<string> ValidarPosteriores(IReadOnlyCollection<FlujoRegistrado> flujos, IRegistroDePasos registro)
+    {
+        ArgumentNullException.ThrowIfNull(flujos);
+        ArgumentNullException.ThrowIfNull(registro);
+
+        var porClave = flujos.ToDictionary(f => f.Flujo.Clave, StringComparer.Ordinal);
+        var errores = new List<string>();
+        foreach (var posterior in flujos.Where(f => f.Flujo.PosteriorA is not null).OrderBy(f => f.Flujo.Clave, StringComparer.Ordinal))
+        {
+            var aqui = $"El flujo «{posterior.Flujo.Clave}»";
+            var deCual = posterior.Flujo.PosteriorA!;
+            if (!porClave.TryGetValue(deCual, out var original))
+            {
+                errores.Add($"{aqui}: es posterior a «{deCual}», y este orquestador no tiene ese flujo.");
+                continue;
+            }
+            if (original.Contrato.Tipos is not { } tipos)
+            {
+                errores.Add($"{aqui}: es posterior a «{deCual}», que no es genérico: su saga no guarda su salida con tipos.");
+                continue;
+            }
+
+            foreach (var (nombre, declarado) in (posterior.Flujo.Tipos ?? new Dictionary<string, TipoDeclarado>(StringComparer.Ordinal))
+                         .Where(t => t.Value.Origen == OrigenDelValor.Original).OrderBy(t => t.Key, StringComparer.Ordinal))
+            {
+                if (!original.Flujo.LoQueSale.Contains(nombre, StringComparer.Ordinal))
+                {
+                    errores.Add($"{aqui}: lee «{nombre}» de «{deCual}», que no lo tiene en su salida.");
+                    continue;
+                }
+                var alla = BindingDeFlujo.TipoDe(original.Flujo, tipos, registro, nombre);
+                var aca = tipos.Resolver(declarado.Tipo!);
+                if (alla is null || aca is null || !string.Equals(alla.Tipo.Nombre, aca.Tipo.Nombre, StringComparison.Ordinal))
+                {
+                    errores.Add($"{aqui}: lee «{nombre}» de «{deCual}» como «{declarado.Tipo}», y allí es «{alla?.Declarado ?? "sin tipo"}».");
+                }
+            }
+        }
+        return errores;
     }
 
     private static void RevisarFases(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
@@ -895,6 +1018,7 @@ public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
         }
 
         var errores = options.Flujos.SelectMany(f => FlowValidator.Validar(f.Flujo, _registro, f.Contrato)).ToList();
+        errores.AddRange(FlowValidator.ValidarPosteriores(options.Flujos, _registro));
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);
     }
 }

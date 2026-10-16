@@ -36,6 +36,8 @@ namespace Synergos.Bff.Core.Flow;
 /// <param name="Tipos">Por nombre de la entrada o de lo efímero, su tipo y su origen. Opcional.</param>
 /// <param name="Salida">Lo que el flujo devuelve al abrir, consultar, cotizar y continuar. Opcional.</param>
 /// <param name="Lecturas">Las lecturas sin saga, por su nombre en la puerta (núcleo, NB-3 de 011). Opcional.</param>
+/// <param name="PosteriorA">Si es una operación posterior al cierre (núcleo, P6 = A del lote 6): la clave del flujo cuya
+/// saga completada lee, del mismo orquestador. La lee <c>flow.leer-original</c> y no la toca. Opcional.</param>
 public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
@@ -44,7 +46,8 @@ public sealed record FlujoDef(
     IReadOnlyDictionary<string, IReadOnlyList<string>>? Efimera = null,
     IReadOnlyDictionary<string, TipoDeclarado>? Tipos = null,
     IReadOnlyList<string>? Salida = null,
-    IReadOnlyDictionary<string, LecturaDef>? Lecturas = null)
+    IReadOnlyDictionary<string, LecturaDef>? Lecturas = null,
+    string? PosteriorA = null)
 {
     /// <summary>Las lecturas: vacío si no declara ninguna.</summary>
     public IReadOnlyDictionary<string, LecturaDef> LecturasDeclaradas
@@ -191,6 +194,12 @@ public enum OrigenDelValor
 
     /// <summary>El contacto del aviso que pone la puerta (<c>X-Synergos-Contacto</c>). Sólo efímero.</summary>
     Contacto,
+
+    /// <summary>
+    /// Lo que una operación posterior al cierre lee de la saga original (P6 = A): no entra, lo escribe
+    /// <c>flow.leer-original</c> al abrir, con el tipo que declara aquí.
+    /// </summary>
+    Original,
 }
 
 /// <summary>El tipo de un valor del cuerpo: el nombre del tipo y, si es una referencia, su clase.</summary>
@@ -257,7 +266,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas", "posterior_a");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -326,7 +335,9 @@ internal static class LectorDeFlujo
                 }
             }
 
-            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas);
+            var posteriorA = raiz.TryGetProperty("posterior_a", out _) ? Texto(raiz, "posterior_a", donde) : null;
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas, posteriorA);
         }
     }
 
@@ -381,9 +392,12 @@ internal static class LectorDeFlujo
                 SoloEstos(nodo, donde, "de", "campo", "tipo");
                 return new TipoDeclarado(OrigenDelValor.Negocio,
                     NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"), null, Texto(nodo, "campo", donde));
+            case "original":
+                SoloEstos(nodo, donde, "de", "tipo");
+                return new TipoDeclarado(OrigenDelValor.Original, NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"));
             default:
                 throw new FormatException(
-                    $"{donde}: «de» admite «sujeto», «negocio» o «contacto», y trae «{de}». Lo que viene en el cuerpo se declara con el nombre del tipo, o con «tipo» y «kind» si es una referencia.");
+                    $"{donde}: «de» admite «sujeto», «negocio», «contacto» u «original», y trae «{de}». Lo que viene en el cuerpo se declara con el nombre del tipo, o con «tipo» y «kind» si es una referencia.");
         }
     }
 
