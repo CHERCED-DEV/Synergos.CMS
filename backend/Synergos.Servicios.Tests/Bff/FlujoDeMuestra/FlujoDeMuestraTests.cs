@@ -106,13 +106,14 @@ public sealed class FlujoDeMuestraTests
             Assert.True(r.StatusCode == HttpStatusCode.Created, $"{capacidad} {ruta}: {(int)r.StatusCode} {await r.Content.ReadAsStringAsync()}");
         }
 
-        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "cita-1", string sujeto = "u-1")
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(
+            string llave = "cita-1", string sujeto = "u-1", string claseDelProfesional = "muestra.profesional")
         {
             var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/muestra.cita")
             {
                 Content = JsonContent.Create(new
                 {
-                    profesional = new { kind = "muestra.profesional", id = "dra-1" },
+                    profesional = new { kind = claseDelProfesional, id = "dra-1" },
                     ventana = new { start = Inicio, end = Inicio.AddMinutes(30) },
                     servicio = new { kind = "muestra.servicio", id = "consulta" },
                 }),
@@ -260,6 +261,35 @@ public sealed class FlujoDeMuestraTests
         var (reabre, misma) = await m.Abrir();
         Assert.Equal(HttpStatusCode.Created, reabre);
         Assert.Equal(id, misma.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task Una_referencia_de_otra_clase_que_la_declarada_no_entra_ni_llega_a_ninguna_capacidad()
+    {
+        // NR-1 de 008: la clase de «profesional» la declara la definición, y el host no lee otra.
+        var llamadas = new List<string>();
+        await using var m = await Muestra.Arrancar(falla: r =>
+        {
+            // El sondeo de los avisos en cola corre solo, sin que nadie lo pida: no es de esta petición.
+            if (r.RequestUri!.AbsolutePath != "/v1/deliveries/queued")
+            {
+                lock (llamadas) llamadas.Add($"{r.Method} {r.RequestUri.AbsolutePath}");
+            }
+            return null;
+        });
+
+        var (estado, cuerpo) = await m.Abrir(llave: "otra-clase", claseDelProfesional: "muestra.otra-clase");
+
+        Assert.True(estado == HttpStatusCode.BadRequest, cuerpo.ToString());
+        Assert.Equal("muestra.entrada_invalida", cuerpo.GetProperty("code").GetString());
+        Assert.Contains("profesional.kind", cuerpo.GetProperty("detail").GetString(), StringComparison.Ordinal);
+        Assert.Empty(llamadas);
+        Assert.Null(m.Sagas.Find("otra-clase"));
+
+        // El control: la clase declarada abre la cita, por el mismo camino.
+        var (abre, abierta) = await m.Abrir();
+        Assert.True(abre == HttpStatusCode.Created, abierta.ToString());
+        Assert.NotEmpty(llamadas);
     }
 
     [Fact]

@@ -91,7 +91,7 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
 
         if (flujo.Tipos?.GetValueOrDefault(nombre) is { } declarado)
         {
-            return declarado.EsLista ? null : tipos.Resolver(declarado.Tipo!);
+            return declarado.EsLista ? null : tipos.Resolver(declarado.Tipo!, declarado.Clase);
         }
 
         var escritos = flujo.Pasos.Values

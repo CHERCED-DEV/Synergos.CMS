@@ -95,7 +95,7 @@ public sealed class TiposDeValorTests
     [Fact]
     public void Una_lista_lee_cada_item_con_sus_campos_y_rechaza_los_que_no_declara()
     {
-        var campos = new Dictionary<string, string> { ["sujeto"] = "ref", ["cantidad"] = "entero", ["butaca"] = "texto?" };
+        var campos = new Dictionary<string, TipoDeCampo> { ["sujeto"] = new("ref"), ["cantidad"] = new("entero"), ["butaca"] = new("texto?") };
 
         var items = Tipos.LeerLista(J("""[{"sujeto":{"kind":"k","id":"1"},"cantidad":2}]"""), campos, "lineas");
 
@@ -111,6 +111,34 @@ public sealed class TiposDeValorTests
 
         var esquema = Tipos.EsquemaDeLista(campos);
         Assert.Equal("""["sujeto","cantidad"]""", esquema["items"]!["required"]!.ToJsonString());
+    }
+
+    [Fact]
+    public void Una_referencia_con_clase_lee_solo_esa_clase_y_la_publica_en_su_esquema()
+    {
+        // NR-1 de 008: la clase la declara la definición, como dato.
+        var conClase = Tipos.Resolver("ref", "salud.profesional")!;
+
+        Assert.Equal(Ref.Create("salud.profesional", "p-1"), conClase.Leer(J("""{"kind":"salud.profesional","id":"p-1"}"""), "profesional"));
+        var ex = Assert.Throws<FormatException>(() => conClase.Leer(J("""{"kind":"otra.clase","id":"p-1"}"""), "profesional"));
+        Assert.Contains("profesional.kind", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("«salud.profesional»", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("""["salud.profesional"]""", conClase.Esquema()["properties"]!["kind"]!["enum"]!.ToJsonString());
+        Assert.Equal("ref", conClase.Declarado);
+
+        var anulable = Tipos.Resolver("ref?", "salud.profesional")!;
+        Assert.Null(anulable.Leer(null, "profesional"));
+        Assert.Throws<FormatException>(() => anulable.Leer(J("""{"kind":"otra.clase","id":"p-1"}"""), "profesional"));
+        Assert.Equal("""["salud.profesional"]""", anulable.Esquema()["oneOf"]![0]!["properties"]!["kind"]!["enum"]!.ToJsonString());
+
+        // Sin clase (el sujeto, o lo que pone la configuración de negocio) no hay enum que publicar.
+        Assert.Null(Tipos.Resolver("ref")!.Esquema()["properties"]!["kind"]!["enum"]);
+
+        var campos = new Dictionary<string, TipoDeCampo> { ["recurso"] = new("ref", "salud.profesional") };
+        var enLista = Assert.Throws<FormatException>(() => Tipos.LeerLista(J("""[{"recurso":{"kind":"otra.clase","id":"1"}}]"""), campos, "lineas"));
+        Assert.Contains("lineas[0].recurso.kind", enLista.Message, StringComparison.Ordinal);
+        Assert.Equal("""["salud.profesional"]""",
+            Tipos.EsquemaDeLista(campos)["items"]!["properties"]!["recurso"]!["properties"]!["kind"]!["enum"]!.ToJsonString());
     }
 
     [Fact]

@@ -68,8 +68,22 @@ public sealed class DefinicionConTiposTests
         var lineas = tipos["lineas"];
         Assert.True(lineas.EsLista);
         Assert.Null(lineas.Tipo);
-        Assert.Equal("entero", lineas.Campos!["cantidad"]);
-        Assert.Equal("ref", lineas.Campos!["sujeto"]);
+        Assert.Equal(new TipoDeCampo("entero"), lineas.Campos!["cantidad"]);
+        Assert.Equal(new TipoDeCampo("ref"), lineas.Campos!["sujeto"]);
+    }
+
+    [Fact]
+    public void Una_referencia_del_cuerpo_declara_su_clase_con_tipo_y_kind()
+    {
+        // NR-1 de 008: la clase es un dato de la definición, también en el campo de una lista.
+        var conClase = Mutar("\"que\": \"ref\"", "\"que\": { \"tipo\": \"ref\", \"kind\": \"muestra.cosa\" }")
+            .Replace("\"sujeto\": \"ref\"", "\"sujeto\": { \"tipo\": \"ref?\", \"kind\": \"muestra.cosa\" }", StringComparison.Ordinal);
+        Assert.Contains("\"tipo\": \"ref?\"", conClase, StringComparison.Ordinal);
+
+        var tipos = FlujoDef.Leer(conClase).Tipos!;
+
+        Assert.Equal(new TipoDeclarado(OrigenDelValor.Cuerpo, "ref", Clase: "muestra.cosa"), tipos["que"]);
+        Assert.Equal(new TipoDeCampo("ref?", "muestra.cosa"), tipos["lineas"].Campos!["sujeto"]);
     }
 
     public static TheoryData<string, string, string> Malas() => new()
@@ -86,6 +100,11 @@ public sealed class DefinicionConTiposTests
         { "\"que\": \"ref\"", "\"que\": 3", "nombre de un tipo" },
         // la salida que nombra dos veces lo mismo
         { "\"salida\": [\"total\"]", "\"salida\": [\"total\", \"total\"]", "dos veces" },
+        // la forma objeto de lo que viene del cuerpo es para declarar la clase: sin ella no se lee
+        { "\"que\": \"ref\"", "\"que\": { \"tipo\": \"ref\" }", "falta «kind»" },
+        { "\"que\": \"ref\"", "\"que\": { \"tipo\": \"ref\", \"kind\": \" \" }", "«kind» tiene que ser un texto no vacío" },
+        { "\"que\": \"ref\"", "\"que\": { \"tipo\": \"ref\", \"kind\": \"x\", \"campo\": \"y\" }", "«campo»" },
+        { "\"sujeto\": \"ref\"", "\"sujeto\": { \"kind\": \"x\" }", "falta «tipo»" },
     };
 
     [Theory]

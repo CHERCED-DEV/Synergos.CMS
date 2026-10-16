@@ -61,8 +61,8 @@ public sealed record FlujoGenerico(
 /// a quién atar la saga, y un sujeto opcional dejaba leer y confirmar lo de cualquiera (F3).</para>
 ///
 /// <para><b>El cuerpo es estricto</b>: un campo que la definición no declara se rechaza, igual que el lector
-/// rechaza un campo que no conoce. Un error de entrada contesta <c>400 {origen}.entrada_invalida</c> con el
-/// nombre del campo.</para>
+/// rechaza un campo que no conoce, y una referencia sólo se lee de la clase que la definición declara. Un
+/// error de entrada contesta <c>400 {origen}.entrada_invalida</c> con el nombre del campo.</para>
 /// </remarks>
 public static class MapeoDeFlujos
 {
@@ -325,7 +325,7 @@ public static class MapeoDeFlujos
             }
             else
             {
-                leido = (tipos.Resolver(tipo.Tipo!) ?? throw new InvalidOperationException($"Nadie registró «{tipo.Tipo}»."))
+                leido = (tipos.Resolver(tipo.Tipo!, tipo.Clase) ?? throw new InvalidOperationException($"Nadie registró «{tipo.Tipo}»."))
                     .Leer(valor, nombre);
             }
             return null;
@@ -371,7 +371,7 @@ public static class MapeoDeFlujos
                 requeridos.Add(nombre);
                 continue;
             }
-            var resuelto = tipos.Resolver(tipo.Tipo!)!;
+            var resuelto = tipos.Resolver(tipo.Tipo!, tipo.Clase)!;
             props[nombre] = resuelto.Esquema();
             if (!resuelto.Anulable) requeridos.Add(nombre);
         }

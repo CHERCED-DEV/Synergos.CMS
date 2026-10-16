@@ -193,7 +193,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4906**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **4915**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -3096,7 +3096,7 @@ dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3231
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1149
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1158
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 536
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
