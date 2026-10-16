@@ -61,8 +61,11 @@ public static class FlowValidator
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
     }
 
-    /// <summary>Los nombres de fase que chocarían con las rutas que el host mapea por convención.</summary>
-    public static readonly IReadOnlyList<string> FasesReservadas = ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones"];
+    /// <summary>
+    /// Los nombres de fase que chocarían con las rutas que el host mapea por convención, o con el nombre que
+    /// esas rutas llevan en la puerta (<c>listar</c>, NB-6: dos operaciones «listar» de un flujo).
+    /// </summary>
+    public static readonly IReadOnlyList<string> FasesReservadas = ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones", "listar"];
 
     /// <summary>
     /// Lo que no se guarda en una saga genérica por su NOMBRE: el mismo olfato que

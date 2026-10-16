@@ -56,6 +56,9 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     public TSaga? FindDe(string id, Ref dueno) => _sagas.Find(id) is { } s && EsDe(s, dueno) ? s : null;
 
+    /// <summary>Las sagas de <paramref name="dueno"/>, de la más nueva a la más vieja (NB-6 de 011, NN-7 de 005).</summary>
+    public IReadOnlyList<TSaga> DeDueno(Ref dueno) => _sagas.DeDueno(dueno);
+
     private static bool EsDe(TSaga saga, Ref? dueno)
         => dueno is null || saga is not ISagaConDueno conDueno || conDueno.Dueno == dueno;
 

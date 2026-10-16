@@ -139,6 +139,13 @@ public sealed class FlujoDeMuestraTests
             return Enviar(peticion);
         }
 
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string consulta = "", string? sujeto = "u-1")
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Get, $"v1/flujos/muestra.cita{consulta}");
+            if (sujeto is not null) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
+            return Enviar(peticion);
+        }
+
         public async Task<JsonElement> Leer(string capacidad, string ruta)
         {
             using var http = Capacidades.CreateClient(capacidad);
@@ -208,6 +215,37 @@ public sealed class FlujoDeMuestraTests
         Assert.Equal("Captured", (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
         var avisos = (await m.Leer("notifications", "v1/deliveries?toKind=muestra.paciente&toId=u-1")).GetProperty("items");
         Assert.Equal(1, avisos.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Mis_citas_son_las_del_dueno_por_estado_y_por_pagina()
+    {
+        // NB-6 de 011 y NN-7 de 005: sin esto, una cita sólo se encontraba por el enlace del aviso. La segunda
+        // pide la MISMA hora, así que la agenda la rechaza y queda deshecha: dos sagas del mismo dueño en dos
+        // estados. Las de otro no salen nunca, y el dueño lo pone la puerta, no la consulta.
+        await using var m = await Muestra.Arrancar();
+        var (_, una) = await m.Abrir("cita-1");
+        var (cerro, _) = await m.Cerrar(una.GetProperty("id").GetString()!);
+        Assert.Equal(HttpStatusCode.OK, cerro);
+        var (rechazada, _) = await m.Abrir("cita-2");
+        Assert.Equal(HttpStatusCode.Conflict, rechazada);
+
+        var (estado, todas) = await m.Listar();
+        var (_, completadas) = await m.Listar("?estado=Completed");
+        var (_, pagina) = await m.Listar("?limit=1");
+        var (_, deOtro) = await m.Listar(sujeto: "u-2");
+
+        Assert.Equal(HttpStatusCode.OK, estado);
+        Assert.Equal(["cita-1", "cita-2"], todas.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetString()!).Order(StringComparer.Ordinal));
+        var completada = Assert.Single(completadas.GetProperty("items").EnumerateArray());
+        Assert.Equal(("cita-1", "Completed"), (completada.GetProperty("id").GetString(), completada.GetProperty("estado").GetString()));
+        Assert.Equal(50_000m, completada.GetProperty("datos").GetProperty("total").GetProperty("amount").GetDecimal());
+        Assert.Equal((1, 2, true), (pagina.GetProperty("items").GetArrayLength(), pagina.GetProperty("total").GetInt32(), pagina.GetProperty("hasMore").GetBoolean()));
+        Assert.Equal(0, deOtro.GetProperty("total").GetInt32());
+
+        var (inventado, problema) = await m.Listar("?estado=Pagada");
+        Assert.Equal((HttpStatusCode.BadRequest, "muestra.entrada_invalida"), (inventado, problema.GetProperty("code").GetString()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await m.Listar(sujeto: null)).Estado);
     }
 
     [Fact]

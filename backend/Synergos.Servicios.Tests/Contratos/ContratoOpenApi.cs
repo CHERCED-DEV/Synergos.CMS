@@ -178,7 +178,7 @@ internal static class ContratoOpenApi
         /// <summary>El cuerpo que ya se publicó con cada nombre, como JSON: dos distintos no comparten nombre.</summary>
         private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
 
-        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "JsonElement"];
+        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "PaginaDeFlujoOfRespuestaDeFlujo", "JsonElement"];
 
         /// <summary>
         /// El nombre con que se publica un cuerpo (N-13 de Tienda): <c>{Flujo}Entrada</c> el de abrir y cotizar, y
@@ -224,6 +224,15 @@ internal static class ContratoOpenApi
             {
                 if (respuesta.Content is null || !respuesta.Content.TryGetValue("application/json", out var json)) continue;
 
+                // «Mis …» (NB-6): una página de respuestas del flujo, cada una con sus datos tipados.
+                if (op.OperationId?.EndsWith("Listar", StringComparison.Ordinal) == true)
+                {
+                    Propios[contrato.Nombre + "Respuesta"] = Respuesta(contrato.Datos);
+                    Propios[contrato.Nombre + "Pagina"] = Pagina(new OpenApiSchemaReference(contrato.Nombre + "Respuesta", ctx.Document));
+                    json.Schema = new OpenApiSchemaReference(contrato.Nombre + "Pagina", ctx.Document);
+                    continue;
+                }
+
                 var cotiza = op.OperationId?.EndsWith("Cotizar", StringComparison.Ordinal) == true;
                 var nombre = contrato.Nombre + (cotiza ? "Cotizacion" : "Respuesta");
                 Propios[nombre] = cotiza ? Cotizacion(contrato.Datos) : Respuesta(contrato.Datos);
@@ -253,6 +262,14 @@ internal static class ContratoOpenApi
         });
 
         private static OpenApiSchema Cotizacion(JsonObject datos) => Objeto(new() { ["flujo"] = Texto(), ["datos"] = Esquema(datos) });
+
+        private static OpenApiSchema Pagina(IOpenApiSchema item) => Objeto(new()
+        {
+            ["items"] = new OpenApiSchema { Type = JsonSchemaType.Array, Items = item },
+            ["total"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["offset"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["hasMore"] = new OpenApiSchema { Type = JsonSchemaType.Boolean },
+        });
 
         private static OpenApiSchema Texto() => new() { Type = JsonSchemaType.String };
 

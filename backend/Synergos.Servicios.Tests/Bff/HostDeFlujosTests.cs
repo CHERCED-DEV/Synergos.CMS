@@ -439,6 +439,22 @@ public sealed class HostDeFlujosTests
     }
 
     [Fact]
+    public async Task Listar_no_trae_las_del_dueno_en_otro_flujo_del_mismo_almacen()
+    {
+        // NB-6: varios flujos genéricos de un orquestador comparten almacén. «Mis citas» no son «mis compras».
+        using var banco = new Banco();
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        banco.Motor.Put(new SagaDeFlujo("otra-1", "prueba.otro", Paciente, SagaStatus.Completed,
+            new Dictionary<string, ValorDeFlujo>(), new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(), [], null, DateTimeOffset.UtcNow));
+
+        var (items, total) = fachada.Listar(Paciente, null, 0, 10);
+
+        Assert.Equal(("cita-1", 1), (Assert.Single(items).Id, total));
+        Assert.Equal(2, banco.Motor.DeDueno(Paciente).Count);   // el almacén sí la tiene: la deja fuera la fachada
+    }
+
+    [Fact]
     public async Task Pedir_permiso_declara_su_proposito_en_los_dos_sentidos()
     {
         // NN-3 de Salud: el propósito es un dato del flujo, como la plantilla del aviso, y se cruza igual.

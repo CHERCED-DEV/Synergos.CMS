@@ -153,6 +153,32 @@ public static class MapeoDeFlujos
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
           .EnLaPuerta(clave, "consultar");
 
+        // «Mis …» (NB-6 de 011, NN-7 de 005): las sagas del dueño en este flujo, de la más nueva a la más vieja, y
+        // por estado si se pide. Sólo las suyas: el dueño es el sujeto que pone la puerta, no un parámetro.
+        app.MapGet($"/v1/flujos/{clave}", Results<Ok<PaginaDeFlujo<RespuestaDeFlujo>>, ProblemHttpResult> (
+            string? estado, int? offset, int? limit, HttpRequest http) =>
+        {
+            if (Sujeto(f, http, out var dueno) is { } sinSujeto) return sinSujeto;
+
+            SagaStatus? enEstado = null;
+            if (!string.IsNullOrWhiteSpace(estado))
+            {
+                if (!Enum.GetNames<SagaStatus>().Contains(estado, StringComparer.Ordinal))
+                {
+                    return Invalida(origen, $"«{estado}» no es un estado: {string.Join(", ", Enum.GetNames<SagaStatus>())}.");
+                }
+                enEstado = Enum.Parse<SagaStatus>(estado);
+            }
+
+            var off = Math.Max(0, offset ?? 0);
+            var lim = QueryWindow.Limit(limit);
+            var (items, total) = f.Fachada.Listar(dueno!, enEstado, off, lim);
+            return TypedResults.Ok(new PaginaDeFlujo<RespuestaDeFlujo>(
+                items.Select(s => Respuesta(f, s)).ToList(), total, off, off + lim < total));
+        }).WithName($"{nombre}Listar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
+          .EnLaPuerta(clave, "listar");
+
         foreach (var fase in def.Fases.Skip(1).Select(x => x.Nombre))
         {
             var efimera = def.EfimeraDe(fase);

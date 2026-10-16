@@ -144,6 +144,26 @@ public sealed class ContratoDeFlujosGenericosTests
     }
 
     [Fact]
+    public async Task Listar_va_a_la_puerta_con_el_sujeto_y_publica_una_pagina_de_respuestas_tipadas()
+    {
+        // NB-6: «mis citas». Cada ítem con los datos del flujo, no con el diccionario genérico; el dueño lo pone la
+        // puerta, así que el sujeto es requerido y el dueño no es un parámetro de la consulta.
+        var doc = await Documento();
+        var listar = Op(doc, "/v1/flujos/muestra.cita", "get");
+
+        Assert.Equal("""{"flujo":"muestra.cita","operacion":"listar"}""", listar["x-synergos-flujo"]!.ToJsonString());
+        var parametros = listar["parameters"]!.AsArray().ToDictionary(p => (string)p!["name"]!, p => p!);
+        Assert.Equal(["X-Synergos-Sujeto", "estado", "limit", "offset"], parametros.Keys.Order(StringComparer.Ordinal));
+        Assert.True((bool?)parametros["X-Synergos-Sujeto"]["required"]);
+
+        var pagina = Esquema(doc, listar["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
+        Assert.Equal(["hasMore", "items", "offset", "total"], pagina["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        var item = Esquema(doc, pagina["properties"]!["items"]!["items"]);
+        Assert.Equal(new[] { "total", "reservaId" }, item["properties"]!["datos"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.DoesNotContain("PaginaDeFlujoOfRespuestaDeFlujo", doc["components"]!["schemas"]!.AsObject().Select(e => e.Key));
+    }
+
+    [Fact]
     public async Task Cerrar_cancelar_y_cotizar_van_a_la_puerta_y_lo_de_operacion_no()
     {
         var doc = await Documento();
