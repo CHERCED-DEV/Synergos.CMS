@@ -49,6 +49,10 @@ builder.AddSagaMachinery<PurchaseSaga, TiendaCompensationExecutor>(
 builder.Services.AddSingleton<TiendaCapabilities>();
 builder.Services.AddSingleton<PurchaseFlow>();
 
+// La oferta del catálogo (004-tienda-compra, R-9): el CMS publica precio y existencias de cada producto y
+// esto los deja en Pricing e Inventory, con los sujetos de las dos compras (la de la puerta y la de arriba).
+builder.Services.AddSingleton<OfertaDeTienda>();
+
 // La compra por la puerta (ADR 0140): flujos/tienda.compra.json sobre el host genérico, en sus propias
 // rutas (/v1/flujos/tienda.compra…), que sólo sirve el flujo declarado; /v1/purchases sigue siendo del
 // motor imperativo de arriba, que el CMS llama. Por eso el modo arranca en «declarado» (lote 2, matiz

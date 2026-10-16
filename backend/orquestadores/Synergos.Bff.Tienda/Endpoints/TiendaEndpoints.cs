@@ -11,8 +11,9 @@ namespace Synergos.Bff.Tienda.Endpoints;
 /// <remarks>
 /// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c> (el molde F2): de ahí
 /// sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Bff.Tienda.json</c>). Son las rutas de la compra
-/// imperativa (<see cref="PurchaseFlow"/>), las que usa el CMS con <c>Synergos:Tienda:Mode=Bff</c>; las de la puerta
-/// las pone el flujo declarado (<c>flujos/tienda.compra.json</c>) en <c>/v1/flujos/tienda.compra</c>.
+/// imperativa (<see cref="PurchaseFlow"/>), las que usa el CMS con <c>Synergos:Tienda:Mode=Bff</c>, y las de la oferta
+/// del catálogo (<see cref="OfertaDeTienda"/>), que el CMS llama al publicar; las de la puerta las pone el flujo
+/// declarado (<c>flujos/tienda.compra.json</c>) en <c>/v1/flujos/tienda.compra</c>.
 /// </remarks>
 public static class TiendaEndpoints
 {
@@ -94,6 +95,29 @@ public static class TiendaEndpoints
         app.MapPost("/v1/purchases/{id}/retry", async Task<Results<Ok<PurchaseResponse>, ProblemHttpResult>> (
             string id, PurchaseFlow flow, CancellationToken ct) =>
             (await flow.RetryStuckAsync(id, ct)).Map(PurchaseResponse.From).ToHttp()).WithName("RetryPurchase");
+
+        // La oferta de un producto: el precio y las existencias de cada variante (004-tienda-compra, R-9).
+        // La llama el CMS al publicar, no un navegador, así que no lleva marca de la puerta ni cabeceras
+        // suyas. Repetirla no duplica nada; ver OfertaDeTienda.
+        app.MapPost("/v1/ofertas", async Task<Results<Ok<ProductOfferResponse>, ProblemHttpResult>> (
+            PublishProductOfferRequest req, HttpRequest http, OfertaDeTienda ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+
+            var oferta = new OfertaDeProducto(req.ProductId, req.Currency, req.Variants?
+                .Select(v => new VarianteOfertada(v.VariantId, v.Price, v.Stock))
+                .ToList());
+            return (await ofertas.PublicarAsync(oferta, key, ct)).Map(ProductOfferResponse.From).ToHttp();
+        }).WithName("PublishProductOffer").ConLlaveDeIdempotencia();
+
+        // Retirar la oferta de un producto que se despublicó, fue a la papelera o se borró: ninguna variante
+        // se vende más. Lo llama el CMS, como publicarla; sin marca de la puerta.
+        app.MapPost("/v1/ofertas/{productId}/retirar", async Task<Results<Ok<ProductOfferResponse>, ProblemHttpResult>> (
+            string productId, HttpRequest http, OfertaDeTienda ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
+            return (await ofertas.RetirarAsync(productId, key, ct)).Map(ProductOfferResponse.From).ToHttp();
+        }).WithName("RetireProductOffer").ConLlaveDeIdempotencia();
 
         // La vista de operación: qué quedó colgado. Sin ella, una compensación que se rindió
         // solo existe en una línea de log que nadie está mirando.

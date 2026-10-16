@@ -36,9 +36,12 @@ internal sealed class CompraDeTiendaReal : IDisposable
     /// <param name="cae">Las rutas (<c>METODO /ruta</c>, «*» un segmento) que contestan 503, como una capacidad caída.</param>
     /// <param name="rechaza">Las que contestan 409 con un rechazo definitivo (no transitorio).</param>
     /// <param name="conRecogida">Notifications deja cada correo como <c>.eml</c> en <see cref="Buzon"/>.</param>
+    /// <param name="pierdeLaPrimera">La primera petición cuya ruta termina así LLEGA a la capacidad y su respuesta se
+    /// pierde: el orquestador ve una caída.</param>
     public CompraDeTiendaReal(
         IReadOnlyDictionary<string, int>? existencias = null, IReadOnlyDictionary<string, decimal>? precios = null,
-        IReadOnlyCollection<string>? cae = null, IReadOnlyCollection<string>? rechaza = null, bool conRecogida = false)
+        IReadOnlyCollection<string>? cae = null, IReadOnlyCollection<string>? rechaza = null, bool conRecogida = false,
+        string? pierdeLaPrimera = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
@@ -53,7 +56,7 @@ internal sealed class CompraDeTiendaReal : IDisposable
             precios ?? new Dictionary<string, decimal> { ["p-1"] = 20_000m, ["p-2:azul"] = 35_000m, ["p-3"] = 5_000m })
             .GetAwaiter().GetResult();
 
-        var cable = new Cable(Capacidades, cae ?? [], rechaza ?? []);
+        var cable = new Cable(Capacidades, cae ?? [], rechaza ?? [], pierdeLaPrimera);
         _fabrica = new WebApplicationFactory<PurchaseResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("tienda:Storage:Root", Raiz);
@@ -188,6 +191,32 @@ internal sealed class CompraDeTiendaReal : IDisposable
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cancelar(string id, string sujeto = "u-1")
         => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/tienda.compra/{id}/cancelar", sujeto));
 
+    /// <summary>Publica la oferta de un producto, como lo hace el CMS: sin cabeceras de la puerta, con llave.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Publicar(object oferta, string llave)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/ofertas") { Content = JsonContent.Create(oferta) };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion);
+    }
+
+    /// <summary>Retira la oferta entera de un producto, como lo hace el CMS al despublicarlo.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Retirar(string producto, string llave)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/ofertas/{Uri.EscapeDataString(producto)}/retirar");
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion);
+    }
+
+    /// <summary>El pozo de existencias de un sujeto de la tienda (<c>p-1</c>, <c>p-2:azul</c>), o nada si no existe.</summary>
+    public async Task<JsonElement?> Pozo(string sujeto)
+    {
+        using var http = Capacidades.CreateClient("inventory");
+        using var r = await http.GetAsync($"v1/items?subjectKind={Producto}&subjectId={Uri.EscapeDataString(sujeto)}");
+        if (r.StatusCode == HttpStatusCode.NotFound) return null;
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        return await r.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
     public string Dato(string id, string nombre) => Sagas.Find(id)!.Datos[nombre].Valor!.Value.GetString()!;
 
     public int Veces(string llamada) => Llamadas.Count(l => l == llamada);
@@ -219,10 +248,15 @@ internal sealed class CompraDeTiendaReal : IDisposable
     }
 
     /// <summary>Las capacidades reales, con las caídas y los rechazos pedidos.</summary>
-    private sealed class Cable(IHttpClientFactory real, IReadOnlyCollection<string> cae, IReadOnlyCollection<string> rechaza)
+    private sealed class Cable(
+        IHttpClientFactory real, IReadOnlyCollection<string> cae, IReadOnlyCollection<string> rechaza, string? pierdeLaPrimera)
         : IHttpClientFactory
     {
+        private int _perdidas;
+
         public List<string> Llamadas { get; } = [];
+
+        private string? PierdeLaPrimera { get; } = pierdeLaPrimera;
 
         private IReadOnlyCollection<string> Cae { get; } = cae;
 
@@ -250,7 +284,14 @@ internal sealed class CompraDeTiendaReal : IDisposable
 
                 using var copia = new HttpRequestMessage(r.Method, r.RequestUri) { Content = r.Content };
                 foreach (var h in r.Headers) copia.Headers.TryAddWithoutValidation(h.Key, h.Value);
-                return await interno.SendAsync(copia, ct);
+                var respuesta = await interno.SendAsync(copia, ct);
+                if (cable.PierdeLaPrimera is { } sufijo && r.RequestUri.AbsolutePath.EndsWith(sufijo, StringComparison.Ordinal)
+                    && Interlocked.Increment(ref cable._perdidas) == 1)
+                {
+                    respuesta.Dispose();
+                    throw new HttpRequestException("La respuesta se perdió por el camino.");
+                }
+                return respuesta;
             }
 
             private static HttpResponseMessage Problema(HttpStatusCode estado, string codigo) => new(estado)
