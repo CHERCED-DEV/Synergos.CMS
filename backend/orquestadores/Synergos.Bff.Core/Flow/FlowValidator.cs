@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Synergos.Core;
 
 namespace Synergos.Bff.Core.Flow;
 
@@ -102,11 +103,26 @@ public static class FlowValidator
                 errores.Add($"declara el tipo de «{nombre}», que no es una entrada ni algo efímero.");
             }
 
-            foreach (var declarado in tipo.EsLista ? tipo.Campos!.Values : [tipo.Tipo!])
+            var valores = tipo.EsLista
+                ? tipo.Campos!.Select(c => (Donde: $"{nombre}.{c.Key}", Declarado: c.Value))
+                : [(Donde: nombre, Declarado: new TipoDeCampo(tipo.Tipo!, tipo.Clase))];
+            foreach (var (donde, declarado) in valores)
             {
-                if (tipos.Resolver(declarado) is null)
+                if (tipos.Resolver(declarado.Tipo) is not { } resuelto)
                 {
-                    errores.Add($"el tipo de «{nombre}» es «{declarado}», y ese tipo de valor no está registrado.");
+                    errores.Add($"el tipo de «{nombre}» es «{declarado.Tipo}», y ese tipo de valor no está registrado.");
+                    continue;
+                }
+
+                var esReferencia = resuelto.Tipo.Clr == typeof(Ref);
+                if (declarado.Clase is not null && !esReferencia)
+                {
+                    errores.Add($"«{donde}» declara la clase «{declarado.Clase}» y es «{declarado.Tipo}»: sólo una referencia tiene clase.");
+                }
+                else if (esReferencia && declarado.Clase is null && tipo.Origen == OrigenDelValor.Cuerpo)
+                {
+                    errores.Add($"«{donde}» es una referencia que viene del cuerpo y no declara su clase "
+                        + "({ \"tipo\": \"ref\", \"kind\": \"…\" }): el host sólo lee del cuerpo la clase que la definición fija.");
                 }
             }
 

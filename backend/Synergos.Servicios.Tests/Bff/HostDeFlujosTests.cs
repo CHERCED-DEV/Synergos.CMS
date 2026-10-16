@@ -66,7 +66,7 @@ public sealed class HostDeFlujosTests
           "entrada": ["inquilino", "equipo", "ventana", "unidades", "garantia"],
           "tipos": {
             "inquilino": { "de": "sujeto" },
-            "equipo": "ref",
+            "equipo": { "tipo": "ref", "kind": "prueba.equipo" },
             "ventana": "ventana",
             "unidades": "entero",
             "garantia": "dinero"
@@ -517,6 +517,49 @@ public sealed class HostDeFlujosTests
         Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
         Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.EndsWith("|deposit", StringComparison.Ordinal));
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("autorizar", StringComparison.Ordinal));
+    }
+
+    // ── La clase de una referencia del cuerpo (NR-1 de 008): un dato de la definición ──────────
+
+    private const string EquipoConClase = "\"equipo\": { \"tipo\": \"ref\", \"kind\": \"prueba.equipo\" }";
+
+    [Fact]
+    public void Una_referencia_del_cuerpo_sin_su_clase_no_arranca()
+    {
+        Assert.Contains(EquipoConClase, Renta, StringComparison.Ordinal);
+        using (var control = new Banco(Renta)) Assert.Empty(control.Errores());
+
+        foreach (var sinClase in new[] { "\"equipo\": \"ref\"", "\"equipo\": \"ref?\"" })
+        {
+            using var banco = new Banco(Renta.Replace(EquipoConClase, sinClase, StringComparison.Ordinal));
+
+            Assert.Contains(banco.Errores(), e => e.Contains("«equipo» es una referencia que viene del cuerpo y no declara su clase", StringComparison.Ordinal)
+                && e.Contains("«prueba.renta»", StringComparison.Ordinal));
+            Assert.Throws<InvalidOperationException>(() => banco.Fachada());
+        }
+    }
+
+    [Fact]
+    public void Un_campo_de_lista_que_es_referencia_declara_su_clase_y_solo_una_referencia_la_tiene()
+    {
+        const string extras = "\"extras\": { \"lista\": { \"pieza\": { \"tipo\": \"ref\", \"kind\": \"prueba.pieza\" }, \"cantidad\": \"entero\" } }";
+        var conLista = Renta
+            .Replace("\"entrada\": [\"inquilino\", \"equipo\", \"ventana\", \"unidades\", \"garantia\"]",
+                "\"entrada\": [\"inquilino\", \"equipo\", \"ventana\", \"unidades\", \"garantia\", \"extras\"]", StringComparison.Ordinal)
+            .Replace("\"garantia\": \"dinero\"", $"\"garantia\": \"dinero\", {extras}", StringComparison.Ordinal);
+        Assert.Contains("\"extras\"]", conLista, StringComparison.Ordinal);
+        Assert.Contains(extras, conLista, StringComparison.Ordinal);
+        using (var control = new Banco(conLista)) Assert.Empty(control.Errores());
+
+        using (var sinClase = new Banco(conLista.Replace("{ \"tipo\": \"ref\", \"kind\": \"prueba.pieza\" }", "\"ref\"", StringComparison.Ordinal)))
+        {
+            Assert.Contains(sinClase.Errores(), e => e.Contains("«extras.pieza» es una referencia que viene del cuerpo y no declara su clase", StringComparison.Ordinal));
+        }
+
+        var unidadesConClase = Renta.Replace("\"unidades\": \"entero\"", "\"unidades\": { \"tipo\": \"entero\", \"kind\": \"prueba.unidad\" }", StringComparison.Ordinal);
+        Assert.NotEqual(Renta, unidadesConClase);
+        using var deMas = new Banco(unidadesConClase);
+        Assert.Contains(deMas.Errores(), e => e.Contains("«unidades» declara la clase «prueba.unidad» y es «entero»: sólo una referencia tiene clase", StringComparison.Ordinal));
     }
 
     [Fact]
