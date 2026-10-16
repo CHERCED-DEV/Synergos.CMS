@@ -451,12 +451,15 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             return new Desenlace(PasoResultado.Abortar, rechazo, definicion.Motivo ?? $"falló el paso «{definicion.Id}»");
         }
 
-        if (salida.Valores.Count != definicion.Escribe.Count)
+        // El paso produce lo que dice producir; la definición nombra los primeros (NB-5: las últimas escrituras
+        // opcionales se pueden no nombrar). Que produzca menos de lo que la definición lee, o más de lo que
+        // declara, es un defecto del paso.
+        if (salida.Valores.Count < definicion.Escribe.Count || salida.Valores.Count > paso.Escrituras)
         {
             throw new InvalidOperationException(
                 $"«{definicion.Tipo}» produjo {salida.Valores.Count} valor(es) y declaró {paso.Escrituras}.");
         }
-        for (var i = 0; i < salida.Valores.Count; i++)
+        for (var i = 0; i < definicion.Escribe.Count; i++)
         {
             Ambito.Escribir(definicion.Escribe[i], salida.Valores[i], corrida.Ctx, alias, item);
         }

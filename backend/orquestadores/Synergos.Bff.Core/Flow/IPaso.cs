@@ -31,6 +31,23 @@ public interface IPaso
     /// <summary>Cuántos valores produce, en orden: los <c>escribe</c> de la definición.</summary>
     int Escrituras { get; }
 
+    /// <summary>
+    /// Cuántas de sus ÚLTIMAS escrituras puede no nombrar una definición (núcleo, NB-5 de 011). Por defecto,
+    /// ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe para que un paso pueda decir algo más sin romper a quien ya lo usaba.</b> Apartar en la
+    /// agenda devolvía el apartado; ahora devuelve también cuándo vence, para que la pantalla diga cuánto
+    /// tiempo queda. Con el recuento exacto, todas las definiciones que ya apartaban dejarían de arrancar el
+    /// día que el paso escribe una cosa más.</para>
+    ///
+    /// <para><b>Sólo las últimas, y siempre en orden</b>: una definición nombra de
+    /// <c>Escrituras − EscriturasOpcionales</c> a <see cref="Escrituras"/> nombres, y se guardan los primeros
+    /// valores. El paso produce siempre todos; no sabe ni tiene que saber cuáles se leen. Saltarse una del
+    /// medio no se puede decir, y no hace falta: lo que no se lee no cuesta nada.</para>
+    /// </remarks>
+    int EscriturasOpcionales => 0;
+
     /// <summary>Qué llave de idempotencia pide: ninguna, la de <c>llave</c> o la de <c>llave_base</c>.</summary>
     LlaveRequerida Llave { get; }
 

@@ -383,9 +383,14 @@ public static class FlowValidator
                 {
                     errores.Add($"el paso «{paso.Id}» declara {paso.Lee.Count} lectura(s) y «{paso.Tipo}» lee {tipo.Lecturas}.");
                 }
-                if (tipo.Escrituras != paso.Escribe.Count)
+                // Las últimas opcionales se pueden no nombrar (NB-5): un paso que ahora dice algo más no deja sin
+                // arrancar a las definiciones que ya lo usaban. Más nombres de los que produce, nunca.
+                if (paso.Escribe.Count > tipo.Escrituras || paso.Escribe.Count < tipo.Escrituras - tipo.EscriturasOpcionales)
                 {
-                    errores.Add($"el paso «{paso.Id}» declara {paso.Escribe.Count} escritura(s) y «{paso.Tipo}» produce {tipo.Escrituras}.");
+                    errores.Add(tipo.EscriturasOpcionales == 0
+                        ? $"el paso «{paso.Id}» declara {paso.Escribe.Count} escritura(s) y «{paso.Tipo}» produce {tipo.Escrituras}."
+                        : $"el paso «{paso.Id}» declara {paso.Escribe.Count} escritura(s) y «{paso.Tipo}» produce {tipo.Escrituras}, "
+                          + $"de las que las últimas {tipo.EscriturasOpcionales} se pueden no nombrar.");
                 }
 
                 var llave = tipo.Llave switch

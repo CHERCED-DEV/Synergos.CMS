@@ -25,8 +25,11 @@ public sealed class PasosYDeshacerTests
         public Money Devolvible { get; set; } = Money.Of(1000m, "COP");
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Hacer("rs-1", $"hallar {sujeto}");
-        public Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
-            => Hacer("bh-1", $"apartar {llave.Value}");
+        /// <summary>Cuándo vence el apartado falso (NB-5 de 011).</summary>
+        public static readonly DateTimeOffset Vence = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
+
+        public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
+            => (await Hacer("bh-1", $"apartar {llave.Value}")).Map(id => new Apartado(id, Vence));
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Hacer("rv-1", $"confirmar {llave.Value}");
         public Task<Result<string>> LiberarAsync(string apartado, CancellationToken ct) => Hacer(apartado, $"liberar {apartado}");
         public Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct) => Hacer(reserva, $"cancelar {reserva}");
@@ -84,7 +87,8 @@ public sealed class PasosYDeshacerTests
 
         Assert.Equal("apartar cita-1|hold", Assert.Single(agenda.Llamadas));
         Assert.Equal(new Reservado("bh-1"), salida.Reservado);
-        Assert.Equal(new object?[] { "bh-1" }, salida.Valores);
+        // El apartado y cuándo vence (NB-5): la definición nombra los que lee, en orden.
+        Assert.Equal(new object?[] { "bh-1", Agenda.Vence }, salida.Valores);
     }
 
     [Fact]

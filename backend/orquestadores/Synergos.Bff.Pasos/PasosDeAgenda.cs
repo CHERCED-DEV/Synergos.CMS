@@ -31,8 +31,8 @@ public sealed class PasoAgendaHallar(IBookingPort agenda) : IPaso
 }
 
 /// <summary>
-/// <c>booking.apartar</c>: lee el recurso, la ventana y para quién; aparta y escribe el apartado. RESERVA,
-/// una vez por saga, con llave FIJA.
+/// <c>booking.apartar</c>: lee el recurso, la ventana y para quién; aparta y escribe el apartado y —si la
+/// definición lo nombra— cuándo vence (<c>instante</c>). RESERVA, una vez por saga, con llave FIJA.
 /// </summary>
 /// <remarks>
 /// Lo reservado se deshace soltando el apartado (<c>booking.liberar</c>); una vez confirmado, cancelando la
@@ -42,9 +42,10 @@ public sealed class PasoAgendaApartar(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -70,9 +71,10 @@ public sealed class PasoAgendaApartarPorItem(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar-por-item";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.PorItem;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -137,9 +139,10 @@ public sealed class PasoAgendaApartarPorIndice(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar-por-indice";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.PorItem;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -203,11 +206,15 @@ public static class PasosDeAgenda
             ? i.ToString(CultureInfo.InvariantCulture)
             : throw new InvalidOperationException($"El paso «{entrada.Paso.Id}» ({entrada.Paso.Tipo}) va por posición y no está dentro de un bloque.");
 
+    /// <remarks>
+    /// Escribe el apartado y, si la definición lo nombra, cuándo vence (NB-5 de 011, NV-12 de 006): la pantalla
+    /// sólo puede decir cuánto tiempo queda si lo dice el servidor.
+    /// </remarks>
     internal static async Task<SalidaDePaso> ApartarAsync(IBookingPort agenda, EntradaDePaso entrada, IdempotencyKey llave, CancellationToken ct)
     {
         var apartado = await agenda.ApartarAsync(entrada.Lee<string>(0), entrada.Lee<TimeWindow>(1), entrada.Lee<Ref>(2), llave, ct);
         return apartado.IsOk
-            ? SalidaDePaso.Reserva(new Reservado(apartado.Value), apartado.Value)
+            ? SalidaDePaso.Reserva(new Reservado(apartado.Value.Id), apartado.Value.Id, apartado.Value.Vence)
             : SalidaDePaso.Rechaza(apartado.Rejection!);
     }
 

@@ -185,9 +185,9 @@ public sealed class PuertosHttp : CapabilityClients,
     async Task<Result<string>> IBookingPort.HallarAsync(Ref sujeto, CancellationToken ct)
         => (await HallarRecursoAsync(sujeto, ct)).Map(r => r.Id);
 
-    async Task<Result<string>> IBookingPort.ApartarAsync(
+    async Task<Result<Apartado>> IBookingPort.ApartarAsync(
         string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
-        => (await ApartarVentanaAsync(recurso, ventana, paraQuien, llave, ct)).Map(h => h.Id);
+        => (await ApartarVentanaAsync(recurso, ventana, paraQuien, llave, ct)).Map(h => new Apartado(h.Id, h.ExpiresAt));
 
     async Task<Result<string>> IBookingPort.ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct)
         => (await ConfirmarApartadoAsync(apartado, llave, ct)).Map(r => r.Id);
@@ -336,7 +336,7 @@ public sealed record ApartadoDto(string Id);
 public sealed record CobroDto(string Id, DineroDto Refundable);
 public sealed record EntregaDto(string Id);
 public sealed record RecursoDto(string Id);
-public sealed record ApartadoDeAgendaDto(string Id);
+public sealed record ApartadoDeAgendaDto(string Id, DateTimeOffset ExpiresAt);
 public sealed record ReservaDto(string Id);
 public sealed record PermisoDto(string Id);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);

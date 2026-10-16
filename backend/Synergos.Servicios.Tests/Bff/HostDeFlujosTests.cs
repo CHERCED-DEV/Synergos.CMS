@@ -153,8 +153,11 @@ public sealed class HostDeFlujosTests
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Ok("rs-1", $"hallar {sujeto}");
         public Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-1", $"permiso {proposito}");
-        public Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
-            => Ok("bh-1", $"apartar {recurso} {llave.Value}");
+        /// <summary>Cuándo vence el apartado falso: lo que <c>booking.apartar</c> escribe si la definición lo nombra.</summary>
+        public static readonly DateTimeOffset VenceElApartado = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
+
+        public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
+            => (await Ok("bh-1", $"apartar {recurso} {llave.Value}")).Map(id => new Apartado(id, VenceElApartado));
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Ok("rv-1", $"confirmar {apartado}");
         public Task<Result<string>> AutorizarAsync(Ref paraQue, Ref pagador, Money monto, IdempotencyKey llave, CancellationToken ct)
         {
@@ -327,6 +330,32 @@ public sealed class HostDeFlujosTests
 
         Assert.Contains(errores, e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
         Assert.Throws<InvalidOperationException>(() => banco.Fachada());
+    }
+
+    [Fact]
+    public async Task El_apartado_dice_cuando_vence_si_la_definicion_lo_nombra()
+    {
+        // NB-5 de 011 y NV-12 de 006: la pantalla sólo puede decir cuánto tiempo queda si lo dice el servidor.
+        // La escritura nueva es OPCIONAL: la cita de arriba la ignora y sigue arrancando (todo este fichero).
+        var conVence = Mutar("\"escribe\": [\"apartadoId\"], \"llave\": \"hold\"", "\"escribe\": [\"apartadoId\", \"vence\"], \"llave\": \"hold\"")
+            .Replace("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"cobroId\", \"reservaId\", \"vence\"]", StringComparison.Ordinal);
+        Assert.Contains("\"reservaId\", \"vence\"]", conVence, StringComparison.Ordinal);
+
+        using (var banco = new Banco(conVence))
+        {
+            Assert.Empty(banco.Errores());
+            var abierta = await banco.Fachada().AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+
+            var vence = abierta.Value.Datos["vence"];
+            Assert.Equal("instante", vence.Tipo.TrimEnd('?'));
+            Assert.Equal(Falsos.VenceElApartado, DateTimeOffset.Parse(vence.Valor!.Value.GetString()!, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        foreach (var escribe in new[] { "[]", "[\"apartadoId\", \"vence\", \"otro\"]" })
+        {
+            using var mal = new Banco(Mutar("\"escribe\": [\"apartadoId\"], \"llave\": \"hold\"", $"\"escribe\": {escribe}, \"llave\": \"hold\""));
+            Assert.Contains(mal.Errores(), e => e.Contains("«booking.apartar» produce 2, de las que las últimas 1 se pueden no nombrar", StringComparison.Ordinal));
+        }
     }
 
     [Fact]
