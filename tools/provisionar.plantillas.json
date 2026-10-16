@@ -15,5 +15,12 @@
     "channel": "Email",
     "subject": "Las entradas de tu compra {numero} están listas",
     "body": "<p>Hola {nombre}:</p><p>Tu compra <b>{numero}</b> en {sitio} quedó confirmada. Total cobrado: <b>{total}</b>.</p><p>Las entradas, con su código QR, están en <a href=\"{enlace}\">{enlace}</a>. Cada asistente necesita la suya para entrar el día del evento: si compraste para otras personas, compártele a cada una la suya.</p><p>Si una de ellas es tuya, también aparece en «Mis entradas» cuando inicias sesión.</p>"
+  },
+  {
+    "_": "El aviso al comprador de la tienda (004-tienda-compra): lo manda el paso notifications.avisar al final de «cerrar» en tienda.compra —después de cobrar, despachar y cumplir el pedido—, a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDeLaCompraDeTiendaTests los cruza en los dos sentidos. Las líneas NO van en el correo (el paso no las manda; N-10 al núcleo): están detrás del enlace, que abre la compra en la tienda. No promete fechas de entrega ni dice cómo devolver: la entrega la sabe la transportadora, y la devolución se pide desde «Mis compras».",
+    "key": "tienda.compra.confirmada",
+    "channel": "Email",
+    "subject": "Tu compra {numero} quedó confirmada",
+    "body": "<p>Hola {nombre}:</p><p>Tu compra <b>{numero}</b> en {sitio} quedó confirmada y su envío quedó registrado con la transportadora. Total cobrado: <b>{total}</b>.</p><p>Lo que compraste está en <a href=\"{enlace}\">{enlace}</a>.</p>"
   }
 ]
