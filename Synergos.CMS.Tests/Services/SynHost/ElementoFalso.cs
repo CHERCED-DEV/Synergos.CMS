@@ -68,6 +68,24 @@ internal static class ElementoFalso
     }
 
     /// <summary>
+    /// Una página del árbol (lo que devuelve un <c>Umbraco.ContentPicker</c>) con su <c>Key</c>, su nombre y estas
+    /// propiedades (011-booking-reserva: la ficha de un servicio reservable).
+    /// </summary>
+    public static IPublishedContent Ficha(Guid key, string nombre, params (string Alias, object? Valor)[] valores)
+    {
+        var propiedades = valores.Select(v => (v.Alias, Propiedad: Propiedad(v.Alias, v.Valor))).ToList();
+        var ficha = Substitute.For<IPublishedContent>();
+        ficha.Key.Returns(key);
+        ficha.Name.Returns(nombre);
+        foreach (var (alias, propiedad) in propiedades)
+        {
+            ficha.GetProperty(alias).Returns(propiedad);
+        }
+
+        return ficha;
+    }
+
+    /// <summary>
     /// El proveedor de URLs: la de un medio es su <c>umbracoFile</c>, tal cual, en cualquier modo
     /// (los tests que miran el modo lo comprueban con <c>Received</c>).
     /// </summary>

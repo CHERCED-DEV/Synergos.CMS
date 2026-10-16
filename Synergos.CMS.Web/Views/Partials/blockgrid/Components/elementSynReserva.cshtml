@@ -1,0 +1,10 @@
+@model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
+@*
+    <synergos-flujo> envuelve la reserva de un servicio (011-booking-reserva, ADR 0140 decisión 6 · F4): el
+    coordinador sin render que la lleva a la puerta. La CLAVE la pone el servidor, no el bundle, y
+    CoordinadorDelFlujoEnLasVistasTests la cruza con la tabla de la puerta y con Synergos:Puerta:Flujos. El style
+    en línea es para antes de que el bundle defina la etiqueta.
+*@
+<synergos-flujo flujo="reservas.servicio" style="display:contents">
+    @await Html.PartialAsync("SynHost/Reserva", Model.Content)
+</synergos-flujo>
