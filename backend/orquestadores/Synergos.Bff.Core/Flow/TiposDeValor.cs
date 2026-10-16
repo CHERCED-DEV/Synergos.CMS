@@ -85,12 +85,14 @@ public sealed class TiposDeValor
     public ITipoDeValor? PorClr(Type clr) => _tipos.Values.FirstOrDefault(t => t.Clr == clr);
 
     /// <summary>El tipo de un nombre declarado (<c>dinero?</c>), o <c>null</c> si nadie lo registró.</summary>
-    public TipoResuelto? Resolver(string declarado)
+    /// <param name="declarado">El nombre, con <c>?</c> si es anulable.</param>
+    /// <param name="clase">Si es una referencia del cuerpo, la clase que admite (<see cref="TipoDeCampo.Clase"/>).</param>
+    public TipoResuelto? Resolver(string declarado, string? clase = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(declarado);
         var anulable = declarado.EndsWith('?');
         var nombre = anulable ? declarado[..^1] : declarado;
-        return _tipos.TryGetValue(nombre, out var tipo) ? new TipoResuelto(tipo, anulable) : null;
+        return _tipos.TryGetValue(nombre, out var tipo) ? new TipoResuelto(tipo, anulable, clase) : null;
     }
 
     /// <summary>
@@ -100,7 +102,7 @@ public sealed class TiposDeValor
     /// <exception cref="FormatException">Si no es una lista de objetos con esos campos y sus tipos.</exception>
     /// <exception cref="InvalidOperationException">Si un campo declara un tipo que nadie registró: el
     /// validador lo habría impedido al arrancar.</exception>
-    public IReadOnlyList<FlowContext> LeerLista(JsonElement valor, IReadOnlyDictionary<string, string> campos, string donde)
+    public IReadOnlyList<FlowContext> LeerLista(JsonElement valor, IReadOnlyDictionary<string, TipoDeCampo> campos, string donde)
     {
         ArgumentNullException.ThrowIfNull(campos);
         if (valor.ValueKind != JsonValueKind.Array) throw Json.Mal(donde, "una lista");
@@ -124,7 +126,7 @@ public sealed class TiposDeValor
     }
 
     /// <summary>El esquema de una lista de ítems con <paramref name="campos"/>.</summary>
-    public JsonObject EsquemaDeLista(IReadOnlyDictionary<string, string> campos)
+    public JsonObject EsquemaDeLista(IReadOnlyDictionary<string, TipoDeCampo> campos)
     {
         ArgumentNullException.ThrowIfNull(campos);
         var props = new JsonObject();
@@ -143,18 +145,24 @@ public sealed class TiposDeValor
         };
     }
 
-    private TipoResuelto Requerir(string declarado)
-        => Resolver(declarado) ?? throw new InvalidOperationException($"Nadie registró el tipo de valor «{declarado}».");
+    private TipoResuelto Requerir(TipoDeCampo declarado)
+        => Resolver(declarado.Tipo, declarado.Clase)
+           ?? throw new InvalidOperationException($"Nadie registró el tipo de valor «{declarado.Tipo}».");
 }
 
 /// <summary>Un tipo con su anulabilidad: lo que una definición declara para un valor.</summary>
-public sealed record TipoResuelto(ITipoDeValor Tipo, bool Anulable)
+/// <param name="Tipo">El tipo de valor.</param>
+/// <param name="Anulable">Si admite <c>null</c> o la ausencia.</param>
+/// <param name="Clase">Si es una referencia con clase declarada, la única que lee (<see cref="TipoDeCampo.Clase"/>).</param>
+public sealed record TipoResuelto(ITipoDeValor Tipo, bool Anulable, string? Clase = null)
 {
     /// <summary>El nombre como lo declara una definición.</summary>
+    /// <remarks>Sin la clase: es también como se guarda el valor en la saga, y así se vuelve a resolver.</remarks>
     public string Declarado => Anulable ? Tipo.Nombre + "?" : Tipo.Nombre;
 
     /// <summary>El valor desde JSON; <c>null</c> (o ausente) sólo si es anulable.</summary>
-    /// <exception cref="FormatException">Si falta, es nulo sin ser anulable, o no tiene la forma.</exception>
+    /// <exception cref="FormatException">Si falta, es nulo sin ser anulable, no tiene la forma, o es una
+    /// referencia de otra clase que la declarada.</exception>
     public object? Leer(JsonElement? valor, string donde)
     {
         if (valor is not { } v || v.ValueKind == JsonValueKind.Null)
@@ -163,16 +171,21 @@ public sealed record TipoResuelto(ITipoDeValor Tipo, bool Anulable)
         }
 
         var leido = Tipo.Leer(v, donde);
+        if (Clase is not null && leido is Ref r && !string.Equals(r.Kind, Clase, StringComparison.Ordinal))
+        {
+            throw new FormatException($"{donde}.kind: tiene que ser «{Clase}».");
+        }
         return Anulable && leido is string s && string.IsNullOrWhiteSpace(s) ? null : leido;
     }
 
     /// <summary>El valor como JSON; <c>null</c> para el nulo.</summary>
     public JsonNode? Escribir(object? valor) => valor is null ? null : Tipo.Escribir(valor);
 
-    /// <summary>El esquema, con <c>null</c> admitido si es anulable.</summary>
+    /// <summary>El esquema, con <c>null</c> admitido si es anulable y la clase como único <c>kind</c> si la declara.</summary>
     public JsonObject Esquema()
     {
         var esquema = Tipo.Esquema();
+        if (Clase is not null && esquema["properties"]?["kind"] is JsonObject kind) kind["enum"] = new JsonArray(Clase);
         if (!Anulable) return esquema;
 
         // Un escalar anulable lleva "null" en su `type`; un objeto, un oneOf: es lo que el suelo del
@@ -321,6 +334,7 @@ public sealed partial class Instante : ITipoDeValor
 }
 
 /// <summary><c>ref</c>: <c>{ kind, id }</c>, las dos partes no vacías.</summary>
+/// <remarks>Qué <c>kind</c> admite lo dice la definición (<see cref="TipoResuelto.Clase"/>), no este tipo.</remarks>
 public sealed class TipoRef : ITipoDeValor
 {
     public string Nombre => "ref";
