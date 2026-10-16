@@ -111,7 +111,16 @@ public sealed class FlujosController : ControllerBase
             if (grande is not null) return Fallo(grande);
         }
 
-        var sujeto = LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, miembro);
+        // El sujeto es el miembro, o —si el flujo lo declara— el seudónimo del correo de la sesión (NE-4).
+        var porCorreo = SujetoDeLaPuerta.Normalizar(ajustes.SujetoDe) == SujetoDeLaPuerta.Correo;
+        if (porCorreo && _miembro.CurrentMemberEmail is not { Length: > 0 })
+        {
+            return Fallo(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida",
+                "Hace falta una sesión con correo."));
+        }
+        var sujeto = porCorreo
+            ? LoQuePoneLaPuerta.SujetoPorCorreo(ajustes.SujetoKind ?? string.Empty, _miembro.CurrentMemberEmail!)
+            : LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, miembro);
         var cabeceras = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (op.LargoDeLaLlave is not null)
         {

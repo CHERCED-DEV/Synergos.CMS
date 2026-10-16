@@ -451,6 +451,46 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal(["Idempotency-Key", "X-Synergos-Negocio", "X-Synergos-Sujeto"], cabeceras.Keys.Order(StringComparer.Ordinal));
     }
 
+    // ── El sujeto por el correo de la sesión (núcleo N3, NE-4 de 007) ─────────────────────
+
+    private static FlujoDeLaPuertaSettings ConSujetoDe(FlujoDeLaPuertaSettings f, string sujetoDe) => new()
+    {
+        Acceso = f.Acceso, SujetoKind = f.SujetoKind, Negocio = f.Negocio, Aviso = f.Aviso, Camino = f.Camino, SujetoDe = sujetoDe,
+    };
+
+    [Fact]
+    public async Task Con_SujetoDe_correo_el_sujeto_es_el_seudonimo_del_correo_de_la_sesion()
+    {
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], " Correo ");
+
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+
+        var (_, _, cabeceras, _) = Assert.Single(_orquestador.Pedidos);
+        // El seudónimo, calculado aparte: SHA-256 del correo en minúsculas, sus primeros 16 hexadecimales.
+        var seudonimo = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("ana@ejemplo.co")))[..16]
+            .ToLowerInvariant();
+        Assert.Equal($"eventos.comprador:{seudonimo}", cabeceras["X-Synergos-Sujeto"]);
+        Assert.DoesNotContain(Ana.ToString("n"), cabeceras["X-Synergos-Sujeto"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Con_SujetoDe_correo_una_sesion_sin_correo_no_pasa_y_sin_declararlo_el_sujeto_es_el_miembro()
+    {
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], SujetoDeLaPuerta.Correo);
+        _miembro.CurrentMemberEmail.Returns((string?)null);
+
+        var r = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+
+        Assert.Equal(401, r.Estado);
+        Assert.Equal("puerta.sesion_requerida", r.Codigo);
+        Assert.Empty(_orquestador.Pedidos);
+
+        // El control: sin declararlo, la misma sesión sin correo pasa con su miembro.
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], "  ");
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+        Assert.Equal($"eventos.comprador:{Ana:n}", Assert.Single(_orquestador.Pedidos).Cabeceras["X-Synergos-Sujeto"]);
+    }
+
     [Fact]
     public async Task La_llave_se_reemite_atada_al_sujeto_y_cabe_en_la_de_una_saga()
     {
@@ -584,6 +624,7 @@ public sealed class FlujosControllerTests : IDisposable
         { "campo", "no es un campo de NegocioDeEventos" },
         { "ruta", "tiene que ser una ruta del sitio" },
         { "marcador", "la operación que avisa no lo trae" },
+        { "sujeto-de", "SujetoDe «documento» tiene que ser «miembro» o «correo»" },
     };
 
     [Theory]
@@ -600,6 +641,7 @@ public sealed class FlujosControllerTests : IDisposable
             "seccion" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Aviso = bien.Aviso, Negocio = new NegocioDelFlujoSettings { Seccion = "Evento", Campos = ["FeePercent"] } }),
             "campo" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Aviso = bien.Aviso, Negocio = new NegocioDelFlujoSettings { Seccion = "Eventos", Campos = ["Comision"] } }),
             "ruta" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "https://evil.test/x" } }),
+            "sujeto-de" => (Flujo, ConSujetoDe(bien, "documento")),
             _ => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "/compra?c={orden}" } }),
         };
 

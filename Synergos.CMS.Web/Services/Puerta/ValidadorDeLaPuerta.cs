@@ -59,6 +59,12 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
             RevisarNegocio(donde, ops, flujo.Negocio, errores);
             RevisarAviso(donde, ops, flujo.Aviso, errores);
 
+            if (SujetoDeLaPuerta.Normalizar(flujo.SujetoDe) is not (SujetoDeLaPuerta.Miembro or SujetoDeLaPuerta.Correo))
+            {
+                errores.Add($"{donde}:SujetoDe «{flujo.SujetoDe}» tiene que ser «{SujetoDeLaPuerta.Miembro}» o «{SujetoDeLaPuerta.Correo}», "
+                    + "o no estar (y el sujeto es el miembro).");
+            }
+
             // Mal escrito no se ignora: caería a la regla y el flujo iría por un camino que nadie eligió.
             if (!CaminoDelFlujo.EsValido(CaminoDelFlujo.Normalizar(flujo.Camino)))
             {

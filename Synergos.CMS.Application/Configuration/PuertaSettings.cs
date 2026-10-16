@@ -32,6 +32,13 @@ public sealed class FlujoDeLaPuertaSettings
     /// <summary>El <c>Kind</c> con que se nombra al sujeto (<c>eventos.comprador</c>); el id es el del miembro.</summary>
     public string? SujetoKind { get; init; }
 
+    /// <summary>
+    /// De qué sale el id del sujeto (núcleo N3, NE-4 de 007): <c>miembro</c> —la <c>MemberKey</c>, el valor por
+    /// defecto— o <c>correo</c>, el seudónimo del correo de la sesión, para un flujo que entrega algo a quien se
+    /// nombra por su correo (una credencial transferida).
+    /// </summary>
+    public string? SujetoDe { get; init; }
+
     /// <summary>Qué campos de qué sección de negocio adjunta, donde la operación los declara.</summary>
     public NegocioDelFlujoSettings? Negocio { get; init; }
 
@@ -67,6 +74,20 @@ public sealed class AvisoDelFlujoSettings
 {
     /// <summary>Ruta del sitio, con los parámetros de la operación entre llaves: <c>/eventos/?compra={id}</c>.</summary>
     public string? Ruta { get; init; }
+}
+
+/// <summary>De qué sale el id del sujeto que pone la puerta.</summary>
+public static class SujetoDeLaPuerta
+{
+    /// <summary>La <c>MemberKey</c> del miembro con sesión: el valor por defecto.</summary>
+    public const string Miembro = "miembro";
+
+    /// <summary>El seudónimo del correo de la sesión (el mismo que usa el resto del CMS para una persona).</summary>
+    public const string Correo = "correo";
+
+    /// <summary>Lo escrito, comparable: sin espacios y en minúsculas; vacío es el valor por defecto.</summary>
+    public static string Normalizar(string? valor)
+        => string.IsNullOrWhiteSpace(valor) ? Miembro : valor.Trim().ToLowerInvariant();
 }
 
 /// <summary>Quién puede pedir las operaciones de un flujo.</summary>
