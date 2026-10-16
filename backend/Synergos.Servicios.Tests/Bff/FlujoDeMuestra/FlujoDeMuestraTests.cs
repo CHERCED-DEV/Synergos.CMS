@@ -82,7 +82,13 @@ public sealed class FlujoDeMuestraTests
 
         private async Task Aprovisionar(decimal precio, bool conPlantilla)
         {
-            await Post("booking", "v1/resources", new { subjectKind = "muestra.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC" }, "agenda");
+            // Con franja de 30 y horario de 08 a 20 todos los días (NB-1/NB-2): la hora de la muestra cae en su grilla, y
+            // la lectura de disponibilidad tiene franjas que contar.
+            await Post("booking", "v1/resources", new
+            {
+                subjectKind = "muestra.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC", slotMinutes = 30,
+                opening = Enum.GetNames<DayOfWeek>().Select(d => new { day = d, from = "08:00", to = "20:00" }).ToArray(),
+            }, "agenda");
             await Post("pricing", "v1/prices", new
             {
                 subjectKind = "muestra.servicio", subjectId = "consulta", amount = new { amount = precio, currency = "COP" }, taxRateBasisPoints = 0,
@@ -138,6 +144,10 @@ public sealed class FlujoDeMuestraTests
             peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
             return Enviar(peticion);
         }
+
+        /// <summary>La lectura de disponibilidad, SIN sujeto: la pide quien todavía no inició sesión (NB-3).</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Disponibilidad(object cuerpo)
+            => Enviar(new HttpRequestMessage(HttpMethod.Post, "v1/flujos/muestra.cita/disponibilidad") { Content = JsonContent.Create(cuerpo) });
 
         public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string consulta = "", string? sujeto = "u-1")
         {
@@ -215,6 +225,36 @@ public sealed class FlujoDeMuestraTests
         Assert.Equal("Captured", (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
         var avisos = (await m.Leer("notifications", "v1/deliveries?toKind=muestra.paciente&toId=u-1")).GetProperty("items");
         Assert.Equal(1, avisos.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task La_disponibilidad_la_ve_un_invitado_y_cuenta_lo_que_la_agenda_ya_aparto()
+    {
+        // NB-3 de 011: quien reserva quiere ver las horas antes de iniciar sesión. Sin sujeto, sin saga y sin apartar
+        // nada; la hora que otra cita ya apartó sale llena, porque lo libre lo cuenta la agenda real.
+        await using var m = await Muestra.Arrancar();
+        var (abrio, abierta) = await m.Abrir("cita-1");
+        Assert.True(abrio == HttpStatusCode.Created, abierta.ToString());
+
+        var (estado, lectura) = await m.Disponibilidad(new
+        {
+            profesional = new { kind = "muestra.profesional", id = "dra-1" },
+            desde = Inicio.AddHours(-1),
+            hasta = Inicio.AddHours(1),
+        });
+
+        Assert.True(estado == HttpStatusCode.OK, lectura.ToString());
+        Assert.Equal("muestra.cita", lectura.GetProperty("flujo").GetString());
+        var franjas = lectura.GetProperty("datos").GetProperty("franjas").EnumerateArray()
+            .Select(f => (f.GetProperty("inicio").GetDateTimeOffset(), f.GetProperty("libres").GetInt32()))
+            .ToList();
+        Assert.Equal(new[] { (Inicio.AddHours(-1), 1), (Inicio.AddMinutes(-30), 1), (Inicio, 0), (Inicio.AddMinutes(30), 1) }, franjas);
+
+        var (otraClase, problema) = await m.Disponibilidad(new
+        {
+            profesional = new { kind = "muestra.paciente", id = "dra-1" }, desde = Inicio, hasta = Inicio.AddHours(1),
+        });
+        Assert.Equal((HttpStatusCode.BadRequest, "muestra.entrada_invalida"), (otraClase, problema.GetProperty("code").GetString()));
     }
 
     [Fact]

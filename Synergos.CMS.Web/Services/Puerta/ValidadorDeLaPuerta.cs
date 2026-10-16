@@ -58,6 +58,7 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
 
             RevisarNegocio(donde, ops, flujo.Negocio, errores);
             RevisarAviso(donde, ops, flujo.Aviso, errores);
+            RevisarInvitado(donde, ops, flujo, errores);
 
             foreach (var aviso in flujo.EnVivo)
             {
@@ -112,6 +113,33 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
         foreach (var campo in negocio.Campos.Where(c => LoQuePoneLaPuerta.Propiedad(tipo, c) is null))
         {
             errores.Add($"{donde}:Negocio:Campos «{campo}» no es un campo de {tipo.Name}.");
+        }
+    }
+
+    /// <summary>
+    /// Lo que se abre a quien no inició sesión (NB-3 de 011): sólo una operación que no pone sujeto, ni llave, ni
+    /// contacto. Lo dice el CONTRATO del orquestador, no un nombre: una operación de alguien no se vuelve de nadie
+    /// porque la configuración la liste.
+    /// </summary>
+    private static void RevisarInvitado(string donde, IReadOnlyList<OperacionDeLaPuerta> ops, FlujoDeLaPuertaSettings flujo, List<string> errores)
+    {
+        foreach (var operacion in flujo.Invitado)
+        {
+            var op = ops.FirstOrDefault(o => string.Equals(o.Operacion, operacion, StringComparison.Ordinal));
+            if (op is null)
+            {
+                errores.Add($"{donde}:Invitado abre «{operacion}», que no es una operación del flujo.");
+            }
+            else if (op.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto) || op.Declara(LoQuePoneLaPuerta.CabeceraDelContacto)
+                     || op.LargoDeLaLlave is not null)
+            {
+                errores.Add($"{donde}:Invitado abre «{operacion}», que pone un sujeto, una llave o un contacto: a quien no inició "
+                    + "sesión sólo se le abre una lectura sin dueño.");
+            }
+        }
+        if (flujo.FrenoPorMinuto is <= 0)
+        {
+            errores.Add($"{donde}:FrenoPorMinuto es {flujo.FrenoPorMinuto}: con eso no pasaría nadie. O un número de veces por minuto, o no estar.");
         }
     }
 

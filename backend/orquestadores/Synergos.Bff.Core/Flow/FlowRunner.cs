@@ -286,6 +286,36 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         return Result.Ok(corrida.Ctx);
     }
 
+    /// <summary>
+    /// Corre una lectura sin saga (núcleo, NB-3 de 011): sus pasos en orden, sobre lo que entra, y devuelve el
+    /// contexto. No escribe nada en ningún sitio —ni saga, ni turno, ni compensación—, como anticipar.
+    /// </summary>
+    /// <param name="lectura">El nombre de la lectura en la definición.</param>
+    /// <param name="entrada">Lo que pone la fachada: su entrada declarada.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El contexto tras el último paso, o el rechazo ORIGINAL del paso que falló.</returns>
+    /// <remarks>
+    /// Que sus pasos no escriban en ninguna capacidad lo dijo el validador al arrancar
+    /// (<see cref="FlowValidator"/>): ninguno reserva, cierra, pide llave ni avisa. Por eso puede correr sin dueño.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si la definición no declara esa lectura.</exception>
+    public async Task<Result<FlowContext>> LeerAsync(string lectura, FlowContext entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var definicion = _flujo.LecturasDeclaradas.GetValueOrDefault(lectura)
+            ?? throw new InvalidOperationException($"El flujo «{_flujo.Clave}» no declara la lectura «{lectura}».");
+
+        var corrida = new Corrida(string.Empty, Ref.Create(_flujo.Clave, lectura), entrada, saga: null);
+        foreach (var id in definicion.Pasos)
+        {
+            var desenlace = await PasoAsync(_flujo.Pasos[id], corrida, null, null, null, ct);
+            if (desenlace.Rechazo is { } rechazo) return Result.Rejected<FlowContext>(rechazo);
+            if (desenlace.Control == PasoResultado.SaltarFase) break;
+        }
+
+        return Result.Ok(corrida.Ctx);
+    }
+
     /// <summary>Lo que contesta una fase que no consiguió el turno de su saga.</summary>
     private static Rejection SinTurno(string fase, string sagaId)
         => Rejection.Unavailable(Ocupada,

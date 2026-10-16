@@ -26,6 +26,9 @@ public sealed record RespuestaDeFlujo(
 /// <summary>Lo que costaría abrir, sin reservar nada: la salida que el flujo ya tiene antes de reservar.</summary>
 public sealed record CotizacionDeFlujo(string Flujo, IReadOnlyDictionary<string, JsonElement?> Datos);
 
+/// <summary>Lo que devuelve una lectura sin saga (núcleo, NB-3 de 011): su salida, con sus tipos.</summary>
+public sealed record LecturaDeFlujo(string Flujo, IReadOnlyDictionary<string, JsonElement?> Datos);
+
 /// <summary>Una compensación pendiente de una saga genérica: la vista de operación.</summary>
 public sealed record CompensacionDeFlujo(
     string SagaId, string Flujo, string Kind, string Reason, int Attempts, DateTimeOffset? NextAttemptUtc,
@@ -43,7 +46,10 @@ public sealed record PaginaDeFlujo<T>(IReadOnlyList<T> Items, int Total, int Off
 /// <param name="Datos">El esquema de <c>datos</c> en la respuesta.</param>
 /// <param name="NombreDelCuerpo">Cómo se publica el cuerpo si no es la entrada del flujo: el de una fase que
 /// continúa (<c>TiendaCompraCerrarEntrada</c>). Nulo: <c>{Nombre}Entrada</c>, el de abrir y cotizar.</param>
-public sealed record ContratoDeLaOperacion(string Nombre, JsonObject? Cuerpo, JsonObject Datos, string? NombreDelCuerpo = null);
+/// <param name="NombreDeLaRespuesta">Cómo se publica la respuesta de una lectura sin saga
+/// (<c>ReservasServicioDisponibilidad</c>: <c>{ flujo, datos }</c>). Nulo: la de la saga, la cotización o la página.</param>
+public sealed record ContratoDeLaOperacion(
+    string Nombre, JsonObject? Cuerpo, JsonObject Datos, string? NombreDelCuerpo = null, string? NombreDeLaRespuesta = null);
 
 /// <summary>Un flujo genérico registrado en el host: lo que el mapeo por convención necesita de él.</summary>
 public sealed record FlujoGenerico(
@@ -179,6 +185,8 @@ public static class MapeoDeFlujos
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
           .EnLaPuerta(clave, "listar");
 
+        foreach (var lectura in def.LecturasDeclaradas.Values) MapLectura(app, f, nombre, lectura);
+
         foreach (var fase in def.Fases.Skip(1).Select(x => x.Nombre))
         {
             var efimera = def.EfimeraDe(fase);
@@ -214,6 +222,39 @@ public static class MapeoDeFlujos
             string id, CancellationToken ct) => (await f.Fachada.ReintentarAsync(id, ct)).Map(s => Respuesta(f, s)).ToHttp())
             .WithName($"{nombre}Reintentar")
             .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos));
+    }
+
+    /// <summary>
+    /// Una lectura sin saga (núcleo, NB-3 de 011): <c>POST /v1/flujos/{clave}/{lectura}</c> con su entrada en el
+    /// cuerpo, SIN sujeto —la pide quien todavía no inició sesión—, marcada en la puerta con su nombre.
+    /// </summary>
+    /// <remarks>
+    /// POST y no GET, como cotizar: la entrada tiene tipos (una referencia es un objeto) y viaja en el cuerpo, con
+    /// el mismo lector estricto que abrir. Sólo lleva la cabecera del negocio si su entrada la usa.
+    /// </remarks>
+    private static void MapLectura(IEndpointRouteBuilder app, FlujoGenerico f, string nombre, LecturaDef lectura)
+    {
+        var clave = f.Definicion.Clave;
+        var propio = $"{nombre}{Pascal(lectura.Nombre)}";
+        var cuerpo = EsquemaDelCuerpo(f, lectura.Entrada);
+        var conNegocio = lectura.Entrada.Any(n => f.Definicion.Tipos![n].Origen == OrigenDelValor.Negocio);
+
+        async Task<Results<Ok<LecturaDeFlujo>, ProblemHttpResult>> LeerLaLectura(HttpRequest http, JsonElement? json, CancellationToken ct)
+        {
+            var entrada = new FlowContext();
+            if (Leer(f, http, json, lectura.Entrada, entrada) is { } mala) return mala;
+
+            var r = await f.Fachada.LeerAsync(lectura.Nombre, entrada, ct);
+            return r.Map(ctx => new LecturaDeFlujo(clave, DatosDe(f, ctx, lectura.Salida))).ToHttp();
+        }
+
+        var ruta = cuerpo is null
+            ? app.MapPost($"/v1/flujos/{clave}/{lectura.Nombre}", (HttpRequest http, CancellationToken ct) => LeerLaLectura(http, null, ct))
+            : app.MapPost($"/v1/flujos/{clave}/{lectura.Nombre}", (JsonElement json, HttpRequest http, CancellationToken ct) => LeerLaLectura(http, json, ct));
+        ruta.WithName(propio)
+            .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpo, EsquemaDeDatos(f, lectura.Salida), $"{propio}Entrada", propio))
+            .EnLaPuerta(clave, lectura.Nombre);
+        if (conNegocio) ruta.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
     }
 
     private static async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> ContinuarAsync(
@@ -375,7 +416,11 @@ public static class MapeoDeFlujos
 
     /// <summary>La salida que el contexto ya tiene, escrita con su tipo.</summary>
     private static IReadOnlyDictionary<string, JsonElement?> DatosDe(FlujoGenerico f, FlowContext ctx)
-        => f.Definicion.LoQueSale.ToDictionary(
+        => DatosDe(f, ctx, f.Definicion.LoQueSale);
+
+    /// <summary><paramref name="nombres"/> como los tiene el contexto, escritos con su tipo (la salida de una lectura).</summary>
+    private static IReadOnlyDictionary<string, JsonElement?> DatosDe(FlujoGenerico f, FlowContext ctx, IReadOnlyList<string> nombres)
+        => nombres.ToDictionary(
             n => n,
             n => ctx.Has(n) && f.Binding.TipoDe(n)?.Escribir(ctx.Get<object?>(n)) is { } json
                 ? JsonSerializer.SerializeToElement(json)
@@ -409,10 +454,13 @@ public static class MapeoDeFlujos
     }
 
     /// <summary>El esquema de <c>datos</c>: la salida con sus tipos, todos anulables (puede no haberse escrito aún).</summary>
-    private static JsonObject EsquemaDeDatos(FlujoGenerico f)
+    private static JsonObject EsquemaDeDatos(FlujoGenerico f) => EsquemaDeDatos(f, f.Definicion.LoQueSale);
+
+    /// <summary>El esquema de <c>datos</c> con <paramref name="nombres"/> (la salida del flujo o la de una lectura).</summary>
+    private static JsonObject EsquemaDeDatos(FlujoGenerico f, IReadOnlyList<string> nombres)
     {
         var props = new JsonObject();
-        foreach (var nombre in f.Definicion.LoQueSale)
+        foreach (var nombre in nombres)
         {
             var tipo = f.Binding.TipoDe(nombre)!;
             props[nombre] = (tipo with { Anulable = true }).Esquema();
@@ -420,7 +468,7 @@ public static class MapeoDeFlujos
         return new JsonObject
         {
             ["type"] = "object",
-            ["required"] = new JsonArray(f.Definicion.LoQueSale.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+            ["required"] = new JsonArray(nombres.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
             ["properties"] = props,
         };
     }

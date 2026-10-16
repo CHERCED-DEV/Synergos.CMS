@@ -29,6 +29,19 @@ public sealed class FlujoDeLaPuertaSettings
     /// <summary>Quién puede pedir sus operaciones. Hoy sólo <see cref="AccesoDeLaPuerta.Miembro"/>.</summary>
     public string? Acceso { get; init; }
 
+    /// <summary>
+    /// Las operaciones que se pueden pedir SIN sesión (núcleo, NB-3 de 011): sólo las que no ponen sujeto, llave ni
+    /// contacto —una lectura de disponibilidad—, y el arranque lo comprueba contra el contrato. Ver las horas antes de
+    /// iniciar sesión no aparta ni cobra nada; abrir una saga sigue pidiendo un miembro.
+    /// </summary>
+    public List<string> Invitado { get; init; } = [];
+
+    /// <summary>
+    /// Cuántas veces por minuto se puede pedir cada operación abierta a invitados, desde una misma IP o un mismo
+    /// miembro. Sin valor, <see cref="AccesoDeLaPuerta.FrenoPorDefecto"/>.
+    /// </summary>
+    public int? FrenoPorMinuto { get; init; }
+
     /// <summary>El <c>Kind</c> con que se nombra al sujeto (<c>eventos.comprador</c>); el id es el del miembro.</summary>
     public string? SujetoKind { get; init; }
 
@@ -119,4 +132,7 @@ public static class AccesoDeLaPuerta
 {
     /// <summary>Un miembro con sesión: el sujeto es su <c>MemberKey</c>.</summary>
     public const string Miembro = "Miembro";
+
+    /// <summary>Cuántas veces por minuto se pide una operación abierta a invitados si el flujo no lo dice.</summary>
+    public const int FrenoPorDefecto = 30;
 }

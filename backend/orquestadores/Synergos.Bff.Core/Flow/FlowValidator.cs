@@ -48,7 +48,8 @@ public static class FlowValidator
         RevisarTipos(flujo, registro, errores);
         var donde = RevisarOrden(flujo, contrato, errores);
 
-        foreach (var id in flujo.Pasos.Keys.Where(id => !donde.ContainsKey(id)).Order(StringComparer.Ordinal))
+        var enLecturas = flujo.LecturasDeclaradas.Values.SelectMany(l => l.Pasos).ToHashSet(StringComparer.Ordinal);
+        foreach (var id in flujo.Pasos.Keys.Where(id => !donde.ContainsKey(id) && !enLecturas.Contains(id)).Order(StringComparer.Ordinal))
         {
             errores.Add($"declara el paso «{id}» y ninguna fase lo nombra: suele ser un nombre mal escrito en la fase.");
         }
@@ -57,15 +58,105 @@ public static class FlowValidator
         RevisarAlFallar(flujo, donde, errores);
         RevisarOmitirSiCero(flujo, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
+        RevisarLecturas(flujo, registro, contrato, errores);
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
     }
 
     /// <summary>
     /// Los nombres de fase que chocarían con las rutas que el host mapea por convención, o con el nombre que
-    /// esas rutas llevan en la puerta (<c>listar</c>, NB-6: dos operaciones «listar» de un flujo).
+    /// esas rutas llevan en la puerta (<c>listar</c>, NB-6, y las lecturas, NB-3: dos operaciones con un nombre).
     /// </summary>
-    public static readonly IReadOnlyList<string> FasesReservadas = ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones", "listar"];
+    public static readonly IReadOnlyList<string> FasesReservadas =
+        ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones", "listar", "disponibilidad"];
+
+    /// <summary>
+    /// Los nombres que puede tener una lectura sin saga (núcleo, NB-3 de 011): son operaciones de la puerta, así que
+    /// la lista es cerrada y la comparten el orquestador, la puerta del CMS y el generador del UI.
+    /// </summary>
+    public static readonly IReadOnlyList<string> LecturasDeLaPuerta = ["disponibilidad"];
+
+    /// <summary>
+    /// Las lecturas sin saga (NB-3 de 011): lo que se ve antes de abrir, sin apartar ni cobrar nada, y sin dueño.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No escribe en ninguna capacidad</b>, y es lo que la deja abrirse a quien todavía no inició sesión:
+    /// ningún paso de una lectura reserva, cierra, pide llave, avisa ni sigue si falla. Uno con llave es uno que
+    /// escribe, como en <c>FlowRunner.AnticiparAsync</c>.</para>
+    ///
+    /// <para><b>Sin dueño</b>: su entrada viene del cuerpo o del negocio del sitio, nunca del sujeto ni del contacto
+    /// de la sesión. La pide un invitado; con un sujeto sería una operación de alguien.</para>
+    ///
+    /// <para><b>Lee lo que tiene</b>: cada paso lee lo que entra en la lectura o lo que escribió un paso anterior de
+    /// ELLA, no lo que una fase escribiría en una saga que no existe.</para>
+    /// </remarks>
+    private static void RevisarLecturas(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato, List<string> errores)
+    {
+        foreach (var lectura in flujo.LecturasDeclaradas.Values.OrderBy(l => l.Nombre, StringComparer.Ordinal))
+        {
+            var aqui = $"la lectura «{lectura.Nombre}»";
+            if (!LecturasDeLaPuerta.Contains(lectura.Nombre, StringComparer.Ordinal))
+            {
+                errores.Add($"{aqui} no es una lectura de la puerta ({string.Join(", ", LecturasDeLaPuerta)}): nadie podría pedirla.");
+            }
+            if (contrato.Tipos is not { } tipos)
+            {
+                errores.Add($"{aqui} necesita «tipos»: el host lee su entrada con ellos, y un flujo tipado no los declara.");
+                continue;
+            }
+            if (lectura.Pasos.Count == 0) errores.Add($"{aqui} no tiene pasos: no leería nada.");
+
+            var disponibles = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var nombre in lectura.Entrada)
+            {
+                var tipo = flujo.Tipos?.GetValueOrDefault(nombre);
+                if (tipo is null)
+                {
+                    errores.Add($"{aqui} recibe «{nombre}» y no declara su tipo en «tipos».");
+                }
+                else if (tipo.Origen is OrigenDelValor.Sujeto or OrigenDelValor.Contacto)
+                {
+                    errores.Add($"{aqui} recibe «{nombre}» del {tipo.Origen.ToString().ToLowerInvariant()}, y una lectura no tiene dueño "
+                        + "ni avisa: la pide quien todavía no inició sesión.");
+                }
+                disponibles.Add(nombre);
+            }
+
+            foreach (var id in lectura.Pasos)
+            {
+                if (!flujo.Pasos.TryGetValue(id, out var paso))
+                {
+                    errores.Add($"{aqui} nombra el paso «{id}», que no está declarado.");
+                    continue;
+                }
+                // Un tipo que pide llave obliga a declararla (RevisarTipos), así que mirar la llave declarada basta.
+                if (paso.Reserva is not null || paso.CierraReserva is not null || paso.Llave is not null || paso.LlaveBase is not null
+                    || paso.Plantilla is not null || paso.AlFallar is not null || paso.OmitirSiCero is not null)
+                {
+                    errores.Add($"{aqui} da el paso «{id}», que reserva, cierra, pide llave, avisa u omite: una lectura no escribe "
+                        + "en ninguna capacidad.");
+                }
+                foreach (var leido in paso.Lee.Where(n => !disponibles.Contains(n)))
+                {
+                    errores.Add($"{aqui}: «{id}» lee «{leido}», que ni entra en la lectura ni lo escribe un paso anterior de ella.");
+                }
+                foreach (var escrito in paso.Escribe) disponibles.Add(escrito);
+            }
+
+            if (lectura.Salida.Count == 0) errores.Add($"{aqui} no devuelve nada.");
+            foreach (var nombre in lectura.Salida)
+            {
+                if (!disponibles.Contains(nombre))
+                {
+                    errores.Add($"{aqui} devuelve «{nombre}», que ni entra ni lo escribe un paso de ella.");
+                }
+                else if (BindingDeFlujo.TipoDe(flujo, tipos, registro, nombre) is null)
+                {
+                    errores.Add($"{aqui} devuelve «{nombre}» y no se sabe su tipo: ni entra con tipo ni lo escribe un paso que declare el suyo.");
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Lo que no se guarda en una saga genérica por su NOMBRE: el mismo olfato que
@@ -98,12 +189,15 @@ public static class FlowValidator
             errores.Add($"«{nombre}» entra y no declara su tipo en «tipos»: el host no sabría de dónde leerlo ni cómo.");
         }
 
+        // Lo que entra en una lectura (NB-3) también se declara en «tipos»; sus reglas propias, en RevisarLecturas.
+        var deLecturas = flujo.LecturasDeclaradas.Values.SelectMany(l => l.Entrada).ToHashSet(StringComparer.Ordinal);
+
         foreach (var (nombre, tipo) in declarados.OrderBy(d => d.Key, StringComparer.Ordinal))
         {
             var esEntrada = flujo.Entrada.Contains(nombre, StringComparer.Ordinal);
-            if (!esEntrada && !efimeros.Contains(nombre))
+            if (!esEntrada && !efimeros.Contains(nombre) && !deLecturas.Contains(nombre))
             {
-                errores.Add($"declara el tipo de «{nombre}», que no es una entrada ni algo efímero.");
+                errores.Add($"declara el tipo de «{nombre}», que no es una entrada, ni algo efímero, ni lo que entra en una lectura.");
             }
 
             var valores = tipo.EsLista
@@ -134,7 +228,9 @@ public static class FlowValidator
                 case OrigenDelValor.Contacto when !efimeros.Contains(nombre) || esEntrada:
                     errores.Add($"«{nombre}» es el contacto del aviso y no es sólo efímero: un dato personal acabaría en la saga.");
                     break;
-                case OrigenDelValor.Sujeto or OrigenDelValor.Negocio when !esEntrada:
+                case OrigenDelValor.Negocio when !esEntrada && deLecturas.Contains(nombre):
+                    break;
+                case OrigenDelValor.Sujeto or OrigenDelValor.Negocio when !esEntrada && !deLecturas.Contains(nombre):
                     errores.Add($"«{nombre}» viene de la puerta ({tipo.Origen}) y no es una entrada: sólo la fase que abre lo recibe.");
                     break;
             }

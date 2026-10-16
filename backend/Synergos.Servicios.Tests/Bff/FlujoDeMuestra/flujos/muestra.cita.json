@@ -7,9 +7,14 @@
     "ventana": "ventana",
     "servicio": { "tipo": "ref", "kind": "muestra.servicio" },
     "promocion": "texto?",
-    "contacto": { "de": "contacto" }
+    "contacto": { "de": "contacto" },
+    "desde": "instante",
+    "hasta": "instante"
   },
   "salida": ["total", "reservaId"],
+  "lecturas": {
+    "disponibilidad": { "entrada": ["profesional", "desde", "hasta"], "pasos": ["hallar", "franjas"], "salida": ["franjas"] }
+  },
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
@@ -25,6 +30,7 @@
       "escribe": ["recursoId"],
       "motivo": "el profesional no tiene agenda"
     },
+    "franjas": { "tipo": "booking.franjas", "lee": ["recursoId", "desde", "hasta"], "escribe": ["franjas"] },
     "apartar": {
       "tipo": "booking.apartar",
       "lee": ["recursoId", "ventana", "paciente"],

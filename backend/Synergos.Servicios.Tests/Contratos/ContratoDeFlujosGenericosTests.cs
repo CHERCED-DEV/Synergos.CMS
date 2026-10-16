@@ -164,6 +164,26 @@ public sealed class ContratoDeFlujosGenericosTests
     }
 
     [Fact]
+    public async Task La_disponibilidad_va_a_la_puerta_sin_sujeto_y_publica_su_entrada_y_su_salida()
+    {
+        // NB-3: una lectura sin saga. Sin la cabecera del sujeto (la pide un invitado), con su propio cuerpo y su
+        // propia respuesta { flujo, datos }; el genérico no sale.
+        var doc = await Documento();
+        var leer = Op(doc, "/v1/flujos/muestra.cita/disponibilidad", "post");
+
+        Assert.Equal("""{"flujo":"muestra.cita","operacion":"disponibilidad"}""", leer["x-synergos-flujo"]!.ToJsonString());
+        Assert.DoesNotContain(leer["parameters"]?.AsArray() ?? [], p => (string?)p!["name"] == CabecerasDeLaPuerta.Sujeto);
+
+        var entrada = Esquema(doc, leer["requestBody"]!["content"]!["application/json"]!["schema"]);
+        Assert.Equal(["desde", "hasta", "profesional"], entrada["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        var salida = Esquema(doc, leer["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
+        var franjas = salida["properties"]!["datos"]!["properties"]!["franjas"]!;   // anulable, como toda la salida
+        Assert.Equal(["array", "null"], franjas["type"]!.AsArray().Select(t => (string)t!).Order(StringComparer.Ordinal));
+        Assert.Equal(["fin", "inicio", "libres"], franjas["items"]!["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("LecturaDeFlujo", doc["components"]!["schemas"]!.AsObject().Select(e => e.Key));
+    }
+
+    [Fact]
     public async Task Cerrar_cancelar_y_cotizar_van_a_la_puerta_y_lo_de_operacion_no()
     {
         var doc = await Documento();

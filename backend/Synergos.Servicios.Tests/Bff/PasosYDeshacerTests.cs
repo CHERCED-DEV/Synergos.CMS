@@ -31,6 +31,8 @@ public sealed class PasosYDeshacerTests
         public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
             => (await Hacer("bh-1", $"apartar {llave.Value}")).Map(id => new Apartado(id, Vence));
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Hacer("rv-1", $"confirmar {llave.Value}");
+        public Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+            => Task.FromResult(Result.Ok<IReadOnlyList<FranjaLibre>>([new FranjaLibre(desde, hasta, 1)]));
         public Task<Result<string>> LiberarAsync(string apartado, CancellationToken ct) => Hacer(apartado, $"liberar {apartado}");
         public Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct) => Hacer(reserva, $"cancelar {reserva}");
         public Task<Result<string>> AnularAsync(string cobro, CancellationToken ct) => Hacer(cobro, $"anular {cobro}");

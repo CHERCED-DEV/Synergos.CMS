@@ -190,6 +190,30 @@ public sealed class PasoAgendaLiberar(IDeshacerAgenda agenda) : IPaso
     }
 }
 
+/// <summary>
+/// <c>booking.franjas</c>: lee el recurso, desde y hasta (<c>instante</c>), y escribe sus franjas con lo libre de cada
+/// una (<c>franjas</c>; núcleo, NB-3 de 011, sobre NB-2). El paso de una lectura de disponibilidad.
+/// </summary>
+/// <remarks>
+/// Lee, no aparta: sin llave y sin reserva, que es lo que deja correrlo en una lectura sin saga y sin dueño. Que
+/// la franja siga libre al apartarla no lo promete nadie: lo dice apartar, con su regla y en su momento.
+/// </remarks>
+public sealed class PasoAgendaFranjas(IBookingPort agenda) : IPaso
+{
+    public string Tipo => "booking.franjas";
+    public int Lecturas => 3;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(IReadOnlyList<FranjaLibre>)];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var franjas = await agenda.FranjasAsync(entrada.Lee<string>(0), entrada.Lee<DateTimeOffset>(1), entrada.Lee<DateTimeOffset>(2), ct);
+        return franjas.IsOk ? SalidaDePaso.Sigue(franjas.Value) : SalidaDePaso.Rechaza(franjas.Rejection!);
+    }
+}
+
 /// <summary>Lo que comparten los pasos de agenda.</summary>
 public static class PasosDeAgenda
 {

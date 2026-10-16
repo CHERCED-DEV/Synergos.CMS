@@ -122,6 +122,22 @@ public sealed class HostDeFlujosTests
         }
         """;
 
+    /// <summary>
+    /// La cita con una lectura sin saga (núcleo, NB-3 de 011): sus horas libres, sin dueño. La entrada de la lectura
+    /// va en otro orden que lo que lee su paso, para que cada mutación nombre UNA de las dos.
+    /// </summary>
+    private static readonly string CitaConLectura = Cita
+        .Replace("\"contacto\": { \"de\": \"contacto\" }", "\"contacto\": { \"de\": \"contacto\" }, \"desde\": \"instante\", \"hasta\": \"instante\"", StringComparison.Ordinal)
+        .Replace("\"efimera\": {", "\"lecturas\": { \"disponibilidad\": { \"entrada\": [\"desde\", \"hasta\", \"recurso\"], \"pasos\": [\"franjas\"], \"salida\": [\"franjas\"] } },\n  \"efimera\": {", StringComparison.Ordinal)
+        .Replace("\"pasos\": {", "\"pasos\": {\n    \"franjas\": { \"tipo\": \"booking.franjas\", \"lee\": [\"recurso\", \"desde\", \"hasta\"], \"escribe\": [\"franjas\"] },", StringComparison.Ordinal);
+
+    private static string MutarLectura(string antes, string despues)
+    {
+        Assert.True(CitaConLectura.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la definición con lectura ya no dice «{antes}». Revisar este test antes que el host.");
+        return CitaConLectura.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
     private static readonly Ref Paciente = Ref.Create("prueba.paciente", "u-1");
     private static readonly TimeWindow Hora = TimeWindow.Of(
         new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 20, 15, 30, 0, TimeSpan.Zero));
@@ -163,6 +179,15 @@ public sealed class HostDeFlujosTests
         public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
             => (await Ok("bh-1", $"apartar {recurso} {llave.Value}")).Map(id => new Apartado(id, VenceElApartado));
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Ok("rv-1", $"confirmar {apartado}");
+
+        /// <summary>Dos franjas desde <c>desde</c>: una libre y una llena, para la lectura de disponibilidad (NB-3).</summary>
+        public Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+        {
+            Llamadas.Add($"franjas {recurso}");
+            Log?.LogInformation("Llamada {Llamada}", $"franjas {recurso}");
+            IReadOnlyList<FranjaLibre> franjas = [new(desde, desde.AddMinutes(30), 1), new(desde.AddMinutes(30), desde.AddMinutes(60), 0)];
+            return Task.FromResult(Result.Ok(franjas));
+        }
         public Task<Result<string>> AutorizarAsync(Ref paraQue, Ref pagador, Money monto, IdempotencyKey llave, CancellationToken ct)
         {
             Llamadas.Add($"autorizar {monto} {llave.Value}");
@@ -267,8 +292,9 @@ public sealed class HostDeFlujosTests
                 new PasoPagosCapturar(Puertos), new PasoAvisar(Puertos),
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
+                new PasoAgendaFranjas(Puertos),
             ]);
-            Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto()), Registro, deshacer.Tipos);
+            Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto(), new TipoFranjas()), Registro, deshacer.Tipos);
         }
 
         public Falsos Puertos { get; } = new();
@@ -436,6 +462,50 @@ public sealed class HostDeFlujosTests
             Assert.Equal("CITA1", l.Valores.GetValueOrDefault("NumeroDeSaga"));
             Assert.Contains("Saga:cita-1 Numero:CITA1", l.Textos);   // lo que imprime la consola, no el nombre de un tipo
         });
+    }
+
+    [Fact]
+    public async Task Una_lectura_corre_sin_saga_ni_dueno_y_devuelve_lo_que_declara()
+    {
+        // NB-3 de 011, el control: la definición con lectura arranca, y leer llama a la agenda y no escribe NADA en el
+        // almacén de sagas. Sin esto, la Theory de abajo pasaría también si toda lectura no arrancara.
+        using var banco = new Banco(CitaConLectura);
+        Assert.Empty(banco.Errores());
+        var desde = new DateTimeOffset(2026, 10, 20, 14, 0, 0, TimeSpan.Zero);
+
+        var leido = await banco.Fachada().LeerAsync("disponibilidad",
+            new FlowContext().Set("recurso", "rs-1").Set("desde", desde).Set("hasta", desde.AddHours(2)), CancellationToken.None);
+
+        Assert.True(leido.IsOk, leido.Rejection?.ToString());
+        Assert.Equal(new[] { 1, 0 }, leido.Value.Get<IReadOnlyList<FranjaLibre>>("franjas").Select(f => f.Libres));
+        Assert.Equal("franjas rs-1", Assert.Single(banco.Puertos.Llamadas));
+        var sagas = Path.Combine(banco.Raiz, "sagas");
+        Assert.False(Directory.Exists(sagas) && Directory.EnumerateFileSystemEntries(sagas).Any(), "Una lectura escribió en el almacén de sagas.");
+    }
+
+    public static TheoryData<string, string, string> LecturasMalDeclaradas() => new()
+    {
+        // un nombre que la puerta no conoce
+        { "\"disponibilidad\": {", "\"horas\": {", "no es una lectura de la puerta" },
+        // un sujeto en la entrada de una lectura: tendría dueño
+        { "\"entrada\": [\"desde\", \"hasta\", \"recurso\"]", "\"entrada\": [\"desde\", \"hasta\", \"recurso\", \"paciente\"]", "una lectura no tiene dueño" },
+        // un paso que aparta (con llave y reserva) dentro de la lectura
+        { "\"pasos\": [\"franjas\"]", "\"pasos\": [\"franjas\", \"apartar\"]", "una lectura no escribe en ninguna capacidad" },
+        // un paso de la lectura con llave y nada más: pedir llave es lo que hace un paso que escribe
+        { "\"escribe\": [\"franjas\"] }", "\"escribe\": [\"franjas\"], \"llave\": \"x\" }", "una lectura no escribe en ninguna capacidad" },
+        // un paso que lee algo que la lectura no tiene
+        { "\"entrada\": [\"desde\", \"hasta\", \"recurso\"]", "\"entrada\": [\"hasta\", \"recurso\"]", "«franjas» lee «desde», que ni entra en la lectura" },
+        // una salida que nadie escribe en la lectura
+        { "\"salida\": [\"franjas\"]", "\"salida\": [\"total\"]", "devuelve «total», que ni entra ni lo escribe un paso de ella" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LecturasMalDeclaradas))]
+    public void Una_lectura_mal_declarada_no_arranca(string antes, string despues, string mensaje)
+    {
+        using var banco = new Banco(MutarLectura(antes, despues));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
     }
 
     [Fact]

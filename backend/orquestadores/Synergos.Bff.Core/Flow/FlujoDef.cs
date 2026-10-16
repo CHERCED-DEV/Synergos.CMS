@@ -35,6 +35,7 @@ namespace Synergos.Bff.Core.Flow;
 /// </remarks>
 /// <param name="Tipos">Por nombre de la entrada o de lo efímero, su tipo y su origen. Opcional.</param>
 /// <param name="Salida">Lo que el flujo devuelve al abrir, consultar, cotizar y continuar. Opcional.</param>
+/// <param name="Lecturas">Las lecturas sin saga, por su nombre en la puerta (núcleo, NB-3 de 011). Opcional.</param>
 public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
@@ -42,8 +43,13 @@ public sealed record FlujoDef(
     IReadOnlyDictionary<string, PasoDef> Pasos,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? Efimera = null,
     IReadOnlyDictionary<string, TipoDeclarado>? Tipos = null,
-    IReadOnlyList<string>? Salida = null)
+    IReadOnlyList<string>? Salida = null,
+    IReadOnlyDictionary<string, LecturaDef>? Lecturas = null)
 {
+    /// <summary>Las lecturas: vacío si no declara ninguna.</summary>
+    public IReadOnlyDictionary<string, LecturaDef> LecturasDeclaradas
+        => Lecturas ?? new Dictionary<string, LecturaDef>(StringComparer.Ordinal);
+
     /// <summary>Lo efímero de una fase: vacío si no declara nada.</summary>
     public IReadOnlyList<string> EfimeraDe(string fase)
         => Efimera?.GetValueOrDefault(fase) ?? Array.Empty<string>();
@@ -63,6 +69,23 @@ public sealed record FlujoDef(
 
 /// <summary>Una fase: los pasos que se dan seguidos, en ese orden.</summary>
 public sealed record FaseDef(string Nombre, IReadOnlyList<PasoRef> Pasos);
+
+/// <summary>
+/// Una lectura SIN saga (núcleo, NB-3 de 011): lo que se puede ver antes de abrir —las horas libres— sin apartar
+/// ni cobrar nada, y por eso sin dueño.
+/// </summary>
+/// <param name="Nombre">Su nombre en la puerta, de una lista cerrada (<c>disponibilidad</c>).</param>
+/// <param name="Entrada">Lo que llega, con su tipo en <c>tipos</c>: del cuerpo o del negocio, nunca un sujeto.</param>
+/// <param name="Pasos">Los pasos, en orden: ninguno reserva, cierra, pide llave ni avisa.</param>
+/// <param name="Salida">Lo que devuelve.</param>
+/// <remarks>
+/// <para><b>No es una fase.</b> Una fase continúa una saga y una lectura no tiene saga: no hay nada que deshacer,
+/// ni a quién atarla. Es lo que deja a quien todavía no inició sesión ver las horas antes de reservar.</para>
+///
+/// <para><b>Con nombre de la puerta</b>, como cotizar: el nombre ES la operación, así que viene de una lista
+/// cerrada que comparten el orquestador, la puerta del CMS y el generador del UI.</para>
+/// </remarks>
+public sealed record LecturaDef(string Nombre, IReadOnlyList<string> Entrada, IReadOnlyList<string> Pasos, IReadOnlyList<string> Salida);
 
 /// <summary>Un elemento de una fase: un paso suelto o un bloque que se repite por ítem.</summary>
 /// <param name="Paso">El identificador del paso, si es suelto.</param>
@@ -234,7 +257,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -289,7 +312,21 @@ internal static class LectorDeFlujo
                 }
             }
 
-            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida);
+            Dictionary<string, LecturaDef>? lecturas = null;
+            if (raiz.TryGetProperty("lecturas", out var nodoLecturas))
+            {
+                Objeto(nodoLecturas, $"{donde}, «lecturas»");
+                lecturas = new Dictionary<string, LecturaDef>(StringComparer.Ordinal);
+                foreach (var l in nodoLecturas.EnumerateObject())
+                {
+                    var aqui = $"{donde}, lectura «{l.Name}»";
+                    Objeto(l.Value, aqui);
+                    SoloEstos(l.Value, aqui, "entrada", "pasos", "salida");
+                    lecturas[l.Name] = new LecturaDef(l.Name, Textos(l.Value, "entrada", aqui), Textos(l.Value, "pasos", aqui), Textos(l.Value, "salida", aqui));
+                }
+            }
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas);
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Synergos.Bff.Core;
 using Synergos.Core;
 
@@ -173,6 +174,12 @@ public sealed class PuertosHttp : CapabilityClients,
         }, llave, ct);
     }
 
+    /// <summary>Las franjas del recurso en el rango (NB-2): una petición, no una por ventana.</summary>
+    public Task<Result<FranjasDto>> FranjasDelRecursoAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+        => Get<FranjasDto>(Booking,
+            $"v1/resources/{Uri.EscapeDataString(recurso)}/slots?from={Uri.EscapeDataString(desde.ToString("O", CultureInfo.InvariantCulture))}"
+            + $"&to={Uri.EscapeDataString(hasta.ToString("O", CultureInfo.InvariantCulture))}", ct);
+
     public Task<Result<ReservaDto>> ConfirmarApartadoAsync(string apartado, IdempotencyKey llave, CancellationToken ct)
         => Post<ReservaDto>(Booking, $"v1/holds/{apartado}/confirm", null, llave, ct);
 
@@ -188,6 +195,10 @@ public sealed class PuertosHttp : CapabilityClients,
     async Task<Result<Apartado>> IBookingPort.ApartarAsync(
         string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
         => (await ApartarVentanaAsync(recurso, ventana, paraQuien, llave, ct)).Map(h => new Apartado(h.Id, h.ExpiresAt));
+
+    async Task<Result<IReadOnlyList<FranjaLibre>>> IBookingPort.FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+        => (await FranjasDelRecursoAsync(recurso, desde, hasta, ct))
+            .Map(f => (IReadOnlyList<FranjaLibre>)f.Items.Select(s => new FranjaLibre(s.Start, s.End, s.Free)).ToList());
 
     async Task<Result<string>> IBookingPort.ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct)
         => (await ConfirmarApartadoAsync(apartado, llave, ct)).Map(r => r.Id);
@@ -337,6 +348,8 @@ public sealed record CobroDto(string Id, DineroDto Refundable);
 public sealed record EntregaDto(string Id);
 public sealed record RecursoDto(string Id);
 public sealed record ApartadoDeAgendaDto(string Id, DateTimeOffset ExpiresAt);
+public sealed record FranjaDto(DateTimeOffset Start, DateTimeOffset End, int Free);
+public sealed record FranjasDto(IReadOnlyList<FranjaDto> Items);
 public sealed record ReservaDto(string Id);
 public sealed record PermisoDto(string Id);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);

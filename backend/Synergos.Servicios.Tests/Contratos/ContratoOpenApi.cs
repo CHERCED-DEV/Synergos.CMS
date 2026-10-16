@@ -178,7 +178,8 @@ internal static class ContratoOpenApi
         /// <summary>El cuerpo que ya se publicó con cada nombre, como JSON: dos distintos no comparten nombre.</summary>
         private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
 
-        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "PaginaDeFlujoOfRespuestaDeFlujo", "JsonElement"];
+        public static readonly string[] Reemplazados =
+            ["RespuestaDeFlujo", "CotizacionDeFlujo", "PaginaDeFlujoOfRespuestaDeFlujo", "LecturaDeFlujo", "JsonElement"];
 
         /// <summary>
         /// El nombre con que se publica un cuerpo (N-13 de Tienda): <c>{Flujo}Entrada</c> el de abrir y cotizar, y
@@ -223,6 +224,14 @@ internal static class ContratoOpenApi
             foreach (var (_, respuesta) in (op.Responses ?? new OpenApiResponses()).Where(r => r.Key.StartsWith('2')))
             {
                 if (respuesta.Content is null || !respuesta.Content.TryGetValue("application/json", out var json)) continue;
+
+                // Una lectura sin saga (NB-3): { flujo, datos } con su salida, bajo su propio nombre.
+                if (contrato.NombreDeLaRespuesta is { } propio)
+                {
+                    Propios[propio] = Cotizacion(contrato.Datos);
+                    json.Schema = new OpenApiSchemaReference(propio, ctx.Document);
+                    continue;
+                }
 
                 // «Mis …» (NB-6): una página de respuestas del flujo, cada una con sus datos tipados.
                 if (op.OperationId?.EndsWith("Listar", StringComparison.Ordinal) == true)

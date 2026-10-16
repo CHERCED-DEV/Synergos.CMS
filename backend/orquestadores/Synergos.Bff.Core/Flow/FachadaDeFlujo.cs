@@ -154,6 +154,10 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
         return (todas.Skip(Math.Max(0, offset)).Take(Math.Max(0, limit)).ToList(), todas.Count);
     }
 
+    /// <summary>Una lectura sin saga (núcleo, NB-3 de 011): sin dueño, sin escribir nada.</summary>
+    public Task<Result<FlowContext>> LeerAsync(string lectura, FlowContext entrada, CancellationToken ct)
+        => _flujo.LeerAsync(lectura, entrada, ct);
+
     /// <summary>La fase que abre, anticipada hasta antes de reservar, sin escribir nada (ADR 0140, el cupón).</summary>
     public Task<Result<FlowContext>> AnticiparAsync(FlowContext entrada, CancellationToken ct)
         => _flujo.AnticiparAsync(_abre, entrada, ct);

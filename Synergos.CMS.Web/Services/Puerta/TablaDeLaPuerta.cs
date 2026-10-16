@@ -68,9 +68,11 @@ public sealed class TablaDeLaPuerta
     /// <remarks>
     /// <c>cotizar</c> es la fase que abre anticipada, sin saga y sin reservar nada: el total con su
     /// descuento antes de pagar (ADR 0140, el cupón). <c>listar</c> son las sagas del dueño, «mis reservas»
-    /// (núcleo, NB-6 de 011). Lo cruza <c>PuertaGenericaTests</c> contra la lista del orquestador.
+    /// (núcleo, NB-6 de 011). <c>disponibilidad</c> es una lectura sin saga ni dueño: la única clase de operación
+    /// que un flujo puede abrir a un invitado (NB-3). Lo cruza <c>PuertaGenericaTests</c> contra la lista del
+    /// orquestador.
     /// </remarks>
-    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar"];
+    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "disponibilidad", "listar"];
 
     private static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ParametroDeRuta = new(@"\{([^}]+)\}", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));

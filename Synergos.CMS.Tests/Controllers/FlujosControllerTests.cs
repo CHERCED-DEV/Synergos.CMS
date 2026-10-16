@@ -60,7 +60,9 @@ public sealed class FlujosControllerTests : IDisposable
     public void Dispose() => _orquestador.Dispose();
 
     /// <summary>El contrato comiteado de Bff.Eventos, con las cinco operaciones de la compra marcadas.</summary>
-    internal static TablaDeLaPuerta TablaDeLaCompra()
+    internal static TablaDeLaPuerta TablaDeLaCompra() => TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", ContratoDeLaCompra().ToJsonString())]);
+
+    private static JsonNode ContratoDeLaCompra()
     {
         var doc = JsonNode.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "docs", "contracts", "openapi",
             "Synergos.Bff.Eventos.json")))!;
@@ -69,8 +71,30 @@ public sealed class FlujosControllerTests : IDisposable
         Marcar("/v1/ticket-purchases", "post", "abrir");
         Marcar("/v1/ticket-purchases/{id}", "get", "consultar");
         Marcar("/v1/ticket-purchases/{id}/confirm", "post", "cerrar");
-        Marcar("/v1/ticket-purchases/{id}/cancel", "post", "cancelar");
         Marcar("/v1/ticket-quotes", "post", "cotizar");
+        Marcar("/v1/ticket-purchases/{id}/cancel", "post", "cancelar");
+        return doc;
+    }
+
+    /// <summary>
+    /// La compra con una lectura sin saga (NB-3): <c>disponibilidad</c>, con cuerpo y SIN ninguna cabecera de la puerta,
+    /// como la publica el host genérico.
+    /// </summary>
+    private static TablaDeLaPuerta TablaConLectura()
+    {
+        var doc = ContratoDeLaCompra();
+        doc["paths"]!["/v1/flujos/eventos.compra/disponibilidad"] = new JsonObject
+        {
+            ["post"] = new JsonObject
+            {
+                ["operationId"] = "EventosCompraDisponibilidad",
+                ["requestBody"] = new JsonObject
+                {
+                    ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = new JsonObject { ["type"] = "object" } } },
+                },
+                [TablaDeLaPuerta.MarcaDelFlujo] = new JsonObject { ["flujo"] = Flujo, ["operacion"] = "disponibilidad" },
+            },
+        };
         return TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]);
     }
 
@@ -118,9 +142,11 @@ public sealed class FlujosControllerTests : IDisposable
 
     private async Task<Respuesta> Pedir(
         string metodo, string operacion, string? consulta = null, string? cuerpo = null, string? tipo = "application/json",
-        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true, bool porTrozos = false)
+        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true, bool porTrozos = false,
+        TablaDeLaPuerta? tabla = null, FrenoDeLaPuerta? freno = null, string? ip = null)
     {
         var http = new DefaultHttpContext();
+        if (ip is not null) http.Connection.RemoteIpAddress = IPAddress.Parse(ip);
         http.Request.Method = metodo;
         http.Request.Scheme = "https";
         http.Request.Host = new HostString("sitio.test");
@@ -145,8 +171,9 @@ public sealed class FlujosControllerTests : IDisposable
             new ServiceCollection().BuildServiceProvider());
 
         var sut = new FlujosController(
-            TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(_conDestino ? ["Eventos"] : []), _miembro,
-            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones, enVivo: _enVivo)
+            tabla ?? TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(_conDestino ? ["Eventos"] : []), _miembro,
+            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones, enVivo: _enVivo,
+            freno: freno)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -662,6 +689,84 @@ public sealed class FlujosControllerTests : IDisposable
 
         Assert.Equal((503, "puerta.orquestador_no_disponible", true), (caido.Estado, caido.Codigo, caido.Json.GetProperty("transient").GetBoolean()));
         Assert.Equal((504, "puerta.tiempo_agotado", true), (lento.Estado, lento.Codigo, lento.Json.GetProperty("transient").GetBoolean()));
+    }
+
+    // ── Lo que se abre a invitados (núcleo, NB-3 de 011) ───────────────────────────
+
+    private FlujoDeLaPuertaSettings Abierto(int? freno = null, params string[] invitado)
+    {
+        var bien = _ajustes.Flujos[Flujo];
+        return new FlujoDeLaPuertaSettings
+        {
+            Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = bien.Aviso,
+            Invitado = invitado.Length == 0 ? ["disponibilidad"] : [.. invitado], FrenoPorMinuto = freno,
+        };
+    }
+
+    [Fact]
+    public async Task Una_lectura_abierta_a_invitados_pasa_sin_sesion_y_sin_sujeto()
+    {
+        // Ver las horas antes de iniciar sesión: la puerta pasa la lectura sin sujeto, porque no lo hay ni lo pide.
+        Sesion(null);
+        _ajustes.Flujos[Flujo] = Abierto();
+
+        var r = await Pedir("POST", "disponibilidad", cuerpo: """{"desde":"2026-10-20T14:00:00Z"}""", tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+
+        Assert.Equal(200, r.Estado);
+        var (metodo, ruta, cabeceras, cuerpo) = Assert.Single(_orquestador.Pedidos);
+        Assert.Equal(("POST", "/v1/flujos/eventos.compra/disponibilidad"), (metodo, ruta));
+        Assert.False(cabeceras.ContainsKey(LoQuePoneLaPuerta.CabeceraDelSujeto));
+        Assert.Equal("""{"desde":"2026-10-20T14:00:00Z"}""", Encoding.UTF8.GetString(cuerpo));
+    }
+
+    [Fact]
+    public async Task Sin_abrirla_o_sin_freno_una_lectura_sigue_pidiendo_sesion_y_abrir_siempre()
+    {
+        // Falla cerrada: lo que el flujo no abre, o un freno que no está, es «hace falta iniciar sesión». Y abrir una
+        // saga nunca se abre a invitados, aunque la lectura sí.
+        Sesion(null);
+        var cerrada = await Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+        _ajustes.Flujos[Flujo] = Abierto();
+        var sinFreno = await Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura());
+        var abrir = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave(), tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+
+        Assert.Equal((401, "puerta.sesion_requerida"), (cerrada.Estado, cerrada.Codigo));
+        Assert.Equal((401, "puerta.sesion_requerida"), (sinFreno.Estado, sinFreno.Codigo));
+        Assert.Equal((401, "puerta.sesion_requerida"), (abrir.Estado, abrir.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task El_freno_corta_a_quien_pide_de_mas_y_no_a_los_demas()
+    {
+        Sesion(null);
+        _ajustes.Flujos[Flujo] = Abierto(freno: 2);
+        var freno = new FrenoDeLaPuerta();
+        Task<Respuesta> Leer(string ip) => Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura(), freno: freno, ip: ip);
+
+        Assert.Equal(200, (await Leer("203.0.113.7")).Estado);
+        Assert.Equal(200, (await Leer("203.0.113.7")).Estado);
+        var demas = await Leer("203.0.113.7");
+        var otro = await Leer("198.51.100.9");
+
+        Assert.Equal((429, "puerta.demasiadas_peticiones", true), (demas.Estado, demas.Codigo, demas.Json.GetProperty("transient").GetBoolean()));
+        Assert.InRange(int.Parse(demas.Cabeceras.RetryAfter.ToString(), System.Globalization.CultureInfo.InvariantCulture), 1, 60);
+        Assert.Equal(200, otro.Estado);
+        Assert.Equal(3, _orquestador.Pedidos.Count);
+    }
+
+    [Fact]
+    public void A_un_invitado_solo_se_le_abre_una_lectura_sin_dueno()
+    {
+        // Lo dice el CONTRATO: abrir y consultar ponen sujeto; listarlas en Invitado no las vuelve de nadie.
+        ValidateOptionsResult Con(FlujoDeLaPuertaSettings f) => new ValidadorDeLaPuerta(TablaConLectura(), Secciones)
+            .Validate(null, new PuertaSettings { Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Flujo] = f } });
+
+        Assert.True(Con(Abierto()).Succeeded);
+        Assert.Contains("a quien no inició sesión sólo se le abre una lectura sin dueño", Con(Abierto(null, "abrir")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("a quien no inició sesión sólo se le abre una lectura sin dueño", Con(Abierto(null, "consultar")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("Invitado abre «vender», que no es una operación del flujo", Con(Abierto(null, "vender")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("FrenoPorMinuto es 0", Con(Abierto(freno: 0)).FailureMessage, StringComparison.Ordinal);
     }
 
     // ── La configuración, validada al arrancar ─────────────────────────────────────
