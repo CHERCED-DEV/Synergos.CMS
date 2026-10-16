@@ -1,5 +1,8 @@
 using System.Net;
+using System.Text.Json;
 using Synergos.Bff.Core;
+using Synergos.Bff.Reservas.Domain;
+using Synergos.CMS.Tests.Architecture;
 
 namespace Synergos.CMS.Tests.Bff.Reservas;
 
@@ -56,7 +59,9 @@ public sealed class ReservaDeServicioTests
 
         var datos = cerrada.GetProperty("datos").EnumerateObject().Select(p => p.Name).Order().ToList();
         Assert.Equal(["servicio", "total", "ventana"], datos);
-        Assert.Equal(ReservaDeServicioReal.Servicio, cerrada.GetProperty("datos").GetProperty("servicio").GetString());
+        var servicio = cerrada.GetProperty("datos").GetProperty("servicio");
+        Assert.Equal(OfertaDeReservas.Clase, servicio.GetProperty("kind").GetString());
+        Assert.Equal(ReservaDeServicioReal.Servicio, servicio.GetProperty("id").GetString());
     }
 
     [Fact]
@@ -89,15 +94,31 @@ public sealed class ReservaDeServicioTests
     }
 
     [Fact]
-    public async Task Un_identificador_que_no_es_de_una_ficha_se_rechaza_sin_apartar()
+    public async Task Una_referencia_de_otra_clase_se_rechaza_sin_apartar_y_un_servicio_sin_oferta_no_se_reserva()
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
 
-        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
-
+        // NR-1: el navegador no elige la clase. Un profesional de Salud con el precio de un servicio no entra.
+        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(clase: "salud.profesional"));
         Assert.Equal(HttpStatusCode.BadRequest, estado);
-        Assert.Equal("reservas.servicio_invalido", cuerpo.GetProperty("code").GetString());
+        Assert.Equal("reservas.entrada_invalida", cuerpo.GetProperty("code").GetString());
+
+        // Con la clase de la definición, una clave que la oferta nunca publicó no tiene duración ni recurso.
+        (estado, cuerpo) = await r.Abrir(llave: "reserva-2", cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
+        Assert.Equal(HttpStatusCode.NotFound, estado);
+        Assert.Equal("reservas.servicio_no_reservable", cuerpo.GetProperty("code").GetString());
         Assert.Equal(0, await Ocupadas(r));
+    }
+
+    [Fact]
+    public void La_clase_que_declara_la_definicion_es_la_que_publica_la_oferta()
+    {
+        using var definicion = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            Proyectos.Dir("Synergos.Bff.Reservas"), "flujos", "reservas.servicio.json")));
+
+        var servicio = definicion.RootElement.GetProperty("tipos").GetProperty("servicio");
+        Assert.Equal("ref", servicio.GetProperty("tipo").GetString());
+        Assert.Equal(OfertaDeReservas.Clase, servicio.GetProperty("kind").GetString());
     }
 
     [Fact]

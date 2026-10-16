@@ -121,10 +121,11 @@ internal sealed class ReservaDeServicioReal : IDisposable
 
     public static string Sujeto(string id) => $"reservas.cliente:{id}";
 
-    public static object Cuerpo(string servicio = Servicio, DateTimeOffset? inicio = null, int minutos = 60)
+    /// <summary>El cuerpo de abrir o cotizar: el servicio es una referencia con la clase que declara la definición (NR-1).</summary>
+    public static object Cuerpo(string servicio = Servicio, DateTimeOffset? inicio = null, int minutos = 60, string clase = "reservas.servicio")
     {
         var desde = inicio ?? Inicio;
-        return new { servicio, ventana = new { start = desde, end = desde.AddMinutes(minutos) } };
+        return new { servicio = new { kind = clase, id = servicio }, ventana = new { start = desde, end = desde.AddMinutes(minutos) } };
     }
 
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "reserva-1", string cliente = "u-1", object? cuerpo = null)

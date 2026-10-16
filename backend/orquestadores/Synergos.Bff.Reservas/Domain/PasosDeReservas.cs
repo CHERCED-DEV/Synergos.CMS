@@ -1,52 +1,11 @@
-using System.Text.RegularExpressions;
 using Synergos.Bff.Core.Flow;
 using Synergos.Core;
 
 namespace Synergos.Bff.Reservas.Domain;
 
-// Los dos pasos de dominio de la reserva. NO son del caso común: son interinos y cada uno espera una pieza
-// del núcleo que lo retira (011-booking-reserva, research R4 y la regla NR-1 del tablero). Se cuentan aparte
-// de la meta del flujo (≤ 60 líneas) y se atribuyen a su necesidad.
-
-/// <summary>
-/// <c>reservas.servicio</c> (interino de NR-1): del identificador que manda el navegador a la referencia del
-/// servicio, con su CLASE FIJA (<see cref="Clase"/>).
-/// </summary>
-/// <remarks>
-/// <para><b>El navegador nunca elige la clase</b>: con un <c>ref</c> libre del cuerpo podría apartar la agenda de
-/// otro vertical (un profesional de Salud, un inmueble) con el precio de un servicio. Sólo aporta el
-/// identificador, y la misma referencia sirve al recurso de la agenda y a la tarifa. Lo retira la clase
-/// declarada en la definición (NR-1 del núcleo).</para>
-/// </remarks>
-public sealed partial class PasoServicio : IPaso
-{
-    /// <summary>La clase del sujeto de un servicio reservable, en la agenda y en precios.</summary>
-    public const string Clase = "reservas.servicio";
-
-    /// <summary>El código cuando el identificador no es uno que la oferta pudo publicar.</summary>
-    public const string Invalido = "reservas.servicio_invalido";
-
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.CultureInvariant)]
-    private static partial Regex Identificador();
-
-    /// <summary>Si <paramref name="id"/> tiene la forma de la clave de una ficha (la misma regla que la oferta).</summary>
-    public static bool EsIdentificador(string id) => Identificador().IsMatch(id);
-
-    public string Tipo => "reservas.servicio";
-    public int Lecturas => 1;
-    public int Escrituras => 1;
-    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(Ref)];
-
-    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(entrada);
-        var id = entrada.Lee<string>(0).Trim();
-        return Task.FromResult(EsIdentificador(id)
-            ? SalidaDePaso.Sigue(Ref.Create(Clase, id))
-            : SalidaDePaso.Rechaza(Rejection.Invalid(Invalido, "Ese servicio no existe en este sitio.")));
-    }
-}
+// El paso de dominio de la reserva. NO es del caso común: es interino y espera la pieza del núcleo que lo
+// retira (011-booking-reserva, research R4). Se cuenta aparte de la meta del flujo (≤ 60 líneas) y se atribuye
+// a su necesidad. El de la clase fija del servicio (NR-1) ya se retiró: la clase la declara la definición.
 
 /// <summary>
 /// <c>reservas.duracion</c> (interino de NB-1): una franja dura lo que dura el servicio que se publicó.

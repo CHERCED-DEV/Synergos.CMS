@@ -10,8 +10,8 @@ using Synergos.Shared;
 // orquestador de producto del CASO COMÚN del núcleo (N1): su flujo es flujos/reservas.servicio.json y lo
 // sirve el host genérico. No escribe saga, enlace, fachada ni adaptadores.
 //
-// Lo que NO es del caso común queda aparte y atribuido: los dos pasos interinos (la clase fija del
-// servicio, NR-1; el largo de la franja, NB-1) y la oferta de los servicios (P12, NB-8).
+// Lo que NO es del caso común queda aparte y atribuido: el paso interino del largo de la franja (NB-1) y
+// la oferta de los servicios (P12, NB-8). La clase del servicio la declara la definición (NR-1).
 //
 // ANTES DE DESPLEGAR: los destinos de booking, pricing, payments y notifications
 // (Reservas__Capabilities__<cap>__BaseUrl/ApiKey), Reservas:ApiKey, Reservas:Alerts y la plantilla
@@ -23,7 +23,7 @@ builder.AddCorrelation();
 
 var ofertas = RastroDeOfertas.De(builder.Configuration);
 builder.AddOrquestadorDeclarado(new SagaVocabulary("reservas", "la reserva de un servicio"), typeof(Program).Assembly,
-    new PasoServicio(), new PasoDuracion(ofertas));
+    new PasoDuracion(ofertas));
 builder.AddOfertaDeReservas(ofertas);
 
 var app = builder.Build();

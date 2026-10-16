@@ -3,25 +3,24 @@
   "entrada": ["cliente", "servicio", "ventana"],
   "tipos": {
     "cliente": { "de": "sujeto" },
-    "servicio": "texto",
+    "servicio": { "tipo": "ref", "kind": "reservas.servicio" },
     "ventana": "ventana",
     "contacto": { "de": "contacto" }
   },
   "salida": ["servicio", "ventana", "total"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
-    "abrir": ["sujeto", "duracion", "lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
+    "abrir": ["duracion", "lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
     "cerrar": ["capturar", "confirmar", "avisar"]
   },
   "pasos": {
-    "sujeto": { "tipo": "reservas.servicio", "lee": ["servicio"], "escribe": ["servicioRef"] },
-    "duracion": { "tipo": "reservas.duracion", "lee": ["servicioRef", "ventana"] },
-    "lineas": { "tipo": "forma.una-linea", "lee": ["servicioRef"], "escribe": ["aCotizar"] },
+    "duracion": { "tipo": "reservas.duracion", "lee": ["servicio", "ventana"] },
+    "lineas": { "tipo": "forma.una-linea", "lee": ["servicio"], "escribe": ["aCotizar"] },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
     "hallar": {
       "tipo": "booking.hallar",
-      "lee": ["servicioRef"],
+      "lee": ["servicio"],
       "escribe": ["recursoId"],
       "motivo": "el servicio no se puede reservar en línea"
     },

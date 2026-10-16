@@ -11,7 +11,7 @@ namespace Synergos.CMS.Tests.Bff.Reservas;
 /// </summary>
 /// <remarks>
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y
-/// ≤ 4 ficheros. <b>Interino</b> = los pasos de dominio que esperan una pieza del núcleo (NR-1, NB-1). <b>Oferta</b> =
+/// ≤ 4 ficheros. <b>Interino</b> = el paso de dominio que espera una pieza del núcleo (NB-1; el de NR-1 ya se retiró). <b>Oferta</b> =
 /// el código del vertical que la oferta genérica (P12, NB-8) retirará. Un fichero nuevo del orquestador que no
 /// esté en ninguna de las tres listas es rojo: no puede crecer sin decir de quién es.</para>
 /// </remarks>
@@ -50,7 +50,7 @@ public sealed class MetricaDeReservasTests(ITestOutputHelper salida)
         var interino = Lineas(Interinos);
         var oferta = Lineas(DeLaOferta);
 
-        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NR-1, NB-1) {interino}; oferta (P12) {oferta}.");
+        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NB-1) {interino}; oferta (P12) {oferta}.");
         Assert.True(flujo <= 60, $"El C# propio del flujo son {flujo} líneas y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros y la meta es ≤ 4.");
     }

@@ -1137,9 +1137,28 @@
             "type": "object",
             "properties": {
               "servicio": {
-                "type": [
-                  "null",
-                  "string"
+                "oneOf": [
+                  {
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "reservas.servicio"
+                        ],
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "ventana": {
@@ -1201,7 +1220,22 @@
         "type": "object",
         "properties": {
           "servicio": {
-            "type": "string"
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "reservas.servicio"
+                ],
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
           },
           "ventana": {
             "required": [
@@ -1256,9 +1290,28 @@
             "type": "object",
             "properties": {
               "servicio": {
-                "type": [
-                  "null",
-                  "string"
+                "oneOf": [
+                  {
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "reservas.servicio"
+                        ],
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               },
               "ventana": {

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Synergos.Bff.Core;
 using Synergos.Bff.Reservas.Clients;
 using Synergos.Bff.Reservas.Contracts;
@@ -57,8 +58,14 @@ public sealed class RastroDeOfertas(string raiz)
 /// <para><b>Retirar no borra</b>: el precio deja de valer desde ahora, así que cotizar —que va primero en el
 /// flujo— lo rechaza sin apartar nada; el recurso y sus reservas siguen ahí.</para>
 /// </remarks>
-public sealed class OfertaDeReservas(CapacidadesDeLaOferta capacidades, RastroDeOfertas rastro, TimeProvider reloj) : IDisposable
+public sealed partial class OfertaDeReservas(CapacidadesDeLaOferta capacidades, RastroDeOfertas rastro, TimeProvider reloj) : IDisposable
 {
+    /// <summary>
+    /// La clase del sujeto de un servicio en la agenda y en precios: la MISMA que declara la definición del flujo
+    /// para la referencia que manda el navegador (NR-1), así que el flujo sólo alcanza lo que esta oferta publicó.
+    /// </summary>
+    public const string Clase = "reservas.servicio";
+
     public const string Invalida = "reservas.oferta_invalida";
     public const string NoActualizable = "reservas.oferta_no_actualizable";
     public const string NoExiste = "reservas.oferta_no_existe";
@@ -75,7 +82,7 @@ public sealed class OfertaDeReservas(CapacidadesDeLaOferta capacidades, RastroDe
         using var turno = await _turno.TryEnterAsync(ct);
         if (turno is null) return Result.Rejected<ServicioOfertado>(_turno.Ocupado);
 
-        var sujeto = Ref.Create(PasoServicio.Clase, o.Servicio!.Trim());
+        var sujeto = Ref.Create(Clase, o.Servicio!.Trim());
         var horario = o.Horario!.Select(Normalizar).ToList();
         var aviso = o.PlazoCancelacionHoras!.Value * 60;
 
@@ -119,7 +126,7 @@ public sealed class OfertaDeReservas(CapacidadesDeLaOferta capacidades, RastroDe
         if (previa.Retirada) return Result.Ok(previa);
 
         var ahora = reloj.GetUtcNow();
-        var retirado = await capacidades.FijarPrecioAsync(Ref.Create(PasoServicio.Clase, servicio), Money.Of(previa.Precio, previa.Moneda),
+        var retirado = await capacidades.FijarPrecioAsync(Ref.Create(Clase, servicio), Money.Of(previa.Precio, previa.Moneda),
             ahora, Derivada(llave.Value, "retirar", servicio), ct);
         if (!retirado.IsOk) return Result.Rejected<ServicioOfertado>(retirado.Rejection!);
 
@@ -129,9 +136,15 @@ public sealed class OfertaDeReservas(CapacidadesDeLaOferta capacidades, RastroDe
     }
 
     /// <summary>Lo que la oferta tiene que traer, con el campo que falta en el mensaje.</summary>
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Identificador();
+
+    /// <summary>Si <paramref name="id"/> tiene la forma de la clave de una ficha: lo único que se publica como servicio.</summary>
+    public static bool EsIdentificador(string id) => Identificador().IsMatch(id);
+
     internal static Rejection? Revisar(PublicarOfertaRequest o)
     {
-        if (string.IsNullOrWhiteSpace(o.Servicio) || !PasoServicio.EsIdentificador(o.Servicio.Trim()))
+        if (string.IsNullOrWhiteSpace(o.Servicio) || !EsIdentificador(o.Servicio.Trim()))
             return Mal("servicio", "hace falta la clave de la ficha del servicio");
         if (o.DuracionMinutos is not > 0) return Mal("duracionMinutos", "tiene que ser un entero mayor que cero");
         if (o.Cupos is not >= 1) return Mal("cupos", "tiene que ser un entero mayor o igual que 1");
