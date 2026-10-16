@@ -195,6 +195,9 @@ public sealed class RentalCompensationDeclaradaTests : RentalReservaBase, IDispo
         public override Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad)
             => throw new NotSupportedException("Cancelar lo confirmado por el camino declarado llega con T020.");
 
+        public override Task<VistaDeRenta> DeclararAsync(string id)
+            => throw new NotSupportedException("Declarar por el camino declarado llega con T017.");
+
         public override SagaStatus? Estado(string id) => Sagas.Find(id)?.Status;
 
         public override int Pendientes(string id) => Sagas.Find(id)?.Pending().Count ?? 0;

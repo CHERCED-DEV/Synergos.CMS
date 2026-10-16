@@ -89,6 +89,11 @@ public static class AlquilerEndpoints
             return (await flow.CancelAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
         }).WithName("CancelRental");
 
+        // Declarar la devolución (decisión 5 del lote 1): sin cuerpo y sin plata; repetirla devuelve lo mismo.
+        app.MapPost("/v1/rentals/{id}/declare-return", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, RentalFlow flow, CancellationToken ct) =>
+            (await flow.DeclareReturnAsync(id, ct)).Map(RentalResponse.From).ToHttp()).WithName("DeclareRentalReturn");
+
         // La oferta de un equipo (lote 3, 005-P1): el precio de cada tramo y la garantía en Pricing, y el
         // recurso con sus unidades en Booking. La llama el CMS al publicar la ficha, no un navegador, así que no
         // lleva marca de la puerta. Repetirla no duplica nada; ver OfertaDeAlquiler.

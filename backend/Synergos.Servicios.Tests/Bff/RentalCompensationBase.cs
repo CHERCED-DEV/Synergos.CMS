@@ -36,6 +36,9 @@ public abstract class ConductorDeRenta
     /// <summary>El equipo volvió, con el daño que haya.</summary>
     public abstract Task<VistaDeRenta> DevolverAsync(string id, decimal danio);
 
+    /// <summary>El inquilino declara que devolvió el equipo; la garantía sigue retenida.</summary>
+    public abstract Task<VistaDeRenta> DeclararAsync(string id);
+
     /// <summary>Se cancela un alquiler confirmado, con la penalidad que haya.</summary>
     public abstract Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad);
 
@@ -468,5 +471,54 @@ public abstract class RentalLiquidacionBase : RentalReservaBase
         Assert.True(devuelta.Ok);
         Assert.Equal("returned", devuelta.Estado);
         Assert.Equal(0, otro.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+    }
+
+    // ── Declarar y confirmar (decisión 5 del lote 1, #203) ─────────────────
+
+    /// <summary>
+    /// Declarar no mueve plata: la garantía sigue retenida, y la libera la confirmación del personal.
+    /// </summary>
+    /// <remarks>
+    /// Es la decisión entera: el inquilino no puede liberar su propia garantía diciendo «lo devolví sin daño». Con
+    /// una sola llamada a <c>/v1/payments/*</c> al declarar, el cupo de su tarjeta volvería antes de que nadie
+    /// mirara el equipo.
+    /// </remarks>
+    [Fact]
+    public async Task Declarar_no_mueve_plata_y_confirmar_despues_anula_la_garantia()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+        var pagosAntes = c.Caps.Llamadas.Count(l => l.Path.Contains("/v1/payments", StringComparison.Ordinal));
+
+        var declarada = await c.DeclararAsync("alq-1");
+
+        Assert.True(declarada.Ok);
+        Assert.Equal("declared", declarada.Estado);
+        Assert.Equal(400000m, declarada.GarantiaRetenida);
+        Assert.Equal(pagosAntes, c.Caps.Llamadas.Count(l => l.Path.Contains("/v1/payments", StringComparison.Ordinal)));
+
+        var devuelta = await c.DevolverAsync("alq-1", 0m);
+
+        Assert.True(devuelta.Ok);
+        Assert.Equal("returned", devuelta.Estado);
+        Assert.Equal(1, c.Caps.Veces("POST", "/v1/payments/pg-dep/void"));
+    }
+
+    /// <summary>Declarar dos veces es declarar una, y lo devuelto ya no se declara.</summary>
+    [Fact]
+    public async Task Declarar_es_idempotente_y_no_vale_desde_otro_estado()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        Assert.True((await c.DeclararAsync("alq-1")).Ok);
+        var otraVez = await c.DeclararAsync("alq-1");
+        Assert.True(otraVez.Ok);
+        Assert.Equal("declared", otraVez.Estado);
+
+        Assert.True((await c.DevolverAsync("alq-1", 0m)).Ok);
+        var tarde = await c.DeclararAsync("alq-1");
+        Assert.False(tarde.Ok);
+        Assert.Equal("alquiler.not_declarable", tarde.Codigo);
     }
 }

@@ -240,6 +240,47 @@ public sealed class RentalFlow
     public async Task<Result<RentalSaga>> CancelAsync(string rentalId, Money penalty, CancellationToken ct)
         => await CerrarAsync(rentalId, penalty, devolucion: false, ct);
 
+    /// <summary>
+    /// El inquilino declara que devolvió el equipo (decisión 5 del lote 1, #203): queda <c>declared</c> y la
+    /// garantía SIGUE retenida hasta que el personal confirme la devolución con el daño.
+    /// </summary>
+    /// <remarks>
+    /// <b>No llama a ninguna capacidad</b>: declarar no mueve plata. Lo que la mueve es <see cref="ReturnAsync"/>,
+    /// que acepta un alquiler declarado y uno sin declarar (S-2). Repetirlo devuelve lo mismo.
+    /// </remarks>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El alquiler declarado, o el rechazo.</returns>
+    public Task<Result<RentalSaga>> DeclareReturnAsync(string rentalId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var buscado = _sagas.Get(rentalId);
+        if (!buscado.IsOk)
+        {
+            return Task.FromResult(buscado);
+        }
+
+        var saga = buscado.Value;
+        if (saga.SettledAs == Declarado)
+        {
+            return Task.FromResult(Result.Ok(saga));
+        }
+
+        if (saga.Settled || saga.Status != SagaStatus.Completed)
+        {
+            return Task.FromResult(Result.Rejected<RentalSaga>(Rejection.Conflict(
+                "alquiler.not_declarable",
+                $"El alquiler {rentalId} no está reservado: no hay devolución que declarar.")));
+        }
+
+        var declarada = saga with { SettledAs = Declarado };
+        _sagas.Put(declarada);
+        return Task.FromResult(Result.Ok(declarada));
+    }
+
+    /// <summary>Cómo queda <see cref="RentalSaga.SettledAs"/> mientras la devolución espera al personal.</summary>
+    public const string Declarado = "declared";
+
     private async Task<Result<RentalSaga>> CerrarAsync(
         string rentalId, Money monto, bool devolucion, CancellationToken ct)
     {

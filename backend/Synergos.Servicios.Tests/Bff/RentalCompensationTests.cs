@@ -75,6 +75,9 @@ public sealed class RentalCompensationTests : RentalLiquidacionBase
         public override async Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad)
             => Vista(await Flow.CancelAsync(id, Cop(penalidad), CancellationToken.None));
 
+        public override async Task<VistaDeRenta> DeclararAsync(string id)
+            => Vista(await Flow.DeclareReturnAsync(id, CancellationToken.None));
+
         public override SagaStatus? Estado(string id) => Sagas.Find(id)?.Status;
 
         public override int Pendientes(string id) => Sagas.Find(id)?.Pending().Count ?? 0;
