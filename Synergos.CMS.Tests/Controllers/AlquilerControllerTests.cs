@@ -85,9 +85,13 @@ public sealed class AlquilerControllerTests
             return Task.FromResult<RentalResult?>(_resultado);
         }
 
-        public Task<RentalResult?> CancelAsync(string id, decimal m, string k, CancellationToken c = default)
+        /// <summary>Con quién y con qué penalidad se canceló por la ruta directa.</summary>
+        public List<(RentalCanceller Quien, decimal Penalidad)> Cancelaciones { get; } = [];
+
+        public Task<RentalResult?> CancelAsync(string id, decimal m, RentalCanceller quien, string k, CancellationToken c = default)
         {
             Cierres++;
+            Cancelaciones.Add((quien, m));
             return Task.FromResult<RentalResult?>(_resultado);
         }
 
@@ -121,6 +125,14 @@ public sealed class AlquilerControllerTests
         public Task<RentalResult?> ConfirmReturnAsync(RentalAgreement a, decimal d, string staffId, string k, CancellationToken c = default)
         {
             ConfirmadoPor.Add(staffId);
+            return Task.FromResult<RentalResult?>(_resultado);
+        }
+
+        public List<(RentalCanceller Quien, decimal Penalidad, string? Personal)> Cancelaciones { get; } = [];
+
+        public Task<RentalResult?> CancelAsync(RentalAgreement a, RentalCanceller quien, decimal p, string? staffId, string k, CancellationToken c = default)
+        {
+            Cancelaciones.Add((quien, p, staffId));
             return Task.FromResult<RentalResult?>(_resultado);
         }
     }
@@ -425,6 +437,42 @@ public sealed class AlquilerControllerTests
         Assert.Equal([Otro.ToString("N")], deLaPuerta.ConfirmadoPor);
         Assert.Equal(0, seam.Declaraciones);
         Assert.Equal(0, seam.Cierres);
+    }
+
+    // ── Cancelar lo confirmado (research R7; línea 005, T020) ──────────────
+
+    [Fact]
+    public async Task El_dueno_cancela_sin_penalidad_aunque_la_mande_y_el_personal_con_ella()
+    {
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, En(RentalState.Cancelled) with { DepositHeld = 0m }, null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro))
+            .Cancel("ALQ-1", new SettleRequest(99_000m, "cancelar-1"), CancellationToken.None);
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro, personal: true))
+            .Cancel("ALQ-1", new SettleRequest(50_000m, "cancelar-2"), CancellationToken.None);
+
+        Assert.Equal([(RentalCanceller.Renter, 0m), (RentalCanceller.Staff, 50_000m)], seam.Cancelaciones);
+        Assert.Equal(RentalState.Cancelled, (await ledger.GetAsync("ALQ-1"))!.Estado);
+    }
+
+    [Fact]
+    public async Task Cancelar_un_alquiler_de_la_puerta_va_al_orquestador_por_el_que_salio()
+    {
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, En(RentalState.Cancelled), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+        await ledger.RecordAsync((await ledger.GetAsync("ALQ-1"))! with { Camino = CaminoDeCompra.Puerta });
+        var deLaPuerta = new PuertaFalsa(new RentalResult(RentalOutcome.Ok, En(RentalState.Cancelled), null, null));
+
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro), deLaPuerta)
+            .Cancel("ALQ-1", new SettleRequest(99_000m, "cancelar-1"), CancellationToken.None);
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro, personal: true), deLaPuerta)
+            .Cancel("ALQ-1", new SettleRequest(50_000m, "cancelar-2"), CancellationToken.None);
+
+        Assert.Equal(
+            [(RentalCanceller.Renter, 0m, (string?)null), (RentalCanceller.Staff, 50_000m, Otro.ToString("N"))],
+            deLaPuerta.Cancelaciones);
+        Assert.Empty(seam.Cancelaciones);
     }
 
     [Fact]

@@ -126,13 +126,15 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
     public Task<RentalResult?> ReturnAsync(
         string rentalId, decimal damageAmount, string idempotencyKey,
         CancellationToken cancellationToken = default)
-        => CerrarAsync(rentalId, damageAmount, idempotencyKey, "return", "devolver", cancellationToken);
+        => CerrarAsync(rentalId, damageAmount, idempotencyKey, "return", "devolver", actor: null, cancellationToken);
 
     /// <inheritdoc />
+    /// <remarks>Quién cancela viaja como <c>actor</c> (<c>renter</c> o <c>staff</c>): la regla la aplica el orquestador.</remarks>
     public Task<RentalResult?> CancelAsync(
-        string rentalId, decimal penaltyAmount, string idempotencyKey,
+        string rentalId, decimal penaltyAmount, RentalCanceller canceller, string idempotencyKey,
         CancellationToken cancellationToken = default)
-        => CerrarAsync(rentalId, penaltyAmount, idempotencyKey, "cancel", "cancelar", cancellationToken);
+        => CerrarAsync(rentalId, penaltyAmount, idempotencyKey, "cancel", "cancelar",
+            actor: canceller == RentalCanceller.Staff ? "staff" : "renter", cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>Sin cuerpo: declarar no lleva monto ni mueve plata (<c>POST v1/rentals/{id}/declare-return</c>).</remarks>
@@ -150,7 +152,7 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
     /// <c>null</c>: «no existe tal alquiler», que es distinto de que la regla diga que no.
     /// </remarks>
     private async Task<RentalResult?> CerrarAsync(
-        string rentalId, decimal monto, string idempotencyKey, string accion, string quePasaba,
+        string rentalId, decimal monto, string idempotencyKey, string accion, string quePasaba, string? actor,
         CancellationToken ct)
     {
         var ruta = $"v1/rentals/{Uri.EscapeDataString(rentalId)}";
@@ -173,7 +175,9 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
             return Ilegible();
         }
 
-        var cuerpo = new { amount = new { amount = monto, currency = actual.Quote.Currency } };
+        object cuerpo = actor is null
+            ? new { amount = new { amount = monto, currency = actual.Quote.Currency } }
+            : new { amount = new { amount = monto, currency = actual.Quote.Currency }, actor };
         return await LlamarAsync($"{ruta}/{accion}", cuerpo, idempotencyKey, quePasaba, ct).ConfigureAwait(false);
     }
 

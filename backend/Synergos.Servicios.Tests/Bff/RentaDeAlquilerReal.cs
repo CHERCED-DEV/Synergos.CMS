@@ -200,6 +200,34 @@ internal sealed class RentaDeAlquilerReal : IDisposable
         return await Enviar(peticion);
     }
 
+    /// <summary>Cancela lo confirmado (T020): el inquilino con su sujeto, o el personal con la penalidad.</summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmado(
+        string id, bool porPersonal, decimal penalidad = 0m, string? sujeto = null)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/cancelar-confirmado")
+        {
+            Content = JsonContent.Create(new
+            {
+                actor = porPersonal ? "staff" : "renter",
+                penalty = new { amount = penalidad, currency = "COP" },
+                staffId = porPersonal ? "staff-1" : null,
+            }),
+        };
+        peticion.Headers.Add("Idempotency-Key", $"cancelar-{Guid.NewGuid():N}");
+        if (!porPersonal) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto ?? Sujeto());
+        return await Enviar(peticion);
+    }
+
+    /// <summary>Pone el reloj del orquestador en esa hora de Bogotá (UTC−5) del día <paramref name="dia"/>.</summary>
+    public void EnBogota(DateOnly dia, int hora, int minuto)
+    {
+        var destino = new DateTimeOffset(dia.ToDateTime(new TimeOnly(hora, minuto)), TimeSpan.FromHours(-5));
+        Reloj.Avanzar(destino - Reloj.GetUtcNow());
+    }
+
+    /// <summary>El día de inicio de la <see cref="Ventana"/>: su fecha UTC.</summary>
+    public static DateOnly DiaDeInicio(int desde = 10) => DateOnly.FromDateTime(Ventana(1, desde).Inicio.UtcDateTime);
+
     /// <summary>Reserva y confirma: <c>abrir</c> y <c>cerrar</c> con el contacto, como la puerta.</summary>
     public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Rentar(string llave = "alq-1", object? pedido = null)
     {

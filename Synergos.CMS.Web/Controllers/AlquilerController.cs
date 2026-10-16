@@ -236,15 +236,43 @@ public sealed class AlquilerController : ControllerBase
         return Ok(declaradas.Select(a => AgreementDto.From(a, _issuer.Verify(a))).ToList());
     }
 
-    /// <summary>Cancela antes de que el equipo salga.</summary>
+    /// <summary>
+    /// Cancela un alquiler confirmado: devuelve lo cobrado entero, suelta las unidades y anula la garantía (research
+    /// R7 de la línea 005). El dueño, antes del día de inicio y SIN penalidad —la del cuerpo se ignora—; el personal,
+    /// con la penalidad que fije.
+    /// </summary>
     /// <param name="rentalId">Cuál alquiler.</param>
-    /// <param name="body">La penalidad a retener, ya calculada.</param>
+    /// <param name="body">La penalidad (sólo la del personal cuenta) y la llave.</param>
     /// <param name="ct">Cancelación del request.</param>
     /// <returns>El alquiler cancelado, o el rechazo.</returns>
     [HttpPost("rentals/{rentalId}/cancel")]
-    public Task<ActionResult<RentalDto>> Cancel(
+    public async Task<ActionResult<RentalDto>> Cancel(
         string rentalId, [FromBody] SettleRequest body, CancellationToken ct)
-        => CerrarAsync(rentalId, body, "cancelar", ct);
+    {
+        if (await NegarSiNoEsSuyo(rentalId, "cancelar", ct).ConfigureAwait(false) is { } negado)
+        {
+            return negado;
+        }
+
+        var llave = body?.IdempotencyKey;
+        if (string.IsNullOrWhiteSpace(llave))
+        {
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces.");
+        }
+
+        // Quién cancela lo dice la sesión, no el cuerpo: el rol del personal, o el dueño.
+        var quien = _gate.HasAnyRole(PersonalCsv) ? RentalCanceller.Staff : RentalCanceller.Renter;
+        var penalidad = quien == RentalCanceller.Staff ? body?.Amount ?? 0m : 0m;
+
+        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        var resultado = contrato is { Camino: CaminoDeCompra.Puerta } deLaPuerta
+            ? await _puerta.CancelAsync(deLaPuerta, quien, penalidad,
+                quien == RentalCanceller.Staff ? QuienAlquila() : null, llave, ct).ConfigureAwait(false)
+            : await _rentals.CancelAsync(rentalId, penalidad, quien, llave, ct).ConfigureAwait(false);
+
+        return await ResponderAsync(resultado, contrato, "cancelar", ct).ConfigureAwait(false);
+    }
 
     // ── EJE 3 · el comprobante, que se lee de este lado ─────────────────────
 
@@ -279,27 +307,6 @@ public sealed class AlquilerController : ControllerBase
     }
 
     // ── Fontanería ──────────────────────────────────────────────────────────
-
-    private async Task<ActionResult<RentalDto>> CerrarAsync(
-        string rentalId, SettleRequest? body, string quePasaba, CancellationToken ct)
-    {
-        if (await NegarSiNoEsSuyo(rentalId, quePasaba, ct).ConfigureAwait(false) is { } negado)
-        {
-            return negado;
-        }
-
-        var monto = body?.Amount ?? 0m;
-        var llave = body?.IdempotencyKey;
-        if (string.IsNullOrWhiteSpace(llave))
-        {
-            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
-                "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces.");
-        }
-
-        var resultado = await _rentals.CancelAsync(rentalId, monto, llave, ct).ConfigureAwait(false);
-        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
-        return await ResponderAsync(resultado, contrato, quePasaba, ct).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// La respuesta de una operación sobre un alquiler, con su estado ANOTADO en el registro: la bandeja lo pinta

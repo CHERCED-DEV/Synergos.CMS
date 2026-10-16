@@ -182,13 +182,31 @@ public interface IEquipmentRentalService
     Task<RentalResult?> DeclareReturnAsync(
         string rentalId, string idempotencyKey, CancellationToken cancellationToken = default);
 
-    /// <summary>Cancela antes de que el equipo salga: suelta la ventana y anula la garantía.</summary>
+    /// <summary>
+    /// Cancela un alquiler confirmado: suelta la ventana, devuelve lo cobrado entero y anula la garantía —o retiene de
+    /// ella la penalidad, si cancela el personal— (research R7 de la línea 005, 005-P3).
+    /// </summary>
+    /// <remarks>
+    /// <b>Quién cancela decide la regla</b>: el inquilino, antes del día de inicio (en el huso del despliegue) y sin
+    /// penalidad —la que mande se ignora—; el personal, siempre que no esté devuelto, con la que fije.
+    /// </remarks>
     /// <param name="rentalId">Cuál alquiler.</param>
-    /// <param name="penaltyAmount">Cuánto retener por cancelar; 0 no retiene nada.</param>
+    /// <param name="penaltyAmount">Cuánto retener por cancelar; sólo cuenta si cancela el personal.</param>
+    /// <param name="canceller">Quién cancela.</param>
     /// <param name="idempotencyKey">Obligatoria, por lo mismo que en la devolución.</param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
     /// <returns>El alquiler cancelado, o el rechazo. Null si el alquiler no existe.</returns>
     Task<RentalResult?> CancelAsync(
-        string rentalId, decimal penaltyAmount, string idempotencyKey,
+        string rentalId, decimal penaltyAmount, RentalCanceller canceller, string idempotencyKey,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>Quién cancela un alquiler confirmado: la regla y la penalidad dependen de eso (S-3).</summary>
+public enum RentalCanceller
+{
+    /// <summary>Quien alquiló: antes del día de inicio y sin penalidad.</summary>
+    Renter,
+
+    /// <summary>El personal: siempre que no esté devuelto, con la penalidad que fije.</summary>
+    Staff,
 }

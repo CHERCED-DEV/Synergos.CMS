@@ -105,6 +105,8 @@ public sealed record ConfirmRentalReturnRequest(MoneyPayload? Damage = null, str
 /// <param name="DepositReleased">Lo que se le soltó al inquilino; nulo es «no consta».</param>
 /// <param name="DeclaredAtUtc">Cuándo declaró el inquilino; nulo si no declaró.</param>
 /// <param name="ConfirmedAtUtc">Cuándo confirmó el personal.</param>
+/// <param name="CancelledAtUtc">Cuándo se canceló (T020).</param>
+/// <param name="RentalRefunded">Lo cobrado que se devolvió al cancelar: el total entero.</param>
 public sealed record RentalSettlementResponse(
     string RentalId,
     string State,
@@ -113,22 +115,33 @@ public sealed record RentalSettlementResponse(
     decimal? DamageCharged,
     decimal? DepositReleased,
     DateTimeOffset? DeclaredAtUtc,
-    DateTimeOffset? ConfirmedAtUtc)
+    DateTimeOffset? ConfirmedAtUtc,
+    DateTimeOffset? CancelledAtUtc,
+    decimal? RentalRefunded)
 {
     /// <summary>Proyecta la vista de la liquidación a lo que el CMS lee.</summary>
     /// <param name="v">La vista.</param>
     /// <returns>La respuesta.</returns>
+    /// <remarks>Lo cobrado de la garantía es el daño al devolver o la penalidad al cancelar: nunca los dos.</remarks>
     public static RentalSettlementResponse From(VistaDeLiquidacion v)
         => new(
             v.SagaId,
             v.Estado,
             new MoneyPayload(v.Garantia.Amount, v.Garantia.Currency),
             v.GarantiaRetenida.Amount,
-            v.Registro?.Danio?.Amount,
+            (v.Registro?.Danio ?? v.Registro?.Penalidad)?.Amount,
             v.Registro?.GarantiaLiberada?.Amount,
             v.Registro?.DeclaradaUtc,
-            v.Registro?.ConfirmadaUtc);
+            v.Registro?.ConfirmadaUtc,
+            v.Registro?.CanceladaUtc,
+            v.Registro?.AlquilerDevuelto?.Amount);
 }
+
+/// <summary>Cancelar un alquiler confirmado de la puerta (línea 005, T020).</summary>
+/// <param name="Actor">Quién cancela: <c>renter</c> (el dueño, por <c>X-Synergos-Sujeto</c>) o <c>staff</c>.</param>
+/// <param name="Penalty">Lo que retiene el personal; la del inquilino se ignora.</param>
+/// <param name="StaffId">El seudónimo del personal, si cancela él; su clase la pone el orquestador.</param>
+public sealed record CancelDoorRentalRequest(string? Actor = null, MoneyPayload? Penalty = null, string? StaffId = null);
 
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>

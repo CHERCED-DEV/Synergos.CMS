@@ -26,11 +26,10 @@ namespace Synergos.CMS.Tests.Bff;
 /// para este motor es la cotización: el total del alquiler y el de la garantía los calcula el servidor con la
 /// oferta publicada, y aquí los pone el guion de <c>Api.Pricing</c> con los mismos montos del imperativo.</para>
 ///
-/// <para><b>Hereda la devolución</b> (T017: declarar y confirmar con el daño, por las operaciones posteriores al
-/// cierre, <c>/v1/alquileres/{id}/…</c>). Cancelar lo confirmado llega con T020, sin <c>Skip</c>: entonces
-/// hereda <see cref="RentalLiquidacionBase"/>.</para>
+/// <para><b>Hereda el oráculo entero de lo que pasa después</b>: declarar y confirmar con el daño (T017) y cancelar
+/// lo confirmado (T020), por las operaciones posteriores al cierre, <c>/v1/alquileres/{id}/…</c>.</para>
 /// </remarks>
-public sealed class RentalCompensationDeclaradaTests : RentalDevolucionBase, IDisposable
+public sealed class RentalCompensationDeclaradaTests : RentalLiquidacionBase, IDisposable
 {
     private readonly List<ConductorDeclarado> _conductores = [];
 
@@ -201,8 +200,21 @@ public sealed class RentalCompensationDeclaradaTests : RentalDevolucionBase, IDi
             return Liquidada(await EnviarAsync(peticion));
         }
 
-        public override Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad, bool porPersonal)
-            => throw new NotSupportedException("Cancelar lo confirmado por el camino declarado llega con T020.");
+        /// <summary>Cancelar lo confirmado: el inquilino con su sujeto, el personal con su seudónimo y la penalidad.</summary>
+        public override async Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad, bool porPersonal)
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/alquileres/{Uri.EscapeDataString(id)}/cancelar-confirmado")
+            {
+                Content = JsonContent.Create(new
+                {
+                    actor = porPersonal ? "staff" : "renter",
+                    penalty = new { amount = penalidad, currency = "COP" },
+                    staffId = porPersonal ? "staff-1" : null,
+                }),
+            };
+            peticion.Headers.Add("Idempotency-Key", $"cancelar-{Guid.NewGuid():N}");
+            return Liquidada(await EnviarAsync(peticion));
+        }
 
         /// <summary>Declarar la devolución: lo que hace el inquilino, con su sujeto de la puerta.</summary>
         public override async Task<VistaDeRenta> DeclararAsync(string id)

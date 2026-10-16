@@ -90,11 +90,16 @@ public sealed partial class SeamComposer
         }
         else
         {
-            services.AddSingleton<IEquipmentRentalService>(sp => new StubEquipmentRentalService(
-                sp.GetRequiredService<IEquipmentCatalogProvider>(),
-                sp.GetRequiredService<IJsonEntityStore>(),
-                sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>().CurrentValue.MaxRentalDays));
+            services.AddSingleton<IEquipmentRentalService>(sp =>
+            {
+                var alquiler = sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>().CurrentValue;
+                return new StubEquipmentRentalService(
+                    sp.GetRequiredService<IEquipmentCatalogProvider>(),
+                    sp.GetRequiredService<IJsonEntityStore>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    alquiler.MaxRentalDays,
+                    TimeZoneInfo.FindSystemTimeZoneById(alquiler.TimeZone));
+            });
         }
 
         // ── Lo que pasa después del cierre con un alquiler de la PUERTA (línea 005, T018) ─────

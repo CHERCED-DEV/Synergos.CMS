@@ -151,6 +151,83 @@ public sealed class LiquidacionDeAlquilerTests
         Assert.Equal("alquiler.not_returnable", Codigo((await r.Confirmar(id, 0m)).Cuerpo));
     }
 
+    // ── Cancelar lo confirmado (T020; research R7, 005-P3) ──────────────────
+
+    [Fact]
+    public async Task El_inquilino_cancela_la_noche_anterior_y_se_le_devuelve_todo()
+    {
+        var (r, id, garantia) = await Rentado();
+        using var _ = r;
+        var cobro = Texto(await r.Sobre(id, null), "cobroId")!;
+
+        // 23:30 en Bogotá del día anterior: en UTC ya es el día de inicio.
+        r.EnBogota(RentaDeAlquilerReal.DiaDeInicio().AddDays(-1), 23, 30);
+        var (estado, cuerpo) = await r.CancelarConfirmado(id, porPersonal: false, penalidad: 99_000m);
+
+        Assert.True(estado == HttpStatusCode.OK, cuerpo.ToString());
+        Assert.Equal("cancelled", cuerpo.GetProperty("state").GetString());
+        Assert.Equal(0m, cuerpo.GetProperty("damageCharged").GetDecimal());   // la penalidad del inquilino se ignora
+        Assert.Equal(210_000m, cuerpo.GetProperty("rentalRefunded").GetDecimal());   // 1 unidad × 7 días × 30 000
+        Assert.Equal(0m, (await Cobro(r, cobro)).GetProperty("refundable").GetProperty("amount").GetDecimal());
+        Assert.Equal("Voided", (await Cobro(r, garantia)).GetProperty("status").GetString());
+        var reserva = Assert.Single(await r.Lista("booking", $"v1/reservations?resourceId={await r.Recurso()}"));
+        Assert.Equal("Cancelled", reserva.GetProperty("status").GetString());
+        Assert.Equal(0, await r.Tomadas());
+    }
+
+    [Fact]
+    public async Task Desde_el_dia_de_inicio_el_inquilino_ya_no_cancela_y_nada_se_mueve()
+    {
+        var (r, id, garantia) = await Rentado();
+        using var _ = r;
+        r.EnBogota(RentaDeAlquilerReal.DiaDeInicio(), 0, 10);
+        var antes = r.Cable.Llamadas.Count;
+
+        var (estado, cuerpo) = await r.CancelarConfirmado(id, porPersonal: false);
+
+        Assert.Equal(HttpStatusCode.Conflict, estado);
+        Assert.Equal("alquiler.already_started", Codigo(cuerpo));
+        Assert.Empty(r.Cable.Llamadas.Skip(antes));
+        Assert.Equal("Authorized", (await Cobro(r, garantia)).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task El_personal_cancela_con_penalidad_y_el_alquiler_se_devuelve_igual()
+    {
+        var (r, id, garantia) = await Rentado();
+        using var _ = r;
+        var cobro = Texto(await r.Sobre(id, null), "cobroId")!;
+        r.EnBogota(RentaDeAlquilerReal.DiaDeInicio(), 9, 0);
+
+        var (estado, cuerpo) = await r.CancelarConfirmado(id, porPersonal: true, penalidad: 50_000m);
+
+        Assert.True(estado == HttpStatusCode.OK, cuerpo.ToString());
+        Assert.Equal(50_000m, cuerpo.GetProperty("damageCharged").GetDecimal());
+        Assert.Equal(350_000m, cuerpo.GetProperty("depositReleased").GetDecimal());
+        Assert.Equal(50_000m, (await Cobro(r, garantia)).GetProperty("refundable").GetProperty("amount").GetDecimal());
+        Assert.Equal(0m, (await Cobro(r, cobro)).GetProperty("refundable").GetProperty("amount").GetDecimal());
+        Assert.Equal(0, await r.Tomadas());
+    }
+
+    [Fact]
+    public async Task Un_inquilino_ajeno_no_cancela_y_cancelar_dos_veces_devuelve_una()
+    {
+        var (r, id, _) = await Rentado();
+        using var __ = r;
+        var cobro = Texto(await r.Sobre(id, null), "cobroId")!;
+
+        var (ajeno, rechazo) = await r.CancelarConfirmado(id, porPersonal: false, sujeto: RentaDeAlquilerReal.Sujeto("u-2"));
+        Assert.Equal(HttpStatusCode.NotFound, ajeno);
+        Assert.Equal("alquiler.saga_not_found", Codigo(rechazo));
+
+        Assert.Equal(HttpStatusCode.OK, (await r.CancelarConfirmado(id, porPersonal: false)).Estado);
+        Assert.Equal(HttpStatusCode.OK, (await r.CancelarConfirmado(id, porPersonal: false)).Estado);
+        Assert.Equal(1, r.Cable.Veces("POST", $"^/v1/payments/{cobro}/refund$"));
+    }
+
+    private static string? Texto(( HttpStatusCode Estado, JsonElement Cuerpo) r, string nombre)
+        => r.Cuerpo.GetProperty("datos").GetProperty(nombre) is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;
+
     [Fact]
     public async Task Con_la_retencion_vencida_sin_danio_cuenta_liberada_y_con_danio_se_rechaza()
     {

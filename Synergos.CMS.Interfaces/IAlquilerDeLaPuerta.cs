@@ -32,4 +32,19 @@ public interface IAlquilerDeLaPuerta
     Task<RentalResult?> ConfirmReturnAsync(
         RentalAgreement agreement, decimal damageAmount, string staffId, string idempotencyKey,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancela el alquiler confirmado (línea 005, T020): devuelve lo cobrado entero y anula la garantía, o retiene la
+    /// penalidad si cancela el personal. El inquilino, sólo antes del día de inicio y sin penalidad.
+    /// </summary>
+    /// <param name="agreement">El contrato del alquiler.</param>
+    /// <param name="canceller">Quién cancela.</param>
+    /// <param name="penaltyAmount">Lo que retiene el personal; la del inquilino no viaja.</param>
+    /// <param name="staffId">El seudónimo del personal, si cancela él.</param>
+    /// <param name="idempotencyKey">La llave de la operación.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El alquiler cancelado, o el rechazo. Null si el orquestador no lo conoce.</returns>
+    Task<RentalResult?> CancelAsync(
+        RentalAgreement agreement, RentalCanceller canceller, decimal penaltyAmount, string? staffId, string idempotencyKey,
+        CancellationToken cancellationToken = default);
 }

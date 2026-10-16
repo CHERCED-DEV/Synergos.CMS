@@ -16,7 +16,10 @@ namespace Synergos.Bff.Alquiler.Domain;
 /// <param name="ConfirmadaUtc">Cuándo la confirmó el personal.</param>
 /// <param name="Danio">Lo que se cobró de la garantía; nulo mientras no se confirma.</param>
 /// <param name="GarantiaLiberada">Lo que se le soltó: G − D. Nulo es «no consta», nunca cero.</param>
-/// <param name="Personal">Quién confirmó, por referencia.</param>
+/// <param name="Personal">Quién confirmó o canceló, por referencia; nulo si canceló el inquilino.</param>
+/// <param name="CanceladaUtc">Cuándo se canceló (T020).</param>
+/// <param name="Penalidad">Lo que el personal retuvo de la garantía al cancelar; cero si canceló el inquilino.</param>
+/// <param name="AlquilerDevuelto">Lo cobrado que se devolvió al cancelar: el total entero.</param>
 public sealed record LiquidacionRegistrada(
     string SagaId,
     string Estado,
@@ -24,7 +27,10 @@ public sealed record LiquidacionRegistrada(
     DateTimeOffset? ConfirmadaUtc,
     Money? Danio,
     Money? GarantiaLiberada,
-    Ref? Personal);
+    Ref? Personal,
+    DateTimeOffset? CanceladaUtc = null,
+    Money? Penalidad = null,
+    Money? AlquilerDevuelto = null);
 
 /// <summary>Un alquiler de la puerta con lo que se sabe de él después del cierre.</summary>
 /// <param name="SagaId">El alquiler.</param>
@@ -70,19 +76,23 @@ public sealed class LiquidacionDeAlquiler
     private readonly ISagaLease _turno;
     private readonly IPaymentsPort _pagos;
     private readonly IDeshacerCobros _cobros;
+    private readonly IDeshacerAgenda _agenda;
+    private readonly HusoDelAlquiler _huso;
     private readonly TimeProvider _reloj;
     private readonly ILogger<LiquidacionDeAlquiler> _log;
     private readonly JsonCollectionStore<LiquidacionRegistrada> _registro;
 
     public LiquidacionDeAlquiler(
-        SagaEngine<SagaDeFlujo> motor, ISagaLease turno, IPaymentsPort pagos, IDeshacerCobros cobros,
-        IOptions<SagaStorageOptions> almacen, TimeProvider reloj, ILogger<LiquidacionDeAlquiler> log)
+        SagaEngine<SagaDeFlujo> motor, ISagaLease turno, IPaymentsPort pagos, IDeshacerCobros cobros, IDeshacerAgenda agenda,
+        HusoDelAlquiler huso, IOptions<SagaStorageOptions> almacen, TimeProvider reloj, ILogger<LiquidacionDeAlquiler> log)
     {
         ArgumentNullException.ThrowIfNull(almacen);
         _motor = motor;
         _turno = turno;
         _pagos = pagos;
         _cobros = cobros;
+        _agenda = agenda;
+        _huso = huso;
         _reloj = reloj;
         _log = log;
         _registro = new JsonCollectionStore<LiquidacionRegistrada>(
@@ -172,6 +182,106 @@ public sealed class LiquidacionDeAlquiler
         return Result.Ok(Vista(saga, devuelta));
     }
 
+    /// <summary>
+    /// Cancela un alquiler confirmado (research R7, 005-P3): cancela las reservas, DEVUELVE lo cobrado entero y anula
+    /// la garantía —o, si cancela el personal con penalidad, la captura y devuelve G − P—.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El inquilino</b> (el dueño, por la puerta) cancela antes del día de inicio en el huso del despliegue y
+    /// sin penalidad; con la devolución declarada, la resuelve el personal. <b>El personal</b>, siempre que no esté
+    /// devuelto, con la penalidad que fije.</para>
+    ///
+    /// <para><b>Las reservas se leen de las compensaciones</b> que dejó el cierre (<c>booking.cancelar</c> sobre cada
+    /// una; al completar quedan dadas por hechas): la ranura de la saga guarda los apartados, no las reservas, y una
+    /// saga cerrada no se compensa —cancelar es una operación con su política, no un deshacer—. Es pegamento atribuido
+    /// a NN-8 (T051 del núcleo).</para>
+    /// </remarks>
+    /// <param name="sagaId">El alquiler.</param>
+    /// <param name="quien">Quién cancela.</param>
+    /// <param name="penalidad">Lo que retiene el personal; la del inquilino se ignora.</param>
+    /// <param name="dueno">El sujeto de la puerta, si cancela el inquilino: tiene que ser el dueño.</param>
+    /// <param name="personal">Quién cancela, si es el personal.</param>
+    /// <param name="ct">Cancelación.</param>
+    public async Task<Result<VistaDeLiquidacion>> CancelarAsync(
+        string sagaId, QuienCancela quien, Money penalidad, Ref? dueno, Ref? personal, CancellationToken ct)
+    {
+        using var turno = _turno.TryAcquire(sagaId);
+        if (turno is null) return Ocupada(sagaId);
+
+        var porElInquilino = quien == QuienCancela.Inquilino;
+        if (porElInquilino && dueno is null) return NoExiste(sagaId);
+        if (Hallar(sagaId, porElInquilino ? dueno : null) is not { } saga) return NoExiste(sagaId);
+        var previo = _registro.Find(sagaId);
+
+        if (previo?.Estado == Cancelada) return Result.Ok(Vista(saga, previo));
+        if (saga.Status != SagaStatus.Completed || previo?.Estado == Devuelta)
+        {
+            return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_cancellable",
+                $"El alquiler {sagaId} no está confirmado o ya se devolvió: no hay nada que cancelar."));
+        }
+
+        var garantia = Garantia(saga);
+        if (porElInquilino)
+        {
+            if (previo?.Estado == Declarada)
+            {
+                return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_cancellable",
+                    $"El alquiler {sagaId} tiene la devolución declarada: lo resuelve el personal."));
+            }
+            if (Ventana(saga) is not { } ventana || _huso.YaEmpezo(ventana, _reloj.GetUtcNow()))
+            {
+                return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.already_started",
+                    $"El alquiler {sagaId} ya empezó: desde el día de inicio lo cancela el personal."));
+            }
+            penalidad = Money.Zero(garantia.Currency);
+        }
+
+        if (penalidad.Amount < 0m || !string.Equals(penalidad.Currency, garantia.Currency, StringComparison.Ordinal))
+        {
+            return Result.Rejected<VistaDeLiquidacion>(Rejection.Invalid("alquiler.bad_amount",
+                $"La penalidad tiene que ser cero o más, en {garantia.Currency}."));
+        }
+        if (penalidad.Amount > garantia.Amount)
+        {
+            return Result.Rejected<VistaDeLiquidacion>(Rejection.Invalid("alquiler.damage_exceeds_deposit",
+                $"La penalidad ({penalidad.Amount}) supera la garantía retenida ({garantia.Amount})."));
+        }
+
+        // Al completar, el intérprete da por hechas las compensaciones armadas; el KIND sigue diciendo qué cierre
+        // produjo una reserva (el «despues» de apartar), y su objetivo es la reserva.
+        foreach (var reserva in saga.Compensations.Where(c => c.Kind == "booking.cancelar").Select(c => c.TargetId).Distinct(StringComparer.Ordinal))
+        {
+            var cancelada = await _agenda.CancelarAsync(reserva, ct);
+            if (!cancelada.IsOk) return Result.Rejected<VistaDeLiquidacion>(cancelada.Rejection!);
+        }
+
+        var total = Total(saga);
+        if (Texto(saga, "cobroId") is { } cobro && !total.IsZero)
+        {
+            var devuelto = await _cobros.DevolverAsync(cobro, total, "alquiler cancelado", IdempotencyKey.From(saga.Id, "liquidar:cancelar"), ct);
+            if (!devuelto.IsOk) return Result.Rejected<VistaDeLiquidacion>(devuelto.Rejection!);
+        }
+
+        if (Texto(saga, "garantiaId") is { } deposito)
+        {
+            var movida = await MoverGarantiaAsync(saga.Id, deposito, garantia, penalidad, ct);
+            if (movida is { } no) return Result.Rejected<VistaDeLiquidacion>(no);
+        }
+
+        var cancelado = (previo ?? new LiquidacionRegistrada(sagaId, Cancelada, null, null, null, null, null)) with
+        {
+            Estado = Cancelada,
+            CanceladaUtc = _reloj.GetUtcNow(),
+            Penalidad = penalidad,
+            GarantiaLiberada = Money.Of(garantia.Amount - penalidad.Amount, garantia.Currency),
+            AlquilerDevuelto = total,
+            Personal = porElInquilino ? null : personal,
+        };
+        _registro.Put(cancelado);
+        _log.LogInformation("Alquiler {Saga}: cancelado por {Quien}; penalidad {Penalidad}.", sagaId, quien, penalidad.Amount);
+        return Result.Ok(Vista(saga, cancelado));
+    }
+
     /// <summary>Anula la garantía, o la captura y devuelve el sobrante. El rechazo, si algo no salió.</summary>
     private async Task<Rejection?> MoverGarantiaAsync(string sagaId, string cobro, Money garantia, Money danio, CancellationToken ct)
     {
@@ -232,6 +342,18 @@ public sealed class LiquidacionDeAlquiler
         var total = saga.Datos.GetValueOrDefault("total")?.Valor;
         return Money.Zero(total is { ValueKind: JsonValueKind.Object } t ? t.GetProperty("currency").GetString()! : Money.Cop);
     }
+
+    /// <summary>Lo que se cobró por el alquiler; cero si no consta.</summary>
+    private static Money Total(SagaDeFlujo saga)
+        => saga.Datos.GetValueOrDefault("total")?.Valor is { ValueKind: JsonValueKind.Object } t
+            ? Money.Of(t.GetProperty("amount").GetDecimal(), t.GetProperty("currency").GetString()!)
+            : Money.Zero(Garantia(saga).Currency);
+
+    /// <summary>La ventana del alquiler, o nula si la saga no la guardó (antes de T020 no estaba en la salida).</summary>
+    private static TimeWindow? Ventana(SagaDeFlujo saga)
+        => saga.Datos.GetValueOrDefault("ventana")?.Valor is { ValueKind: JsonValueKind.Object } v
+            ? (TimeWindow)new Synergos.Bff.Core.Flow.Ventana().Leer(v, $"la saga {saga.Id}, «ventana»")
+            : null;
 
     private static string? Texto(SagaDeFlujo saga, string nombre)
         => saga.Datos.GetValueOrDefault(nombre)?.Valor is { ValueKind: JsonValueKind.String } v ? v.GetString() : null;

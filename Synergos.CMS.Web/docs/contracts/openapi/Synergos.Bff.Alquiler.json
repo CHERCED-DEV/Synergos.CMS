@@ -5,6 +5,123 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/alquileres/{id}/cancelar-confirmado": {
+      "post": {
+        "operationId": "CancelDoorRental",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelDoorRentalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RentalSettlementResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/alquileres/{id}/confirmar-devolucion": {
       "post": {
         "operationId": "ConfirmDoorRentalReturn",
@@ -1585,7 +1702,8 @@
               "total",
               "garantia",
               "garantiaId",
-              "cobroId"
+              "cobroId",
+              "ventana"
             ],
             "type": "object",
             "properties": {
@@ -1645,6 +1763,30 @@
                 "type": [
                   "null",
                   "string"
+                ]
+              },
+              "ventana": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             }
@@ -1726,7 +1868,8 @@
               "total",
               "garantia",
               "garantiaId",
-              "cobroId"
+              "cobroId",
+              "ventana"
             ],
             "type": "object",
             "properties": {
@@ -1787,6 +1930,30 @@
                   "null",
                   "string"
                 ]
+              },
+              "ventana": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
@@ -1802,6 +1969,33 @@
           },
           "deshaciendo": {
             "type": "boolean"
+          }
+        }
+      },
+      "CancelDoorRentalRequest": {
+        "type": "object",
+        "properties": {
+          "actor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "penalty": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MoneyPayload"
+              }
+            ]
+          },
+          "staffId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -2204,7 +2398,9 @@
           "damageCharged",
           "depositReleased",
           "declaredAtUtc",
-          "confirmedAtUtc"
+          "confirmedAtUtc",
+          "cancelledAtUtc",
+          "rentalRefunded"
         ],
         "type": "object",
         "properties": {
@@ -2248,6 +2444,20 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "cancelledAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "rentalRefunded": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
           }
         }
       },

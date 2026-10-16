@@ -8,7 +8,7 @@
     "ventana": "ventana",
     "contacto": { "de": "contacto" }
   },
-  "salida": ["total", "garantia", "garantiaId", "cobroId"],
+  "salida": ["total", "garantia", "garantiaId", "cobroId", "ventana"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": [

@@ -39,6 +39,7 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
     private readonly IJsonEntityStore _store;
     private readonly TimeProvider _clock;
     private readonly int _maxRentalDays;
+    private readonly TimeZoneInfo _huso;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Construye el motor.</summary>
@@ -46,16 +47,22 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
     /// <param name="store">Dónde se guardan los alquileres, durable.</param>
     /// <param name="clock">El reloj; inyectado para que un test no dependa del de pared.</param>
     /// <param name="maxRentalDays">El tope del despliegue, de <c>AlquilerSettings</c>.</param>
+    /// <param name="huso">
+    /// El huso del despliegue (<c>Synergos:Alquiler:TimeZone</c>): en qué día está «hoy» para la regla de cancelar.
+    /// Sin él, el de por defecto (<see cref="Application.Configuration.AlquilerSettings.HusoPorDefecto"/>).
+    /// </param>
     public StubEquipmentRentalService(
         IEquipmentCatalogProvider catalog,
         IJsonEntityStore store,
         TimeProvider clock,
-        int maxRentalDays)
+        int maxRentalDays,
+        TimeZoneInfo? huso = null)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _maxRentalDays = maxRentalDays;
+        _huso = huso ?? TimeZoneInfo.FindSystemTimeZoneById(Application.Configuration.AlquilerSettings.HusoPorDefecto);
     }
 
     /// <inheritdoc />
@@ -147,14 +154,14 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
     public async Task<RentalResult?> ReturnAsync(
         string rentalId, decimal damageAmount, string idempotencyKey,
         CancellationToken cancellationToken = default)
-        => await CerrarAsync(rentalId, damageAmount, idempotencyKey, devolucion: true, cancellationToken)
+        => await CerrarAsync(rentalId, damageAmount, idempotencyKey, quienCancela: null, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<RentalResult?> CancelAsync(
-        string rentalId, decimal penaltyAmount, string idempotencyKey,
+        string rentalId, decimal penaltyAmount, RentalCanceller canceller, string idempotencyKey,
         CancellationToken cancellationToken = default)
-        => await CerrarAsync(rentalId, penaltyAmount, idempotencyKey, devolucion: false, cancellationToken)
+        => await CerrarAsync(rentalId, penaltyAmount, idempotencyKey, canceller, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc />
@@ -211,14 +218,18 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
     /// libera el resto. Lo que cambia es el estado destino y cuándo es legal.
     /// </summary>
     /// <remarks>
-    /// Los dos valen desde un alquiler reservado o declarado (S-2: el personal confirma sin declaración, y
-    /// cancela con penalidad aunque esté declarado). Quién puede cancelar y hasta cuándo lo pone la regla del
-    /// actor (línea 005, T019–T020).
+    /// <para>Los dos valen desde un alquiler reservado o declarado (S-2: el personal confirma sin declaración, y
+    /// cancela con penalidad aunque esté declarado).</para>
+    ///
+    /// <para><b>Cancelar el inquilino</b> (research R7 de la línea 005): sólo antes del día de inicio —«hoy» en el
+    /// huso del despliegue—, nunca con la devolución declarada, y sin penalidad: la que mande se ignora. Lo cobrado
+    /// se devuelve entero, que en este motor no es un movimiento: el alquiler queda cancelado sin cobro.</para>
     /// </remarks>
     private async Task<RentalResult?> CerrarAsync(
-        string rentalId, decimal monto, string idempotencyKey, bool devolucion,
+        string rentalId, decimal monto, string idempotencyKey, RentalCanceller? quienCancela,
         CancellationToken cancellationToken)
     {
+        var devolucion = quienCancela is null;
         if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
             return Rechazo("idempotency_key_required",
@@ -249,6 +260,24 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
                         $"El alquiler {rentalId} está en {alquiler.State} y ya no admite devolución.")
                     : Rechazo("not_cancellable",
                         $"El alquiler {rentalId} está en {alquiler.State} y ya no se puede cancelar.");
+            }
+
+            if (quienCancela == RentalCanceller.Renter)
+            {
+                if (alquiler.State is RentalState.Declared)
+                {
+                    return Rechazo("not_cancellable",
+                        $"El alquiler {rentalId} tiene la devolución declarada: lo resuelve el personal.");
+                }
+
+                var hoy = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), _huso).DateTime);
+                if (hoy >= alquiler.Start)
+                {
+                    return Rechazo("already_started",
+                        $"El alquiler {rentalId} empezó el {alquiler.Start:yyyy-MM-dd}: desde ese día lo cancela el personal.");
+                }
+
+                monto = 0m;
             }
 
             if (monto < 0m)

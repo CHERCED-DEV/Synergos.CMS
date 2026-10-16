@@ -70,6 +70,23 @@ public sealed class HttpAlquilerDeLaPuerta : IAlquilerDeLaPuerta
             "confirmar la devolución", cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<RentalResult?> CancelAsync(
+        RentalAgreement agreement, RentalCanceller canceller, decimal penaltyAmount, string? staffId, string idempotencyKey,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(agreement);
+        var porPersonal = canceller == RentalCanceller.Staff;
+        var cuerpo = new
+        {
+            actor = porPersonal ? "staff" : "renter",
+            penalty = new { amount = porPersonal ? penaltyAmount : 0m, currency = agreement.Currency },
+            staffId = porPersonal ? staffId : null,
+        };
+        return LlamarAsync(agreement, "cancelar-confirmado", cuerpo, idempotencyKey,
+            sujeto: porPersonal ? null : $"{_settings.CurrentValue.RenterKind}:{agreement.RenterId}", "cancelar", cancellationToken);
+    }
+
     private async Task<RentalResult?> LlamarAsync(
         RentalAgreement contrato, string operacion, object? cuerpo, string idempotencyKey, string? sujeto,
         string quePasaba, CancellationToken ct)
