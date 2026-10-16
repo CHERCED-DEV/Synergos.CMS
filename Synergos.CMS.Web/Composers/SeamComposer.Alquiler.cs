@@ -96,5 +96,25 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>().CurrentValue.MaxRentalDays));
         }
+
+        // ── Lo que pasa después del cierre con un alquiler de la PUERTA (línea 005, T018) ─────
+        //
+        // Declarar y confirmar van al orquestador por el que salió el alquiler, no al motor del Mode. No
+        // depende del modo de la ruta directa: la puerta habla con el orquestador también con el motor en
+        // proceso de default. Hay destino si el despliegue dice dónde vive (BaseUrl) o si la directa ya va
+        // por él (Mode=Bff); sin destino no sale a la red, como el artefacto de Eventos.
+        var seccionDeAlquiler = builder.Config.GetSection("Synergos:Alquiler");
+        var hayOrquestadorDeAlquiler = !string.IsNullOrWhiteSpace(seccionDeAlquiler["BaseUrl"])
+            || Interruptor.Encendido(builder.Config, "Synergos:Alquiler:Mode", "Bff", new AlquilerSettings().Mode);
+        if (hayOrquestadorDeAlquiler)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpAlquilerDeLaPuerta.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 30));
+        }
+        services.AddSingleton<IAlquilerDeLaPuerta>(sp => new HttpAlquilerDeLaPuerta(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
+            sp.GetRequiredService<ILogger<HttpAlquilerDeLaPuerta>>(),
+            hayOrquestadorDeAlquiler));
     }
 }

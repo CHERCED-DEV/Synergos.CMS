@@ -30,6 +30,7 @@ public sealed class AlquilerController : ControllerBase
 {
     private readonly IEquipmentCatalogProvider _catalog;
     private readonly IEquipmentRentalService _rentals;
+    private readonly IAlquilerDeLaPuerta _puerta;
     private readonly EquipmentAgreementIssuer _issuer;
     private readonly EquipmentAgreementLedger _ledger;
     private readonly IMemberAccessGate _gate;
@@ -37,7 +38,8 @@ public sealed class AlquilerController : ControllerBase
 
     /// <summary>Construye el borde.</summary>
     /// <param name="catalog">El eje 1.</param>
-    /// <param name="rentals">El eje 2.</param>
+    /// <param name="rentals">El eje 2, por la ruta directa.</param>
+    /// <param name="puerta">Lo que pasa después del cierre con un alquiler que salió por la puerta.</param>
     /// <param name="issuer">El emisor del contrato (eje 3), fuera del seam.</param>
     /// <param name="ledger">El registro de contratos, que es el modelo de lectura.</param>
     /// <param name="gate">Quién está en sesión.</param>
@@ -45,6 +47,7 @@ public sealed class AlquilerController : ControllerBase
     public AlquilerController(
         IEquipmentCatalogProvider catalog,
         IEquipmentRentalService rentals,
+        IAlquilerDeLaPuerta puerta,
         EquipmentAgreementIssuer issuer,
         EquipmentAgreementLedger ledger,
         IMemberAccessGate gate,
@@ -52,6 +55,7 @@ public sealed class AlquilerController : ControllerBase
     {
         _catalog = catalog;
         _rentals = rentals;
+        _puerta = puerta;
         _issuer = issuer;
         _ledger = ledger;
         _gate = gate;
@@ -137,15 +141,100 @@ public sealed class AlquilerController : ControllerBase
         return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
     }
 
-    /// <summary>El equipo volvió: libera la garantía o cobra de ella el daño.</summary>
+    /// <summary>
+    /// El inquilino declara que devolvió el equipo (decisión 5 del lote 1, #203): la garantía SIGUE retenida
+    /// hasta que el personal confirme.
+    /// </summary>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="body">La llave de la operación.</param>
+    /// <param name="ct">Cancelación del request.</param>
+    /// <returns>El alquiler declarado, o el rechazo. Uno ajeno no existe (404).</returns>
+    [HttpPost("rentals/{rentalId}/declare-return")]
+    public async Task<ActionResult<RentalDto>> DeclareReturn(
+        string rentalId, [FromBody] DeclareReturnRequest body, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                "Hay que iniciar sesión para declarar una devolución.");
+        }
+
+        // Declarar es del dueño: el de otro no existe, como en la puerta. El dueño se lee del contrato.
+        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        if (contrato is null || !string.Equals(contrato.RenterId, QuienAlquila(), StringComparison.Ordinal))
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(body?.IdempotencyKey))
+        {
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Declarar la devolución es una escritura: hace falta la llave.");
+        }
+
+        // Por donde salió el alquiler, no por donde el sitio venda hoy.
+        var resultado = contrato.Camino == CaminoDeCompra.Puerta
+            ? await _puerta.DeclareReturnAsync(contrato, body.IdempotencyKey, ct).ConfigureAwait(false)
+            : await _rentals.DeclareReturnAsync(rentalId, body.IdempotencyKey, ct).ConfigureAwait(false);
+
+        return await ResponderAsync(resultado, contrato, "declarar la devolución", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// El personal confirma la devolución con el daño: libera la garantía o cobra de ella. SÓLO el personal
+    /// (decisión 5 del lote 1, #203): el inquilino declara, no confirma, aunque sea el dueño y aunque diga cero.
+    /// </summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="body">El monto del daño, ya calculado por quien recibió.</param>
     /// <param name="ct">Cancelación del request.</param>
-    /// <returns>El alquiler cerrado, o el rechazo.</returns>
+    /// <returns>El alquiler devuelto, o el rechazo.</returns>
     [HttpPost("rentals/{rentalId}/return")]
-    public Task<ActionResult<RentalDto>> Return(
+    public async Task<ActionResult<RentalDto>> Return(
         string rentalId, [FromBody] SettleRequest body, CancellationToken ct)
-        => CerrarAsync(rentalId, body, "devolver", ct);
+    {
+        if (NegarSiNoEsPersonal("confirmar la devolución de") is { } negado)
+        {
+            return negado;
+        }
+
+        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        if (contrato is null)
+        {
+            return NotFound();
+        }
+
+        var llave = body?.IdempotencyKey;
+        if (string.IsNullOrWhiteSpace(llave))
+        {
+            return Problema(StatusCodes.Status400BadRequest, "alquiler.idempotency_key_required",
+                "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces.");
+        }
+
+        var monto = body?.Amount ?? 0m;
+        var resultado = contrato.Camino == CaminoDeCompra.Puerta
+            ? await _puerta.ConfirmReturnAsync(contrato, monto, QuienAlquila()!, llave, ct).ConfigureAwait(false)
+            : await _rentals.ReturnAsync(rentalId, monto, llave, ct).ConfigureAwait(false);
+
+        return await ResponderAsync(resultado, contrato, "confirmar la devolución", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Las devoluciones declaradas que esperan al personal, de todo el despliegue y de la más vieja a la más
+    /// nueva. Sólo el personal.
+    /// </summary>
+    /// <param name="ct">Cancelación del request.</param>
+    /// <returns>Los contratos declarados.</returns>
+    [HttpGet("staff/returns")]
+    public async Task<ActionResult<IReadOnlyList<AgreementDto>>> StaffReturns(CancellationToken ct)
+    {
+        if (NegarSiNoEsPersonal("ver las devoluciones declaradas de") is { } negado)
+        {
+            return negado;
+        }
+
+        var declaradas = await _ledger.ListByStateAsync(RentalState.Declared, ct).ConfigureAwait(false);
+        return Ok(declaradas.Select(a => AgreementDto.From(a, _issuer.Verify(a))).ToList());
+    }
 
     /// <summary>Cancela antes de que el equipo salga.</summary>
     /// <param name="rentalId">Cuál alquiler.</param>
@@ -207,10 +296,21 @@ public sealed class AlquilerController : ControllerBase
                 "Cobrar de la garantía es un movimiento relativo: sin llave, un reintento cobra dos veces.");
         }
 
-        var resultado = quePasaba == "devolver"
-            ? await _rentals.ReturnAsync(rentalId, monto, llave, ct).ConfigureAwait(false)
-            : await _rentals.CancelAsync(rentalId, monto, llave, ct).ConfigureAwait(false);
+        var resultado = await _rentals.CancelAsync(rentalId, monto, llave, ct).ConfigureAwait(false);
+        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        return await ResponderAsync(resultado, contrato, quePasaba, ct).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// La respuesta de una operación sobre un alquiler, con su estado ANOTADO en el registro: la bandeja lo pinta
+    /// sin preguntarle a nadie, y la del personal lo busca ahí.
+    /// </summary>
+    /// <remarks>
+    /// El sello del contrato no cubre el estado (sólo lo pactado al salir), así que anotarlo no lo rompe.
+    /// </remarks>
+    private async Task<ActionResult<RentalDto>> ResponderAsync(
+        RentalResult? resultado, RentalAgreement? contrato, string quePasaba, CancellationToken ct)
+    {
         if (resultado is null)
         {
             return NotFound();
@@ -221,8 +321,32 @@ public sealed class AlquilerController : ControllerBase
             return Rechazar(resultado, quePasaba);
         }
 
-        var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
+        if (contrato is not null && contrato.Estado != resultado.Rental.State)
+        {
+            contrato = contrato with { Estado = resultado.Rental.State };
+            await _ledger.RecordAsync(contrato, ct).ConfigureAwait(false);
+        }
+
         return Ok(RentalDto.From(resultado.Rental, contrato, _issuer.Verify(contrato)));
+    }
+
+    /// <summary>Lo que sólo hace el personal: sin sesión 401, sin el rol 403 (<c>alquiler.staff_required</c>).</summary>
+    /// <remarks>
+    /// 403 aunque sea el dueño: confirmar la devolución con el daño es lo que la decisión 5 le quitó al inquilino,
+    /// que declara y espera.
+    /// </remarks>
+    private ActionResult? NegarSiNoEsPersonal(string quePasaba)
+    {
+        if (!_gate.IsAuthenticated)
+        {
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                $"Hay que iniciar sesión para {quePasaba} un alquiler.");
+        }
+
+        return _gate.HasAnyRole(PersonalCsv)
+            ? null
+            : Problema(StatusCodes.Status403Forbidden, "alquiler.staff_required",
+                $"Sólo el personal puede {quePasaba} un alquiler: quien alquila declara la devolución.");
     }
 
     /// <summary>
@@ -251,7 +375,8 @@ public sealed class AlquilerController : ControllerBase
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// Devolver o cancelar lo hace quien alquiló o el personal — nadie más.
+    /// Cancelar lo hace quien alquiló o el personal — nadie más. (Confirmar la devolución ya es SÓLO del
+    /// personal, <see cref="NegarSiNoEsPersonal"/>: la decisión 5 contestó la pregunta de producto de abajo.)
     /// </summary>
     /// <remarks>
     /// <para><b>Sin esto, cualquiera que supiera un <c>rentalId</c> cerraba el alquiler
@@ -379,6 +504,10 @@ public sealed record ReserveRequest(
 /// </param>
 /// <param name="IdempotencyKey">Obligatoria: cobrar de la garantía es relativo.</param>
 public sealed record SettleRequest(decimal? Amount, string? IdempotencyKey);
+
+/// <summary>Lo que se pide para declarar la devolución: sólo la llave, porque declarar no lleva monto.</summary>
+/// <param name="IdempotencyKey">Obligatoria, como en las demás escrituras.</param>
+public sealed record DeclareReturnRequest(string? IdempotencyKey);
 
 
 /// <summary>La tarjeta de un equipo en el listado.</summary>

@@ -81,6 +81,25 @@ public sealed class EquipmentAgreementLedger
             .ToList();
     }
 
+    /// <summary>
+    /// Los contratos de TODO el despliegue en un estado, del más viejo al más reciente: la bandeja del personal
+    /// (las devoluciones declaradas que esperan su confirmación, línea 005, T018).
+    /// </summary>
+    /// <param name="estado">El estado que se busca.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>Los contratos en ese estado. Vacío es «ninguno», que es cierto: el estado lo anota este borde.</returns>
+    public async Task<IReadOnlyList<RentalAgreement>> ListByStateAsync(
+        RentalState estado, CancellationToken cancellationToken = default)
+    {
+        var todos = await _store.ListAsync(ResourceType, cancellationToken).ConfigureAwait(false);
+        return todos
+            .Select(Deserializar)
+            .Where(a => a is not null && a.Estado == estado)
+            .Select(a => a!)
+            .OrderBy(a => a.IssuedUtc)
+            .ToList();
+    }
+
     private static RentalAgreement? Deserializar(string json)
     {
         try
