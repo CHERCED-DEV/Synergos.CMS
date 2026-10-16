@@ -226,9 +226,13 @@ internal sealed class CitaDeSaludReal : IDisposable
 
                 if (ruta == "POST /v1/grants/check")
                 {
-                    return cable.Permiso is null
+                    // El paciente otorgó el permiso de AGENDA y ningún otro: un propósito distinto no lo encuentra,
+                    // como en Api.Consent.
+                    using var pedido = JsonDocument.Parse(await r.Content!.ReadAsStringAsync(ct));
+                    var proposito = pedido.RootElement.GetProperty("purpose").GetString();
+                    return cable.Permiso is null && proposito == "salud.agenda"
                         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { id = "g1", active = true }) }
-                        : Problema(HttpStatusCode.Forbidden, cable.Permiso);
+                        : Problema(HttpStatusCode.Forbidden, cable.Permiso ?? "consent.not_granted");
                 }
                 if (cable.Cae.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.ServiceUnavailable, "guion.caida");
                 if (cable.Rechaza.Any(c => Coincide(c, ruta))) return Problema(HttpStatusCode.Conflict, "guion.rechazo");

@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Pasos;
-using Synergos.Bff.Pasos.Http;
 using Synergos.Bff.Salud.Clients;
 using Synergos.Bff.Salud.Domain;
 using Synergos.Bff.Salud.Endpoints;
@@ -65,29 +63,9 @@ builder.Services.AddSingleton<AppointmentFlow>();
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
 if (declarado)
 {
-    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
-
-    // El permiso de agenda, provisional hasta consent.verificar (N2; NN-3), y el profesional con su clase
-    // fija, interino hasta que la definición declare la clase de una referencia (NR-1; NN-16).
-    builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
-        sp.GetRequiredService<PuertosHttp>(), new PasoPermisoDeAgenda(sp.GetRequiredService<SaludCapabilities>()),
-        new PasoProfesionalDeSalud()));
-
-    // Dos máquinas de saga en un orquestador (NN-15), hasta que Bff.Core lo resuelva: la saga
-    // genérica en su propia carpeta —la tipada no se mueve: sus datos ya están desplegados— y la
-    // llave UNA vez en los clientes que configuran las dos (dos veces es «k,k» y la capacidad
-    // contesta 401).
-    builder.Services.AddSingleton<ISagaStore<SagaDeFlujo>>(sp => new FileSystemSagaStore<SagaDeFlujo>(Options.Create(
-        new SagaStorageOptions { Root = Path.Combine(sp.GetRequiredService<IOptions<SagaStorageOptions>>().Value.Root, "flujos") })));
-    foreach (var capacidad in PuertosHttp.Capacidades)
-    {
-        var llave = builder.Configuration[$"{vocabulario.Origin}:Capabilities:{capacidad}:ApiKey"];
-        builder.Services.AddHttpClient(capacidad).ConfigureHttpClient(http =>
-        {
-            http.DefaultRequestHeaders.Remove(SharedKeyAuth.HeaderName);
-            if (llave is { Length: > 0 }) http.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, llave);
-        });
-    }
+    // El profesional con su clase fija, interino hasta que la definición declare la clase de una
+    // referencia (NR-1; NN-16).
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, new PasoProfesionalDeSalud());
 }
 
 var app = builder.Build();

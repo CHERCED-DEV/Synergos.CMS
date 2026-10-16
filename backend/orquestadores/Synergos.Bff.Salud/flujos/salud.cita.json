@@ -16,7 +16,7 @@
   },
   "pasos": {
     "profesional": { "tipo": "salud.profesional", "lee": ["profesionalId"], "escribe": ["profesional"] },
-    "permiso": { "tipo": "salud.permiso", "lee": ["paciente"] },
+    "permiso": { "tipo": "consent.verificar", "lee": ["paciente"], "proposito": "salud.agenda" },
     "lineas": { "tipo": "forma.una-linea", "lee": ["servicio"], "escribe": ["aCotizar"] },
     "copago": { "tipo": "pricing.cotizar-o-cero", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
