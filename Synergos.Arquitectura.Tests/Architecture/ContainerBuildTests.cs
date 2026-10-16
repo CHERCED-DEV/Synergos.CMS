@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
-/// Que las 25 imágenes se puedan construir con <b>un solo</b> <c>Dockerfile.service</c>, y que
+/// Que las 26 imágenes se puedan construir con <b>un solo</b> <c>Dockerfile.service</c>, y que
 /// la matriz que las enumera no se quede corta (HU #17).
 /// </summary>
 /// <remarks>
@@ -122,7 +122,7 @@ public sealed class ContainerBuildTests
         // al menos es consistente. Y el día que haya que cambiar la imagen base, hay que
         // acordarse de veinticuatro sitios — el que se olvide no rompe el build, rompe después.
         Assert.True(File.Exists(Path.Combine(RepoRoot(), "Dockerfile.service")),
-            "Falta Dockerfile.service — es el único que construye las 25.");
+            "Falta Dockerfile.service — es el único que construye las 26.");
 
         var sueltos = Servicios()
             .Where(s => File.Exists(Path.Combine(RepoRoot(), s, "Dockerfile")))
