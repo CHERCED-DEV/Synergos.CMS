@@ -19,8 +19,9 @@ namespace Synergos.CMS.Tests.Services;
 /// (004-tienda-compra): la transportadora que pone la puerta y el camino de compra que declara el CMS.
 /// </summary>
 /// <remarks>
-/// El camino sigue la regla de Eventos (<see cref="CaminoDeCompra.Decidir"/>): el override del negocio si lo
-/// hay; si no, la puerta cuando abre <c>tienda.compra</c> y el orquestador tiene destino; si no, la directa.
+/// El camino sigue la regla de cualquier flujo (<see cref="CaminoDeLosFlujos"/>, núcleo N3): el override del
+/// negocio si lo hay; si no, el del flujo en la puerta; si no, la puerta cuando abre <c>tienda.compra</c> y el
+/// orquestador tiene destino; si no, la directa. Y el país de envío es del despliegue, por sitio.
 /// </remarks>
 public sealed class NegocioDeStorefrontTests
 {
@@ -45,6 +46,8 @@ public sealed class NegocioDeStorefrontTests
     [InlineData("Carrier", " ", "Carrier")]
     [InlineData("PurchasePath", "directo", "PurchasePath")]
     [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:PurchasePath", "orquestador", "PurchasePath")]
+    [InlineData("ShippingCountry", "COL", "ShippingCountry")]
+    [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:ShippingCountry", "c1", "ShippingCountry")]
     public void Una_clave_mal_escrita_no_deja_arrancar(string clave, string valor, string seDice)
     {
         using var sp = Opciones(new() { [clave] = valor });
@@ -62,9 +65,19 @@ public sealed class NegocioDeStorefrontTests
             ["Carrier"] = "servientrega",
             ["PurchasePath"] = "puerta",
             [$"Sitios:{Bogota}:PurchasePath"] = "directa",
+            [$"Sitios:{Bogota}:ShippingCountry"] = " mx ",
         });
 
         sp.GetRequiredService<IStartupValidator>().Validate();
+    }
+
+    [Fact]
+    public void El_pais_de_envio_es_CO_si_nadie_dice_otro_y_un_sitio_lo_cambia_normalizado()
+    {
+        var seccion = Seccion(new() { [$"Sitios:{Bogota}:ShippingCountry"] = " mx " });
+
+        Assert.Equal("CO", seccion.Para(null).ShippingCountry);
+        Assert.Equal("MX", seccion.Para(Bogota).ShippingCountry);
     }
 
     // ── El camino de compra: lo declara el CMS ───────────────────────────────────────────────
@@ -97,12 +110,29 @@ public sealed class NegocioDeStorefrontTests
         Assert.Equal(declarado, Resuelto(Fijo(declarado), Puerta(puertaAbierta, puertaAbierta)).PurchasePath);
     }
 
+    /// <summary>Desde N3 el flujo también declara su camino en la puerta; el del negocio del sitio gana.</summary>
+    [Fact]
+    public void El_camino_que_declara_el_flujo_en_la_puerta_va_antes_que_la_regla_y_despues_del_sitio()
+    {
+        Assert.Equal(CaminoDeCompra.Directa, Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true, caminoDelFlujo: "directa")).PurchasePath);
+        Assert.Equal(CaminoDeCompra.Puerta, Resuelto(Fijo("puerta"), Puerta(abierto: true, conDestino: true, caminoDelFlujo: "directa")).PurchasePath);
+    }
+
+    [Fact]
+    public void El_resolver_lleva_el_pais_de_envio_del_sitio()
+    {
+        var negocio = Substitute.For<INegocioDelSitio<NegocioDeStorefront>>();
+        negocio.Actual().Returns(new NegocioDeStorefront("/api/shop", "default", null, "MX"));
+
+        Assert.Equal("MX", Resuelto(negocio, Puerta(abierto: true, conDestino: true)).ShippingCountry);
+    }
+
     [Fact]
     public void El_resolver_copia_lo_del_editor_y_la_configuracion_del_sitio()
     {
         var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true));
 
-        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta), props);
+        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO"), props);
     }
 
     private static StorefrontFeatureSettings Seccion(Dictionary<string, string?> claves)
@@ -136,20 +166,27 @@ public sealed class NegocioDeStorefrontTests
     /// <c>Synergos:Puerta:Flujos</c> trae <c>tienda.compra</c>, y <paramref name="conDestino"/> si
     /// <c>Synergos:Tienda:BaseUrl</c> le da destino al orquestador.
     /// </summary>
-    private static IPuertaDeLosFlujos Puerta(bool abierto, bool conDestino)
+    /// <param name="caminoDelFlujo">Lo que declara <c>Synergos:Puerta:Flujos:tienda.compra:Camino</c>, si algo
+    /// (sólo con el flujo abierto: declararlo en la puerta ya lo abre).</param>
+    private static ICaminoDeLosFlujos Puerta(bool abierto, bool conDestino, string? caminoDelFlujo = null)
     {
         var ajustes = new PuertaSettings();
         if (abierto)
         {
-            ajustes.Flujos[StorefrontResolutor.FlujoDeLaCompra] = new FlujoDeLaPuertaSettings { Acceso = AccesoDeLaPuerta.Miembro };
+            ajustes.Flujos[StorefrontResolutor.FlujoDeLaCompra] = new FlujoDeLaPuertaSettings
+            {
+                Acceso = AccesoDeLaPuerta.Miembro,
+                Camino = caminoDelFlujo,
+            };
         }
 
         var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         monitor.CurrentValue.Returns(ajustes);
-        return new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? ["Tienda"] : []));
+        var puerta = new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? ["Tienda"] : []));
+        return new CaminoDeLosFlujos(puerta, monitor, NullLogger<CaminoDeLosFlujos>.Instance);
     }
 
-    private static StorefrontProps Resuelto(INegocioDelSitio<NegocioDeStorefront> negocio, IPuertaDeLosFlujos puerta)
-        => new StorefrontResolutor(ElementoFalso.Fallback, negocio, puerta, NullLogger<StorefrontResolutor>.Instance)
+    private static StorefrontProps Resuelto(INegocioDelSitio<NegocioDeStorefront> negocio, ICaminoDeLosFlujos caminos)
+        => new StorefrontResolutor(ElementoFalso.Fallback, negocio, caminos, NullLogger<StorefrontResolutor>.Instance)
             .Resolver(ElementoFalso.Con(("heading", "Tienda"))).Props;
 }

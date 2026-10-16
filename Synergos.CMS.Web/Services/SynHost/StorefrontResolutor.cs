@@ -6,12 +6,14 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary>
 /// <c>elementSynStorefront</c> → <see cref="StorefrontProps"/>: lo que escribe el editor, más dónde vive
-/// la API para el sitio de la petición (ADR 0137).
+/// la API, por dónde compra y a qué país despacha el sitio de la petición (ADR 0137).
 /// </summary>
 /// <remarks>
-/// <b>El camino de compra lo decide acá el CMS</b> (ADR 0140, <see cref="CaminoDeCompra.Decidir"/>), como el de
-/// Eventos: el override del sitio si lo hay; si no, la puerta cuando abre <see cref="FlujoDeLaCompra"/>; si no,
-/// la ruta directa. La pregunta a la puerta es la misma condición con que contesta 503.
+/// <b>El camino de compra lo decide acá el CMS</b> (ADR 0140) con la regla de cualquier flujo
+/// (<see cref="ICaminoDeLosFlujos"/>, núcleo N3), como el de Eventos: el override del sitio si lo hay; si no,
+/// lo que declare <c>Synergos:Puerta:Flujos:tienda.compra:Camino</c>; si no, la puerta cuando abre
+/// <see cref="FlujoDeLaCompra"/>; si no, la ruta directa. La pregunta a la puerta es la misma condición con que
+/// contesta 503.
 /// </remarks>
 public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
 {
@@ -20,18 +22,18 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
 
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeStorefront> _negocio;
-    private readonly IPuertaDeLosFlujos _puerta;
+    private readonly ICaminoDeLosFlujos _caminos;
     private readonly ILogger<StorefrontResolutor> _log;
 
     public StorefrontResolutor(
         IPublishedValueFallback fallback,
         INegocioDelSitio<NegocioDeStorefront> negocio,
-        IPuertaDeLosFlujos puerta,
+        ICaminoDeLosFlujos caminos,
         ILogger<StorefrontResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
-        _puerta = puerta;
+        _caminos = caminos;
         _log = log;
     }
 
@@ -44,6 +46,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
-            PurchasePath: CaminoDeCompra.Decidir(negocio.PurchasePath, _puerta.Abre(FlujoDeLaCompra))));
+            PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath),
+            ShippingCountry: negocio.ShippingCountry));
     }
 }

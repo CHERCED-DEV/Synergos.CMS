@@ -36,12 +36,19 @@ public sealed class StorefrontFeatureSettings : SeccionDeNegocio<StorefrontFeatu
     /// <remarks>Un sitio con el valor vacío vuelve a la regla aunque los valores base declaren uno.</remarks>
     public string? PurchasePath { get; init; }
 
+    /// <summary>
+    /// El país al que despacha la tienda, ISO 3166-1 alfa-2 (<c>CO</c>). La dirección de una compra por la
+    /// puerta lo exige y el formulario de envío no lo pregunta: es del despliegue, no de quien compra.
+    /// </summary>
+    public string ShippingCountry { get; init; } = "CO";
+
     /// <inheritdoc />
     protected override NegocioDeStorefront Fusionar(StorefrontFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             Carrier: propio?.Carrier ?? Carrier,
-            PurchasePath: CaminoDeCompra.Normalizar(propio?.PurchasePath ?? PurchasePath));
+            PurchasePath: CaminoDeCompra.Normalizar(propio?.PurchasePath ?? PurchasePath),
+            ShippingCountry: (propio?.ShippingCountry ?? ShippingCountry).Trim().ToUpperInvariant());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeStorefront negocio)
@@ -50,6 +57,9 @@ public sealed class StorefrontFeatureSettings : SeccionDeNegocio<StorefrontFeatu
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             string.IsNullOrWhiteSpace(negocio.Carrier) ? "Carrier: hace falta una transportadora; sin ella no se despacha." : null,
             ReglasDeNegocio.Camino("PurchasePath", negocio.PurchasePath),
+            negocio.ShippingCountry is { Length: 2 } pais && pais.All(char.IsAsciiLetterUpper)
+                ? null
+                : $"ShippingCountry: «{negocio.ShippingCountry}» no es un país ISO 3166-1 alfa-2 (CO, MX…).",
         }.OfType<string>();
 }
 
@@ -66,4 +76,7 @@ public sealed class StorefrontFeatureSitio
 
     /// <inheritdoc cref="StorefrontFeatureSettings.PurchasePath"/>
     public string? PurchasePath { get; init; }
+
+    /// <inheritdoc cref="StorefrontFeatureSettings.ShippingCountry"/>
+    public string? ShippingCountry { get; init; }
 }
