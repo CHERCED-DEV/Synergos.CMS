@@ -40,22 +40,25 @@ public static class BookingEndpoints
             var subject = Ref.TryCreate(req.SubjectKind, req.SubjectId);
             if (subject is null) return Invalid("bad_subject", "Hacen falta subjectKind y subjectId.");
 
-            var opening = new List<OpeningRule>();
-            foreach (var o in req.Opening ?? Array.Empty<OpeningRuleDto>())
-            {
-                if (!Enum.TryParse<DayOfWeek>(o.Day, ignoreCase: true, out var day))
-                    return Invalid("bad_opening_day", $"'{o.Day}' no es un día de la semana.");
-                if (!TimeOnly.TryParse(o.From, out var from) || !TimeOnly.TryParse(o.To, out var to))
-                    return Invalid("bad_opening_time", $"'{o.From}'–'{o.To}' no es un rango horario.");
-                if (to <= from)
-                    return Invalid("bad_opening_range", $"La franja {o.From}–{o.To} no avanza.");
-                opening.Add(new OpeningRule(day, from, to));
-            }
+            if (TryOpening(req.Opening, out var opening) is { } malHorario) return malHorario;
 
             var policy = new CancellationPolicy(TimeSpan.FromMinutes(Math.Max(0, req.CancellationNoticeMinutes ?? 0)));
             return svc.RegisterResource(subject, req.Capacity ?? 1, req.TimeZoneId ?? "UTC", opening, policy, key, req.SlotMinutes)
                 .Map(ResourceResponse.From).ToCreated(r => $"/v1/resources/{r.Id}");
         }).WithName("RegisterResource").ConLlaveDeIdempotencia();
+
+        // Revisar lo que el negocio cambia de un recurso, sin tocar sus reservas (NB-7 de 011, NN-6 de 005).
+        // Una acción con nombre y no un PUT, como confirmar: dice qué pasó, y contesta qué quedó fuera.
+        app.MapPost("/v1/resources/{id}/revise", Results<Ok<RevisionResponse>, ProblemHttpResult> (
+            string id, ReviseResourceRequest req, HttpRequest http, BookingService svc) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, BookingRules.CodePrefix, out var key, out var falta)) return falta!;
+            if (TryOpening(req.Opening, out var opening) is { } malHorario) return malHorario;
+
+            var policy = new CancellationPolicy(TimeSpan.FromMinutes(Math.Max(0, req.CancellationNoticeMinutes ?? 0)));
+            return svc.ReviseResource(id, req.Capacity ?? 1, opening, policy, req.SlotMinutes, key)
+                .Map(RevisionResponse.From).ToHttp();
+        }).WithName("ReviseResource").ConLlaveDeIdempotencia();
 
         app.MapGet("/v1/resources/{id}", (string id, BookingService svc) =>
             svc.GetResource(id).Map(ResourceResponse.From).ToHttp()).WithName("GetResource");
@@ -192,6 +195,23 @@ public static class BookingEndpoints
 
     private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{BookingRules.CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>El horario tal como llega, o el rechazo de la primera franja que no se lee. Ausente: siempre abierto.</summary>
+    private static ProblemHttpResult? TryOpening(IReadOnlyList<OpeningRuleDto>? reglas, out List<OpeningRule> opening)
+    {
+        opening = new List<OpeningRule>();
+        foreach (var o in reglas ?? Array.Empty<OpeningRuleDto>())
+        {
+            if (!Enum.TryParse<DayOfWeek>(o.Day, ignoreCase: true, out var day))
+                return Invalid("bad_opening_day", $"'{o.Day}' no es un día de la semana.");
+            if (!TimeOnly.TryParse(o.From, out var from) || !TimeOnly.TryParse(o.To, out var to))
+                return Invalid("bad_opening_time", $"'{o.From}'–'{o.To}' no es un rango horario.");
+            if (to <= from)
+                return Invalid("bad_opening_range", $"La franja {o.From}–{o.To} no avanza.");
+            opening.Add(new OpeningRule(day, from, to));
+        }
+        return null;
+    }
 
     /// <summary>
     /// Lee un instante ISO-8601 de la query. Ausente es válido (lo resuelve el llamador).

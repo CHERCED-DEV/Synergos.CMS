@@ -31,6 +31,16 @@ public sealed record CreateResourceRequest(
     int? CancellationNoticeMinutes = null,
     int? SlotMinutes = null);
 
+/// <summary>
+/// Revisar un recurso: lo que se puede cambiar, ENTERO (registrarlo otra vez sin sujeto ni huso). Lo que no
+/// viene vale lo mismo que al registrar: capacidad 1, siempre abierto, sin plazo, sin franja.
+/// </summary>
+public sealed record ReviseResourceRequest(
+    int? Capacity = null,
+    IReadOnlyList<OpeningRuleDto>? Opening = null,
+    int? CancellationNoticeMinutes = null,
+    int? SlotMinutes = null);
+
 /// <summary>Tomar un bloqueo temporal sobre una ventana.</summary>
 public sealed record CreateHoldRequest(
     string? ResourceId = null,
@@ -108,6 +118,22 @@ public sealed record AvailabilityResponse(
     int Capacity,
     string? ReasonCode,
     string? Reason);
+
+/// <summary>Una reserva vigente que con el recurso revisado ya no cabría, y por qué.</summary>
+public sealed record OutsideReservationResponse(
+    string ReservationId, DateTimeOffset Start, DateTimeOffset End, string ReasonCode, string Reason);
+
+/// <summary>
+/// El recurso revisado y las reservas vigentes que ya no cabrían. Ninguna se canceló: decidir qué hacer con
+/// ellas es de quien revisó.
+/// </summary>
+public sealed record RevisionResponse(ResourceResponse Resource, IReadOnlyList<OutsideReservationResponse> Outside)
+{
+    public static RevisionResponse From(Revision r) => new(
+        ResourceResponse.From(r.Resource),
+        r.Outside.Select(o => new OutsideReservationResponse(
+            o.Reservation.Id, o.Reservation.Window.Start, o.Reservation.Window.End, o.Reason.Code, o.Reason.Message)).ToList());
+}
 
 /// <summary>Una franja y cuánto cupo le queda.</summary>
 public sealed record SlotResponse(DateTimeOffset Start, DateTimeOffset End, int Free);
