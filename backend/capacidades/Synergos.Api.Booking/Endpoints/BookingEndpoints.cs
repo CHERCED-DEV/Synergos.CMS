@@ -114,6 +114,17 @@ public static class BookingEndpoints
                 .ToHttp();
         }).WithName("CheckAvailability");
 
+        // Las franjas de un día (o de una semana): una petición en vez de una por ventana (NB-2 de 011).
+        // from y to como texto, por lo mismo que la disponibilidad: un 400 con código y no uno genérico.
+        app.MapGet("/v1/resources/{id}/slots", Results<Ok<SlotListResponse>, ProblemHttpResult> (
+            string id, string? from, string? to, BookingService svc) =>
+        {
+            if (!TryInstant(from, out var desde) || desde is null) return Invalid("bad_from", $"'{from}' no es una fecha ISO-8601.");
+            if (!TryInstant(to, out var hasta) || hasta is null) return Invalid("bad_to", $"'{to}' no es una fecha ISO-8601.");
+
+            return svc.ListSlots(id, desde.Value, hasta.Value).Map(SlotListResponse.From).ToHttp();
+        }).WithName("ListSlots");
+
         // ── Holds ───────────────────────────────────────────────────────────
         app.MapPost("/v1/holds", Results<Created<HoldResponse>, ProblemHttpResult> (CreateHoldRequest req, HttpRequest http, BookingService svc) =>
         {

@@ -155,6 +155,91 @@ public sealed class BookingService
         return Result.Ok((motivo is null, solapadas, resource.Capacity, motivo));
     }
 
+    // ── Franjas libres (núcleo, NB-2 de 011) ────────────────────────────────
+
+    /// <summary>El rango más largo que se lista de una vez: una semana.</summary>
+    public static readonly TimeSpan MaxSlotRange = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Las franjas del recurso entre <paramref name="from"/> y <paramref name="to"/>, con lo libre de cada una.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque mostrar un día eran N preguntas.</b> <see cref="CheckAvailability"/> contesta
+    /// sobre UNA ventana; quien reserva quiere ver las horas del día, y la única que conoce a la vez el
+    /// horario, los cupos y la ocupación es esta capacidad. Que la grilla no sea suya lo sigue diciendo la
+    /// disponibilidad: la franja la DECLARA el recurso (<see cref="Resource.SlotMinutes"/>), y aquí sólo se
+    /// recorre.</para>
+    ///
+    /// <para><b>Sólo para un recurso que declara su franja Y su horario</b>
+    /// (<c>booking.slots_undefined</c> si no): la grilla se cuenta desde la apertura, y sin horario no hay
+    /// desde dónde contarla. Cada franja listada pasa <see cref="BookingRules.CheckSlot"/> y
+    /// <see cref="BookingRules.CheckOpeningHours"/>, y lo libre se cuenta con la MISMA ocupación que
+    /// apartar (<see cref="Occupied"/>): la lista no promete lo que apartar después niega.</para>
+    ///
+    /// <para><b>Todas, también las llenas</b>, con <c>Free</c> en cero: la pantalla decide si las enseña
+    /// tachadas. Las que ya empezaron no salen: no se pueden tomar.</para>
+    ///
+    /// <para><b>Acotado a una semana</b> (<c>booking.range_too_long</c>): el rango llega del navegador, y sin
+    /// tope un año de franjas de cinco minutos son cien mil filas por petición.</para>
+    ///
+    /// <para><b>El cambio de hora:</b> una hora local que no existe (el salto de primavera) no da franja; una
+    /// que existe dos veces se lee como la primera. Colombia no cambia de hora; un recurso en un huso que sí
+    /// pierde la franja del salto en vez de inventarla.</para>
+    /// </remarks>
+    public Result<SlotList> ListSlots(string resourceId, DateTimeOffset from, DateTimeOffset to)
+    {
+        if (to <= from)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_range", "El rango termina antes de empezar.");
+        }
+        if (to - from > MaxSlotRange)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.range_too_long",
+                $"Las franjas se listan de a {MaxSlotRange.TotalDays:0} días como mucho.");
+        }
+
+        var resource = _resources.Find(resourceId);
+        if (resource is null)
+        {
+            return Rejection.NotFound($"{BookingRules.CodePrefix}.resource_not_found", $"No existe el recurso {resourceId}.");
+        }
+        if (resource.SlotMinutes is not { } minutos || resource.Opening.Count == 0)
+        {
+            return Rejection.Conflict($"{BookingRules.CodePrefix}.slots_undefined",
+                "El recurso no declara franja y horario: no tiene grilla que listar. Se pregunta por una ventana.");
+        }
+        if (BookingRules.Zone(resource, out var zone) is { } malHuso) return Result.Rejected<SlotList>(malHuso);
+
+        var ahora = Now;
+        var largo = TimeSpan.FromMinutes(minutos);
+        var ocupadas = Occupied(resourceId).ToList();
+        var franjas = new SortedDictionary<DateTimeOffset, Slot>();
+
+        var primerDia = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from, zone).DateTime);
+        var ultimoDia = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(to, zone).DateTime);
+        for (var dia = primerDia; dia <= ultimoDia; dia = dia.AddDays(1))
+        {
+            foreach (var regla in resource.Opening.Where(r => r.Day == dia.DayOfWeek))
+            {
+                var fin = regla.To.ToTimeSpan();
+                for (var t = regla.From.ToTimeSpan(); t + largo <= fin; t += largo)
+                {
+                    var local = dia.ToDateTime(TimeOnly.FromTimeSpan(t), DateTimeKind.Unspecified);
+                    if (zone.IsInvalidTime(local)) continue;
+
+                    var inicio = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone), TimeSpan.Zero);
+                    var ventana = TimeWindow.Starting(inicio, largo);
+                    if (ventana.Start < from || ventana.End > to || ventana.Start < ahora) continue;
+
+                    var tomadas = ocupadas.Count(w => w.Overlaps(ventana));
+                    franjas.TryAdd(inicio, new Slot(ventana, Math.Max(0, resource.Capacity - tomadas)));
+                }
+            }
+        }
+
+        return Result.Ok(new SlotList(resource.Id, minutos, resource.Capacity, franjas.Values.ToList()));
+    }
+
     // ── Holds ───────────────────────────────────────────────────────────────
 
     public Result<Hold> CreateHold(string resourceId, TimeWindow window, Ref heldFor, TimeSpan? ttl, IdempotencyKey key)

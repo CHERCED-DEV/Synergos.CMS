@@ -109,5 +109,19 @@ public sealed record AvailabilityResponse(
     string? ReasonCode,
     string? Reason);
 
+/// <summary>Una franja y cuánto cupo le queda.</summary>
+public sealed record SlotResponse(DateTimeOffset Start, DateTimeOffset End, int Free);
+
+/// <summary>
+/// Las franjas de un recurso en un rango, también las llenas (<c>free</c> en cero): la pantalla decide si
+/// las enseña.
+/// </summary>
+public sealed record SlotListResponse(string ResourceId, int SlotMinutes, int Capacity, IReadOnlyList<SlotResponse> Items)
+{
+    public static SlotListResponse From(SlotList l) => new(
+        l.ResourceId, l.SlotMinutes, l.Capacity,
+        l.Items.Select(s => new SlotResponse(s.Window.Start, s.Window.End, s.Free)).ToList());
+}
+
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

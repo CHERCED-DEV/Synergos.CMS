@@ -106,7 +106,7 @@ public static class BookingRules
     }
 
     /// <summary>El huso del recurso, o el rechazo si no lo conoce este servicio.</summary>
-    private static Rejection? Zone(Resource resource, out TimeZoneInfo zone)
+    internal static Rejection? Zone(Resource resource, out TimeZoneInfo zone)
     {
         try
         {
