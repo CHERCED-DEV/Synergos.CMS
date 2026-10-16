@@ -157,10 +157,64 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
         => await CerrarAsync(rentalId, penaltyAmount, idempotencyKey, devolucion: false, cancellationToken)
             .ConfigureAwait(false);
 
+    /// <inheritdoc />
+    public async Task<RentalResult?> DeclareReturnAsync(
+        string rentalId, string idempotencyKey, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            return Rechazo("idempotency_key_required", "Declarar la devolución es una escritura: hace falta la llave.");
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var yaHecho = await LeerPorLlaveAsync(idempotencyKey, cancellationToken).ConfigureAwait(false);
+            if (yaHecho is not null)
+            {
+                return new RentalResult(RentalOutcome.AlreadyDone, yaHecho, null, null);
+            }
+
+            var alquiler = await LeerAsync(rentalId, cancellationToken).ConfigureAwait(false);
+            if (alquiler is null)
+            {
+                return null;
+            }
+
+            if (alquiler.State is RentalState.Declared)
+            {
+                return new RentalResult(RentalOutcome.AlreadyDone, alquiler, null, null);
+            }
+
+            if (alquiler.State is not RentalState.Reserved)
+            {
+                return Rechazo("not_declarable",
+                    $"El alquiler {rentalId} está en {alquiler.State}: no hay devolución que declarar.");
+            }
+
+            // La garantía NO se toca: declarar no la libera (decisión 5 del lote 1). La resuelve el personal.
+            var declarado = alquiler with { State = RentalState.Declared };
+            await GuardarAsync(declarado, cancellationToken).ConfigureAwait(false);
+            await _store.WriteAsync(IdempotencyResourceType, Llave(idempotencyKey),
+                JsonSerializer.Serialize(declarado.RentalId, Json), cancellationToken).ConfigureAwait(false);
+
+            return new RentalResult(RentalOutcome.Ok, declarado, null, null);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// Devolver y cancelar son el MISMO movimiento sobre la garantía: se cobra una parte y se
     /// libera el resto. Lo que cambia es el estado destino y cuándo es legal.
     /// </summary>
+    /// <remarks>
+    /// Los dos valen desde un alquiler reservado o declarado (S-2: el personal confirma sin declaración, y
+    /// cancela con penalidad aunque esté declarado). Quién puede cancelar y hasta cuándo lo pone la regla del
+    /// actor (línea 005, T019–T020).
+    /// </remarks>
     private async Task<RentalResult?> CerrarAsync(
         string rentalId, decimal monto, string idempotencyKey, bool devolucion,
         CancellationToken cancellationToken)
@@ -186,7 +240,7 @@ public sealed class StubEquipmentRentalService : IEquipmentRentalService, IDispo
                 return null;
             }
 
-            var legal = alquiler.State is RentalState.Reserved;
+            var legal = alquiler.State is RentalState.Reserved or RentalState.Declared;
 
             if (!legal)
             {

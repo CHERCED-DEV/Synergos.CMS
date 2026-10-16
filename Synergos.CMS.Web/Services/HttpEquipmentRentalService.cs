@@ -134,6 +134,13 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
         CancellationToken cancellationToken = default)
         => CerrarAsync(rentalId, penaltyAmount, idempotencyKey, "cancel", "cancelar", cancellationToken);
 
+    /// <inheritdoc />
+    /// <remarks>Sin cuerpo: declarar no lleva monto ni mueve plata (<c>POST v1/rentals/{id}/declare-return</c>).</remarks>
+    public Task<RentalResult?> DeclareReturnAsync(
+        string rentalId, string idempotencyKey, CancellationToken cancellationToken = default)
+        => LlamarAsync($"v1/rentals/{Uri.EscapeDataString(rentalId)}/declare-return", null, idempotencyKey,
+            "declarar la devolución", cancellationToken);
+
     /// <summary>
     /// Devolver y cancelar: el monto contra la garantía, en la moneda en que se retuvo.
     /// </summary>
@@ -179,12 +186,12 @@ public sealed class HttpEquipmentRentalService : IEquipmentRentalService
     /// «no existe tal alquiler» y un rechazo dice que existe y que la regla dijo que no.
     /// </remarks>
     private async Task<RentalResult?> LlamarAsync(
-        string ruta, object cuerpo, string idempotencyKey, string quePasaba, CancellationToken ct)
+        string ruta, object? cuerpo, string idempotencyKey, string quePasaba, CancellationToken ct)
     {
         using var http = _factory.CreateClient(ClientName);
         using var req = new HttpRequestMessage(HttpMethod.Post, ruta)
         {
-            Content = JsonContent.Create(cuerpo, options: Json),
+            Content = cuerpo is null ? null : JsonContent.Create(cuerpo, options: Json),
         };
 
         if (!string.IsNullOrWhiteSpace(idempotencyKey))

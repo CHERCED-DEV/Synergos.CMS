@@ -344,4 +344,54 @@ public sealed class StubEquipmentRentalServiceTests
         Assert.Null(await motor.QuoteAsync(new RentalRequest(
             "no-existe", 1, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 4), "x")));
     }
+
+    // ── Declarar y confirmar (decisión 5 del lote 1, #203; línea 005, T015) ──
+
+    [Fact]
+    public async Task Declarar_deja_la_garantia_RETENIDA_y_confirmar_despues_la_libera()
+    {
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+        var retenida = r.Rental!.DepositHeld;
+
+        var declarado = await motor.DeclareReturnAsync(r.Rental.RentalId, "k2");
+
+        Assert.Equal(RentalOutcome.Ok, declarado!.Outcome);
+        Assert.Equal(RentalState.Declared, declarado.Rental!.State);
+        Assert.Equal(retenida, declarado.Rental.DepositHeld);
+        Assert.True(retenida > 0m);
+
+        var devuelto = await motor.ReturnAsync(r.Rental.RentalId, 0m, "k3");
+
+        Assert.Equal(RentalState.Returned, devuelto!.Rental!.State);
+        Assert.Equal(0m, devuelto.Rental.DepositHeld);
+    }
+
+    [Fact]
+    public async Task Declarar_es_idempotente_y_no_vale_desde_otro_estado()
+    {
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+        var id = r.Rental!.RentalId;
+
+        Assert.Equal(RentalOutcome.Ok, (await motor.DeclareReturnAsync(id, "k2"))!.Outcome);
+        Assert.Equal(RentalOutcome.AlreadyDone, (await motor.DeclareReturnAsync(id, "k2"))!.Outcome);
+        Assert.Equal(RentalOutcome.AlreadyDone, (await motor.DeclareReturnAsync(id, "k3"))!.Outcome);
+
+        await motor.ReturnAsync(id, 0m, "k5");
+        Assert.Equal("alquiler.not_declarable", (await motor.DeclareReturnAsync(id, "k6"))!.RejectionCode);
+        Assert.Null(await motor.DeclareReturnAsync("ALQ-inexistente", "k7"));
+    }
+
+    [Fact]
+    public async Task El_personal_confirma_sin_declaracion_previa()
+    {
+        // S-2: el personal recibe el equipo aunque el inquilino no lo haya declarado.
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+
+        var devuelto = await motor.ReturnAsync(r.Rental!.RentalId, 0m, "k2");
+
+        Assert.Equal(RentalState.Returned, devuelto!.Rental!.State);
+    }
 }

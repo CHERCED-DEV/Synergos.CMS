@@ -167,6 +167,21 @@ public interface IEquipmentRentalService
         string rentalId, decimal damageAmount, string idempotencyKey,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// El inquilino declara que devolvió el equipo (decisión 5 del lote 1, #203): queda
+    /// <see cref="RentalState.Declared"/> y la garantía SIGUE retenida.
+    /// </summary>
+    /// <remarks>
+    /// <b>No mueve plata</b>: lo que la libera o la cobra es <see cref="ReturnAsync"/>, que hace el personal con el
+    /// daño, desde un alquiler declarado o sin declarar. Declarar dos veces es declarar una.
+    /// </remarks>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="idempotencyKey">Obligatoria, como en las demás escrituras.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El alquiler declarado, o el rechazo. Null si el alquiler no existe.</returns>
+    Task<RentalResult?> DeclareReturnAsync(
+        string rentalId, string idempotencyKey, CancellationToken cancellationToken = default);
+
     /// <summary>Cancela antes de que el equipo salga: suelta la ventana y anula la garantía.</summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="penaltyAmount">Cuánto retener por cancelar; 0 no retiene nada.</param>

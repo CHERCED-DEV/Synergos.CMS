@@ -90,6 +90,9 @@ public sealed class AlquilerControllerTests
             Cierres++;
             return Task.FromResult<RentalResult?>(_resultado);
         }
+
+        public Task<RentalResult?> DeclareReturnAsync(string id, string k, CancellationToken c = default)
+            => Task.FromResult<RentalResult?>(_resultado);
     }
 
     private sealed class RelojFijo : TimeProvider
