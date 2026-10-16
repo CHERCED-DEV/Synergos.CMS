@@ -1,0 +1,16 @@
+@*
+    SynHost renderer — <synergos-reserva>. La reserva de un servicio por franja, con cobro, por la puerta
+    (011-booking-reserva).
+
+    Host tonto (ADR 0135): el resolver arma ReservaProps con lo que escribe el editor, el servicio reservable de la
+    ficha que eligió y el camino del sitio (Synergos:Features:Reserva, ADR 0137). Es una FUNCIONALIDAD (ADR 0134).
+*@
+@using Synergos.CMS.Web.Services.SynHost
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.ReservaProps> Resolutor
+@inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
+@{
+    var resuelto = Resolutor.Resolver(Model);
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, System.Globalization.CultureInfo.CurrentUICulture));
+}
+@await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))

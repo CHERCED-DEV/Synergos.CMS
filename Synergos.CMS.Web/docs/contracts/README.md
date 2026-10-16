@@ -82,6 +82,7 @@ ensamblado, igual que su `info.title`.
 | Fichero | Pieza | Quién lo ejecuta |
 |---|---|---|
 | [`openapi/Synergos.Bff.Eventos.json`](openapi/Synergos.Bff.Eventos.json) | El orquestador de Eventos: el contrato del flujo de compra. El único que el UI convierte en tipos (el front conoce el contrato del flujo, no el de las capacidades). | CMS: los cuatro gates de abajo · UI: el generador de tipos de los `Synergos.Bff.*` (repo hermano) |
+| [`openapi/Synergos.Bff.Reservas.json`](openapi/Synergos.Bff.Reservas.json) | El orquestador de Reservas (011-booking-reserva): la reserva de un servicio por franja (`reservas.servicio`), servida por las rutas por convención del host genérico de N1, y la oferta de los servicios (`/v1/ofertas`, sin marca de la puerta). | CMS: los cuatro gates de abajo + `ContratoConsumidorReservasTests` (la oferta) · UI: el generador de tipos de los `Synergos.Bff.*` |
 | [`openapi/Synergos.Api.Pricing.json`](openapi/Synergos.Api.Pricing.json) | La capacidad de precios y cotizaciones. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Inventory.json`](openapi/Synergos.Api.Inventory.json) | La capacidad de existencias y apartados. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |
 | [`openapi/Synergos.Api.Payments.json`](openapi/Synergos.Api.Payments.json) | La capacidad de cobros. | CMS: los cuatro gates de abajo + `ContratoConsumidorEventosTests` |

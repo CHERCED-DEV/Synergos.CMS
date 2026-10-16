@@ -72,6 +72,7 @@
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Alquiler\Synergos.Bff.Alquiler.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj" />
+    <ProjectReference Include="..\orquestadores\Synergos.Bff.Reservas\Synergos.Bff.Reservas.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Salud\Synergos.Bff.Salud.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Tienda\Synergos.Bff.Tienda.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Viajes\Synergos.Bff.Viajes.csproj" />
