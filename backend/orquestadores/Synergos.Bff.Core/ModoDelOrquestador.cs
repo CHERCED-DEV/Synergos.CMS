@@ -40,16 +40,38 @@ public static class ModosDelOrquestador
     {
         ArgumentNullException.ThrowIfNull(configuracion);
         ArgumentNullException.ThrowIfNull(vocabulario);
+        return Interpretar(configuracion, $"{vocabulario.Origin}:{Clave}") ?? porDefecto;
+    }
 
-        var valor = configuracion[$"{vocabulario.Origin}:{Clave}"];
-        if (string.IsNullOrWhiteSpace(valor)) return porDefecto;
+    /// <summary>
+    /// El modo de UN flujo (núcleo N3, NE-10 de 007): <c>{Origen}:Flujos:{flujo}:Modo</c> si se configura; si
+    /// no, el del orquestador (<see cref="Leer"/>); si no, <paramref name="porDefecto"/>.
+    /// </summary>
+    /// <remarks>
+    /// Un orquestador con dos flujos puede portar uno y conservar el otro: Eventos declara su oferta y su compra
+    /// sigue imperativa. Un interruptor sólo por orquestador cambiaría los dos a la vez.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si la configuración trae otra palabra, en cualquiera de las dos claves.</exception>
+    public static ModoDelOrquestador LeerDelFlujo(
+        IConfiguration configuracion, SagaVocabulary vocabulario, string flujo, ModoDelOrquestador porDefecto)
+    {
+        ArgumentNullException.ThrowIfNull(configuracion);
+        ArgumentNullException.ThrowIfNull(vocabulario);
+        ArgumentException.ThrowIfNullOrWhiteSpace(flujo);
+        return Interpretar(configuracion, $"{vocabulario.Origin}:Flujos:{flujo}:Modo")
+            ?? Leer(configuracion, vocabulario, porDefecto);
+    }
+
+    private static ModoDelOrquestador? Interpretar(IConfiguration configuracion, string clave)
+    {
+        var valor = configuracion[clave];
+        if (string.IsNullOrWhiteSpace(valor)) return null;
 
         return valor.Trim().ToLowerInvariant() switch
         {
             "imperativo" => ModoDelOrquestador.Imperativo,
             "declarado" => ModoDelOrquestador.Declarado,
-            _ => throw new InvalidOperationException(
-                $"{vocabulario.Origin}:{Clave} vale «{valor}» y sólo admite «declarado» o «imperativo».")
+            _ => throw new InvalidOperationException($"{clave} vale «{valor}» y sólo admite «declarado» o «imperativo».")
         };
     }
 }

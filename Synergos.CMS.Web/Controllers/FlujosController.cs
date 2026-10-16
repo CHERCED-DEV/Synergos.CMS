@@ -54,7 +54,10 @@ public sealed class FlujosController : ControllerBase
     private readonly ReenvioDeLaPuerta _reenvio;
     private readonly Func<string?> _sitio;
 
+    private readonly AvisoEnVivoDeLaPuerta? _enVivo;
+
     /// <param name="sitio">El nombre del sitio de la petición, para el aviso. Nulo: el host.</param>
+    /// <param name="enVivo">Los avisos en vivo que declaran los flujos (núcleo N3). Nulo: no se avisa.</param>
     public FlujosController(
         TablaDeLaPuerta tabla,
         IOptionsMonitor<PuertaSettings> ajustes,
@@ -62,7 +65,8 @@ public sealed class FlujosController : ControllerBase
         IMemberAccessGate miembro,
         ReenvioDeLaPuerta reenvio,
         SeccionesDelSitio? secciones = null,
-        SitioDeLaPeticion? sitio = null)
+        SitioDeLaPeticion? sitio = null,
+        AvisoEnVivoDeLaPuerta? enVivo = null)
     {
         _tabla = tabla;
         _ajustes = ajustes;
@@ -71,6 +75,7 @@ public sealed class FlujosController : ControllerBase
         _reenvio = reenvio;
         _secciones = secciones;
         _sitio = () => sitio?.Resolver().SiteRoot?.Name;
+        _enVivo = enVivo;
     }
 
     [Route("{flujo}/{operacion}")]
@@ -111,7 +116,16 @@ public sealed class FlujosController : ControllerBase
             if (grande is not null) return Fallo(grande);
         }
 
-        var sujeto = LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, miembro);
+        // El sujeto es el miembro, o —si el flujo lo declara— el seudónimo del correo de la sesión (NE-4).
+        var porCorreo = SujetoDeLaPuerta.Normalizar(ajustes.SujetoDe) == SujetoDeLaPuerta.Correo;
+        if (porCorreo && _miembro.CurrentMemberEmail is not { Length: > 0 })
+        {
+            return Fallo(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida",
+                "Hace falta una sesión con correo."));
+        }
+        var sujeto = porCorreo
+            ? LoQuePoneLaPuerta.SujetoPorCorreo(ajustes.SujetoKind ?? string.Empty, _miembro.CurrentMemberEmail!)
+            : LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, miembro);
         var cabeceras = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (op.LargoDeLaLlave is not null)
         {
@@ -178,6 +192,12 @@ public sealed class FlujosController : ControllerBase
         Response.StatusCode = salida.Estado;
         if (salida.TipoDeContenido is not null) Response.ContentType = salida.TipoDeContenido;
         await Response.Body.WriteAsync(salida.Cuerpo, ct);
+
+        // Lo que el flujo declara avisar en vivo, sólo si salió bien y DESPUÉS de contestar (NE-6). No lanza.
+        if (_enVivo is not null && salida.Estado is >= 200 and < 300)
+        {
+            await _enVivo.PublicarAsync(op.Flujo, ajustes, op.Operacion, parametros, salida.Cuerpo, ct);
+        }
         return new EmptyResult();
     }
 

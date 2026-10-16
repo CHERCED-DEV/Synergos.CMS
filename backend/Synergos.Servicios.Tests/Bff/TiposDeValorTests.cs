@@ -27,6 +27,7 @@ public sealed class TiposDeValorTests
         { "ref", """{"kind":"salud.profesional","id":"p-1"}""" },
         { "dinero", """{"amount":50000,"currency":"COP"}""" },
         { "ventana", """{"start":"2026-10-15T10:00:00.0000000+00:00","end":"2026-10-15T10:30:00.0000000+00:00"}""" },
+        { "fecha", "\"2026-10-15\"" },
     };
 
     [Theory]
@@ -56,6 +57,10 @@ public sealed class TiposDeValorTests
         { "dinero", """{"amount":1,"currency":"CO"}""", "ISO 4217" },
         { "dinero", """{"amount":"1","currency":"COP"}""", "campo.amount" },
         { "ventana", """{"start":"2026-10-15T10:00:00Z","end":"2026-10-15T10:00:00Z"}""", "después de su inicio" },
+        // un día, no un instante; y sólo la forma ISO: «15/10/2026» se lee distinto en cada cultura
+        { "fecha", "\"2026-10-15T10:00:00Z\"", "AAAA-MM-DD" },
+        { "fecha", "\"15/10/2026\"", "AAAA-MM-DD" },
+        { "fecha", "20261015", "AAAA-MM-DD" },
     };
 
     [Theory]

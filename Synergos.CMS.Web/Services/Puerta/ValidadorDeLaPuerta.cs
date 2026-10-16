@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Web.Services.Puerta;
 
@@ -57,6 +58,31 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
 
             RevisarNegocio(donde, ops, flujo.Negocio, errores);
             RevisarAviso(donde, ops, flujo.Aviso, errores);
+
+            foreach (var aviso in flujo.EnVivo)
+            {
+                if (!ops.Any(o => string.Equals(o.Operacion, aviso.Operacion, StringComparison.Ordinal)))
+                {
+                    errores.Add($"{donde}:EnVivo avisa tras «{aviso.Operacion}», que no es una operación del flujo.");
+                }
+                if (string.IsNullOrWhiteSpace(aviso.Canal) || string.IsNullOrWhiteSpace(aviso.Nombre))
+                {
+                    errores.Add($"{donde}:EnVivo tras «{aviso.Operacion}» necesita Canal y Nombre.");
+                }
+            }
+
+            if (SujetoDeLaPuerta.Normalizar(flujo.SujetoDe) is not (SujetoDeLaPuerta.Miembro or SujetoDeLaPuerta.Correo))
+            {
+                errores.Add($"{donde}:SujetoDe «{flujo.SujetoDe}» tiene que ser «{SujetoDeLaPuerta.Miembro}» o «{SujetoDeLaPuerta.Correo}», "
+                    + "o no estar (y el sujeto es el miembro).");
+            }
+
+            // Mal escrito no se ignora: caería a la regla y el flujo iría por un camino que nadie eligió.
+            if (!CaminoDelFlujo.EsValido(CaminoDelFlujo.Normalizar(flujo.Camino)))
+            {
+                errores.Add($"{donde}:Camino «{flujo.Camino}» tiene que ser «{CaminoDelFlujo.Puerta}» o «{CaminoDelFlujo.Directa}», "
+                    + "o no estar (y decide la regla: la puerta si la abre, y si no la directa).");
+            }
         }
 
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);

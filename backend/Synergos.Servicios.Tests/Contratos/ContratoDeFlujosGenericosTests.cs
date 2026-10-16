@@ -91,6 +91,40 @@ public sealed class ContratoDeFlujosGenericosTests
         Assert.True((bool)sujeto["required"]! && (bool)sujeto["x-synergos-puerta"]!);
     }
 
+    /// <summary>
+    /// N-13 de Tienda: el cuerpo de una fase que continúa (lo efímero de <c>cerrar</c>: la dirección) no es la
+    /// entrada del flujo. Con el mismo nombre pisaba al de abrir, y el tipo generado de abrir salía con la dirección.
+    /// </summary>
+    [Fact]
+    public async Task Abrir_y_cotizar_publican_la_entrada_y_una_fase_que_continua_su_propio_cuerpo()
+    {
+        var doc = await Documento();
+        string Ref(string ruta, string? pide = "post")
+            => ((string)Op(doc, ruta, pide!)["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!).Split('/')[^1];
+        string[] Campos(string esquema) => doc["components"]!["schemas"]![esquema]!["properties"]!.AsObject().Select(p => p.Key).ToArray();
+
+        Assert.Equal("MuestraCompraEntrada", Ref("/v1/flujos/muestra.compra"));
+        Assert.Equal("MuestraCompraEntrada", Ref("/v1/flujos/muestra.compra/cotizar"));
+        Assert.Equal(["canasta"], Campos("MuestraCompraEntrada"));
+
+        Assert.Equal("MuestraCompraCerrarEntrada", Ref("/v1/flujos/muestra.compra/{id}/cerrar"));
+        Assert.Equal(["direccion", "transportadora"], Campos("MuestraCompraCerrarEntrada"));
+    }
+
+    [Fact]
+    public void Dos_cuerpos_distintos_con_el_mismo_nombre_no_se_publican_y_el_mismo_dos_veces_si()
+    {
+        var esquemas = new ContratoOpenApi.EsquemasDeFlujos();
+        var entrada = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["canasta"] = new JsonObject { ["type"] = "string" } } };
+
+        esquemas.RegistrarCuerpo("PruebaEntrada", entrada);
+        esquemas.RegistrarCuerpo("PruebaEntrada", (JsonObject)entrada.DeepClone());
+
+        var otro = new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["direccion"] = new JsonObject { ["type"] = "string" } } };
+        var ex = Assert.Throws<InvalidOperationException>(() => esquemas.RegistrarCuerpo("PruebaEntrada", otro));
+        Assert.Contains("Dos cuerpos distintos se publicarían como «PruebaEntrada»", ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task La_respuesta_tipa_la_salida_que_declara_el_flujo_y_los_genericos_no_se_publican()
     {

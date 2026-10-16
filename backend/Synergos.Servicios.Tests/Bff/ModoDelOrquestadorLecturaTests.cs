@@ -28,4 +28,34 @@ public sealed class ModoDelOrquestadorLecturaTests
         var ex = Assert.Throws<InvalidOperationException>(() => ModosDelOrquestador.Leer(Con("declarativo"), Salud, ModoDelOrquestador.Imperativo));
         Assert.Contains("«declarativo»", ex.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Por flujo (núcleo N3, NE-10 de 007): un orquestador con dos flujos porta uno y conserva el otro. Lo del
+    /// flujo gana; sin él, el del orquestador; sin los dos, el por defecto.
+    /// </summary>
+    [Fact]
+    public void El_modo_de_un_flujo_gana_al_del_orquestador_y_sin_el_decide_el_orquestador()
+    {
+        var eventos = new SagaVocabulary("eventos", "la compra");
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Eventos:Flujos:Modo"] = "imperativo",
+            ["Eventos:Flujos:eventos.oferta:Modo"] = "Declarado",
+        }).Build();
+
+        Assert.Equal(ModoDelOrquestador.Declarado,
+            ModosDelOrquestador.LeerDelFlujo(config, eventos, "eventos.oferta", ModoDelOrquestador.Imperativo));
+        Assert.Equal(ModoDelOrquestador.Imperativo,
+            ModosDelOrquestador.LeerDelFlujo(config, eventos, "eventos.compra", ModoDelOrquestador.Declarado));
+        Assert.Equal(ModoDelOrquestador.Declarado,
+            ModosDelOrquestador.LeerDelFlujo(Con(null), Salud, "salud.cita", ModoDelOrquestador.Declarado));
+
+        var mal = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Eventos:Flujos:eventos.oferta:Modo"] = "a veces",
+        }).Build();
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ModosDelOrquestador.LeerDelFlujo(mal, eventos, "eventos.oferta", ModoDelOrquestador.Imperativo));
+        Assert.Contains("eventos:Flujos:eventos.oferta:Modo vale «a veces»", ex.Message, StringComparison.Ordinal);
+    }
 }

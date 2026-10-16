@@ -904,6 +904,8 @@ public sealed class ContratoSynHostTests
         => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
             .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
             .AddSingleton(Substitute.For<Umbraco.Cms.Core.Web.IUmbracoContextAccessor>())
+            .Configure<Synergos.CMS.Application.Configuration.PuertaSettings>(_ => { })
+            .AddSingleton<ICaminoDeLosFlujos, Synergos.CMS.Web.Services.Puerta.CaminoDeLosFlujos>()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
