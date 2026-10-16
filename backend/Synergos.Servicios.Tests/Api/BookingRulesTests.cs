@@ -21,9 +21,74 @@ public sealed class BookingRulesTests
         int capacity = 1,
         IReadOnlyList<OpeningRule>? opening = null,
         string tz = "UTC",
-        int noticeMinutes = 0)
+        int noticeMinutes = 0,
+        int? slot = null)
         => new("r1", Ref.Create("test.recurso", "x"), capacity, tz,
-            opening ?? Array.Empty<OpeningRule>(), new CancellationPolicy(TimeSpan.FromMinutes(noticeMinutes)));
+            opening ?? Array.Empty<OpeningRule>(), new CancellationPolicy(TimeSpan.FromMinutes(noticeMinutes)), slot);
+
+    // ── Franja (núcleo, NB-1 de 011) ────────────────────────────────────────
+
+    [Fact]
+    public void Sin_franja_declarada_la_ventana_la_decide_quien_reserva()
+    {
+        // Lo de siempre, y lo que sigue sirviéndole a una noche de hotel: ni largo ni grilla.
+        var hotel = Recurso();
+
+        Assert.Null(BookingRules.CheckSlot(hotel, Ventana(Lunes10.AddMinutes(17), 45)));
+    }
+
+    [Fact]
+    public void Con_franja_una_ventana_de_OTRO_largo_se_rechaza_como_invalida()
+    {
+        // La ventana llega del navegador y el precio es por servicio: sin esto, tres horas se cobran
+        // como treinta minutos.
+        var consulta = Recurso(slot: 30);
+
+        var larga = BookingRules.CheckSlot(consulta, Ventana(Lunes10, 180));
+        var justa = BookingRules.CheckSlot(consulta, Ventana(Lunes10.AddMinutes(17), 30));
+
+        Assert.Equal("booking.bad_slot_length", larga?.Code);
+        Assert.Equal(RejectionKind.Invalid, larga?.Kind);
+        Assert.Null(justa);   // sin horario no hay grilla: sólo el largo
+    }
+
+    [Fact]
+    public void Con_franja_y_horario_la_ventana_empieza_en_la_grilla_de_su_franja_de_apertura()
+    {
+        // Abre a las 08:00 con franjas de 30: 10:00 y 10:30 son franjas, 10:15 parte las dos.
+        var clinica = Recurso(slot: 30,
+            opening: new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 0), new TimeOnly(12, 0)) });
+
+        Assert.Null(BookingRules.CheckSlot(clinica, Ventana(Lunes10, 30)));
+        Assert.Null(BookingRules.CheckSlot(clinica, Ventana(Lunes10.AddMinutes(30), 30)));
+        var partida = BookingRules.CheckSlot(clinica, Ventana(Lunes10.AddMinutes(15), 30));
+
+        Assert.Equal("booking.off_slot_grid", partida?.Code);
+        Assert.Equal(RejectionKind.Invalid, partida?.Kind);
+    }
+
+    [Fact]
+    public void La_grilla_se_cuenta_desde_la_apertura_y_en_el_HUSO_del_recurso()
+    {
+        // Abre a las 08:20 hora de Bogotá con franjas de 40: 09:00 local (14:00 UTC) es franja;
+        // 09:20 local (14:20 UTC), no. Contada en UTC o desde la hora en punto, saldría al revés.
+        var bogota = Recurso(slot: 40, tz: "America/Bogota",
+            opening: new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 20), new TimeOnly(12, 0)) });
+        var nueveLocal = new DateTimeOffset(2026, 3, 2, 14, 0, 0, TimeSpan.Zero);
+
+        Assert.Null(BookingRules.CheckSlot(bogota, Ventana(nueveLocal, 40)));
+        Assert.Equal("booking.off_slot_grid", BookingRules.CheckSlot(bogota, Ventana(nueveLocal.AddMinutes(20), 40))?.Code);
+    }
+
+    [Fact]
+    public void Una_ventana_fuera_de_horario_no_es_asunto_de_la_franja()
+    {
+        // La rechaza CheckOpeningHours con su propio código; la franja no se inventa uno.
+        var clinica = Recurso(slot: 30,
+            opening: new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 0), new TimeOnly(12, 0)) });
+
+        Assert.Null(BookingRules.CheckSlot(clinica, Ventana(Lunes10.AddHours(4).AddMinutes(10), 30)));
+    }
 
     // ── Horario ─────────────────────────────────────────────────────────────
 

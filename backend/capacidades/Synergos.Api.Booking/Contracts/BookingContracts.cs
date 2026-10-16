@@ -28,7 +28,8 @@ public sealed record CreateResourceRequest(
     int? Capacity = null,
     string? TimeZoneId = null,
     IReadOnlyList<OpeningRuleDto>? Opening = null,
-    int? CancellationNoticeMinutes = null);
+    int? CancellationNoticeMinutes = null,
+    int? SlotMinutes = null);
 
 /// <summary>Tomar un bloqueo temporal sobre una ventana.</summary>
 public sealed record CreateHoldRequest(
@@ -40,6 +41,7 @@ public sealed record CreateHoldRequest(
     int? TtlMinutes = null);
 
 /// <summary>Cómo sale un recurso.</summary>
+/// <remarks><c>SlotMinutes</c> nulo: el recurso no se reserva por franjas.</remarks>
 public sealed record ResourceResponse(
     string Id,
     string SubjectKind,
@@ -47,12 +49,14 @@ public sealed record ResourceResponse(
     int Capacity,
     string TimeZoneId,
     IReadOnlyList<OpeningRuleDto> Opening,
-    int CancellationNoticeMinutes)
+    int CancellationNoticeMinutes,
+    int? SlotMinutes)
 {
     public static ResourceResponse From(Resource r) => new(
         r.Id, r.Subject.Kind, r.Subject.Id, r.Capacity, r.TimeZoneId,
         r.Opening.Select(o => new OpeningRuleDto(o.Day.ToString(), o.From.ToString("HH:mm"), o.To.ToString("HH:mm"))).ToList(),
-        (int)r.Policy.MinNoticeBeforeStart.TotalMinutes);
+        (int)r.Policy.MinNoticeBeforeStart.TotalMinutes,
+        r.SlotMinutes);
 }
 
 /// <summary>Cómo sale un hold.</summary>

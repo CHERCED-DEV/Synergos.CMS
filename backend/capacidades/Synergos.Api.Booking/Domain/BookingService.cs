@@ -56,14 +56,22 @@ public sealed class BookingService
 
     // ── Recursos ────────────────────────────────────────────────────────────
 
+    /// <summary>La franja más larga que admite un recurso: un día. Una más larga no es una franja.</summary>
+    public const int MaxSlotMinutes = 24 * 60;
+
     public Result<Resource> RegisterResource(
         Ref subject, int capacity, string timeZoneId,
-        IReadOnlyList<OpeningRule> opening, CancellationPolicy policy, IdempotencyKey key)
+        IReadOnlyList<OpeningRule> opening, CancellationPolicy policy, IdempotencyKey key, int? slotMinutes = null)
     {
         if (capacity <= 0)
         {
             return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_capacity",
                 "Un recurso con capacidad cero o negativa no puede reservarse nunca.");
+        }
+        if (slotMinutes is <= 0 or > MaxSlotMinutes)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_slot_minutes",
+                $"La franja de un recurso dura entre 1 y {MaxSlotMinutes} minutos.");
         }
 
         lock (_gate)
@@ -77,7 +85,7 @@ public sealed class BookingService
             }
 
             var id = Guid.NewGuid().ToString("n");
-            var resource = new Resource(id, subject, capacity, timeZoneId, opening, policy);
+            var resource = new Resource(id, subject, capacity, timeZoneId, opening, policy, slotMinutes);
             _resources.Put(resource);
             _idempotency.Remember("resource", key, id);
             return Result.Ok(resource);
@@ -140,6 +148,7 @@ public sealed class BookingService
         var solapadas = ocupadas.Count(w => w.Overlaps(window));
 
         var motivo = BookingRules.CheckNotInThePast(window, Now)
+                     ?? BookingRules.CheckSlot(resource, window)
                      ?? BookingRules.CheckOpeningHours(resource, window)
                      ?? BookingRules.CheckCapacity(resource, ocupadas, window);
 
@@ -180,7 +189,9 @@ public sealed class BookingService
             // El orden importa: primero lo que depende solo de la petición, después lo que
             // depende del estado. Así el llamador que manda una ventana mala recibe "arreglá
             // lo que mandaste" y no "no hay cupo", que lo mandaría a reintentar en vano.
+            // La franja va antes que el horario: el largo es lo primero que quien reserva calculó mal.
             var motivo = BookingRules.CheckNotInThePast(window, Now)
+                         ?? BookingRules.CheckSlot(resource, window)
                          ?? BookingRules.CheckOpeningHours(resource, window)
                          ?? BookingRules.CheckCapacity(resource, Occupied(resourceId), window);
             if (motivo is not null) return Result.Rejected<Hold>(motivo);

@@ -53,7 +53,7 @@ public static class BookingEndpoints
             }
 
             var policy = new CancellationPolicy(TimeSpan.FromMinutes(Math.Max(0, req.CancellationNoticeMinutes ?? 0)));
-            return svc.RegisterResource(subject, req.Capacity ?? 1, req.TimeZoneId ?? "UTC", opening, policy, key)
+            return svc.RegisterResource(subject, req.Capacity ?? 1, req.TimeZoneId ?? "UTC", opening, policy, key, req.SlotMinutes)
                 .Map(ResourceResponse.From).ToCreated(r => $"/v1/resources/{r.Id}");
         }).WithName("RegisterResource").ConLlaveDeIdempotencia();
 

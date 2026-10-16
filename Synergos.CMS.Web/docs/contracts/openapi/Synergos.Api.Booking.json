@@ -1200,6 +1200,13 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "slotMinutes": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -1405,7 +1412,8 @@
           "capacity",
           "timeZoneId",
           "opening",
-          "cancellationNoticeMinutes"
+          "cancellationNoticeMinutes",
+          "slotMinutes"
         ],
         "type": "object",
         "properties": {
@@ -1433,6 +1441,13 @@
           },
           "cancellationNoticeMinutes": {
             "type": "integer",
+            "format": "int32"
+          },
+          "slotMinutes": {
+            "type": [
+              "null",
+              "integer"
+            ],
             "format": "int32"
           }
         }

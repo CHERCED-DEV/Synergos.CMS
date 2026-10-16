@@ -128,6 +128,57 @@ public sealed class BookingServiceTests
         Assert.Equal(ReservationStatus.Cancelled, cancelada.Value.Status);
     }
 
+    // ── La franja del recurso (núcleo, NB-1 de 011) ─────────────────────────
+
+    private static Resource RegistrarConFranja(BookingService svc, int minutos)
+        => svc.RegisterResource(
+            Ref.Create("test.recurso", "franja"), 1, "UTC",
+            new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 0), new TimeOnly(12, 0)) },
+            CancellationPolicy.Anytime, Llave(Guid.NewGuid().ToString("n")), minutos).Value;
+
+    [Fact]
+    public void El_recurso_guarda_su_franja_y_una_franja_sin_largo_no_se_registra()
+    {
+        var (svc, _) = Nuevo();
+
+        Assert.Equal(30, RegistrarConFranja(svc, 30).SlotMinutes);
+        foreach (var mala in new[] { 0, -30, BookingService.MaxSlotMinutes + 1 })
+        {
+            var r = svc.RegisterResource(Ref.Create("test.recurso", $"m{mala}"), 1, "UTC", Array.Empty<OpeningRule>(),
+                CancellationPolicy.Anytime, Llave($"mala-{mala}"), mala);
+            Assert.Equal("booking.bad_slot_minutes", r.Rejection?.Code);
+        }
+    }
+
+    [Fact]
+    public void Apartar_una_ventana_que_no_es_franja_se_rechaza_y_NO_toma_cupo()
+    {
+        // El orden importa: «arreglá lo que mandaste» antes que el cupo. Y nada queda apartado: la
+        // franja buena sigue libre para quien la pida bien.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var larga = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2), 180), Ref.Create("t.p", "1"), null, Llave("larga"));
+        var partida = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2).AddMinutes(15), 30), Ref.Create("t.p", "1"), null, Llave("partida"));
+        var buena = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2), 30), Ref.Create("t.p", "2"), null, Llave("buena"));
+
+        Assert.Equal("booking.bad_slot_length", larga.Rejection?.Code);
+        Assert.Equal("booking.off_slot_grid", partida.Rejection?.Code);
+        Assert.True(buena.IsOk);
+    }
+
+    [Fact]
+    public void La_disponibilidad_dice_por_que_una_ventana_no_es_franja()
+    {
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var r = svc.CheckAvailability(recurso.Id, Ventana(Lunes8.AddHours(2), 45)).Value;
+
+        Assert.False(r.Available);
+        Assert.Equal("booking.bad_slot_length", r.Reason?.Code);
+    }
+
     [Fact]
     public void Un_hold_vigente_BLOQUEA_el_cupo_aunque_nadie_haya_confirmado()
     {
