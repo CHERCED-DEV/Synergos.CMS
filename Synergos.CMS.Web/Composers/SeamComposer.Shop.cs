@@ -119,6 +119,32 @@ public sealed partial class SeamComposer
         // sigue sirviendo catálogo y fichas.
         services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
 
+        // El registro de las compras de la PUERTA (004-tienda-compra, US 6): las anota en el mismo almacén
+        // de órdenes para que «Mis compras», el seguimiento, la devolución y las reseñas las vean, con el
+        // motor que sea. Lee al orquestador si el despliegue dice dónde vive (BaseUrl) o si la compra ya va
+        // por él (Mode=Bff, con el puerto local por defecto); sin destino, contesta 503 y no sale a la red.
+        var seccionDeTienda = builder.Config.GetSection("Synergos:Tienda");
+        var hayOrquestadorDeTienda = !string.IsNullOrWhiteSpace(seccionDeTienda["BaseUrl"])
+            || Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode);
+        if (hayOrquestadorDeTienda)
+        {
+            services.AddClienteDelArbolDeServicios(
+                RegistroDeComprasDeLaTienda.ClientName,
+                DestinoDelArbol.De(seccionDeTienda, "http://127.0.0.1:5300/", 10));
+        }
+        services.AddSingleton(sp => new LibroDeComprasDeLaPuerta(
+            sp.GetRequiredService<IJsonEntityStore>(),
+            sp.GetRequiredService<IOrderTrackingService>(),
+            sp.GetRequiredService<ICheckoutRecorder>()));
+        services.AddSingleton(sp => new RegistroDeComprasDeLaTienda(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<IProductCatalogProvider>(),
+            sp.GetRequiredService<ILogger<RegistroDeComprasDeLaTienda>>(),
+            hayOrquestadorDeTienda));
+
+        Func<IServiceProvider, IShopOrderService> motor;
         if (Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode))
         {
             // Dos clientes —el orquestador y la canasta— bajo la MISMA llave y el mismo techo, y
@@ -133,11 +159,12 @@ public sealed partial class SeamComposer
                 HttpShopOrderService.CartClientName,
                 DestinoDelArbol.De(tienda, "http://127.0.0.1:5210/", 30, claveDeLaUrl: "CartBaseUrl"));
 
-            services.AddSingleton<IShopOrderService, HttpShopOrderService>();
+            services.AddSingleton<HttpShopOrderService>();
+            motor = sp => sp.GetRequiredService<HttpShopOrderService>();
         }
         else
         {
-            services.AddSingleton<IShopOrderService>(sp =>
+            motor = sp =>
             new StubShopOrderService(
                 sp.GetRequiredService<IProductCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
@@ -149,8 +176,16 @@ public sealed partial class SeamComposer
                 // El read-model del dashboard se alimenta acá: es el único punto
                 // por el que una orden llega a Paid. Sin esto el panel de ventas
                 // quedaba en $0 con órdenes reales en disco.
-                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>()));
+                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>());
         }
+
+        // El motor de arriba MÁS las órdenes de la puerta, una vez cada una (004-tienda-compra, US 6). Lo
+        // leen el catálogo (Mis compras, reseñas, seguimiento, devolución) y el RMA de abajo.
+        services.AddSingleton<IShopOrderService>(sp => new OrdenesConLasDeLaPuerta(
+            motor(sp),
+            sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
+            sp.GetRequiredService<RegistroDeComprasDeLaTienda>(),
+            sp.GetRequiredService<ILogger<OrdenesConLasDeLaPuerta>>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 // Sin IPaymentProvider (#57): la devolución se la pide al seam de ÓRDENES, que
