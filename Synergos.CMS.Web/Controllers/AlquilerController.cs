@@ -220,7 +220,8 @@ public sealed class AlquilerController : ControllerBase
             ? await _puerta.ConfirmReturnAsync(contrato, monto, QuienAlquila()!, llave, ct).ConfigureAwait(false)
             : await _rentals.ReturnAsync(rentalId, monto, llave, ct).ConfigureAwait(false);
 
-        return await ResponderAsync(resultado, contrato, "confirmar la devolución", ct).ConfigureAwait(false);
+        return await ResponderAsync(resultado, contrato, "confirmar la devolución", ct, confirmaElPersonal: QuienAlquila())
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -346,7 +347,7 @@ public sealed class AlquilerController : ControllerBase
         }
 
         var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
-        return Ok(AgreementDto.From(leido.Contrato, leido.Comprobado));
+        return Ok(AgreementDto.From(leido.Contrato, leido.Comprobado, leido.DesenlaceComprobado));
     }
 
     // ── Fontanería ──────────────────────────────────────────────────────────
@@ -359,7 +360,8 @@ public sealed class AlquilerController : ControllerBase
     /// El sello del contrato no cubre el estado (sólo lo pactado al salir), así que anotarlo no lo rompe.
     /// </remarks>
     private async Task<ActionResult<RentalDto>> ResponderAsync(
-        RentalResult? resultado, RentalAgreement? contrato, string quePasaba, CancellationToken ct)
+        RentalResult? resultado, RentalAgreement? contrato, string quePasaba, CancellationToken ct,
+        string? confirmaElPersonal = null)
     {
         if (resultado is null)
         {
@@ -377,7 +379,22 @@ public sealed class AlquilerController : ControllerBase
             await _ledger.RecordAsync(contrato, ct).ConfigureAwait(false);
         }
 
-        return Ok(RentalDto.From(resultado.Rental, contrato, await _issuer.ComprobarAsync(contrato, ct).ConfigureAwait(false)));
+        // La devolución que confirmó el personal queda con su desenlace SELLADO aparte (005-P6): lo cobrado de la
+        // garantía y lo liberado, que es lo retenido al salir menos el daño. Una vez: repetir no lo vuelve a sellar.
+        if (contrato is { Desenlace: null } && confirmaElPersonal is not null && resultado.Rental.State == RentalState.Returned)
+        {
+            var danio = resultado.Rental.DamageCharged;
+            contrato = await _issuer.SellarDesenlaceAsync(contrato, danio,
+                danio <= contrato.DepositHeld ? contrato.DepositHeld - danio : null, confirmaElPersonal, ct).ConfigureAwait(false);
+        }
+
+        if (contrato is null)
+        {
+            return Ok(RentalDto.From(resultado.Rental, null, false));
+        }
+
+        var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
+        return Ok(RentalDto.From(resultado.Rental, leido.Contrato, leido.Comprobado, leido.DesenlaceComprobado));
     }
 
     /// <summary>
@@ -390,7 +407,7 @@ public sealed class AlquilerController : ControllerBase
         foreach (var contrato in contratos)
         {
             var leido = await _issuer.LeerAsync(contrato, ct).ConfigureAwait(false);
-            dtos.Add(AgreementDto.From(leido.Contrato, leido.Comprobado));
+            dtos.Add(AgreementDto.From(leido.Contrato, leido.Comprobado, leido.DesenlaceComprobado));
         }
 
         return dtos;
@@ -687,11 +704,12 @@ public sealed record RentalDto(
     /// <c>an_omitted_key_can_be_an_assertion</c> con la clave presente.
     /// </param>
     /// <returns>El DTO.</returns>
-    public static RentalDto From(Rental r, RentalAgreement? a, bool? comprobado)
+    /// <param name="desenlaceComprobado">Lo mismo para el sello del desenlace de la devolución, si lo hay.</param>
+    public static RentalDto From(Rental r, RentalAgreement? a, bool? comprobado, bool? desenlaceComprobado = null)
         => new(r.RentalId, r.EquipmentId, r.Quantity, r.Start, r.End,
             r.State.ToString().ToLowerInvariant(), QuoteDto.From(r.Quote),
             r.DepositHeld, r.DamageCharged,
-            a is null ? null : AgreementDto.From(a, comprobado));
+            a is null ? null : AgreementDto.From(a, comprobado, desenlaceComprobado));
 }
 
 /// <summary>El comprobante de un alquiler.</summary>
@@ -711,16 +729,33 @@ public sealed record RentalDto(
 /// comprobar» (el sello está pendiente, o quien lo selló no contestó): el elemento lo pinta distinto de «no cuadra».
 /// </param>
 /// <param name="SealPending">El servicio de firma no contestó al emitirlo: se sella al volver.</param>
+/// <param name="Outcome">Cómo se cerró la devolución, con su propio sello; null mientras no se cierre.</param>
 public sealed record AgreementDto(
     string RentalId, string EquipmentName, int Quantity, DateOnly Start, DateOnly End,
     decimal RentalTotal, decimal DepositHeld, string Currency, DateTimeOffset IssuedUtc, string Seal, bool? Verified,
-    bool SealPending = false)
+    bool SealPending = false, AgreementOutcomeDto? Outcome = null)
 {
     /// <summary>Proyecta un comprobante.</summary>
     /// <param name="a">El comprobante.</param>
     /// <param name="comprobado">Si su sello comprobó; null si no se pudo comprobar.</param>
+    /// <param name="desenlaceComprobado">Si el sello de su desenlace comprobó; null si no se pudo o no hay.</param>
     /// <returns>El DTO.</returns>
-    public static AgreementDto From(RentalAgreement a, bool? comprobado)
+    public static AgreementDto From(RentalAgreement a, bool? comprobado, bool? desenlaceComprobado = null)
         => new(a.RentalId, a.EquipmentName, a.Quantity, a.Start, a.End,
-            a.RentalTotal, a.DepositHeld, a.Currency, a.IssuedUtc, a.Seal, comprobado, a.SelloPendiente);
+            a.RentalTotal, a.DepositHeld, a.Currency, a.IssuedUtc, a.Seal, comprobado, a.SelloPendiente,
+            a.Desenlace is not { } d
+                ? null
+                : new AgreementOutcomeDto(d.ConfirmadoUtc, d.Danio, d.GarantiaLiberada, d.Sello, desenlaceComprobado,
+                    d.SelloPendiente));
 }
+
+/// <summary>Cómo se cerró la devolución de un alquiler (decisión 5 del lote 1; 005-P6): lo que confirmó el personal.</summary>
+/// <remarks>Quién lo confirmó no sale: es una referencia del personal, y a quien alquiló no le hace falta.</remarks>
+/// <param name="ConfirmedUtc">Cuándo lo confirmó el personal.</param>
+/// <param name="Damage">Cuánto se cobró de la garantía; cero sin daño.</param>
+/// <param name="DepositReleased">Cuánto se liberó; null es «no consta».</param>
+/// <param name="Seal">El sello del desenlace, o vacío si quedó pendiente.</param>
+/// <param name="Verified">Si ese sello comprueba; null si no se pudo comprobar.</param>
+/// <param name="SealPending">El servicio de firma no contestó al sellarlo.</param>
+public sealed record AgreementOutcomeDto(
+    DateTimeOffset ConfirmedUtc, decimal Damage, decimal? DepositReleased, string Seal, bool? Verified, bool SealPending);

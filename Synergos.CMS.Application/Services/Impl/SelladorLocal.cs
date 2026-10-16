@@ -32,4 +32,13 @@ public sealed class SelladorLocal : ISelladorDeContratos
     public Task<bool?> ComprobarAsync(
         string? sello, AgreementSubject subject, CancellationToken cancellationToken = default)
         => Task.FromResult<bool?>(_firmante.Matches(sello, subject));
+
+    /// <inheritdoc />
+    public Task<SelloDelContrato> SellarAsync(AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SelloDelContrato(_firmante.Seal(outcome), Nombre));
+
+    /// <inheritdoc />
+    public Task<bool?> ComprobarAsync(
+        string? sello, AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+        => Task.FromResult<bool?>(_firmante.Matches(sello, outcome));
 }

@@ -15,6 +15,26 @@ public sealed record AgreementSubject(
     string RentalId, string RenterId, string EquipmentId, decimal DepositHeld, string Currency);
 
 /// <summary>
+/// Lo que el sello del DESENLACE de una devolución afirma (lote 3, 005-P6; FR-023): cómo la cerró el personal.
+/// </summary>
+/// <remarks>
+/// Va en un sello PROPIO y no dentro de <see cref="AgreementSubject"/>: el contrato afirma lo pactado al salir, y meterle
+/// el desenlace cambiaría lo sellado y dejaría sin comprobar todo contrato ya emitido. Así el papel de la salida sigue
+/// valiendo, y el de la devolución vale por su lado.
+/// </remarks>
+/// <param name="RentalId">Qué alquiler.</param>
+/// <param name="RenterId">El seudónimo de quien lo alquiló.</param>
+/// <param name="EquipmentId">Qué equipo volvió.</param>
+/// <param name="Damage">Cuánto se cobró de la garantía; cero sin daño.</param>
+/// <param name="DepositReleased">Cuánto se liberó; null es «no consta», nunca cero.</param>
+/// <param name="Currency">En qué moneda.</param>
+/// <param name="StaffRef">Quién lo confirmó, por referencia: nunca su nombre ni su correo.</param>
+/// <param name="ConfirmedUtc">Cuándo.</param>
+public sealed record AgreementOutcomeSubject(
+    string RentalId, string RenterId, string EquipmentId, decimal Damage, decimal? DepositReleased, string Currency,
+    string StaffRef, DateTimeOffset ConfirmedUtc);
+
+/// <summary>
 /// Sella un contrato de alquiler para que alguien de FUERA pueda comprobarlo sin creernos.
 /// </summary>
 /// <remarks>
@@ -38,6 +58,17 @@ public interface IAgreementSigner
     /// <param name="subject">Contra qué se comprueba.</param>
     /// <returns><c>true</c> sólo si coinciden.</returns>
     bool Matches(string? sealValue, AgreementSubject subject);
+
+    /// <summary>Sella el desenlace de la devolución, con la misma llave y otra clase de contenido.</summary>
+    /// <param name="outcome">Lo que queda afirmado.</param>
+    /// <returns>El sello, opaco.</returns>
+    string Seal(AgreementOutcomeSubject outcome);
+
+    /// <summary>¿Este sello corresponde a este desenlace?</summary>
+    /// <param name="sealValue">El sello que alguien presenta.</param>
+    /// <param name="outcome">Contra qué se comprueba.</param>
+    /// <returns><c>true</c> sólo si coinciden.</returns>
+    bool Matches(string? sealValue, AgreementOutcomeSubject outcome);
 }
 
 /// <summary>Lo que devuelve sellar un contrato: el sello y quién lo selló, o «pendiente».</summary>
@@ -80,4 +111,17 @@ public interface ISelladorDeContratos
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
     /// <returns><c>true</c> si cuadra, <c>false</c> si no, <c>null</c> si no se pudo comprobar.</returns>
     Task<bool?> ComprobarAsync(string? sello, AgreementSubject subject, CancellationToken cancellationToken = default);
+
+    /// <summary>Sella el desenlace de la devolución (005-P6).</summary>
+    /// <param name="outcome">Lo que queda afirmado.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El sello y quién lo selló, o pendiente.</returns>
+    Task<SelloDelContrato> SellarAsync(AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default);
+
+    /// <summary>¿Este sello corresponde a este desenlace?</summary>
+    /// <param name="sello">El sello que el desenlace registra.</param>
+    /// <param name="outcome">Contra qué se comprueba.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns><c>true</c> si cuadra, <c>false</c> si no, <c>null</c> si no se pudo comprobar.</returns>
+    Task<bool?> ComprobarAsync(string? sello, AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default);
 }

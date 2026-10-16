@@ -59,7 +59,19 @@ public sealed class SelladorDeContratosTests
             string? sello, AgreementSubject subject, CancellationToken cancellationToken = default)
             => Task.FromResult<bool?>(Caido ? null : string.Equals(sello, SelloDe(subject), StringComparison.Ordinal));
 
+        public Task<SelloDelContrato> SellarAsync(AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+            => Task.FromResult(Caido
+                ? new SelloDelContrato(string.Empty, Nombre, Pendiente: true)
+                : new SelloDelContrato(SelloDe(outcome), "api:k-1"));
+
+        public Task<bool?> ComprobarAsync(
+            string? sello, AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+            => Task.FromResult<bool?>(Caido ? null : string.Equals(sello, SelloDe(outcome), StringComparison.Ordinal));
+
         private static string SelloDe(AgreementSubject s) => $"api|{s.RentalId}|{s.RenterId}|{s.DepositHeld}|{s.Currency}";
+
+        private static string SelloDe(AgreementOutcomeSubject s)
+            => $"api-desenlace|{s.RentalId}|{s.Damage}|{s.DepositReleased}|{s.StaffRef}|{s.ConfirmedUtc:O}";
     }
 
     private static readonly byte[] Llave = Encoding.UTF8.GetBytes("llave-de-prueba-del-contrato-32b!");

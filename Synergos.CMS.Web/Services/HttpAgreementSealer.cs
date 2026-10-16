@@ -62,46 +62,70 @@ public sealed class HttpAgreementSealer : ISelladorDeContratos
     private string Proposito => _settings.Value.Signing.Purpose;
 
     /// <inheritdoc />
-    public async Task<SelloDelContrato> SellarAsync(
-        AgreementSubject subject, CancellationToken cancellationToken = default)
+    public Task<SelloDelContrato> SellarAsync(AgreementSubject subject, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(subject);
+        return SellarContenidoAsync(Contenido(subject), subject.RentalId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<bool?> ComprobarAsync(string? sello, AgreementSubject subject, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+        return ComprobarContenidoAsync(sello, Contenido(subject), subject.RentalId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<SelloDelContrato> SellarAsync(AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        return SellarContenidoAsync(Contenido(outcome), outcome.RentalId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<bool?> ComprobarAsync(
+        string? sello, AgreementOutcomeSubject outcome, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        return ComprobarContenidoAsync(sello, Contenido(outcome), outcome.RentalId, cancellationToken);
+    }
+
+    private async Task<SelloDelContrato> SellarContenidoAsync(string contenido, string rentalId, CancellationToken cancellationToken)
+    {
         try
         {
             using var http = _factory.CreateClient(ClientName);
             using var respuesta = await http.PostAsJsonAsync(
-                "v1/seals", new SealRequest(Proposito, Contenido(subject)), Json, cancellationToken).ConfigureAwait(false);
+                "v1/seals", new SealRequest(Proposito, contenido), Json, cancellationToken).ConfigureAwait(false);
 
             if (!respuesta.IsSuccessStatusCode)
             {
-                return Pendiente(subject, $"contestó {(int)respuesta.StatusCode}");
+                return Pendiente(rentalId, $"contestó {(int)respuesta.StatusCode}");
             }
 
             var sello = await respuesta.Content
                 .ReadFromJsonAsync<SealResponse>(Json, cancellationToken).ConfigureAwait(false);
             return sello is null || string.IsNullOrWhiteSpace(sello.Seal) || string.IsNullOrWhiteSpace(sello.KeyId)
-                ? Pendiente(subject, "devolvió un sello vacío")
+                ? Pendiente(rentalId, "devolvió un sello vacío")
                 : new SelloDelContrato(sello.Seal, $"{NombreApi}:{sello.KeyId}");
         }
         catch (HttpRequestException)
         {
-            return Pendiente(subject, "no responde");
+            return Pendiente(rentalId, "no responde");
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Pendiente(subject, "tardó demasiado");
+            return Pendiente(rentalId, "tardó demasiado");
         }
         catch (JsonException)
         {
-            return Pendiente(subject, "devolvió algo que no es un sello");
+            return Pendiente(rentalId, "devolvió algo que no es un sello");
         }
     }
 
-    /// <inheritdoc />
-    public async Task<bool?> ComprobarAsync(
-        string? sello, AgreementSubject subject, CancellationToken cancellationToken = default)
+    private async Task<bool?> ComprobarContenidoAsync(
+        string? sello, string contenido, string rentalId, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(subject);
         if (string.IsNullOrWhiteSpace(sello))
         {
             return false;
@@ -111,7 +135,7 @@ public sealed class HttpAgreementSealer : ISelladorDeContratos
         {
             using var http = _factory.CreateClient(ClientName);
             using var respuesta = await http.PostAsJsonAsync(
-                "v1/seals/verify", new VerifySealRequest(Proposito, Contenido(subject), sello.Trim()), Json,
+                "v1/seals/verify", new VerifySealRequest(Proposito, contenido, sello.Trim()), Json,
                 cancellationToken).ConfigureAwait(false);
 
             if (respuesta.IsSuccessStatusCode)
@@ -126,8 +150,8 @@ public sealed class HttpAgreementSealer : ISelladorDeContratos
                 return false;
             }
 
-            _log.LogWarning("Api.Signing no pudo comprobar el contrato {RentalId} ({Estado}).",
-                subject.RentalId, (int)respuesta.StatusCode);
+            _log.LogWarning("Api.Signing no pudo comprobar el sello del alquiler {RentalId} ({Estado}).",
+                rentalId, (int)respuesta.StatusCode);
             return null;
         }
         catch (HttpRequestException)
@@ -151,11 +175,18 @@ public sealed class HttpAgreementSealer : ISelladorDeContratos
         => string.Join('\u001f', "contrato", s.RentalId, s.RenterId, s.EquipmentId,
             s.DepositHeld.ToString("0.####", CultureInfo.InvariantCulture), s.Currency);
 
-    private SelloDelContrato Pendiente(AgreementSubject subject, string porQue)
+    /// <summary>Lo sellado del desenlace de la devolución, con su clase delante (005-P6).</summary>
+    private static string Contenido(AgreementOutcomeSubject s)
+        => string.Join('\u001f', "desenlace", s.RentalId, s.RenterId, s.EquipmentId,
+            s.Damage.ToString("0.####", CultureInfo.InvariantCulture),
+            s.DepositReleased?.ToString("0.####", CultureInfo.InvariantCulture) ?? string.Empty,
+            s.Currency, s.StaffRef, s.ConfirmedUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+
+    private SelloDelContrato Pendiente(string rentalId, string porQue)
     {
         _log.LogWarning(
-            "Api.Signing {PorQue}: el contrato {RentalId} sale con el sello PENDIENTE y se sella al leerlo.",
-            porQue, subject.RentalId);
+            "Api.Signing {PorQue}: el sello del alquiler {RentalId} queda PENDIENTE y se sella al leerlo.",
+            porQue, rentalId);
         return new SelloDelContrato(string.Empty, NombreApi, Pendiente: true);
     }
 

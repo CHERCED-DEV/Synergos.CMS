@@ -70,6 +70,29 @@ public sealed class EquipmentAgreementLedger
         return sellado;
     }
 
+    /// <summary>
+    /// Anota cómo se cerró la devolución, sobre lo que el registro tiene AHORA (línea 005, T025): sólo cambia el
+    /// desenlace, nunca lo pactado ni su sello.
+    /// </summary>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="desenlace">El desenlace, con su propio sello.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato con su desenlace, o null si ya no consta.</returns>
+    public async Task<RentalAgreement?> AnotarDesenlaceAsync(
+        string rentalId, DesenlaceDelAlquiler desenlace, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(desenlace);
+        var actual = await GetAsync(rentalId, cancellationToken).ConfigureAwait(false);
+        if (actual is null)
+        {
+            return null;
+        }
+
+        var cerrado = actual with { Desenlace = desenlace };
+        await RecordAsync(cerrado, cancellationToken).ConfigureAwait(false);
+        return cerrado;
+    }
+
     /// <summary>El contrato de un alquiler, o null.</summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>

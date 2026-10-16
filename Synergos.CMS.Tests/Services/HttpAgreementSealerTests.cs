@@ -153,6 +153,24 @@ public sealed class HttpAgreementSealerTests
         Assert.Equal("/v1/seals/verify", capacidad.Llamadas[^1].Path);
     }
 
+    /// <summary>El desenlace de la devolución va por las mismas rutas con su clase delante (005-P6, T025).</summary>
+    [Fact]
+    public async Task El_desenlace_se_sella_con_su_clase_y_no_comprueba_como_contrato()
+    {
+        var capacidad = new CapacidadFalsa();
+        var sellador = Armar(capacidad);
+        var desenlace = new AgreementOutcomeSubject("alq-1", "u-1", "andamio", 40_000m, 210_000m, "COP", "p-1",
+            new DateTimeOffset(2026, 11, 9, 9, 0, 0, TimeSpan.Zero));
+
+        var sello = await sellador.SellarAsync(desenlace);
+
+        Assert.Equal("api:k-1", sello.SelladoPor);
+        Assert.Contains("desenlace", capacidad.Llamadas[^1].Body, StringComparison.Ordinal);
+        Assert.True(await sellador.ComprobarAsync(sello.Valor, desenlace));
+        Assert.False(await sellador.ComprobarAsync(sello.Valor, Sujeto));
+        Assert.False(await sellador.ComprobarAsync(sello.Valor, desenlace with { Damage = 0m }));
+    }
+
     [Fact]
     public async Task Con_la_capacidad_caida_el_sello_queda_pendiente_y_comprobar_no_sabe()
     {

@@ -126,7 +126,79 @@ public sealed class EquipmentAgreementIssuer
             }
         }
 
-        return new ContratoLeido(agreement, await ComprobarAsync(agreement, cancellationToken).ConfigureAwait(false));
+        if (agreement.Desenlace is { SelloPendiente: true } pendiente
+            && QuienSello(pendiente.SelladoPor) is { } delDesenlace)
+        {
+            var sello = await delDesenlace.SellarAsync(SujetoDelDesenlace(agreement, pendiente), cancellationToken)
+                .ConfigureAwait(false);
+            if (!sello.Pendiente)
+            {
+                agreement = await _ledger.AnotarDesenlaceAsync(agreement.RentalId,
+                        pendiente with { Sello = sello.Valor, SelladoPor = sello.SelladoPor, SelloPendiente = false },
+                        cancellationToken)
+                    .ConfigureAwait(false) ?? agreement;
+            }
+        }
+
+        return new ContratoLeido(
+            agreement,
+            await ComprobarAsync(agreement, cancellationToken).ConfigureAwait(false),
+            agreement.Desenlace is null ? null : await ComprobarDesenlaceAsync(agreement, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Sella el desenlace de la devolución que confirmó el personal y lo anota (lote 3, 005-P6; T025), con su PROPIO
+    /// sello: el del contrato no se toca y sigue comprobando.
+    /// </summary>
+    /// <param name="agreement">El contrato del alquiler devuelto.</param>
+    /// <param name="danio">Lo que se cobró de la garantía; cero sin daño.</param>
+    /// <param name="liberada">Lo que se liberó; null es «no consta».</param>
+    /// <param name="personal">Quién lo confirmó, por referencia.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato con su desenlace sellado (o pendiente, si el servicio de firma no contestó).</returns>
+    public async Task<RentalAgreement> SellarDesenlaceAsync(
+        RentalAgreement agreement, decimal danio, decimal? liberada, string personal,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(agreement);
+        ArgumentException.ThrowIfNullOrWhiteSpace(personal);
+
+        var borrador = new DesenlaceDelAlquiler(_clock.GetUtcNow(), danio, liberada, personal, string.Empty);
+        var sello = _sellador is null
+            ? new SelloDelContrato(string.Empty, RentalAgreement.SelladoLocal)
+            : await _sellador.SellarAsync(SujetoDelDesenlace(agreement, borrador), cancellationToken).ConfigureAwait(false);
+        var desenlace = borrador with { Sello = sello.Valor, SelladoPor = sello.SelladoPor, SelloPendiente = sello.Pendiente };
+
+        return await _ledger.AnotarDesenlaceAsync(agreement.RentalId, desenlace, cancellationToken).ConfigureAwait(false)
+               ?? agreement with { Desenlace = desenlace };
+    }
+
+    /// <summary>¿El sello del desenlace corresponde a lo que afirma? Con las mismas tres respuestas que el contrato.</summary>
+    /// <param name="agreement">El contrato con su desenlace.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns><c>false</c> sin desenlace o sin sello o si no cuadra; <c>null</c> si no se pudo comprobar.</returns>
+    public async Task<bool?> ComprobarDesenlaceAsync(RentalAgreement? agreement, CancellationToken cancellationToken = default)
+    {
+        if (agreement?.Desenlace is not { } desenlace)
+        {
+            return false;
+        }
+
+        if (desenlace.SelloPendiente)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(desenlace.Sello))
+        {
+            return false;
+        }
+
+        var quien = QuienSello(desenlace.SelladoPor);
+        return quien is null
+            ? null
+            : await quien.ComprobarAsync(desenlace.Sello, SujetoDelDesenlace(agreement, desenlace), cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>¿El sello de este contrato corresponde a lo que afirma?</summary>
@@ -176,9 +248,13 @@ public sealed class EquipmentAgreementIssuer
 
     private static AgreementSubject Sujeto(RentalAgreement a)
         => new(a.RentalId, a.RenterId, a.EquipmentId, a.DepositHeld, a.Currency);
+
+    private static AgreementOutcomeSubject SujetoDelDesenlace(RentalAgreement a, DesenlaceDelAlquiler d)
+        => new(a.RentalId, a.RenterId, a.EquipmentId, d.Danio, d.GarantiaLiberada, a.Currency, d.Personal, d.ConfirmadoUtc);
 }
 
 /// <summary>Un contrato leído para enseñarlo, con su sello comprobado por quien lo selló.</summary>
 /// <param name="Contrato">El contrato, sellado si el reintento pudo.</param>
 /// <param name="Comprobado"><c>true</c> cuadra, <c>false</c> no cuadra o no tiene sello, <c>null</c> no se pudo comprobar.</param>
-public sealed record ContratoLeido(RentalAgreement Contrato, bool? Comprobado);
+/// <param name="DesenlaceComprobado">Lo mismo para el sello del desenlace; null también si no hay desenlace.</param>
+public sealed record ContratoLeido(RentalAgreement Contrato, bool? Comprobado, bool? DesenlaceComprobado = null);
