@@ -46,12 +46,31 @@ ANTERIOR=""
 echo "── versión anterior: ${ANTERIOR:-(ninguna, primer despliegue)}"
 echo "── versión a poner:  $SHA"
 
+# ── Los ficheros de la versión, no sólo sus imágenes ─────────────────────────
+#
+# Una versión son sus imágenes Y el compose y el Caddyfile con que se puso en
+# pie. Volver a las imágenes de antes con el compose de ahora muere en el `pull`
+# en cuanto la versión nueva trae un servicio que la anterior no tenía: pide una
+# imagen que con esa etiqueta nunca se publicó, y la vuelta atrás no vuelve
+# (medido en el ensayo de `ed634d55`, el primero tras sumar `bff-reservas`).
+# Por eso cada versión que queda en pie guarda los suyos en `versiones/<sha>/`
+# (al final), y poner una que ya estuvo repone los de ella ANTES de bajar nada.
+GUARDADOS="$DIR/versiones/$SHA"
+if [ -f "$GUARDADOS/compose.prod.yml" ] && [ -f "$GUARDADOS/Caddyfile" ]; then
+  echo "── reponiendo el compose y el Caddyfile con que $SHA estuvo en pie"
+  cp "$GUARDADOS/compose.prod.yml" "$GUARDADOS/Caddyfile" "$DIR/"
+fi
+
 # ── Bajar las imágenes ANTES de parar nada ───────────────────────────────────
 #
 # La descarga es el tramo largo. Hacerla con el sitio abajo alarga la caída por
 # el tiempo que tarde la red, que además es el tramo que puede fallar.
 echo "── bajando imágenes…"
-SYNERGOS_TAG="$SHA" $COMPOSE pull --quiet
+if ! SYNERGOS_TAG="$SHA" $COMPOSE pull --quiet; then
+  echo "✗ el pull de $SHA falló (arriba, por qué); no se paró nada."
+  [ -f "$GUARDADOS/compose.prod.yml" ] || echo "  $SHA no tiene ficheros guardados en $GUARDADOS: si es una vuelta atrás, los suyos están en el repo (git show $SHA:compose.prod.yml)."
+  exit 1
+fi
 
 # ── Parar, arrancar ──────────────────────────────────────────────────────────
 #
@@ -123,5 +142,9 @@ if [ -n "$VIEJAS" ]; then
   exit 1
 fi
 
+# Lo que quedó en pie, con los ficheros con que se puso en pie: el destino de
+# una vuelta atrás futura (ver «Los ficheros de la versión», arriba).
+mkdir -p "$GUARDADOS"
+cp "$DIR/compose.prod.yml" "$DIR/Caddyfile" "$GUARDADOS/"
 echo "$SHA" > tag.actual
 echo "✓ $SHA desplegado (el humo público decide si se queda)"
