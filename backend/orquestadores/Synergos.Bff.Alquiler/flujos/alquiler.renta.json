@@ -8,7 +8,7 @@
     "ventana": "ventana",
     "contacto": { "de": "contacto" }
   },
-  "salida": ["total", "garantia", "garantiaId", "cobroId", "ventana"],
+  "salida": ["total", "garantia", "garantiaId", "cobroId", "ventana", "equipo", "cantidad"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": [
@@ -24,6 +24,7 @@
     ],
     "cerrar": [
       "capturar",
+      "anotar",
       { "para_cada": "reservas:apartar", "como": "apartado", "pasos": ["confirmar"] },
       "conservar",
       "avisar"
@@ -33,7 +34,7 @@
     "tramo": {
       "tipo": "alquiler.tramo",
       "lee": ["equipo", "unidades", "ventana"],
-      "escribe": ["aCotizar", "garantiaACotizar", "recursoSujeto"]
+      "escribe": ["aCotizar", "garantiaACotizar", "recursoSujeto", "cantidad"]
     },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": {
@@ -111,6 +112,7 @@
       "cierra_reserva": "apartar",
       "motivo": "no se pudo confirmar una unidad"
     },
+    "anotar": { "tipo": "alquiler.anotar", "lee": ["inquilino"] },
     "conservar": {
       "tipo": "alquiler.conservar-garantia",
       "lee": ["garantiaId"],

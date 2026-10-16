@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Alquiler.Contracts;
 using Synergos.Bff.Alquiler.Domain;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
 using Synergos.Core;
 using Synergos.Shared;
 
@@ -22,6 +23,31 @@ public static class LiquidacionEndpoints
     /// <returns>El mismo router.</returns>
     public static IEndpointRouteBuilder MapLiquidacionDeAlquiler(this IEndpointRouteBuilder app)
     {
+        // Los alquileres de la puerta del dueño (T024): lo que el CMS reconcilia en «mis alquileres». Siempre del
+        // sujeto que pone la puerta, nunca de uno que llegue en la consulta. Pegamento de NN-7.
+        app.MapGet("/v1/alquileres", Results<Ok<DoorRentalsResponse>, ProblemHttpResult> (
+            HttpRequest http, AlquileresDeLaPuerta indice, SagaEngine<SagaDeFlujo> sagas) =>
+        {
+            if (!CabecerasDeLaPuerta.TryLeerSujeto(http, out var dueno))
+            {
+                return Rejection.Invalid(CabecerasDeLaPuerta.CodigoInvalido(AlquilerEndpoints.CodePrefix, CabecerasDeLaPuerta.Sujeto),
+                    "El sujeto no se puede leer: <kind>:<id>.").ToProblem();
+            }
+            if (dueno is null)
+            {
+                return Rejection.Invalid(CabecerasDeLaPuerta.CodigoRequerido(AlquilerEndpoints.CodePrefix, CabecerasDeLaPuerta.Sujeto),
+                    "Hace falta el sujeto: lo pone la puerta del CMS.").ToProblem();
+            }
+
+            var suyos = indice.De(dueno)
+                .Select(a => sagas.Get(a.SagaId).Match(s => (SagaDeFlujo?)s, _ => null))
+                .Where(s => s is not null && string.Equals(s.Flujo, LiquidacionDeAlquiler.Flujo, StringComparison.Ordinal)
+                            && s.Dueno == dueno)
+                .Select(s => new DoorRentalItem(s!.Id, s.Status.ToString()))
+                .ToList();
+            return TypedResults.Ok(new DoorRentalsResponse(suyos));
+        }).WithName("ListDoorRentals").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true);
+
         // El inquilino: el dueño lo pone la puerta en X-Synergos-Sujeto; un alquiler ajeno no existe.
         app.MapPost("/v1/alquileres/{id}/declarar-devolucion", async Task<Results<Ok<RentalSettlementResponse>, ProblemHttpResult>> (
             string id, HttpRequest http, LiquidacionDeAlquiler liquidacion, CancellationToken ct) =>

@@ -5,6 +5,97 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/alquileres": {
+      "get": {
+        "operationId": "ListDoorRentals",
+        "parameters": [
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoorRentalsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/alquileres/{id}/cancelar-confirmado": {
       "post": {
         "operationId": "CancelDoorRental",
@@ -1703,7 +1794,9 @@
               "garantia",
               "garantiaId",
               "cobroId",
-              "ventana"
+              "ventana",
+              "equipo",
+              "cantidad"
             ],
             "type": "object",
             "properties": {
@@ -1788,6 +1881,19 @@
                     "type": "null"
                   }
                 ]
+              },
+              "equipo": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "cantidad": {
+                "type": [
+                  "null",
+                  "integer"
+                ],
+                "format": "int32"
               }
             }
           }
@@ -1869,7 +1975,9 @@
               "garantia",
               "garantiaId",
               "cobroId",
-              "ventana"
+              "ventana",
+              "equipo",
+              "cantidad"
             ],
             "type": "object",
             "properties": {
@@ -1954,6 +2062,19 @@
                     "type": "null"
                   }
                 ]
+              },
+              "equipo": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "cantidad": {
+                "type": [
+                  "null",
+                  "integer"
+                ],
+                "format": "int32"
               }
             }
           },
@@ -2093,6 +2214,35 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "DoorRentalItem": {
+        "required": [
+          "id",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DoorRentalsResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DoorRentalItem"
+            }
           }
         }
       },

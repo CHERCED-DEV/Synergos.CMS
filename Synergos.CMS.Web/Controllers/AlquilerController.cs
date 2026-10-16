@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -33,6 +34,7 @@ public sealed class AlquilerController : ControllerBase
     private readonly IAlquilerDeLaPuerta _puerta;
     private readonly EquipmentAgreementIssuer _issuer;
     private readonly EquipmentAgreementLedger _ledger;
+    private readonly ArtefactoDeAlquiler _artefacto;
     private readonly IMemberAccessGate _gate;
     private readonly ILogger<AlquilerController> _log;
 
@@ -42,6 +44,7 @@ public sealed class AlquilerController : ControllerBase
     /// <param name="puerta">Lo que pasa después del cierre con un alquiler que salió por la puerta.</param>
     /// <param name="issuer">El emisor del contrato (eje 3), fuera del seam.</param>
     /// <param name="ledger">El registro de contratos, que es el modelo de lectura.</param>
+    /// <param name="artefacto">El contrato de un alquiler de la puerta, que se emite al leerlo (T024).</param>
     /// <param name="gate">Quién está en sesión.</param>
     /// <param name="log">Para decir qué se rechazó.</param>
     public AlquilerController(
@@ -50,6 +53,7 @@ public sealed class AlquilerController : ControllerBase
         IAlquilerDeLaPuerta puerta,
         EquipmentAgreementIssuer issuer,
         EquipmentAgreementLedger ledger,
+        ArtefactoDeAlquiler artefacto,
         IMemberAccessGate gate,
         ILogger<AlquilerController> log)
     {
@@ -58,6 +62,7 @@ public sealed class AlquilerController : ControllerBase
         _puerta = puerta;
         _issuer = issuer;
         _ledger = ledger;
+        _artefacto = artefacto;
         _gate = gate;
         _log = log;
     }
@@ -291,19 +296,51 @@ public sealed class AlquilerController : ControllerBase
                 "Hay que iniciar sesión para ver los alquileres.");
         }
 
+        // Los alquileres de la puerta que se completaron y el registro no tiene —la pestaña se cerró justo después de
+        // pagar— se emiten antes de leer (FR-020). Con techo: la bandeja sale igual del registro.
+        if (_gate.CurrentMemberKey is { } miembro)
+        {
+            await _artefacto.ReconciliarAsync(miembro, ct).ConfigureAwait(false);
+        }
+
         var contratos = await _ledger.ListForAsync(quien, ct).ConfigureAwait(false);
         return Ok(await ProyectarAsync(contratos, ct).ConfigureAwait(false));
     }
 
-    /// <summary>El comprobante de un alquiler, con su sello comprobado.</summary>
+    /// <summary>
+    /// El comprobante de un alquiler, con su sello comprobado. El de un alquiler de la PUERTA se emite al leerlo, si
+    /// el alquiler se completó (T024). Sólo de quien alquiló o del personal: uno ajeno no existe.
+    /// </summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="ct">Cancelación del request.</param>
-    /// <returns>El comprobante, o 404.</returns>
+    /// <returns>El comprobante; 404 si no consta o es ajeno; 409 si el alquiler no se completó.</returns>
     [HttpGet("rentals/{rentalId}/agreement")]
     public async Task<ActionResult<AgreementDto>> Agreement(string rentalId, CancellationToken ct)
     {
+        if (!_gate.IsAuthenticated)
+        {
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required",
+                "Hay que iniciar sesión para ver un contrato.");
+        }
+
         var contrato = await _ledger.GetAsync(rentalId, ct).ConfigureAwait(false);
-        if (contrato is null)
+        if (contrato is null && _gate.CurrentMemberKey is { } miembro)
+        {
+            var dePuerta = await _artefacto.ContratoAsync(rentalId, miembro, ct).ConfigureAwait(false);
+            if (dePuerta.Contrato is null)
+            {
+                return dePuerta.Estado == StatusCodes.Status404NotFound
+                    ? NotFound()
+                    : Problema(dePuerta.Estado, dePuerta.Codigo ?? "alquiler.rejected", dePuerta.Mensaje ?? string.Empty,
+                        dePuerta.Transitorio);
+            }
+
+            contrato = dePuerta.Contrato;
+        }
+
+        if (contrato is null
+            || (!_gate.HasAnyRole(PersonalCsv)
+                && !string.Equals(contrato.RenterId, QuienAlquila(), StringComparison.Ordinal)))
         {
             return NotFound();
         }

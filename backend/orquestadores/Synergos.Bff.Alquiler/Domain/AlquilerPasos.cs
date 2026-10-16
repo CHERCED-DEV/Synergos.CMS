@@ -19,7 +19,8 @@ public static class AlquilerPasos
 
 /// <summary>
 /// <c>alquiler.tramo</c>: lee el equipo, las unidades y la ventana; revisa los límites contra la oferta publicada y
-/// escribe lo que se cotiza —el tramo por días por unidades, y la garantía por unidades— y la agenda del equipo.
+/// escribe lo que se cotiza —el tramo por días por unidades, y la garantía por unidades—, la agenda del equipo y
+/// cuántas unidades son (la salida las devuelve: el contrato del CMS las lleva, línea 005 T024).
 /// </summary>
 /// <remarks>
 /// <para><b>Es la regla del catálogo</b> (<c>ReglasDeAlquiler</c> en el CMS) escrita del lado que cobra: el
@@ -38,10 +39,10 @@ public sealed class PasoTramo(OfertaDeAlquiler ofertas, int maxDiasDelDespliegue
 {
     public string Tipo => "alquiler.tramo";
     public int Lecturas => 3;
-    public int Escrituras => 3;
+    public int Escrituras => 4;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
     public IReadOnlyList<Type> TiposDeEscritura =>
-        [typeof(IReadOnlyList<(Ref Sujeto, int Cantidad)>), typeof(IReadOnlyList<(Ref Sujeto, int Cantidad)>), typeof(Ref)];
+        [typeof(IReadOnlyList<(Ref Sujeto, int Cantidad)>), typeof(IReadOnlyList<(Ref Sujeto, int Cantidad)>), typeof(Ref), typeof(int)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -68,7 +69,7 @@ public sealed class PasoTramo(OfertaDeAlquiler ofertas, int maxDiasDelDespliegue
         var oferta = ofertas.Registrada(equipo)!;
         IReadOnlyList<(Ref Sujeto, int Cantidad)> alquiler = [(RentalSubject.TarifaOf(equipo, TramoPara(oferta, dias)), dias * unidades)];
         IReadOnlyList<(Ref Sujeto, int Cantidad)> garantia = [(RentalSubject.GarantiaUnidadOf(equipo), unidades)];
-        return SalidaDePaso.Sigue(alquiler, garantia, RentalSubject.For(equipo));
+        return SalidaDePaso.Sigue(alquiler, garantia, RentalSubject.For(equipo), unidades);
     }
 
     private Rejection? Revisar(string equipo, IReadOnlyList<FlowContext> unidades, TimeWindow ventana)

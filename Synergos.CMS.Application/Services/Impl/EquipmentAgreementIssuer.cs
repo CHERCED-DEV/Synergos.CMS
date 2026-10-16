@@ -55,19 +55,12 @@ public sealed class EquipmentAgreementIssuer
     /// <param name="equipmentName">Cómo se llama el equipo, para que el papel se lea.</param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
     /// <returns>El contrato emitido.</returns>
-    public async Task<RentalAgreement> IssueAsync(
+    public Task<RentalAgreement> IssueAsync(
         Rental rental, string equipmentName, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rental);
 
-        var subject = new AgreementSubject(
-            rental.RentalId, rental.RenterId, rental.EquipmentId, rental.DepositHeld, rental.Quote.Currency);
-
-        var sello = _sellador is null
-            ? new SelloDelContrato(string.Empty, RentalAgreement.SelladoLocal)
-            : await _sellador.SellarAsync(subject, cancellationToken).ConfigureAwait(false);
-
-        var agreement = new RentalAgreement(
+        return EmitirAsync(new RentalAgreement(
             RentalId: rental.RentalId,
             RenterId: rental.RenterId,
             EquipmentId: rental.EquipmentId,
@@ -79,9 +72,31 @@ public sealed class EquipmentAgreementIssuer
             DepositHeld: rental.DepositHeld,
             Currency: rental.Quote.Currency,
             IssuedUtc: _clock.GetUtcNow(),
-            Seal: sello.Valor,
-            SelladoPor: sello.SelladoPor,
-            SelloPendiente: sello.Pendiente);
+            Seal: string.Empty), cancellationToken);
+    }
+
+    /// <summary>
+    /// Sella y anota un contrato ya armado con lo que se pactó: el de la ruta directa, o el de un alquiler de la PUERTA
+    /// que arma el artefacto con lo que contestó el orquestador (línea 005, T024).
+    /// </summary>
+    /// <param name="borrador">El contrato sin sello: su sello, quién lo selló y cuándo se emitió los pone este emisor.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato emitido.</returns>
+    public async Task<RentalAgreement> EmitirAsync(RentalAgreement borrador, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(borrador);
+
+        var sello = _sellador is null
+            ? new SelloDelContrato(string.Empty, RentalAgreement.SelladoLocal)
+            : await _sellador.SellarAsync(Sujeto(borrador), cancellationToken).ConfigureAwait(false);
+
+        var agreement = borrador with
+        {
+            IssuedUtc = _clock.GetUtcNow(),
+            Seal = sello.Valor,
+            SelladoPor = sello.SelladoPor,
+            SelloPendiente = sello.Pendiente,
+        };
 
         await _ledger.RecordAsync(agreement, cancellationToken).ConfigureAwait(false);
         return agreement;

@@ -15,7 +15,8 @@ namespace Synergos.Bff.Alquiler.Domain;
 public static class AlquilerSalidasPropias
 {
     /// <summary>Las salidas, para sumarlas a los pasos propios del orquestador.</summary>
-    public static IPaso[] Pasos() => [new PasoConservarGarantia()];
+    /// <param name="duenos">El índice de los alquileres de la puerta por dueño (NN-7, T024).</param>
+    public static IPaso[] Pasos(AlquileresDeLaPuerta duenos) => [new PasoConservarGarantia(), new PasoAnotarDueno(duenos)];
 }
 
 /// <summary>

@@ -1,9 +1,13 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -157,15 +161,26 @@ public sealed class AlquilerControllerTests
         var firmante = conSello
             ? new HmacAgreementSigner("llave-de-prueba-de-32-bytes-xxxx"u8.ToArray())
             : null;
+        var emisor = new EquipmentAgreementIssuer(ledger, firmante is null ? null : new SelladorLocal(firmante), new RelojFijo());
 
         return new AlquilerController(
             new StubEquipmentCatalogProvider(),
             new RentalServiceFalso(resultado),
             new PuertaFalsa(resultado),
-            new EquipmentAgreementIssuer(ledger, firmante is null ? null : new SelladorLocal(firmante), new RelojFijo()),
+            emisor,
             ledger,
+            SinPuerta(ledger, emisor),
             new PuertaDeMiembro(conSesion ? Miembro : null),
             NullLogger<AlquilerController>.Instance);
+    }
+
+    /// <summary>Un artefacto de un sitio que no alquila por la puerta: no sale a la red y no emite nada.</summary>
+    private static ArtefactoDeAlquiler SinPuerta(EquipmentAgreementLedger ledger, EquipmentAgreementIssuer emisor)
+    {
+        var puerta = Substitute.For<IOptionsMonitor<PuertaSettings>>();
+        puerta.CurrentValue.Returns(new PuertaSettings());
+        return new ArtefactoDeAlquiler(Substitute.For<IHttpClientFactory>(), ledger, emisor, new StubEquipmentCatalogProvider(),
+            puerta, NullLogger<ArtefactoDeAlquiler>.Instance, hayDestino: false);
     }
 
     private static readonly Guid Otro = Guid.Parse("99999999-8888-7777-6666-555555555555");
@@ -182,6 +197,7 @@ public sealed class AlquilerControllerTests
             deLaPuerta ?? new PuertaFalsa(new RentalResult(RentalOutcome.Rejected, null, "test.no_deberia", "")),
             new EquipmentAgreementIssuer(ledger, null, new RelojFijo()),
             ledger,
+            SinPuerta(ledger, new EquipmentAgreementIssuer(ledger, null, new RelojFijo())),
             puerta,
             NullLogger<AlquilerController>.Instance);
 

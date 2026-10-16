@@ -77,11 +77,16 @@ if (declarado)
 {
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
-    // El tramo (la regla del alquiler) y la salida propia de la garantía, provisional hasta el núcleo (NN-4).
+    // El tramo (la regla del alquiler) y las salidas propias —la garantía (NN-4) y el índice por dueño (NN-7)—,
+    // provisionales hasta el núcleo.
     var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
+    builder.Services.AddSingleton<AlquileresDeLaPuerta>();
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
         sp.GetRequiredService<PuertosHttp>(),
-        [.. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias), .. AlquilerSalidasPropias.Pasos()]));
+        [
+            .. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias),
+            .. AlquilerSalidasPropias.Pasos(sp.GetRequiredService<AlquileresDeLaPuerta>()),
+        ]));
 
     // Lo que pasa después del cierre, fuera de la puerta hasta el núcleo (lote 3, 005-P9; T051).
     builder.Services.AddSingleton<LiquidacionDeAlquiler>();

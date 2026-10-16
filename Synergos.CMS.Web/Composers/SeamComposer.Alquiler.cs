@@ -146,6 +146,22 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
             sp.GetRequiredService<ILogger<HttpAlquilerDeLaPuerta>>(),
             hayOrquestadorDeAlquiler));
+
+        // El contrato de un alquiler de la PUERTA (línea 005, T024): se emite al leerlo, con lo que contesta el
+        // orquestador, y «mis alquileres» reconcilia los completados que el registro no tiene. Mismo destino.
+        if (hayOrquestadorDeAlquiler)
+        {
+            services.AddClienteDelArbolDeServicios(
+                ArtefactoDeAlquiler.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 10));
+        }
+        services.AddSingleton(sp => new ArtefactoDeAlquiler(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<EquipmentAgreementLedger>(),
+            sp.GetRequiredService<EquipmentAgreementIssuer>(),
+            sp.GetRequiredService<IEquipmentCatalogProvider>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<ILogger<ArtefactoDeAlquiler>>(),
+            hayOrquestadorDeAlquiler));
     }
 
     /// <summary>
