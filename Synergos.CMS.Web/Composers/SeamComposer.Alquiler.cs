@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -162,6 +164,25 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
             sp.GetRequiredService<ILogger<ArtefactoDeAlquiler>>(),
             hayOrquestadorDeAlquiler));
+
+        // La OFERTA de cada equipo (línea 005, T029): lo que la renta por la puerta cotiza. Se publica al publicar un
+        // equipmentPage y se retira al despublicarlo o borrarlo, NUNCA al arrancar (ADR 0013). Sólo tiene sentido
+        // donde la puerta tiene destino —Synergos:Alquiler:BaseUrl, la misma condición con que abre alquiler.renta—;
+        // sin él no sale a la red y no falla.
+        var hayDestinoParaLaOferta = !string.IsNullOrWhiteSpace(seccionDeAlquiler["BaseUrl"]);
+        if (hayDestinoParaLaOferta)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpEquipmentOfferPublisher.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 10));
+        }
+        services.AddSingleton<IEquipmentOfferPublisher>(sp => new HttpEquipmentOfferPublisher(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HttpEquipmentOfferPublisher>>(),
+            hayDestinoParaLaOferta));
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEquipoAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeEquipoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeEquipoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeEquipoAlRetirar>();
     }
 
     /// <summary>

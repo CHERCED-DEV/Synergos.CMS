@@ -28,7 +28,7 @@ namespace Synergos.CMS.Tests.Contracts;
 /// sujeto que manda están declarados, cada campo del cuerpo está en el esquema), y lo que LEE, desde el tipo que
 /// deserializa: un campo renombrado en un lado se quedaría en nulo en silencio — un contrato sin unidades, una
 /// liquidación sin lo retenido. Cubre al artefacto de la puerta, a lo posterior al cierre de la puerta y a la ruta
-/// directa; el publicador de la oferta entra con T029.</para>
+/// directa y al publicador de la oferta.</para>
 /// </remarks>
 public sealed class ConsumidorCmsDeBffAlquilerTests
 {
@@ -158,6 +158,30 @@ public sealed class ConsumidorCmsDeBffAlquilerTests
             Respuesta(Raiz.GetProperty("paths").GetProperty("/v1/rentals/{id}").GetProperty("get")), "GetRental", malas);
 
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
+    }
+
+    /// <summary>
+    /// Lo que manda el publicador de la oferta (T029) cabe en <c>PublishEquipmentOffer</c> y el retiro existe en
+    /// <c>RetireEquipmentOffer</c>: un campo renombrado —<c>deposit</c> por <c>depositPerUnit</c>— lo descartaría el
+    /// orquestador y la renta por la puerta cotizaría la garantía en cero.
+    /// </summary>
+    [Fact]
+    public async Task Lo_que_manda_el_publicador_de_la_oferta_cabe_en_sus_operaciones()
+    {
+        var grabadora = new Grabadora();
+        var publicador = new HttpEquipmentOfferPublisher(
+            new Fabrica(grabadora), NullLogger<HttpEquipmentOfferPublisher>.Instance, hayDestino: true);
+
+        await publicador.PublishAsync(Synergos.CMS.Tests.Services.HttpEquipmentOfferPublisherTests.Equipo());
+        await publicador.RetireAsync("andamio-6m");
+
+        Assert.Equal(["/v1/ofertas", "/v1/ofertas/andamio-6m/retirar"], grabadora.Llamadas.Select(l => l.Ruta));
+        Assert.Equal("PublishEquipmentOffer", Operacion("POST", "/v1/ofertas")!.Value.Op.GetProperty("operationId").GetString());
+        Assert.Equal("RetireEquipmentOffer",
+            Operacion("POST", "/v1/ofertas/andamio-6m/retirar")!.Value.Op.GetProperty("operationId").GetString());
+        var malas = Juzgar(grabadora);
+        Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
+        Assert.Contains("depositPerUnit", grabadora.Llamadas.First().Cuerpo, StringComparison.Ordinal);
     }
 
     // ── Cómo se juzga ───────────────────────────────────────────────────────
