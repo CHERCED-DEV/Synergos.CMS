@@ -72,8 +72,9 @@ public sealed class RentalCompensationTests : RentalLiquidacionBase
         public override async Task<VistaDeRenta> DevolverAsync(string id, decimal danio)
             => Vista(await Flow.ReturnAsync(id, Cop(danio), CancellationToken.None));
 
-        public override async Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad)
-            => Vista(await Flow.CancelAsync(id, Cop(penalidad), CancellationToken.None));
+        public override async Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad, bool porPersonal)
+            => Vista(await Flow.CancelAsync(id, Cop(penalidad),
+                porPersonal ? QuienCancela.Personal : QuienCancela.Inquilino, CancellationToken.None));
 
         public override async Task<VistaDeRenta> DeclararAsync(string id)
             => Vista(await Flow.DeclareReturnAsync(id, CancellationToken.None));

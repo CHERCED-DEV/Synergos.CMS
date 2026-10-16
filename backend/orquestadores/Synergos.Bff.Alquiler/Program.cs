@@ -65,6 +65,10 @@ builder.AddSagaMachinery<RentalSaga, AlquilerCompensationExecutor>(
 builder.Services.AddSingleton<AlquilerCapabilities>();
 builder.Services.AddSingleton<RentalFlow>();
 
+// El huso del despliegue: qué día es hoy para la regla de cancelar (línea 005, T019). El mismo valor por defecto
+// que el CMS (Synergos:Alquiler:TimeZone); uno que este sistema no conozca no arranca.
+builder.Services.AddSingleton(HusoDelAlquiler.De(builder.Configuration["Alquiler:TimeZone"]));
+
 // La oferta de cada equipo (línea 005): lo que la renta por la puerta cotiza en vez de un total del navegador.
 builder.Services.AddSingleton<OfertaDeAlquiler>();
 

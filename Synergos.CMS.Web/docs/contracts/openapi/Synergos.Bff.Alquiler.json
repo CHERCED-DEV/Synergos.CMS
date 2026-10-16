@@ -1294,7 +1294,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SettleRentalRequest"
+                "$ref": "#/components/schemas/CancelRentalRequest"
               }
             }
           },
@@ -1802,6 +1802,27 @@
           },
           "deshaciendo": {
             "type": "boolean"
+          }
+        }
+      },
+      "CancelRentalRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MoneyPayload"
+              }
+            ]
+          },
+          "actor": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

@@ -86,6 +86,11 @@ public sealed record EquipmentOfferResponse(
 /// <param name="Amount">El daño o la penalidad, ya calculado por quien recibió.</param>
 public sealed record SettleRentalRequest(MoneyPayload? Amount = null);
 
+/// <summary>Lo que se pide para cancelar un alquiler confirmado (línea 005, T019).</summary>
+/// <param name="Amount">La penalidad que retiene el personal; la del inquilino se ignora.</param>
+/// <param name="Actor">Quién cancela: <c>renter</c> (por defecto) o <c>staff</c>.</param>
+public sealed record CancelRentalRequest(MoneyPayload? Amount = null, string? Actor = null);
+
 /// <summary>Confirmar la devolución de un alquiler de la puerta (línea 005, T017): el daño y quién confirma.</summary>
 /// <param name="Damage">Lo que se cobra de la garantía; cero la anula entera. Obligatorio: no se supone cero.</param>
 /// <param name="StaffId">El seudónimo del personal que recibió el equipo; su clase la pone el orquestador.</param>

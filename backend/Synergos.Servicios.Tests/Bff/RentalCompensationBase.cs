@@ -39,8 +39,8 @@ public abstract class ConductorDeRenta
     /// <summary>El inquilino declara que devolvió el equipo; la garantía sigue retenida.</summary>
     public abstract Task<VistaDeRenta> DeclararAsync(string id);
 
-    /// <summary>Se cancela un alquiler confirmado, con la penalidad que haya.</summary>
-    public abstract Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad);
+    /// <summary>Se cancela un alquiler confirmado: el personal con la penalidad que fije, el inquilino sin ella.</summary>
+    public abstract Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad, bool porPersonal);
 
     /// <summary>En qué estado quedó la saga; nulo si no existe.</summary>
     public abstract SagaStatus? Estado(string id);
@@ -517,7 +517,7 @@ public abstract class RentalLiquidacionBase : RentalDevolucionBase
         var c = Nuevo(FelizEstricto());
         Assert.True((await c.ReservarAsync()).Ok);
 
-        var cancelada = await c.CancelarAsync("alq-1", 50000m);
+        var cancelada = await c.CancelarAsync("alq-1", 50000m, porPersonal: true);
 
         Assert.True(cancelada.Ok);
         Assert.Equal("cancelled", cancelada.Estado);
@@ -531,5 +531,87 @@ public abstract class RentalLiquidacionBase : RentalDevolucionBase
         Assert.True(devuelta.Ok);
         Assert.Equal("returned", devuelta.Estado);
         Assert.Equal(0, otro.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+    }
+
+    // ── Cancelar lo confirmado (research R7, 005-P3) ───────────────────────
+
+    /// <summary>
+    /// Cancelar un alquiler confirmado DEVUELVE lo cobrado entero, cancela las reservas y anula la garantía.
+    /// </summary>
+    /// <remarks>
+    /// Es el defecto vivo de la línea 005: antes se soltaban las unidades y la garantía y el alquiler capturado se
+    /// quedaba cobrado por algo que nadie iba a usar. Mueve plata: por eso 005-P3 se cierra además en vivo.
+    /// </remarks>
+    [Fact]
+    public async Task Cancelar_un_confirmado_devuelve_el_alquiler_entero_y_anula_la_garantia()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        var cancelada = await c.CancelarAsync("alq-1", 0m, porPersonal: false);
+
+        Assert.True(cancelada.Ok);
+        Assert.Equal("cancelled", cancelada.Estado);
+        var devolucion = c.Caps.Llamadas.Single(l => l.Path.EndsWith("/v1/payments/pg-ren/refund", StringComparison.Ordinal));
+        Assert.Contains("350000", devolucion.Body!, StringComparison.Ordinal);
+        Assert.Equal(1, c.Caps.Veces("POST", "/v1/payments/pg-dep/void"));
+        Assert.Equal(1, c.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+    }
+
+    /// <summary>El inquilino no cancela desde el día de inicio: ese día ya es del personal.</summary>
+    [Fact]
+    public async Task El_inquilino_no_cancela_desde_el_dia_de_inicio()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        // Semana empieza el 5 de septiembre; el reloj del motor va al 5 a las 10:00 UTC (las 05:00 en Bogotá).
+        c.Avanzar(TimeSpan.FromDays(4));
+        var r = await c.CancelarAsync("alq-1", 0m, porPersonal: false);
+
+        Assert.False(r.Ok);
+        Assert.Equal("alquiler.already_started", r.Codigo);
+        Assert.Equal(0, c.Caps.Veces("POST", "/refund"));
+        Assert.Equal(0, c.Caps.Veces("POST", "/v1/reservations/res-1/cancel"));
+    }
+
+    /// <summary>
+    /// A las 23:30 de Bogotá del día anterior el inquilino TODAVÍA cancela, aunque en UTC ya sea el día de inicio.
+    /// </summary>
+    /// <remarks>
+    /// El borde que separa contar «hoy» en el huso del despliegue de contarlo en UTC: de 19:00 a 24:00 en Bogotá,
+    /// el día UTC ya es el siguiente, y quien cancela la noche anterior se quedaría sin poder.
+    /// </remarks>
+    [Fact]
+    public async Task El_inquilino_cancela_hasta_la_noche_anterior_en_el_huso_del_despliegue()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+
+        // Del 1 de septiembre 10:00 UTC al 5 a las 04:30 UTC: el 4 a las 23:30 en Bogotá.
+        c.Avanzar(new TimeSpan(3, 18, 30, 0));
+        var r = await c.CancelarAsync("alq-1", 0m, porPersonal: false);
+
+        Assert.True(r.Ok, r.Codigo);
+        Assert.Equal("cancelled", r.Estado);
+    }
+
+    /// <summary>
+    /// El personal cancela con penalidad: captura la garantía, devuelve G − P, y el alquiler se devuelve entero.
+    /// </summary>
+    [Fact]
+    public async Task El_personal_cancela_con_penalidad_y_el_alquiler_se_devuelve_igual()
+    {
+        var c = Nuevo(FelizEstricto());
+        Assert.True((await c.ReservarAsync()).Ok);
+        c.Avanzar(TimeSpan.FromDays(4));
+
+        var r = await c.CancelarAsync("alq-1", 50000m, porPersonal: true);
+
+        Assert.True(r.Ok);
+        Assert.Equal(50000m, r.DanioCobrado);
+        Assert.Equal(1, c.Caps.Veces("POST", "/v1/payments/pg-dep/capture"));
+        Assert.Contains("350000", c.Caps.Llamadas.Single(l => l.Path.EndsWith("/v1/payments/pg-dep/refund", StringComparison.Ordinal)).Body!, StringComparison.Ordinal);
+        Assert.Contains("350000", c.Caps.Llamadas.Single(l => l.Path.EndsWith("/v1/payments/pg-ren/refund", StringComparison.Ordinal)).Body!, StringComparison.Ordinal);
     }
 }

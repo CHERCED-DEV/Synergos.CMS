@@ -78,15 +78,22 @@ public static class AlquilerEndpoints
             return (await flow.ReturnAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
         }).WithName("ReturnRental");
 
+        // Cancelar lo confirmado (research R7): quién cancela decide la regla y la penalidad. Sin actor, el
+        // inquilino: es lo más restrictivo, y un cliente viejo que no lo mande no cobra penalidades por error.
         app.MapPost("/v1/rentals/{id}/cancel", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
-            string id, SettleRentalRequest req, RentalFlow flow, CancellationToken ct) =>
+            string id, CancelRentalRequest req, RentalFlow flow, CancellationToken ct) =>
         {
-            if (!TryMonto(req, out var monto, out var malo))
+            if (!TryMonto(new SettleRentalRequest(req.Amount), out var monto, out var malo))
             {
                 return malo!;
             }
 
-            return (await flow.CancelAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
+            if (!TryActor(req.Actor, out var actor))
+            {
+                return Invalid("bad_actor", "Quien cancela es «renter» o «staff».");
+            }
+
+            return (await flow.CancelAsync(id, monto, actor, ct)).Map(RentalResponse.From).ToHttp();
         }).WithName("CancelRental");
 
         // Declarar la devolución (decisión 5 del lote 1): sin cuerpo y sin plata; repetirla devuelve lo mismo.
@@ -116,6 +123,23 @@ public static class AlquilerEndpoints
         }).WithName("RetireEquipmentOffer").ConLlaveDeIdempotencia();
 
         return app;
+    }
+
+    /// <summary>Quién cancela, en el cable: <c>renter</c> (o nada) y <c>staff</c>.</summary>
+    internal static bool TryActor(string? valor, out QuienCancela actor)
+    {
+        switch (valor?.Trim().ToLowerInvariant())
+        {
+            case null or "" or "renter":
+                actor = QuienCancela.Inquilino;
+                return true;
+            case "staff":
+                actor = QuienCancela.Personal;
+                return true;
+            default:
+                actor = QuienCancela.Inquilino;
+                return false;
+        }
     }
 
     /// <summary>Cero es legítimo —devolver sin daño— así que la ausencia no se rechaza.</summary>

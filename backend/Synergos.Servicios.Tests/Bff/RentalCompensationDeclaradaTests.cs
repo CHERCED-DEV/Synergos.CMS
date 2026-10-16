@@ -201,7 +201,7 @@ public sealed class RentalCompensationDeclaradaTests : RentalDevolucionBase, IDi
             return Liquidada(await EnviarAsync(peticion));
         }
 
-        public override Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad)
+        public override Task<VistaDeRenta> CancelarAsync(string id, decimal penalidad, bool porPersonal)
             => throw new NotSupportedException("Cancelar lo confirmado por el camino declarado llega con T020.");
 
         /// <summary>Declarar la devolución: lo que hace el inquilino, con su sujeto de la puerta.</summary>
