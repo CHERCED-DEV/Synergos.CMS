@@ -4,6 +4,7 @@ using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
 using Synergos.CMS.Web.Services.Reservas;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services.SynHost;
 
@@ -12,8 +13,9 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// reservable que eligió (leído de SU ficha) y el camino del sitio de la petición (ADR 0137).
 /// </summary>
 /// <remarks>
-/// <para><b>El servicio sale de la ficha, no del bloque</b>: el editor elige la ficha y lo reservable —duración,
-/// días, horario— es lo que la ficha declara en su composición «reservable», lo MISMO que el CMS publica como oferta.
+/// <para><b>El servicio sale de la ficha, no del bloque</b>: el editor elige la ficha —o deja el selector vacío y vale
+/// la ficha donde está el bloque— y lo reservable —duración, días, horario— es lo que la ficha declara en su composición
+/// «reservable», lo MISMO que el CMS publica como oferta.
 /// Una ficha no marcada reservable, o incompleta, no viaja como servicio: el elemento lo dice y no ofrece horas.</para>
 ///
 /// <para><b>El camino lo decide acá el CMS</b> (<see cref="CaminoDeReserva.Decidir"/>): <c>apagada</c> si el sitio lo
@@ -25,16 +27,18 @@ public sealed class ReservaResolutor : IResolutorSynHost<ReservaProps>
     private readonly INegocioDelSitio<NegocioDeReserva> _negocio;
     private readonly IPuertaDeLosFlujos _puerta;
     private readonly IOptions<ListadosSettings> _listados;
+    private readonly IUmbracoContextAccessor _contexto;
     private readonly ILogger<ReservaResolutor> _log;
 
     public ReservaResolutor(
         IPublishedValueFallback fallback, INegocioDelSitio<NegocioDeReserva> negocio, IPuertaDeLosFlujos puerta,
-        IOptions<ListadosSettings> listados, ILogger<ReservaResolutor> log)
+        IOptions<ListadosSettings> listados, IUmbracoContextAccessor contexto, ILogger<ReservaResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
         _puerta = puerta;
         _listados = listados;
+        _contexto = contexto;
         _log = log;
     }
 
@@ -45,11 +49,15 @@ public sealed class ReservaResolutor : IResolutorSynHost<ReservaProps>
         return new ElementoResuelto<ReservaProps>(new ReservaProps(
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
-            Servicio: Servicio(elemento.Value<IPublishedContent>(_fallback, "servicio")),
+            Servicio: Servicio(elemento.Value<IPublishedContent>(_fallback, "servicio") ?? PaginaActual()),
             EnlaceAlternativo: editor.Enlace("enlaceAlternativo")?.Url,
             Camino: CaminoDeReserva.Decidir(_negocio.Actual().Camino, _puerta.Abre(CaminoDeReserva.Flujo)),
             Zona: _listados.Value.ZonaHoraria));
     }
+
+    /// <summary>La página de la petición: la ficha que contiene el bloque cuando el editor no eligió otra.</summary>
+    private IPublishedContent? PaginaActual()
+        => _contexto.TryGetUmbracoContext(out var contexto) ? contexto.PublishedRequest?.PublishedContent : null;
 
     /// <summary>El servicio de la ficha, o <c>null</c> si no está marcada reservable o le falta algo para reservarse.</summary>
     private ServicioReservable? Servicio(IPublishedContent? ficha)

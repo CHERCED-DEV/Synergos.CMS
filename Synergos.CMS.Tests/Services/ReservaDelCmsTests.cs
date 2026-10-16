@@ -9,6 +9,9 @@ using Synergos.CMS.Interfaces.SynHost;
 using Synergos.CMS.Tests.Services.SynHost;
 using Synergos.CMS.Web.Services.Puerta;
 using Synergos.CMS.Web.Services.SynHost;
+using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.Routing;
+using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Tests.Services;
 
@@ -87,8 +90,23 @@ public sealed class ReservaDelCmsTests
         => Assert.Null(Resolver(Declarado(CaminoDeReserva.Puerta), Puerta(true), Bloque(duracion: duracion, abre: abre, cierra: cierra)).Servicio);
 
     [Fact]
-    public void Sin_ficha_elegida_no_hay_servicio()
-        => Assert.Null(Resolver(Declarado(CaminoDeReserva.Puerta), Puerta(true), ElementoFalso.Con(("heading", "Reserva tu cita"))).Servicio);
+    public void Sin_ficha_elegida_y_fuera_de_una_ficha_reservable_no_hay_servicio()
+    {
+        Assert.Null(Resolver(Declarado(CaminoDeReserva.Puerta), Puerta(true), ElementoFalso.Con(("heading", "Reserva tu cita"))).Servicio);
+        var pagina = ElementoFalso.Ficha(Guid.NewGuid(), "Reservar");
+        Assert.Null(Resolver(Declarado(CaminoDeReserva.Puerta), Puerta(true), ElementoFalso.Con(("heading", "Reserva tu cita")), pagina).Servicio);
+    }
+
+    [Fact]
+    public void Sin_ficha_elegida_vale_la_ficha_reservable_que_contiene_el_bloque()
+    {
+        var ficha = ElementoFalso.Ficha(Masaje, "Masaje terapéutico · 60 min",
+            ("reservable", true), ("duracionMinutos", 60), ("diasDeAtencion", new[] { "lunes" }), ("abre", "08:00"), ("cierra", "18:00"));
+
+        var servicio = Resolver(Declarado(CaminoDeReserva.Puerta), Puerta(true), ElementoFalso.Con(("heading", "Reserva tu cita")), ficha).Servicio;
+
+        Assert.Equal(Masaje.ToString("D"), Assert.IsType<ServicioReservable>(servicio).Id);
+    }
 
     // ── La puerta y el enlace del aviso (T010, T014) ─────────────────────────────────────────
 
@@ -123,7 +141,7 @@ public sealed class ReservaDelCmsTests
         return puerta;
     }
 
-    private static Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement Bloque(
+    private static IPublishedElement Bloque(
         bool reservable = true, int duracion = 60, string abre = "08:00", string cierra = "18:00")
         => ElementoFalso.Con(
             ("heading", "Reserva tu cita"),
@@ -133,9 +151,23 @@ public sealed class ReservaDelCmsTests
             ("enlaceAlternativo", ElementoFalso.Enlace("/booking/contacto/", "Escríbenos")));
 
     private static ReservaProps Resolver(
-        INegocioDelSitio<NegocioDeReserva> negocio, IPuertaDeLosFlujos puerta, Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement bloque)
-        => new ReservaResolutor(ElementoFalso.Fallback, negocio, puerta, Options.Create(new ListadosSettings()), NullLogger<ReservaResolutor>.Instance)
+        INegocioDelSitio<NegocioDeReserva> negocio, IPuertaDeLosFlujos puerta, IPublishedElement bloque, IPublishedContent? pagina = null)
+        => new ReservaResolutor(ElementoFalso.Fallback, negocio, puerta, Options.Create(new ListadosSettings()), Contexto(pagina),
+                NullLogger<ReservaResolutor>.Instance)
             .Resolver(bloque).Props;
+
+    /// <summary>El contexto de una petición que pinta <paramref name="pagina"/> (sin página: fuera de una petición).</summary>
+    private static IUmbracoContextAccessor Contexto(IPublishedContent? pagina)
+    {
+        var accesor = Substitute.For<IUmbracoContextAccessor>();
+        if (pagina is null) return accesor;
+        var peticion = Substitute.For<IPublishedRequest>();
+        peticion.PublishedContent.Returns(pagina);
+        var contexto = Substitute.For<IUmbracoContext>();
+        contexto.PublishedRequest.Returns(peticion);
+        accesor.TryGetUmbracoContext(out Arg.Any<IUmbracoContext?>()).Returns(x => { x[0] = contexto; return true; });
+        return accesor;
+    }
 
     private static JsonElement AppSettings()
     {

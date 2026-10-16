@@ -903,6 +903,7 @@ public sealed class ContratoSynHostTests
     private static ServiceProvider Proveedor()
         => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
             .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
+            .AddSingleton(Substitute.For<Umbraco.Cms.Core.Web.IUmbracoContextAccessor>())
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
