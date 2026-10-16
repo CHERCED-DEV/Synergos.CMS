@@ -1,9 +1,9 @@
 {
   "clave": "salud.cita",
-  "entrada": ["paciente", "profesionalId", "ventana", "servicio"],
+  "entrada": ["paciente", "profesional", "ventana", "servicio"],
   "tipos": {
     "paciente": { "de": "sujeto" },
-    "profesionalId": "texto",
+    "profesional": { "tipo": "ref", "kind": "salud.profesional" },
     "ventana": "ventana",
     "servicio": { "de": "negocio", "campo": "servicio", "tipo": "ref" },
     "contacto": { "de": "contacto" }
@@ -11,11 +11,10 @@
   "salida": ["profesional", "ventana", "total", "reservaId"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
-    "abrir": ["profesional", "permiso", "lineas", "copago", "desglose", "agenda", "apartar", "autorizar"],
+    "abrir": ["permiso", "lineas", "copago", "desglose", "agenda", "apartar", "autorizar"],
     "cerrar": ["capturar", "confirmar", "avisar"]
   },
   "pasos": {
-    "profesional": { "tipo": "salud.profesional", "lee": ["profesionalId"], "escribe": ["profesional"] },
     "permiso": { "tipo": "consent.verificar", "lee": ["paciente"], "proposito": "salud.agenda" },
     "lineas": { "tipo": "forma.una-linea", "lee": ["servicio"], "escribe": ["aCotizar"] },
     "copago": { "tipo": "pricing.cotizar-o-cero", "lee": ["aCotizar"], "escribe": ["cotizacion"] },

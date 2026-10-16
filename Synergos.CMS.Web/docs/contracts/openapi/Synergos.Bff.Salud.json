@@ -1596,6 +1596,9 @@
                     "type": "object",
                     "properties": {
                       "kind": {
+                        "enum": [
+                          "salud.profesional"
+                        ],
                         "type": "string"
                       },
                       "id": {
@@ -1667,13 +1670,28 @@
       },
       "SaludCitaEntrada": {
         "required": [
-          "profesionalId",
+          "profesional",
           "ventana"
         ],
         "type": "object",
         "properties": {
-          "profesionalId": {
-            "type": "string"
+          "profesional": {
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "salud.profesional"
+                ],
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
           },
           "ventana": {
             "required": [
@@ -1738,6 +1756,9 @@
                     "type": "object",
                     "properties": {
                       "kind": {
+                        "enum": [
+                          "salud.profesional"
+                        ],
                         "type": "string"
                       },
                       "id": {

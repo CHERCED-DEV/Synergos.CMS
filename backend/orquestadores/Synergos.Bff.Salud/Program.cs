@@ -61,12 +61,7 @@ builder.Services.AddSingleton<SaludCapabilities>();
 builder.Services.AddSingleton<AppointmentFlow>();
 
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
-if (declarado)
-{
-    // El profesional con su clase fija, interino hasta que la definición declare la clase de una
-    // referencia (NR-1; NN-16).
-    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, new PasoProfesionalDeSalud());
-}
+if (declarado) builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
 var app = builder.Build();
 

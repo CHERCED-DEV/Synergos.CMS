@@ -71,7 +71,8 @@ public sealed class PuertaDeLaCitaTests
         var definicion = JsonDocument.Parse(File.ReadAllText(Path.Combine(
             Raiz(), "backend", "orquestadores", "Synergos.Bff.Salud", "flujos", "salud.cita.json")));
         var leidos = definicion.RootElement.GetProperty("tipos").EnumerateObject()
-            .Where(t => t.Value.ValueKind == JsonValueKind.Object && t.Value.GetProperty("de").GetString() == "negocio")
+            .Where(t => t.Value.ValueKind == JsonValueKind.Object
+                && t.Value.TryGetProperty("de", out var de) && de.GetString() == "negocio")
             .Select(t => t.Value.GetProperty("campo").GetString()!)
             .Order(StringComparer.Ordinal)
             .ToList();
