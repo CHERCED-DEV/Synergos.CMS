@@ -191,6 +191,30 @@ public sealed class PasoAgendaLiberar(IDeshacerAgenda agenda) : IPaso
 }
 
 /// <summary>
+/// <c>booking.cancelar</c>: lee una reserva CONFIRMADA y la cancela (núcleo, T071 del lote 6; NB-4 de 011). Es el paso
+/// de la operación posterior que cancela lo confirmado.
+/// </summary>
+/// <remarks>
+/// El plazo lo decide la agenda con la política del recurso (<c>CheckCancellable</c>): fuera de plazo vuelve su
+/// <c>booking.cancellation_too_late</c> tal cual, y una ya cancelada, <c>booking.already_cancelled</c>.
+/// </remarks>
+public sealed class PasoAgendaCancelar(IDeshacerAgenda agenda) : IPaso
+{
+    public string Tipo => "booking.cancelar";
+    public int Lecturas => 1;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var cancelada = await agenda.CancelarAsync(entrada.Lee<string>(0), ct);
+        return cancelada.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(cancelada.Rejection!);
+    }
+}
+
+/// <summary>
 /// <c>booking.franjas</c>: lee el recurso, desde y hasta (<c>instante</c>), y escribe sus franjas con lo libre de cada
 /// una (<c>franjas</c>; núcleo, NB-3 de 011, sobre NB-2). El paso de una lectura de disponibilidad.
 /// </summary>
