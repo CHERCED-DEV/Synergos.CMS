@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -143,6 +145,27 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IProductCatalogProvider>(),
             sp.GetRequiredService<ILogger<RegistroDeComprasDeLaTienda>>(),
             hayOrquestadorDeTienda));
+
+        // La OFERTA del catálogo (004-tienda-compra, R-9): lo que el catálogo muestra es lo que el orquestador
+        // cobra y aparta. Diez segundos y no los treinta de comprar: quien espera es el editor que publica, y una
+        // oferta que no salió se repara republicando. Sin destino no intenta nada (degradar por ausencia).
+        if (hayOrquestadorDeTienda)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpTiendaOfferPublisher.ClientName,
+                DestinoDelArbol.De(seccionDeTienda, "http://127.0.0.1:5300/", 10));
+        }
+        services.AddSingleton<ITiendaOfferPublisher>(sp => new HttpTiendaOfferPublisher(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HttpTiendaOfferPublisher>>(),
+            hayOrquestadorDeTienda));
+
+        // Se publica al publicar un productPage y a mano (POST /api/shop/oferta/republicar), NUNCA al arrancar
+        // (ADR 0013); y se RETIRA al despublicar, mandar a la papelera o borrar uno (o el nodo que lo contiene).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTiendaAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeTiendaAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeTiendaAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeTiendaAlRetirar>();
 
         Func<IServiceProvider, IShopOrderService> motor;
         if (Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode))

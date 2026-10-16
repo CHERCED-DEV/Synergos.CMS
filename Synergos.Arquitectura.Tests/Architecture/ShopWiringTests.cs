@@ -205,6 +205,54 @@ public sealed class ShopWiringTests
         Assert.Contains("Mode { get; init; } = \"Stub\"", settings, StringComparison.Ordinal);
     }
 
+    // ── La oferta del catálogo (004-tienda-compra, R-9) ─────────────────────
+
+    /// <summary>Las notificaciones del editor que mueven la oferta, y ninguna otra: ni el arranque ni nada.</summary>
+    private static readonly string[] NotificacionesDeLaOferta =
+    {
+        "ContentPublishedNotification", "ContentUnpublishedNotification",
+        "ContentMovedToRecycleBinNotification", "ContentDeletedNotification",
+    };
+
+    /// <summary>
+    /// La oferta del catálogo va por el ORQUESTADOR, se publica y se retira con el editor, y nunca al arrancar.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por el orquestador</b>: escribir el precio en <c>Api.Pricing</c> y las existencias en
+    /// <c>Api.Inventory</c> desde el CMS es el atajo de un martes, y le copiaría al CMS el vocabulario de
+    /// sujetos de la compra y el rastro de lo declarado, que es lo que hace que un cambio de existencias no
+    /// devuelva lo vendido.</para>
+    ///
+    /// <para><b>Con el editor, en los dos sentidos</b>: publicar sin retirar deja vendiéndose lo que la ficha ya
+    /// no muestra, y es el defecto que nadie ve, porque comprar sigue funcionando. <b>Nunca al arrancar</b>
+    /// (ADR 0013): se mira qué notificaciones atienden los dos manejadores, no sólo que estén registrados.</para>
+    /// </remarks>
+    [Fact]
+    public void La_oferta_de_la_tienda_va_por_el_orquestador_sigue_al_editor_y_nunca_corre_al_arrancar()
+    {
+        var publicador = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Services", "HttpTiendaOfferPublisher.cs"));
+        Assert.Contains("\"v1/ofertas\"", publicador, StringComparison.Ordinal);
+        Assert.Contains("v1/ofertas/{Uri.EscapeDataString(productId)}/retirar", publicador, StringComparison.Ordinal);
+        Assert.DoesNotContain("v1/prices", publicador, StringComparison.Ordinal);
+
+        var composer = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.Shop.cs"));
+        Assert.Contains("AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTiendaAlPublicar>()", composer, StringComparison.Ordinal);
+        foreach (var retiro in NotificacionesDeLaOferta.Skip(1))
+        {
+            Assert.Contains($"AddNotificationAsyncHandler<{retiro}, OfertaDeTiendaAlRetirar>()", composer, StringComparison.Ordinal);
+        }
+
+        foreach (var manejador in new[] { "OfertaDeTiendaAlPublicar.cs", "OfertaDeTiendaAlRetirar.cs" })
+        {
+            var codigo = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Notifications", manejador));
+            var atiende = System.Text.RegularExpressions.Regex.Matches(codigo, @"INotification(?:Async)?Handler<(\w+)>")
+                .Select(m => m.Groups[1].Value)
+                .ToList();
+            Assert.NotEmpty(atiende);
+            Assert.All(atiende, n => Assert.Contains(n, NotificacionesDeLaOferta));
+        }
+    }
+
     // ── La identidad de quien compra (HU #14) ───────────────────────────────
 
     /// <summary>El cuerpo del método que abre la canasta en <c>Api.Cart</c>.</summary>
