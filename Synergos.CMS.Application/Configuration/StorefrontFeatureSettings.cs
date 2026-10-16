@@ -18,13 +18,39 @@ public sealed class StorefrontFeatureSettings : SeccionDeNegocio<StorefrontFeatu
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/shop";
 
+    /// <summary>
+    /// La transportadora con que se despacha una compra por la puerta (<c>tienda.compra</c>).
+    /// </summary>
+    /// <remarks>
+    /// «default» es la que usa hoy la ruta directa cuando <c>Synergos:Tienda:Carrier</c> no dice otra
+    /// (<c>HttpShopOrderService</c>), que se conserva para ese camino: con los valores base, los dos
+    /// despachan igual.
+    /// </remarks>
+    public string Carrier { get; init; } = "default";
+
+    /// <summary>
+    /// Por dónde compra la tienda, si el despliegue lo declara: <c>puerta</c> o <c>directa</c>
+    /// (<see cref="CaminoDeCompra"/>). Sin valor no se declara nada y decide la regla: la puerta cuando
+    /// abre <c>tienda.compra</c>, y la ruta directa en otro caso.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío vuelve a la regla aunque los valores base declaren uno.</remarks>
+    public string? PurchasePath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeStorefront Fusionar(StorefrontFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            Carrier: propio?.Carrier ?? Carrier,
+            PurchasePath: CaminoDeCompra.Normalizar(propio?.PurchasePath ?? PurchasePath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeStorefront negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            string.IsNullOrWhiteSpace(negocio.Carrier) ? "Carrier: hace falta una transportadora; sin ella no se despacha." : null,
+            ReglasDeNegocio.Camino("PurchasePath", negocio.PurchasePath),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +60,10 @@ public sealed class StorefrontFeatureSitio
 {
     /// <inheritdoc cref="StorefrontFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="StorefrontFeatureSettings.Carrier"/>
+    public string? Carrier { get; init; }
+
+    /// <inheritdoc cref="StorefrontFeatureSettings.PurchasePath"/>
+    public string? PurchasePath { get; init; }
 }

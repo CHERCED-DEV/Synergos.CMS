@@ -2909,13 +2909,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "purchasePath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Compra en nuestra tienda online",
         "subheading": "Catálogo, carrito y checkout",
-        "apiBase": "/api/shop"
+        "apiBase": "/api/shop",
+        "purchasePath": "directa"
       }
     },
     {
