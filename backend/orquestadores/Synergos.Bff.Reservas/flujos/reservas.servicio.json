@@ -1,0 +1,78 @@
+{
+  "clave": "reservas.servicio",
+  "entrada": ["cliente", "servicio", "ventana"],
+  "tipos": {
+    "cliente": { "de": "sujeto" },
+    "servicio": "texto",
+    "ventana": "ventana",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["servicio", "ventana", "total"],
+  "efimera": { "cerrar": ["contacto"] },
+  "fases": {
+    "abrir": ["sujeto", "duracion", "lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
+    "cerrar": ["capturar", "confirmar", "avisar"]
+  },
+  "pasos": {
+    "sujeto": { "tipo": "reservas.servicio", "lee": ["servicio"], "escribe": ["servicioRef"] },
+    "duracion": { "tipo": "reservas.duracion", "lee": ["servicioRef", "ventana"] },
+    "lineas": { "tipo": "forma.una-linea", "lee": ["servicioRef"], "escribe": ["aCotizar"] },
+    "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
+    "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
+    "hallar": {
+      "tipo": "booking.hallar",
+      "lee": ["servicioRef"],
+      "escribe": ["recursoId"],
+      "motivo": "el servicio no se puede reservar en línea"
+    },
+    "apartar": {
+      "tipo": "booking.apartar",
+      "lee": ["recursoId", "ventana", "cliente"],
+      "escribe": ["apartadoId"],
+      "llave": "hold",
+      "motivo": "no se pudo apartar la franja",
+      "reserva": {
+        "consumado_por": "confirmar",
+        "antes": "booking.liberar",
+        "despues": "booking.cancelar",
+        "motivo": "reserva no confirmada"
+      }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["cliente", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "reserva no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "confirmar": {
+      "tipo": "booking.confirmar",
+      "lee": ["apartadoId"],
+      "escribe": ["reservaId"],
+      "llave": "confirm",
+      "cierra_reserva": "apartar",
+      "motivo": "no se pudo confirmar la franja"
+    },
+    "avisar": {
+      "tipo": "notifications.avisar",
+      "lee": ["cliente", "contacto", "total"],
+      "llave": "avisar",
+      "plantilla": "reservas.servicio.confirmada",
+      "al_fallar": "seguir"
+    }
+  }
+}

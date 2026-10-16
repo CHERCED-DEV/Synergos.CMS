@@ -42,7 +42,7 @@
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 3231 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 1149 | Core, Shared, las 20 `Api.*` y los 6 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 1191 | Core, Shared, las 20 `Api.*` y los 7 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 536 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -3096,7 +3096,7 @@ dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3231
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1149
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1191
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 536
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
