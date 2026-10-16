@@ -2439,6 +2439,7 @@
         "Booking.Slot.Alternative",
         "Booking.Slot.Cancel",
         "Booking.Slot.Cancelled",
+        "Booking.Slot.Check",
         "Booking.Slot.Checking",
         "Booking.Slot.Confirm",
         "Booking.Slot.Confirmed",

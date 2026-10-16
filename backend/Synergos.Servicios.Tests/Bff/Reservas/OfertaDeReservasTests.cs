@@ -77,12 +77,14 @@ public sealed class OfertaDeReservasTests
         using var r = new ReservaDeServicioReal();
         await r.Publicar();
 
-        var (estado, cuerpo) = await r.Publicar(ReservaDeServicioReal.Oferta(desde: "09:00"), llave: "oferta-2");
+        var (estado, cuerpo) = await r.Publicar(ReservaDeServicioReal.Oferta(desde: "09:00", precio: 999_000m), llave: "oferta-2");
 
         Assert.Equal(HttpStatusCode.Conflict, estado);
         Assert.Equal("reservas.oferta_no_actualizable", cuerpo.GetProperty("code").GetString());
         var recurso = Assert.Single(await RecursosDelServicio(r));
         Assert.Equal("08:00", recurso.GetProperty("opening")[0].GetProperty("from").GetString());
+        // Sin publicar a medias: la tarifa nueva tampoco entró, se sigue cobrando la de antes (T028).
+        Assert.Equal(140_000m, (await r.Cotizar()).Cuerpo.GetProperty("datos").GetProperty("total").GetProperty("amount").GetDecimal());
     }
 
     [Fact]

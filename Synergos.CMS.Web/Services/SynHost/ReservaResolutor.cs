@@ -1,8 +1,8 @@
-using System.Globalization;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
+using Synergos.CMS.Web.Services.Reservas;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace Synergos.CMS.Web.Services.SynHost;
@@ -21,13 +21,6 @@ namespace Synergos.CMS.Web.Services.SynHost;
 /// </remarks>
 public sealed class ReservaResolutor : IResolutorSynHost<ReservaProps>
 {
-    private static readonly IReadOnlyDictionary<string, DayOfWeek> Dias = new Dictionary<string, DayOfWeek>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["lunes"] = DayOfWeek.Monday, ["martes"] = DayOfWeek.Tuesday, ["miércoles"] = DayOfWeek.Wednesday,
-        ["miercoles"] = DayOfWeek.Wednesday, ["jueves"] = DayOfWeek.Thursday, ["viernes"] = DayOfWeek.Friday,
-        ["sábado"] = DayOfWeek.Saturday, ["sabado"] = DayOfWeek.Saturday, ["domingo"] = DayOfWeek.Sunday,
-    };
-
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeReserva> _negocio;
     private readonly IPuertaDeLosFlujos _puerta;
@@ -61,16 +54,15 @@ public sealed class ReservaResolutor : IResolutorSynHost<ReservaProps>
     /// <summary>El servicio de la ficha, o <c>null</c> si no está marcada reservable o le falta algo para reservarse.</summary>
     private ServicioReservable? Servicio(IPublishedContent? ficha)
     {
-        if (ficha is null || !ficha.Value<bool>(_fallback, "reservable")) return null;
+        if (ficha is null || !ficha.Value<bool>(_fallback, FichaReservable.Marca)) return null;
 
         var duracion = ficha.Value<int>(_fallback, "duracionMinutos");
         var abre = ficha.Value<string>(_fallback, "abre")?.Trim();
         var cierra = ficha.Value<string>(_fallback, "cierra")?.Trim();
-        var dias = (ficha.Value<IEnumerable<string>>(_fallback, "diasDeAtencion") ?? [])
-            .Select(d => Dias.TryGetValue(d.Trim(), out var dia) ? dia.ToString() : null)
-            .OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        var dias = FichaReservable.DiasDe(ficha.Value<IEnumerable<string>>(_fallback, "diasDeAtencion"))
+            .Select(d => d.ToString()).ToList();
 
-        var horario = Hora(abre) is { } desde && Hora(cierra) is { } hasta && desde < hasta;
+        var horario = FichaReservable.Hora(abre) is { } desde && FichaReservable.Hora(cierra) is { } hasta && desde < hasta;
         if (duracion <= 0 || dias.Count == 0 || !horario)
         {
             _log.LogWarning("La ficha {Ficha} está marcada reservable y le falta duración, días u horario: no se ofrece para reservar.", ficha.Key);
@@ -79,7 +71,4 @@ public sealed class ReservaResolutor : IResolutorSynHost<ReservaProps>
 
         return new ServicioReservable(ficha.Key.ToString("D"), ficha.Name ?? string.Empty, duracion, dias, abre!, cierra!);
     }
-
-    private static TimeOnly? Hora(string? texto)
-        => TimeOnly.TryParseExact(texto, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hora) ? hora : null;
 }
