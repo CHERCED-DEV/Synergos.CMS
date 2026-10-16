@@ -64,6 +64,18 @@ if (declarado)
 
     // Interino de N-12: los tipos del host más las líneas del pedido (TipoLineasDePedido).
     builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoLineasDePedido()));
+
+    // El tope de códigos de promoción que no sirven por comprador (US 8; copia declarada del de Eventos hasta
+    // N-11): «cotizar» y «abrir» con código contestan distinto a uno que no existe, a uno vencido y a uno que
+    // vale. Tienda:Cupon:FallosPorVentana (10) y Tienda:Cupon:Ventana (00:15:00) los ajusta el despliegue.
+    builder.Services.AddSingleton(sp =>
+    {
+        var configuracion = sp.GetRequiredService<IConfiguration>();
+        return new IntentosDeCodigo(
+            sp.GetRequiredService<TimeProvider>(),
+            configuracion.GetValue("Tienda:Cupon:FallosPorVentana", IntentosDeCodigo.TopePorDefecto),
+            configuracion.GetValue("Tienda:Cupon:Ventana", IntentosDeCodigo.VentanaPorDefecto));
+    });
 }
 
 var app = builder.Build();
@@ -71,7 +83,9 @@ var app = builder.Build();
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Tienda:ApiKey"]);
 app.MapTiendaEndpoints();
-if (declarado) app.MapFlujosDeclarados();
+// Las rutas del flujo las pone el host genérico; el cupón (recortar el código y frenar los que no sirven) se les
+// cuelga como filtro de un grupo sin prefijo —las rutas no cambian—, porque la línea no toca el mapeo del núcleo.
+if (declarado) app.MapGroup(string.Empty).AddEndpointFilter<CuponDeLaCompra>().MapFlujosDeclarados();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

@@ -38,10 +38,11 @@ internal sealed class CompraDeTiendaReal : IDisposable
     /// <param name="conRecogida">Notifications deja cada correo como <c>.eml</c> en <see cref="Buzon"/>.</param>
     /// <param name="pierdeLaPrimera">La primera petición cuya ruta termina así LLEGA a la capacidad y su respuesta se
     /// pierde: el orquestador ve una caída.</param>
+    /// <param name="ajustes">Configuración del orquestador, además de la del arnés (<c>Tienda:Cupon:…</c>).</param>
     public CompraDeTiendaReal(
         IReadOnlyDictionary<string, int>? existencias = null, IReadOnlyDictionary<string, decimal>? precios = null,
         IReadOnlyCollection<string>? cae = null, IReadOnlyCollection<string>? rechaza = null, bool conRecogida = false,
-        string? pierdeLaPrimera = null)
+        string? pierdeLaPrimera = null, IReadOnlyDictionary<string, string>? ajustes = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
@@ -61,6 +62,7 @@ internal sealed class CompraDeTiendaReal : IDisposable
         {
             b.UseSetting("tienda:Storage:Root", Raiz);
             b.UseSetting("Tienda:ApiKey", Llave);
+            foreach (var (clave, valor) in ajustes ?? new Dictionary<string, string>()) b.UseSetting(clave, valor);
             b.ConfigureTestServices(s => s.AddSingleton<IHttpClientFactory>(cable));
         });
         Orquestador = _fabrica.CreateClient();
@@ -190,6 +192,16 @@ internal sealed class CompraDeTiendaReal : IDisposable
 
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cancelar(string id, string sujeto = "u-1")
         => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/tienda.compra/{id}/cancelar", sujeto));
+
+    /// <summary>
+    /// Una promoción publicada en Pricing, como la crearía quien opera el sitio: <c>Percentage</c> en puntos básicos
+    /// (1000 = 10 %) o <c>Fixed</c> en pesos.
+    /// </summary>
+    public Task Promocion(string codigo, string tipo, decimal valor, DateTimeOffset desde, DateTimeOffset hasta)
+        => Post("pricing", "v1/promotions", new
+        {
+            code = codigo, kind = tipo, value = valor, currency = "COP", validFrom = desde, validTo = hasta,
+        }, "promocion-" + codigo);
 
     /// <summary>Publica la oferta de un producto, como lo hace el CMS: sin cabeceras de la puerta, con llave.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Publicar(object oferta, string llave)
