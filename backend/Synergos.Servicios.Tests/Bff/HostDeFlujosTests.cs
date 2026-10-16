@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
@@ -138,6 +139,9 @@ public sealed class HostDeFlujosTests
         public List<string> Llamadas { get; } = [];
         public bool RechazaAutorizar { get; set; }
 
+        /// <summary>Si está, cada llamada se escribe en el registro, como lo haría el cliente de una capacidad.</summary>
+        public ILogger? Log { get; set; }
+
         /// <summary>Rechaza sólo la autorización cuya llave termina en <c>|{esto}</c>.</summary>
         public string? RechazaLaLlave { get; set; }
 
@@ -162,6 +166,7 @@ public sealed class HostDeFlujosTests
         public Task<Result<string>> AutorizarAsync(Ref paraQue, Ref pagador, Money monto, IdempotencyKey llave, CancellationToken ct)
         {
             Llamadas.Add($"autorizar {monto} {llave.Value}");
+            Log?.LogInformation("Llamada {Llamada}", $"autorizar {monto}");
             var tramo = llave.Value[(llave.Value.LastIndexOf('|') + 1)..];
             return Task.FromResult(RechazaAutorizar || tramo == RechazaLaLlave
                 ? Result.Rejected<string>(Rejection.Conflict("payments.payment_declined", "guionado"))
@@ -183,6 +188,7 @@ public sealed class HostDeFlujosTests
         private Task<Result<string>> Ok(string valor, string llamada)
         {
             Llamadas.Add(llamada);
+            Log?.LogInformation("Llamada {Llamada}", llamada);
             return Task.FromResult(Result.Ok(valor));
         }
     }
@@ -237,8 +243,14 @@ public sealed class HostDeFlujosTests
 
     private sealed class Banco : IDisposable
     {
-        public Banco(string definicion = Cita)
+        private readonly ILoggerFactory? _logs;
+
+        /// <param name="definicion">La definición.</param>
+        /// <param name="logs">Si está, el motor, el intérprete y los puertos escriben en él (NB-9); si no, en nada.</param>
+        public Banco(string definicion = Cita, ILoggerFactory? logs = null)
         {
+            _logs = logs;
+            Puertos.Log = logs?.CreateLogger("puertos");
             Flujo = FlujoDef.Leer(definicion);
             var vocabulario = new SagaVocabulary("prueba", "la cita");
             var deshacer = new DeshacerComun(Puertos, Puertos, Puertos, Puertos, []);
@@ -247,7 +259,8 @@ public sealed class HostDeFlujosTests
             Motor = new SagaEngine<SagaDeFlujo>(
                 almacen, new Compensator<SagaDeFlujo>(deshacer, TimeProvider.System, NullLogger<Compensator<SagaDeFlujo>>.Instance),
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
-                ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System, NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
+                ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System,
+                logs?.CreateLogger<SagaEngine<SagaDeFlujo>>() ?? NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
             Registro = new RegistroDePasos(
             [
                 new PasoAgendaApartar(Puertos), new PasoAgendaConfirmar(Puertos), new PasoPagosAutorizar(Puertos),
@@ -271,7 +284,8 @@ public sealed class HostDeFlujosTests
         public FachadaDeFlujo<SagaDeFlujo> Fachada()
         {
             var interprete = new FlowRunner<SagaDeFlujo>(
-                Motor, Registro, Flujo, Binding, Flujo.Fases.Select(f => f.Nombre).ToList(), TimeProvider.System, NullLogger.Instance);
+                Motor, Registro, Flujo, Binding, Flujo.Fases.Select(f => f.Nombre).ToList(), TimeProvider.System,
+                _logs?.CreateLogger("flujo") ?? NullLogger.Instance);
             return new FachadaDeFlujo<SagaDeFlujo>(Motor, interprete, Flujo, ReglasDeLaFachada.Para(new SagaVocabulary("prueba", "la cita")),
                 s => s.Flujo == Flujo.Clave);
         }
@@ -356,6 +370,72 @@ public sealed class HostDeFlujosTests
             using var mal = new Banco(Mutar("\"escribe\": [\"apartadoId\"], \"llave\": \"hold\"", $"\"escribe\": {escribe}, \"llave\": \"hold\""));
             Assert.Contains(mal.Errores(), e => e.Contains("«booking.apartar» produce 2, de las que las últimas 1 se pueden no nombrar", StringComparison.Ordinal));
         }
+    }
+
+    /// <summary>
+    /// Un registro que guarda cada línea con los ámbitos que tenía abiertos, como los ve el formateador de consola
+    /// (<c>IncludeScopes</c>): el texto de cada ámbito y sus valores por nombre.
+    /// </summary>
+    private sealed class RegistroConAmbitos : ILoggerProvider, ISupportExternalScope
+    {
+        private IExternalScopeProvider _ambitos = new LoggerExternalScopeProvider();
+
+        public List<(string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> Lineas { get; } = [];
+
+        public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _ambitos = scopeProvider;
+
+        public ILogger CreateLogger(string categoryName) => new Registrador(this);
+
+        public void Dispose() { }
+
+        private sealed class Registrador(RegistroConAmbitos dueno) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => dueno._ambitos.Push(state);
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                var textos = new List<string>();
+                var valores = new Dictionary<string, object?>(StringComparer.Ordinal);
+                dueno._ambitos.ForEachScope((ambito, _) =>
+                {
+                    textos.Add(ambito?.ToString() ?? string.Empty);
+                    if (ambito is IEnumerable<KeyValuePair<string, object?>> pares)
+                    {
+                        foreach (var (k, v) in pares) valores[k] = v;
+                    }
+                }, (object?)null);
+                lock (dueno.Lineas) dueno.Lineas.Add((formatter(state, exception), textos, valores));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Cada_linea_de_una_fase_y_de_lo_que_se_deshace_lleva_la_saga_y_su_numero()
+    {
+        // NB-9 de 011: medido en vivo, el número de una reserva salía cero veces en el registro del orquestador.
+        // Las llamadas a las capacidades las escribe quien llama, no el intérprete: si llevan la saga, la lleva
+        // todo lo de en medio. Al abrir (apartar, autorizar) y al deshacer (liberar, anular).
+        var registro = new RegistroConAmbitos();
+        using var logs = LoggerFactory.Create(b => b.AddProvider(registro).SetMinimumLevel(LogLevel.Trace));
+        using var banco = new Banco(logs: logs);
+        var fachada = banco.Fachada();
+
+        var abierta = await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+        Assert.True((await fachada.CancelarAsync(abierta.Value.Id, Paciente, CancellationToken.None)).IsOk);
+
+        var llamadas = registro.Lineas.Where(l => l.Mensaje.StartsWith("Llamada ", StringComparison.Ordinal)).ToList();
+        foreach (var hecho in new[] { "apartar", "autorizar", "liberar", "anular" })
+        {
+            Assert.Contains(llamadas, l => l.Mensaje.Contains(hecho, StringComparison.Ordinal));
+        }
+        Assert.All(llamadas, l =>
+        {
+            Assert.Equal("cita-1", l.Valores.GetValueOrDefault("Saga"));
+            Assert.Equal("CITA1", l.Valores.GetValueOrDefault("NumeroDeSaga"));
+            Assert.Contains("Saga:cita-1 Numero:CITA1", l.Textos);   // lo que imprime la consola, no el nombre de un tipo
+        });
     }
 
     [Fact]

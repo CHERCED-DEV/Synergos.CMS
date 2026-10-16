@@ -180,6 +180,9 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     public async Task<Result<TSaga>> CompensateAsync(string sagaId, string reason, CancellationToken ct)
     {
+        // Lo que se deshace lleva la saga y su número en cada línea (NB-9), también desde el barrido. La de una
+        // fase que falla (CompensarConTurnoAsync) ya corre dentro del ámbito de su fase.
+        using var ambito = AmbitoDeLaSaga.Abrir(_log, sagaId);
         using var arriendo = _arriendos.TryAcquire(sagaId);
         if (arriendo is null) return EnCurso(sagaId);
 
@@ -319,6 +322,7 @@ public sealed class SagaEngine<TSaga> where TSaga : class, ISaga<TSaga>
         // El arriendo se toma ACÁ y no dentro de la compensación: lo que hay debajo es una
         // lectura-modificación-escritura —poner los intentos a cero y rearmar el aviso— y si un
         // barrido escribe en medio, el reintento que pidió una persona se pierde sin decir nada.
+        using var ambito = AmbitoDeLaSaga.Abrir(_log, sagaId);
         using var arriendo = _arriendos.TryAcquire(sagaId);
         if (arriendo is null) return EnCurso(sagaId);
 

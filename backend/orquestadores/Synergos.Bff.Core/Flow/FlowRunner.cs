@@ -164,6 +164,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     {
         ArgumentNullException.ThrowIfNull(entrada);
 
+        // Cada línea de la fase —de cada paso y de cada llamada a una capacidad— lleva la saga y su número
+        // (NB-9). También la que abre: el número es el de la saga que nace con esta llamada.
+        using var ambito = AmbitoDeLaSaga.Abrir(_log, sagaId);
+
         var definicion = _flujo.Fase(fase);
         var abre = ReferenceEquals(definicion, _flujo.Fases[0]);
 
