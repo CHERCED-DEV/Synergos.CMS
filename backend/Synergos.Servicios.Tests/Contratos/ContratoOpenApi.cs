@@ -79,6 +79,7 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Orders.Contracts.OrderResponse>("Orders"),
         new PiezaPublicada<Synergos.Api.Fulfillment.Contracts.ShipmentResponse>("Fulfillment"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
+        new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
     ];
 
     /// <summary>La pieza por el nombre de su ensamblado, que es también el del fichero.</summary>

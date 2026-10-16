@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Core;
 using Synergos.Bff.Tienda.Contracts;
 using Synergos.Bff.Tienda.Domain;
@@ -7,6 +8,12 @@ using Synergos.Shared;
 namespace Synergos.Bff.Tienda.Endpoints;
 
 /// <summary>El ruteo del orquestador de Tienda.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c> (el molde F2): de ahí
+/// sale el contrato publicado (<c>docs/contracts/openapi/Synergos.Bff.Tienda.json</c>). Son las rutas de la compra
+/// imperativa (<see cref="PurchaseFlow"/>), las que usa el CMS con <c>Synergos:Tienda:Mode=Bff</c>; las de la puerta
+/// las pone el flujo declarado (<c>flujos/tienda.compra.json</c>) en <c>/v1/flujos/tienda.compra</c>.
+/// </remarks>
 public static class TiendaEndpoints
 {
     /// <summary>Prefijo de los códigos de rechazo propios del BFF.</summary>
@@ -19,22 +26,22 @@ public static class TiendaEndpoints
         // de todos los demás, y el llamador ya está obligado a traer uno.
         // Por eso acepta una llave más corta que la de una capacidad: de ella cuelgan las de cada
         // paso, y una que no cupiera rompería a mitad de la saga (ConLlaveDeSaga).
-        app.MapPost("/v1/purchases", async (BuyRequest req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
+        app.MapPost("/v1/purchases", async Task<Results<Created<PurchaseResponse>, ProblemHttpResult>> (
+            BuyRequest req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
             if (string.IsNullOrWhiteSpace(req.CartId)) return Invalid("bad_cart", "Hace falta cartId.");
 
             var r = await flow.BuyAsync(req.CartId!, key.Value, ct);
 
-            return r.Match(
-                s => Results.Created($"/v1/purchases/{s.Id}", PurchaseResponse.From(s)),
-                bad => bad.ToProblem());
-        }).ConLlaveDeSaga();
+            return r.Map(PurchaseResponse.From).ToCreated(s => $"/v1/purchases/{s.Id}");
+        }).WithName("BuyCart").ConLlaveDeSaga();
 
-        app.MapGet("/v1/purchases/{id}", (string id, PurchaseFlow flow) =>
-            flow.Get(id).Map(PurchaseResponse.From).ToHttp());
+        app.MapGet("/v1/purchases/{id}", Results<Ok<PurchaseResponse>, ProblemHttpResult> (string id, PurchaseFlow flow) =>
+            flow.Get(id).Map(PurchaseResponse.From).ToHttp()).WithName("GetPurchase");
 
-        app.MapPost("/v1/purchases/{id}/confirm", async (string id, ConfirmRequest req, PurchaseFlow flow, CancellationToken ct) =>
+        app.MapPost("/v1/purchases/{id}/confirm", async Task<Results<Ok<PurchaseResponse>, ProblemHttpResult>> (
+            string id, ConfirmRequest req, PurchaseFlow flow, CancellationToken ct) =>
         {
             if (req.To is null || string.IsNullOrWhiteSpace(req.To.Line1) || string.IsNullOrWhiteSpace(req.To.City))
             {
@@ -45,10 +52,11 @@ public static class TiendaEndpoints
             if (string.IsNullOrWhiteSpace(req.Carrier)) return Invalid("bad_carrier", "Hace falta la transportadora.");
 
             return (await flow.ConfirmAsync(id, req.To, req.Carrier!, ct)).Map(PurchaseResponse.From).ToHttp();
-        });
+        }).WithName("ConfirmPurchase");
 
-        app.MapPost("/v1/purchases/{id}/cancel", async (string id, PurchaseFlow flow, CancellationToken ct) =>
-            (await flow.CancelAsync(id, ct)).Map(PurchaseResponse.From).ToHttp());
+        app.MapPost("/v1/purchases/{id}/cancel", async Task<Results<Ok<PurchaseResponse>, ProblemHttpResult>> (
+            string id, PurchaseFlow flow, CancellationToken ct) =>
+            (await flow.CancelAsync(id, ct)).Map(PurchaseResponse.From).ToHttp()).WithName("CancelPurchase");
 
         // Devolver una PARTE de lo cobrado, por una compra que SÍ se cumplió (#57).
         //
@@ -64,29 +72,32 @@ public static class TiendaEndpoints
         // EXIGE llave, y no por ceremonia: devolver plata es un movimiento RELATIVO, así que un
         // reintento tras un timeout sin llave devolvería dos veces. Es la misma razón por la que
         // el ajuste relativo de Api.Inventory la exige y el absoluto no (#30).
-        app.MapPost("/v1/purchases/{id}/refund", async (
-            string id, RefundPurchaseRequest? req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
+        app.MapPost("/v1/purchases/{id}/refund", async Task<Results<Ok<PurchaseResponse>, ProblemHttpResult>> (
+            string id, RefundPurchaseRequest req, HttpRequest http, PurchaseFlow flow, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
 
-            if (req?.Amount is not { } m)
+            // El cuerpo es requerido en el contrato (lo que genera el UI no admite uno opcional); sin él
+            // contesta el framework, antes de mirar la llave. Lo que falte DENTRO lo dice este rechazo.
+            if (req.Amount is not { } m)
             {
                 return Invalid("bad_refund", "Hace falta el monto a devolver.");
             }
             if (!TryMoney(m, out var monto, out var mala)) return mala!;
 
             return (await flow.RefundAsync(id, monto, req.Reason, key, ct)).Map(PurchaseResponse.From).ToHttp();
-        });
+        }).WithName("RefundPurchase").ConLlaveDeIdempotencia();
 
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, "se rinde a los ocho intentos" sería "se abandona", y arreglar una devolución
         // colgada exigiría tocarla a mano en la capacidad, por fuera del rastro de la saga.
-        app.MapPost("/v1/purchases/{id}/retry", async (string id, PurchaseFlow flow, CancellationToken ct) =>
-            (await flow.RetryStuckAsync(id, ct)).Map(PurchaseResponse.From).ToHttp());
+        app.MapPost("/v1/purchases/{id}/retry", async Task<Results<Ok<PurchaseResponse>, ProblemHttpResult>> (
+            string id, PurchaseFlow flow, CancellationToken ct) =>
+            (await flow.RetryStuckAsync(id, ct)).Map(PurchaseResponse.From).ToHttp()).WithName("RetryPurchase");
 
         // La vista de operación: qué quedó colgado. Sin ella, una compensación que se rindió
         // solo existe en una línea de log que nadie está mirando.
-        app.MapGet("/v1/compensations", (int? offset, int? limit, PurchaseFlow flow) =>
+        app.MapGet("/v1/compensations", Ok<PageResponse<PendingCompensationResponse>> (int? offset, int? limit, PurchaseFlow flow) =>
         {
             var todas = flow.PendingCompensations()
                 .SelectMany(s => s.Pending().Select(c => new PendingCompensationResponse(
@@ -96,14 +107,14 @@ public static class TiendaEndpoints
 
             var off = Math.Max(0, offset ?? 0);
             var lim = QueryWindow.Limit(limit);
-            return Results.Ok(new PageResponse<PendingCompensationResponse>(
+            return TypedResults.Ok(new PageResponse<PendingCompensationResponse>(
                 todas.Skip(off).Take(lim).ToList(), todas.Count, off, off + lim < todas.Count));
-        });
+        }).WithName("ListPurchaseCompensations");
 
         return app;
     }
 
-    private static IResult Invalid(string code, string message)
+    private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
 
     /// <summary>
@@ -114,7 +125,7 @@ public static class TiendaEndpoints
     /// como 500 — un problema del servidor por un cuerpo que mandó el cliente. Se valida la FORMA
     /// acá (CLAUDE.md §15) y se deja el negocio en <c>Domain/</c>.
     /// </remarks>
-    private static bool TryMoney(MoneyDto dto, out Money monto, out IResult? mala)
+    private static bool TryMoney(MoneyDto dto, out Money monto, out ProblemHttpResult? mala)
     {
         monto = default;
         mala = null;

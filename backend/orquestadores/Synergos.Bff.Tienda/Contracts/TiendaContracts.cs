@@ -10,16 +10,19 @@ namespace Synergos.Bff.Tienda.Contracts;
 /// <summary>Un monto tal como sale.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
 
+// En una petición, todo anulable lleva `= null` (ADR 0140 F2, decisión 6): el contrato publica la forma
+// del cable; lo que el negocio exige lo publican los rechazos con código.
+
 /// <summary>Comprar una canasta.</summary>
-public sealed record BuyRequest(string? CartId);
+public sealed record BuyRequest(string? CartId = null);
 
 /// <summary>Una dirección de entrega, tal como la pide <c>Api.Fulfillment</c>.</summary>
 public sealed record AddressRequest(
-    string? Line1, string? Line2, string? City, string? Region,
-    string? PostalCode, string? Country, string? Contact);
+    string? Line1 = null, string? Line2 = null, string? City = null, string? Region = null,
+    string? PostalCode = null, string? Country = null, string? Contact = null);
 
 /// <summary>Confirmar la compra: capturar y despachar.</summary>
-public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
+public sealed record ConfirmRequest(AddressRequest? To = null, string? Carrier = null);
 
 /// <summary>
 /// Lo que quien vendió manda para devolver una parte de lo cobrado (#57).
@@ -28,7 +31,7 @@ public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
 /// <b>El monto llega calculado.</b> El orquestador cotiza la compra entera y no sabe cuánto vale
 /// una línea; quien vende sí, y lo saca de la orden — no del cliente.
 /// </remarks>
-public sealed record RefundPurchaseRequest(MoneyDto? Amount, string? Reason);
+public sealed record RefundPurchaseRequest(MoneyDto? Amount = null, string? Reason = null);
 
 /// <summary>Cómo sale una compra.</summary>
 /// <param name="Id">Identificador.</param>
