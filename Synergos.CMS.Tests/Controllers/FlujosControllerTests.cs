@@ -53,6 +53,8 @@ public sealed class FlujosControllerTests : IDisposable
 
     private bool _conDestino = true;
 
+    private AvisoEnVivoDeLaPuerta? _enVivo;
+
     public FlujosControllerTests() => Sesion(Ana);
 
     public void Dispose() => _orquestador.Dispose();
@@ -144,7 +146,7 @@ public sealed class FlujosControllerTests : IDisposable
 
         var sut = new FlujosController(
             TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(_conDestino ? ["Eventos"] : []), _miembro,
-            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones)
+            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones, enVivo: _enVivo)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -491,6 +493,73 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal($"eventos.comprador:{Ana:n}", Assert.Single(_orquestador.Pedidos).Cabeceras["X-Synergos-Sujeto"]);
     }
 
+    // ── Los avisos en vivo que declara un flujo (núcleo N3, NE-6 de 007) ──────────────────
+
+    private sealed class CanalQueRecuerda : Synergos.CMS.Interfaces.IRealtimeNotifier
+    {
+        public List<(string Canal, string Evento, string Datos)> Publicados { get; } = [];
+        public bool Rompe { get; set; }
+
+        public Task PublishAsync(string channel, string eventName, string payloadJson, CancellationToken cancellationToken = default)
+        {
+            if (Rompe) throw new InvalidOperationException("el canal no contesta");
+            Publicados.Add((channel, eventName, payloadJson));
+            return Task.CompletedTask;
+        }
+    }
+
+    private CanalQueRecuerda ConAvisos(params AvisoEnVivoSettings[] avisos)
+    {
+        var f = _ajustes.Flujos[Flujo];
+        _ajustes.Flujos[Flujo] = new FlujoDeLaPuertaSettings
+        {
+            Acceso = f.Acceso, SujetoKind = f.SujetoKind, Negocio = f.Negocio, Aviso = f.Aviso, EnVivo = [.. avisos],
+        };
+        var canal = new CanalQueRecuerda();
+        _enVivo = new AvisoEnVivoDeLaPuerta(canal, NullLogger<AvisoEnVivoDeLaPuerta>.Instance);
+        return canal;
+    }
+
+    [Fact]
+    public async Task Tras_una_operacion_que_sale_bien_avisa_en_vivo_en_su_canal_con_lo_que_trae_la_respuesta()
+    {
+        var canal = ConAvisos(
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:cerrado:{id}", Nombre = "cerrado" },
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:evento:{eventoId}", Nombre = "entrada" },
+            new AvisoEnVivoSettings { Operacion = "cancelar", Canal = "flujo:cancelado:{id}", Nombre = "cancelado" });
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.OK, """{"id":"s-1","datos":{"eventoId":"ev-9"}}""");
+
+        var r = await Pedir("POST", "cerrar", "id=s-1");
+
+        Assert.Equal(200, r.Estado);
+        Assert.Equal(
+            [("flujo:cerrado:s-1", "cerrado", """{"eventoId":"ev-9"}"""), ("flujo:evento:ev-9", "entrada", """{"eventoId":"ev-9"}""")],
+            canal.Publicados);
+    }
+
+    [Fact]
+    public async Task Un_rechazo_un_canal_sin_su_dato_o_un_canal_roto_no_avisan_ni_cambian_la_respuesta()
+    {
+        var canal = ConAvisos(
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:cerrado:{id}", Nombre = "cerrado" },
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:nada:{nada}", Nombre = "nada" });
+
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.Conflict, """{"code":"eventos.already_completed","transient":false}""",
+            "application/problem+json");
+        Assert.Equal(409, (await Pedir("POST", "cerrar", "id=s-1")).Estado);
+        Assert.Empty(canal.Publicados);
+
+        // El que no se puede llenar no sale; el otro sí.
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.OK, """{"id":"s-1"}""");
+        Assert.Equal(200, (await Pedir("POST", "cerrar", "id=s-1")).Estado);
+        Assert.Equal(["flujo:cerrado:s-1"], canal.Publicados.Select(p => p.Canal));
+
+        canal.Rompe = true;
+        var r = await Pedir("POST", "cerrar", "id=s-1");
+        Assert.Equal(200, r.Estado);
+        Assert.Equal("""{"id":"s-1"}""", r.Cuerpo);
+    }
+
     [Fact]
     public async Task La_llave_se_reemite_atada_al_sujeto_y_cabe_en_la_de_una_saga()
     {
@@ -625,6 +694,7 @@ public sealed class FlujosControllerTests : IDisposable
         { "ruta", "tiene que ser una ruta del sitio" },
         { "marcador", "la operación que avisa no lo trae" },
         { "sujeto-de", "SujetoDe «documento» tiene que ser «miembro» o «correo»" },
+        { "en-vivo", "EnVivo avisa tras «pagar», que no es una operación del flujo" },
     };
 
     [Theory]
@@ -642,6 +712,11 @@ public sealed class FlujosControllerTests : IDisposable
             "campo" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Aviso = bien.Aviso, Negocio = new NegocioDelFlujoSettings { Seccion = "Eventos", Campos = ["Comision"] } }),
             "ruta" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "https://evil.test/x" } }),
             "sujeto-de" => (Flujo, ConSujetoDe(bien, "documento")),
+            "en-vivo" => (Flujo, new FlujoDeLaPuertaSettings
+            {
+                Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = bien.Aviso,
+                EnVivo = [new AvisoEnVivoSettings { Operacion = "pagar", Canal = "flujo:x:{id}", Nombre = "x" }],
+            }),
             _ => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "/compra?c={orden}" } }),
         };
 

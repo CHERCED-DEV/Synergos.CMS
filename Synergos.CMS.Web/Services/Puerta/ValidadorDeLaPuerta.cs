@@ -59,6 +59,18 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
             RevisarNegocio(donde, ops, flujo.Negocio, errores);
             RevisarAviso(donde, ops, flujo.Aviso, errores);
 
+            foreach (var aviso in flujo.EnVivo)
+            {
+                if (!ops.Any(o => string.Equals(o.Operacion, aviso.Operacion, StringComparison.Ordinal)))
+                {
+                    errores.Add($"{donde}:EnVivo avisa tras «{aviso.Operacion}», que no es una operación del flujo.");
+                }
+                if (string.IsNullOrWhiteSpace(aviso.Canal) || string.IsNullOrWhiteSpace(aviso.Nombre))
+                {
+                    errores.Add($"{donde}:EnVivo tras «{aviso.Operacion}» necesita Canal y Nombre.");
+                }
+            }
+
             if (SujetoDeLaPuerta.Normalizar(flujo.SujetoDe) is not (SujetoDeLaPuerta.Miembro or SujetoDeLaPuerta.Correo))
             {
                 errores.Add($"{donde}:SujetoDe «{flujo.SujetoDe}» tiene que ser «{SujetoDeLaPuerta.Miembro}» o «{SujetoDeLaPuerta.Correo}», "

@@ -48,6 +48,8 @@ public sealed partial class SeamComposer
         services.AddSingleton<Synergos.CMS.Interfaces.ICaminoDeLosFlujos, CaminoDeLosFlujos>();
         // Y qué flujo coloca una vista: el que elige el editor, de la lista cerrada (núcleo N3).
         services.AddSingleton<FlujosColocables>();
+        // Y los avisos en vivo que declara un flujo tras una operación (núcleo N3).
+        services.AddSingleton<AvisoEnVivoDeLaPuerta>();
         services.AddOptions<PuertaSettings>().Bind(builder.Config.GetSection(PuertaSettings.Seccion)).ValidateOnStart();
         services.AddSingleton<IValidateOptions<PuertaSettings>, ValidadorDeLaPuerta>();
     }

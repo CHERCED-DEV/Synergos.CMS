@@ -50,6 +50,30 @@ public sealed class FlujoDeLaPuertaSettings
     /// valor decide la regla: la puerta cuando la abre, y la directa si no. Lo que declara un sitio gana.
     /// </summary>
     public string? Camino { get; init; }
+
+    /// <summary>
+    /// Los avisos EN VIVO que publica la puerta cuando una operación del flujo sale bien (núcleo N3, NE-6 de
+    /// 007): las consolas que miran un canal ven el hecho al instante, como el check-in de Eventos.
+    /// </summary>
+    public List<AvisoEnVivoSettings> EnVivo { get; init; } = [];
+}
+
+/// <summary>Un aviso en vivo: tras qué operación, en qué canal y con qué nombre.</summary>
+/// <remarks>
+/// El canal lleva marcadores entre llaves (<c>eventos:checkin:{eventId}</c>) que se llenan con los
+/// parámetros de la operación o con los datos de su respuesta. Quién puede LEER el canal no se decide acá:
+/// lo declara el endpoint del realtime, que es fail-closed (un canal sin política no se abre).
+/// </remarks>
+public sealed class AvisoEnVivoSettings
+{
+    /// <summary>La operación de la puerta tras la que se avisa (<c>cerrar</c>).</summary>
+    public string? Operacion { get; init; }
+
+    /// <summary>El canal, con sus marcadores: <c>eventos:checkin:{eventId}</c>.</summary>
+    public string? Canal { get; init; }
+
+    /// <summary>El nombre con que sale en el canal (<c>checkin</c>).</summary>
+    public string? Nombre { get; init; }
 }
 
 /// <summary>Los campos de negocio que el flujo adjunta (ADR 0137): sólo éstos viajan.</summary>

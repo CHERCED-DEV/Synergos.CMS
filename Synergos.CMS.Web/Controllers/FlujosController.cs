@@ -54,7 +54,10 @@ public sealed class FlujosController : ControllerBase
     private readonly ReenvioDeLaPuerta _reenvio;
     private readonly Func<string?> _sitio;
 
+    private readonly AvisoEnVivoDeLaPuerta? _enVivo;
+
     /// <param name="sitio">El nombre del sitio de la petición, para el aviso. Nulo: el host.</param>
+    /// <param name="enVivo">Los avisos en vivo que declaran los flujos (núcleo N3). Nulo: no se avisa.</param>
     public FlujosController(
         TablaDeLaPuerta tabla,
         IOptionsMonitor<PuertaSettings> ajustes,
@@ -62,7 +65,8 @@ public sealed class FlujosController : ControllerBase
         IMemberAccessGate miembro,
         ReenvioDeLaPuerta reenvio,
         SeccionesDelSitio? secciones = null,
-        SitioDeLaPeticion? sitio = null)
+        SitioDeLaPeticion? sitio = null,
+        AvisoEnVivoDeLaPuerta? enVivo = null)
     {
         _tabla = tabla;
         _ajustes = ajustes;
@@ -71,6 +75,7 @@ public sealed class FlujosController : ControllerBase
         _reenvio = reenvio;
         _secciones = secciones;
         _sitio = () => sitio?.Resolver().SiteRoot?.Name;
+        _enVivo = enVivo;
     }
 
     [Route("{flujo}/{operacion}")]
@@ -187,6 +192,12 @@ public sealed class FlujosController : ControllerBase
         Response.StatusCode = salida.Estado;
         if (salida.TipoDeContenido is not null) Response.ContentType = salida.TipoDeContenido;
         await Response.Body.WriteAsync(salida.Cuerpo, ct);
+
+        // Lo que el flujo declara avisar en vivo, sólo si salió bien y DESPUÉS de contestar (NE-6). No lanza.
+        if (_enVivo is not null && salida.Estado is >= 200 and < 300)
+        {
+            await _enVivo.PublicarAsync(op.Flujo, ajustes, op.Operacion, parametros, salida.Cuerpo, ct);
+        }
         return new EmptyResult();
     }
 
