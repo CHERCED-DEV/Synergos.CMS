@@ -244,7 +244,7 @@ que hace de capa media entre los elementos y el flujo.
 | **Elementos de mapeo en el DOM que arman el payload de cada API** | El DOM no es frontera de confianza: el mapeo, el endpoint o el precio se reescriben desde las herramientas del navegador. Y la orquestación (cobrar, apartar, compensar, avisar) necesita idempotencia y sagas en el servidor. Se conserva la idea buena —una capa media sin render—, reducida a un coordinador que sólo conoce la clave del flujo. |
 | **Que el navegador hable directo con el orquestador** (Caddy enruta, el orquestador valida al miembro) | El orquestador tendría que entender la cookie de Umbraco o el CMS emitir tokens al navegador; la llave compartida no puede salir al cliente. Se reabre con un gateway propio si la puerta del CMS mide latencia o carga que importe (p95 de la puerta > 50 ms sobre el orquestador). |
 | **Usar `Api.Workflow` como motor de flujos** | Es una máquina de estados pasiva sobre HTTP: no ejecuta efectos, no compensa, no tiene arriendo ni barrido. Convertirla en motor la volvería el orquestador de todos, contra el principio 12 (la capacidad es dueña del cuándo, el orquestador del qué). Sigue siendo la capacidad para expedientes con estados declarados. |
-| **Un motor de flujos de terceros** (Temporal, Elsa, MassTransit) | Infraestructura y un modelo de programación nuevos para resolver lo que el `SagaEngine` ya resuelve y está probado. Se reabre si hacen falta flujos de larga duración con esperas humanas de días o eventos asíncronos entre capacidades (hoy no hay outbox ni bus: brecha aparte). |
+| **Un motor de flujos de terceros** (Temporal, Elsa, MassTransit) | Infraestructura y un modelo de programación nuevos para resolver lo que el `SagaEngine` ya resuelve y está probado. Se reabre si hacen falta flujos de larga duración con esperas humanas de días o eventos asíncronos entre capacidades (hoy no hay outbox ni bus: brecha aparte). *(2026-10-16: las esperas humanas ya tienen su forma sin terceros —ver «La regla de forma»—; sigue en pie el disparador de los eventos asíncronos.)* |
 | **Generar los clientes C# de los orquestadores con NSwag/Kiota desde el día uno** | Se decide en el piloto (F2): primero el contrato publicado y su gate; el cliente generado del lado .NET puede ser un paso después si los tipos de `Bff.Pasos` alcanzan. |
 
 ## Consecuencias
@@ -1772,6 +1772,36 @@ persistencia sin ganar nada en el piloto. Lo común es la fachada: Eventos conse
 - **N2:** Consent, Cart, Orders y Fulfillment, con contrato y gate, y sus puertos y pasos.
 - **N3:** el envoltorio tipado de cada flujo en el front; los avisos derivados del contrato;
   `<synergos-flujo>` colocado por declaración del editor; el selector puerta/proceso con su gate.
+
+## La regla de forma: ninguna saga espera a una persona (2026-10-16)
+
+Decidida por el arquitecto (lote 7, 009-P1) con lo que midió la línea de Gobierno en el código. Contesta el
+criterio de reapertura de la fila «motor de flujos de terceros» en lo que toca a las **esperas humanas de días**.
+
+- **Lo que espera a una persona** (revisar, aprobar, subsanar, renovar) es un **estado declarado en la capacidad
+  de procesos** (`Api.Workflow`): la definición es un dato versionado en el repositorio, se publica y la cruza un
+  gate. La espera es el estado entre dos actos.
+- **Cada acto con efectos** sobre ese estado (cobrar, sellar, avisar, deshacer) es un **flujo corto declarado**
+  del orquestador del vertical: la operación posterior sobre lo ya cerrado (001-P6), con el acceso de personal
+  (001-P8) cuando actúa quien atiende. Lee el expediente, hace sus efectos y dispara la transición como un paso:
+  lo reversible va antes y se deshace si la transición falla; lo que sólo avisa va después.
+- **Lo que no espera a nadie y tiene algo que deshacer** es una saga declarada. **Una lectura** es una lectura.
+
+**Por qué no una «fase que espera» en el intérprete:** el barrido abandona toda saga sin cerrar pasado un plazo
+que es del orquestador entero y no de cada flujo; la gramática no tiene condiciones ni ciclos (un expediente
+tiene varios desenlaces y una vuelta); y la saga es de quien la abrió, mientras que quien atiende actúa sobre la
+de otro. **Por qué no un motor de terceros:** la capacidad de procesos ya guarda los estados declarados, su
+historia y su guarda por rol. Lo que le falta (contrato publicado y tres pasos comunes: arrancar, disparar,
+leer) se construye con el molde de esta ADR (009-P2).
+
+**La transición es un dato del paso** (009-P3): el proceso y la transición —o la lista cerrada entre las que
+elige quien actúa— van como constantes en la definición del flujo, como la plantilla de un aviso; sin
+expresiones, y validadas al arrancar contra la definición del proceso. Cumple el criterio con que el lote 2
+dejó los pasos sin parámetros (lo piden cuatro verticales).
+
+**Dónde se aplica:** el trámite de Gobierno (009). La devolución de la tienda (004-P1), el embudo del lead de
+Propiedades (008-P2) y la renovación de una receta de Salud se reabren con esta regla cuando sus líneas lleguen
+ahí. Queda en pie el otro disparador de la fila de terceros: los eventos asíncronos entre capacidades.
 
 ## Relación con otras ADRs
 
