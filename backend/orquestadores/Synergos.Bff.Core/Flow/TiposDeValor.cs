@@ -72,6 +72,7 @@ public sealed class TiposDeValor
     public static IReadOnlyList<ITipoDeValor> Comunes { get; } =
     [
         new Texto(), new Entero(), new NumeroDecimal(), new Booleano(), new Instante(), new TipoRef(), new Dinero(), new Ventana(),
+        new Fecha(),
     ];
 
     /// <summary>Un registro con los comunes y <paramref name="mas"/>.</summary>
@@ -331,6 +332,33 @@ public sealed partial class Instante : ITipoDeValor
     public JsonNode Escribir(object valor) => JsonValue.Create(((DateTimeOffset)valor).ToString("O", CultureInfo.InvariantCulture))!;
 
     public JsonObject Esquema() => new() { ["type"] = "string", ["format"] = "date-time" };
+}
+
+/// <summary><c>fecha</c>: un día del calendario, <c>AAAA-MM-DD</c> (núcleo N3, NE-10 de 007).</summary>
+/// <remarks>
+/// Un día y no un instante: la fecha de un evento o de una oferta no tiene hora ni huso, y leerla como
+/// instante la correría de día según el servidor. Sólo la forma ISO exacta: «15/10/2026» se lee distinto en
+/// cada cultura, y una fecha con hora es otro tipo.
+/// </remarks>
+public sealed class Fecha : ITipoDeValor
+{
+    public string Nombre => "fecha";
+    public Type Clr => typeof(DateOnly);
+    public bool Guardable => true;
+
+    public object Leer(JsonElement valor, string donde)
+    {
+        if (valor.ValueKind == JsonValueKind.String
+            && DateOnly.TryParseExact(valor.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
+        {
+            return fecha;
+        }
+        throw Json.Mal(donde, "una fecha AAAA-MM-DD");
+    }
+
+    public JsonNode Escribir(object valor) => JsonValue.Create(((DateOnly)valor).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))!;
+
+    public JsonObject Esquema() => new() { ["type"] = "string", ["format"] = "date" };
 }
 
 /// <summary><c>ref</c>: <c>{ kind, id }</c>, las dos partes no vacías.</summary>
