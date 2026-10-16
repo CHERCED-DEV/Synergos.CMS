@@ -34,6 +34,11 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     private static readonly Regex PintaEventos = new(@"PartialAsync\(\s*""SynHost/Eventos""", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Comentarios = new(@"@\*.*?\*@|<!--.*?-->", RegexOptions.CultureInvariant | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
 
+    /// <summary>La clave elegida por el editor (núcleo N3): <c>var x = Colocables.Elegir(…, porDefecto: "clave");</c>.</summary>
+    private static readonly Regex Elegida = new(
+        @"var\s+(?<var>\w+)\s*=\s*Colocables\.Elegir\([^;]*?porDefecto:\s*""(?<clave>[^""]+)""\s*\)\s*;",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     private const string FlujoDeEventos = "eventos.compra";
 
     /// <summary>Lo que lee el participante (<c>AVISOS_DE_LOS_FLUJOS</c> en <c>vitals/core/src/flujos/avisos.ts</c> del UI).</summary>
@@ -45,7 +50,7 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
         var tabla = TablaDeLaPuerta.Incrustada();
         var abiertos = FlujosAbiertos();
         var colocados = Vistas()
-            .SelectMany(v => Coordinador.Matches(v.Texto).Select(m => (v.Ruta, Atributos: m.Groups[1].Value)))
+            .SelectMany(v => Coordinador.Matches(v.Texto).Select(m => (v.Ruta, v.Texto, Atributos: m.Groups[1].Value)))
             .ToList();
 
         Assert.True(colocados.Count > 0,
@@ -53,12 +58,12 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             + "dejó de envolverse y su compra ya no encuentra a quién pedirle (ADR 0140 F4).");
 
         var malos = new List<string>();
-        foreach (var (ruta, atributos) in colocados)
+        foreach (var (ruta, texto, atributos) in colocados)
         {
-            var clave = Clave.Match(atributos) is { Success: true } m ? m.Groups[1].Value : null;
-            if (string.IsNullOrEmpty(clave))
+            var clave = ClaveColocada(texto, atributos, out var porque);
+            if (clave is null)
             {
-                malos.Add($"{ruta}: <synergos-flujo> sin flujo=\"…\"");
+                malos.Add($"{ruta}: {porque}");
                 continue;
             }
             if (tabla.DelFlujo(clave).Count == 0)
@@ -99,7 +104,7 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
                 var abre = antes.LastIndexOf("<synergos-flujo", StringComparison.Ordinal);
                 var cierraAntes = antes.LastIndexOf("</synergos-flujo>", StringComparison.Ordinal);
                 var dentro = abre >= 0 && abre > cierraAntes
-                    && Clave.Match(Coordinador.Match(texto, abre).Groups[1].Value).Groups[1].Value == FlujoDeEventos
+                    && ClaveColocada(texto, Coordinador.Match(texto, abre).Groups[1].Value, out _) == FlujoDeEventos
                     && texto.IndexOf("</synergos-flujo>", llamada.Index, StringComparison.Ordinal) >= 0;
                 if (!dentro) fuera.Add(ruta);
             }
@@ -133,6 +138,70 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     public void El_camino_de_compra_pregunta_por_el_flujo_que_coloca_la_vista()
     {
         Assert.Equal(FlujoDeEventos, Synergos.CMS.Web.Services.SynHost.EventosResolutor.FlujoDeLaCompra);
+    }
+
+    /// <summary>
+    /// La colocación por declaración del editor (núcleo N3, FR-033): lo que el desplegable ofrece es la lista
+    /// cerrada —cada opción la expone la puerta y el sitio la declara—, y cada vista que deja elegir lee una
+    /// propiedad que su bloque tiene, por <c>compFlujo</c>.
+    /// </summary>
+    [Fact]
+    public void Lo_que_elige_el_editor_es_de_la_lista_cerrada_y_su_bloque_tiene_la_propiedad()
+    {
+        var uSync = Path.Combine(RepoRoot(), "Synergos.CMS.Web", "uSync", "v9");
+        var tabla = TablaDeLaPuerta.Incrustada();
+        var abiertos = FlujosAbiertos();
+
+        var config = System.Xml.Linq.XDocument.Load(Path.Combine(uSync, "DataTypes", "DTSelectFlujo.config"));
+        using var opciones = JsonDocument.Parse(config.Root!.Element("Config")!.Value);
+        var valores = opciones.RootElement.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("value").GetString()!).ToList();
+        Assert.NotEmpty(valores);
+        foreach (var valor in valores)
+        {
+            Assert.True(tabla.DelFlujo(valor).Count > 0 && abiertos.Contains(valor),
+                $"DTSelectFlujo ofrece «{valor}», que la puerta no expone o appsettings.json no declara: el editor elegiría un flujo que la vista descartaría.");
+        }
+
+        var composicion = System.Xml.Linq.XDocument.Load(Path.Combine(uSync, "ContentTypes", "compflujo.config"));
+        var propiedad = composicion.Descendants("GenericProperty").Single(p => (string?)p.Element("Alias") == "flujo");
+        Assert.Equal((string?)config.Root.Attribute("Key"), (string?)propiedad.Element("Definition"));
+        var clave = (string?)composicion.Root!.Attribute("Key");
+
+        var eligen = Vistas().Where(v => Elegida.IsMatch(v.Texto)).ToList();
+        Assert.NotEmpty(eligen);
+        foreach (var (ruta, _) in eligen)
+        {
+            var elemento = Path.Combine(uSync, "ContentTypes", Path.GetFileNameWithoutExtension(ruta).ToLowerInvariant() + ".config");
+            Assert.True(File.Exists(elemento), $"{ruta} deja elegir el flujo y no se encontró su bloque en uSync ({elemento}).");
+            var compone = System.Xml.Linq.XDocument.Load(elemento).Descendants("Composition").Any(c => (string?)c.Attribute("Key") == clave);
+            Assert.True(compone, $"{ruta} lee la propiedad «flujo» y su bloque no compone compFlujo: el editor no tendría dónde elegir.");
+        }
+    }
+
+    /// <summary>
+    /// La clave que coloca un <c>&lt;synergos-flujo&gt;</c>: el literal del atributo, o —si el atributo es una
+    /// variable— el por defecto de la <c>Colocables.Elegir</c> que la asigna. Cualquier otra expresión no sale
+    /// de la lista cerrada, y es un defecto.
+    /// </summary>
+    private static string? ClaveColocada(string texto, string atributos, out string porque)
+    {
+        porque = string.Empty;
+        var valor = Clave.Match(atributos) is { Success: true } m ? m.Groups[1].Value : null;
+        if (string.IsNullOrEmpty(valor))
+        {
+            porque = "<synergos-flujo> sin flujo=\"…\"";
+            return null;
+        }
+        if (!valor.StartsWith('@')) return valor;
+
+        var variable = valor.TrimStart('@').Trim('(', ')');
+        var asignada = Elegida.Matches(texto).FirstOrDefault(x => x.Groups["var"].Value == variable);
+        if (asignada is null)
+        {
+            porque = $"<synergos-flujo flujo=\"{valor}\">: la clave no sale de Colocables.Elegir(…, porDefecto: \"…\"), la lista cerrada";
+            return null;
+        }
+        return asignada.Groups["clave"].Value;
     }
 
     /// <summary>Las vistas, sin sus comentarios de Razor ni de HTML: lo que se nombra en un comentario no se coloca.</summary>
