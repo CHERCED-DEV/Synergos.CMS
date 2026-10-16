@@ -56,6 +56,7 @@ public static class FlowValidator
 
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
+        RevisarConservadas(flujo, registro, errores);
         RevisarOmitirSiCero(flujo, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
@@ -420,6 +421,42 @@ public static class FlowValidator
             {
                 errores.Add($"{aqui} y va antes del último cierre de «{flujo.Fases[ultima].Nombre}»: seguir "
                     + "completaría la saga con una reserva sin consumir.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lo que se cierra sin consumir (P7 = A, <c>payments.conservar</c>): queda vivo fuera de la saga, así que tiene
+    /// que verse.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin <c>despues</c></b>: lo conservado no se consumió. Un <c>despues</c> diría que, una vez cerrado, se
+    /// deshace distinto, y es justo lo que un cierre que conserva no hace.</para>
+    ///
+    /// <para><b>Con su id en la salida</b>: una garantía retenida que nadie sabe cuál es no la liquida nadie. El id es
+    /// lo primero que escribe el paso que reserva, y fuera de un bloque: dentro, cada ítem escribe el suyo y la salida
+    /// no puede nombrarlos.</para>
+    /// </remarks>
+    private static void RevisarConservadas(FlujoDef flujo, IRegistroDePasos registro, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => p.CierraReserva is not null).OrderBy(p => p.Id, StringComparer.Ordinal))
+        {
+            if (registro.Para(paso.Tipo) is not { Conserva: true }
+                || !flujo.Pasos.TryGetValue(paso.CierraReserva!, out var reservante) || reservante.Reserva is not { } reserva)
+            {
+                continue;
+            }
+
+            var aqui = $"«{paso.Id}» conserva la reserva de «{reservante.Id}»";
+            if (reserva.Despues is { } despues)
+            {
+                errores.Add($"{aqui}, que declara «despues: {despues}»: lo conservado no se consume, y después de "
+                    + "completar lo resuelve la operación posterior.");
+            }
+            if (reservante.Escribe.Count == 0 || !flujo.LoQueSale.Contains(reservante.Escribe[0], StringComparer.Ordinal))
+            {
+                errores.Add($"{aqui} y su id no sale en la salida: lo reservado queda vivo fuera de la saga, y nadie "
+                    + "sabría cuál liquidar.");
             }
         }
     }

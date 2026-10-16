@@ -75,7 +75,7 @@ public static class PasosComunes
             new PasoCotizacion(puertos), new PasoCotizacionSinCodigo(puertos), new PasoCotizacionOCero(puertos), new PasoDesglose(),
             new PasoPreciosPorLinea(),
             new PasoInventarioHallar(puertos), new PasoInventarioApartar(puertos), new PasoInventarioConsumir(puertos),
-            new PasoPagosAutorizar(puertos), new PasoPagosCapturar(puertos),
+            new PasoPagosAutorizar(puertos), new PasoPagosCapturar(puertos), new PasoPagosConservar(),
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),

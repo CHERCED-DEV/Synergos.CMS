@@ -178,7 +178,14 @@ public sealed class HostDeFlujosTests
 
         public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
             => (await Ok("bh-1", $"apartar {recurso} {llave.Value}")).Map(id => new Apartado(id, VenceElApartado));
-        public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Ok("rv-1", $"confirmar {apartado}");
+
+        /// <summary>Si está, confirmar en la agenda se rechaza: el apartado venció.</summary>
+        public bool RechazaConfirmar { get; set; }
+
+        public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct)
+            => RechazaConfirmar
+                ? Task.FromResult(Result.Rejected<string>(Rejection.Conflict("booking.hold_expired", "guionado")))
+                : Ok("rv-1", $"confirmar {apartado}");
 
         /// <summary>Dos franjas desde <c>desde</c>: una libre y una llena, para la lectura de disponibilidad (NB-3).</summary>
         public Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
@@ -292,7 +299,7 @@ public sealed class HostDeFlujosTests
                 new PasoPagosCapturar(Puertos), new PasoAvisar(Puertos),
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
-                new PasoAgendaFranjas(Puertos),
+                new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
             ]);
             Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto(), new TipoFranjas()), Registro, deshacer.Tipos);
         }
@@ -747,6 +754,76 @@ public sealed class HostDeFlujosTests
         Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
         Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.EndsWith("|deposit", StringComparison.Ordinal));
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("autorizar", StringComparison.Ordinal));
+    }
+
+    // ── La garantía que sobrevive al cierre (P7 = A, NN-4 de 005): payments.conservar ──────────
+
+    /// <summary>
+    /// La renta con el paso común: la garantía se conserva ANTES de confirmar las unidades, a propósito. Con un cierre
+    /// sin <c>despues</c> cualquiera, que confirmar fallara dejaría la garantía retenida sin dueño.
+    /// </summary>
+    private static readonly string RentaConservada = MutarRenta(
+        "\"conservar\": { \"tipo\": \"prueba.conservar\"", "\"conservar\": { \"tipo\": \"payments.conservar\"");
+
+    private static string MutarRenta(string antes, string despues, string? base_ = null)
+    {
+        var de = base_ ?? Renta;
+        Assert.True(de.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la renta ya no dice «{antes}». Revisar este test antes que el host.");
+        return de.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_queda_viva_fuera_de_la_saga_con_su_id_en_la_salida()
+    {
+        using var banco = new Banco(RentaConservada);
+        Assert.Empty(banco.Errores());
+        banco.Puertos.CobroPorLlave["deposit"] = "pg-garantia";
+        banco.Puertos.CobroPorLlave["rental"] = "pg-renta";
+        var fachada = banco.Fachada();
+
+        Assert.True((await fachada.AbrirAsync("renta-1", Paciente, EntradaDeRenta(1, 300_000m), CancellationToken.None)).IsOk);
+        var cerrada = await fachada.ContinuarAsync("cerrar", "renta-1", Paciente, new FlowContext(), CancellationToken.None);
+
+        Assert.True(cerrada.IsOk, cerrada.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
+        Assert.DoesNotContain(cerrada.Value.Compensations, c => c.IsPending);
+        Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.Contains("pg-garantia", StringComparison.Ordinal));
+        Assert.Equal("pg-garantia", cerrada.Value.Datos["garantiaId"].Valor!.Value.GetString());
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_antes_de_confirmar_se_anula_si_confirmar_falla()
+    {
+        using var banco = new Banco(RentaConservada);
+        banco.Puertos.CobroPorLlave["deposit"] = "pg-garantia";
+        banco.Puertos.CobroPorLlave["rental"] = "pg-renta";
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("renta-1", Paciente, EntradaDeRenta(1, 300_000m), CancellationToken.None)).IsOk);
+        banco.Puertos.RechazaConfirmar = true;
+
+        var r = await fachada.ContinuarAsync("cerrar", "renta-1", Paciente, new FlowContext(), CancellationToken.None);
+
+        Assert.Equal("booking.hold_expired", r.Rejection?.Code);
+        Assert.Contains("devolver pg-renta", banco.Puertos.Llamadas);
+        Assert.Contains("anular pg-garantia", banco.Puertos.Llamadas);
+        Assert.Contains("liberar bh-1", banco.Puertos.Llamadas);
+        Assert.Equal(SagaStatus.Compensated, banco.Motor.Find("renta-1")!.Status);
+    }
+
+    [Theory]
+    [InlineData("\"consumado_por\": \"conservar\", \"antes\": \"payments.anular\" }",
+        "\"consumado_por\": \"conservar\", \"antes\": \"payments.anular\", \"despues\": \"payments.devolver\" }",
+        "«conservar» conserva la reserva de «deposito», que declara «despues: payments.devolver»")]
+    [InlineData("\"salida\": [\"total\", \"garantia\", \"garantiaId\", \"cobroId\"]",
+        "\"salida\": [\"total\", \"garantia\", \"cobroId\"]",
+        "«conservar» conserva la reserva de «deposito» y su id no sale en la salida")]
+    public void Lo_que_se_conserva_no_declara_despues_y_su_id_sale_en_la_salida(string antes, string despues, string mensaje)
+    {
+        using (var control = new Banco(RentaConservada)) Assert.Empty(control.Errores());
+        using var banco = new Banco(MutarRenta(antes, despues, RentaConservada));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
     }
 
     // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────

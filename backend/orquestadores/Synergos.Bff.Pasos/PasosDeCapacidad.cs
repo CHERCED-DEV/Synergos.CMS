@@ -141,6 +141,34 @@ public sealed class PasoPagosCapturar(IPaymentsPort pagos) : IPaso
 }
 
 /// <summary>
+/// <c>payments.conservar</c>: lee el cobro y CIERRA su reserva sin capturarlo (núcleo, P7 = A del lote 6, NN-4 de 005).
+/// </summary>
+/// <remarks>
+/// <para><b>No llama a nada.</b> La autorización sigue viva en <c>Api.Payments</c>, con su id en la salida del
+/// flujo, y la resuelve la operación posterior: capturar una parte y devolver el resto, o anularla.</para>
+///
+/// <para><b>Hasta completar, deshacer la saga la sigue anulando</b> (<see cref="IPaso.Conserva"/>): el intérprete no le
+/// cambia la compensación, así que da igual en qué lugar de la fase vaya. Es lo que <c>alquiler.conservar-garantia</c>
+/// conseguía yendo al final.</para>
+/// </remarks>
+public sealed class PasoPagosConservar : IPaso
+{
+    public string Tipo => "payments.conservar";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+    public int Lecturas => 1;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool Conserva => true;
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entrada.Lee<string>(0));
+        return Task.FromResult(SalidaDePaso.Sigue());
+    }
+}
+
+/// <summary>
 /// <c>notifications.avisar</c>: lee a quién, adónde y cuánto, y avisa con la plantilla que declara.
 /// </summary>
 /// <remarks>

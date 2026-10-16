@@ -67,6 +67,21 @@ public interface IPaso
     bool UsaProposito => false;
 
     /// <summary>
+    /// Si cierra la reserva que nombra SIN consumirla (núcleo, P7 = A del lote 6, NN-4 de 005): lo reservado sobrevive
+    /// al cierre, como la garantía de un alquiler, que se resuelve días después. Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Cerrar así no cambia la compensación.</b> Mientras la saga no se complete, deshacerla sigue anulando
+    /// lo reservado: si un paso posterior de la misma fase falla, la garantía no queda retenida sin dueño. Completar
+    /// la marca hecha, como a todo lo armado, y entonces vive fuera de la saga.</para>
+    ///
+    /// <para><b>Lo que queda vivo se ve</b>: el validador exige que el id de lo reservado salga en la salida, para que
+    /// la operación posterior que lo liquida (P6) sepa cuál es, y que la reserva no declare <c>despues</c>: lo
+    /// conservado no se consumió.</para>
+    /// </remarks>
+    bool Conserva => false;
+
+    /// <summary>
     /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
     /// declara (por defecto).
     /// </summary>

@@ -501,7 +501,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         if (definicion.Reserva is { } reserva) Reservar(corrida, definicion, reserva, salida, item);
         if (definicion.CierraReserva is { } cerrada)
         {
-            CerrarReserva(corrida, cerrada, _flujo.Pasos[cerrada].Reserva!, item, salida.Cerrado);
+            CerrarReserva(corrida, cerrada, _flujo.Pasos[cerrada].Reserva!, item, salida.Cerrado, paso.Conserva);
         }
 
         return new Desenlace(salida.Control, null, null);
@@ -569,8 +569,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// capturada no se puede, devolverla sí. La de después apunta a lo que el cierre produjo, o al
     /// objetivo anotado al reservar —el pozo, porque el apartado consumido ya no existe—. Sin
     /// <c>despues</c>, consumir deja la compensación hecha.
+    ///
+    /// Un cierre que CONSERVA (<see cref="IPaso.Conserva"/>, P7) no la toca: lo conservado no se consumió, así que
+    /// deshacer la saga antes de completarla lo sigue anulando, y completar la marca hecha como a todo lo armado.
     /// </remarks>
-    private void CerrarReserva(Corrida corrida, string reservante, ReservaDef reserva, FlowContext? item, string? objetivo)
+    private void CerrarReserva(
+        Corrida corrida, string reservante, ReservaDef reserva, FlowContext? item, string? objetivo, bool conserva)
     {
         var saga = corrida.Saga!;
         var cerrada = item is not null
@@ -578,7 +582,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             : Ledger(corrida).Legs(reservante).Single();
         DateTimeOffset? ahora = reserva.Despues is null ? _reloj.GetUtcNow() : null;
 
-        var cambiada = saga.WithCompensations(saga.Compensations
+        var cambiada = conserva ? saga : saga.WithCompensations(saga.Compensations
             .Select(c => c.Kind == reserva.Antes && c.IsPending && c.TargetId == cerrada.HoldId
                 ? reserva.Despues is { } despues
                     ? c with { Kind = despues, TargetId = objetivo ?? cerrada.CloseTargetId }
