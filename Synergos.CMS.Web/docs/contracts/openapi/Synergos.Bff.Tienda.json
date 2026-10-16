@@ -558,7 +558,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TiendaCompraEntrada"
+                "$ref": "#/components/schemas/TiendaCompraCerrarEntrada"
               }
             }
           },
@@ -2000,6 +2000,57 @@
           }
         }
       },
+      "TiendaCompraCerrarEntrada": {
+        "required": [
+          "direccion"
+        ],
+        "type": "object",
+        "properties": {
+          "direccion": {
+            "required": [
+              "linea1",
+              "ciudad",
+              "pais"
+            ],
+            "type": "object",
+            "properties": {
+              "linea1": {
+                "type": "string"
+              },
+              "linea2": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "ciudad": {
+                "type": "string"
+              },
+              "region": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "codigoPostal": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "pais": {
+                "type": "string"
+              },
+              "contacto": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
+          }
+        }
+      },
       "TiendaCompraCotizacion": {
         "required": [
           "flujo",
@@ -2182,52 +2233,49 @@
       },
       "TiendaCompraEntrada": {
         "required": [
-          "direccion"
+          "lineas"
         ],
         "type": "object",
         "properties": {
-          "direccion": {
-            "required": [
-              "linea1",
-              "ciudad",
-              "pais"
-            ],
-            "type": "object",
-            "properties": {
-              "linea1": {
-                "type": "string"
-              },
-              "linea2": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "ciudad": {
-                "type": "string"
-              },
-              "region": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "codigoPostal": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "pais": {
-                "type": "string"
-              },
-              "contacto": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+          "lineas": {
+            "type": "array",
+            "items": {
+              "required": [
+                "producto",
+                "cantidad"
+              ],
+              "type": "object",
+              "properties": {
+                "producto": {
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "tienda.producto"
+                      ],
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "cantidad": {
+                  "type": "integer",
+                  "format": "int32"
+                }
               }
             }
+          },
+          "promocion": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

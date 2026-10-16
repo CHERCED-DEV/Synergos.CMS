@@ -102,6 +102,25 @@ public sealed class HostDeFlujosTests
         }
         """;
 
+    /// <summary>
+    /// La forma de la oferta de 007 (NE-10, núcleo N3): UNA fase, sin reservas, que termina completada; un
+    /// sujeto que no es un comprador, una <c>fecha</c> y una lista de ítems con sus campos.
+    /// </summary>
+    private const string Oferta = """
+        {
+          "clave": "prueba.oferta",
+          "entrada": ["quien", "dia", "funciones"],
+          "tipos": {
+            "quien": { "de": "sujeto" },
+            "dia": "fecha",
+            "funciones": { "lista": { "sala": "texto", "aforo": "entero" } }
+          },
+          "salida": ["dia", "cuantas"],
+          "fases": { "abrir": ["resumir"] },
+          "pasos": { "resumir": { "tipo": "prueba.resumir", "lee": ["dia", "funciones"], "escribe": ["cuantas"] } }
+        }
+        """;
+
     private static readonly Ref Paciente = Ref.Create("prueba.paciente", "u-1");
     private static readonly TimeWindow Hora = TimeWindow.Of(
         new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 20, 15, 30, 0, TimeSpan.Zero));
@@ -193,6 +212,22 @@ public sealed class HostDeFlujosTests
         public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct) => Task.FromResult(SalidaDePaso.Sigue());
     }
 
+    /// <summary><c>prueba.resumir</c>: cuántas funciones trae la oferta de ese día (un paso de dominio sin capacidad).</summary>
+    private sealed class PasoResumir : IPaso
+    {
+        public string Tipo => "prueba.resumir";
+        public int Lecturas => 2;
+        public int Escrituras => 1;
+        public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+        public IReadOnlyList<Type> TiposDeEscritura => [typeof(int)];
+
+        public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+        {
+            _ = entrada.Lee<DateOnly>(0);
+            return Task.FromResult(SalidaDePaso.Sigue(entrada.Lee<IReadOnlyList<FlowContext>>(1).Count));
+        }
+    }
+
     private static FlowContext EntradaDeRenta(int unidades, decimal garantia) => new FlowContext()
         .Set("inquilino", Paciente).Set("equipo", Ref.Create("prueba.equipo", "andamio")).Set("ventana", Hora)
         .Set("unidades", unidades).Set("garantia", Money.Of(garantia, "COP"));
@@ -215,7 +250,7 @@ public sealed class HostDeFlujosTests
                 new PasoAgendaApartar(Puertos), new PasoAgendaConfirmar(Puertos), new PasoPagosAutorizar(Puertos),
                 new PasoPagosCapturar(Puertos), new PasoAvisar(Puertos),
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
-                new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos),
+                new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
             ]);
             Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto()), Registro, deshacer.Tipos);
         }
@@ -517,6 +552,31 @@ public sealed class HostDeFlujosTests
         Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
         Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.EndsWith("|deposit", StringComparison.Ordinal));
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("autorizar", StringComparison.Ordinal));
+    }
+
+    // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────
+
+    [Fact]
+    public async Task Un_flujo_de_una_fase_sin_reservas_abre_y_queda_completado()
+    {
+        using var banco = new Banco(Oferta);
+        Assert.Empty(banco.Errores());
+        IReadOnlyList<FlowContext> funciones =
+        [
+            new FlowContext().Set("sala", "A").Set("aforo", 100),
+            new FlowContext().Set("sala", "B").Set("aforo", 50),
+        ];
+
+        var r = await banco.Fachada().AbrirAsync("oferta-1", Paciente,
+            new FlowContext().Set("quien", Paciente).Set("dia", new DateOnly(2026, 10, 20)).Set("funciones", funciones),
+            CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Empty(r.Value.Compensations);
+        Assert.Equal(2, r.Value.Datos["cuantas"].Valor!.Value.GetInt32());
+        Assert.Equal("2026-10-20", r.Value.Datos["dia"].Valor!.Value.GetString());
+        Assert.Empty(banco.Puertos.Llamadas);
     }
 
     // ── La clase de una referencia del cuerpo (NR-1 de 008): un dato de la definición ──────────

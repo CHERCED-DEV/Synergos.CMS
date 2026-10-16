@@ -72,6 +72,16 @@ public sealed class ContratoSynHostTests
                 ("selectedValue", "co"),
                 ("searchable", true),
             },
+            // 011-booking-reserva: el servicio sale de la ficha reservable que elige el editor.
+            ["reserva"] = new (string, object?)[]
+            {
+                ("heading", "Reserva tu cita"),
+                ("subheading", "Elige el día y la hora"),
+                ("servicio", ElementoFalso.Ficha(Guid.Parse("51e3c7f8-96f8-4458-a650-5adec6126174"), "Masaje terapéutico · 60 min",
+                    ("reservable", true), ("duracionMinutos", 60), ("diasDeAtencion", new[] { "lunes", "miércoles", "viernes" }),
+                    ("abre", "08:00"), ("cierra", "18:00"))),
+                ("enlaceAlternativo", ElementoFalso.Enlace("/booking/reservar/", "Escríbenos")),
+            },
             // La configuración de negocio no es del editor: sale de NegocioBase (ADR 0137).
             ["eventos"] = new (string, object?)[]
             {
@@ -893,6 +903,9 @@ public sealed class ContratoSynHostTests
     private static ServiceProvider Proveedor()
         => FuentesDeMuestra(ConNegocioBase(new ServiceCollection()))
             .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
+            .AddSingleton(Substitute.For<Umbraco.Cms.Core.Web.IUmbracoContextAccessor>())
+            .Configure<Synergos.CMS.Application.Configuration.PuertaSettings>(_ => { })
+            .AddSingleton<ICaminoDeLosFlujos, Synergos.CMS.Web.Services.Puerta.CaminoDeLosFlujos>()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())

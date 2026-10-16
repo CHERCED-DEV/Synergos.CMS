@@ -1,0 +1,30 @@
+{
+  "queEsEsto": [
+    "Vectores de oro del seudónimo de una persona (núcleo N3, NE-9 de 007). Los ejecutan las",
+    "implementaciones de los dos árboles: la del CMS (`SeudonimoDePersona.De`, con la que la puerta pone el",
+    "sujeto de un flujo con SujetoDe «correo») y la de cada orquestador que derive el mismo sujeto de un",
+    "correo que escribe alguien (Eventos, al transferir una credencial). No es documentación: es el",
+    "fixture que hace que «el CMS y el orquestador dan el mismo seudónimo» sea un hecho comprobado.",
+    "",
+    "POR QUÉ EXISTE. El CMS (net8) y los orquestadores (net10) no comparten código: son árboles",
+    "disjuntos. La función queda escrita dos veces, y dos copias se desvían sin que nada falle. El",
+    "destinatario de una transferencia no encontraría lo que le dieron.",
+    "",
+    "LA REGLA. seudónimo = los primeros 16 hexadecimales, en minúsculas, de SHA-256 del correo en UTF-8,",
+    "sin espacios alrededor y en minúsculas (invariante). Un correo vacío o nulo da la huella de la",
+    "cadena vacía.",
+    "",
+    "LAS EXPECTATIVAS NO SALEN DE NINGUNA DE LAS DOS: se calcularon con el SHA-256 de Node",
+    "(node:crypto), otra implementación. Los vectores con mayúsculas, espacios y una tilde están para",
+    "que una copia que no normalice, o que normalice con la cultura del servidor, dé OTRO número."
+  ],
+  "vectores": [
+    { "nombre": "un correo", "correo": "ana@ejemplo.co", "seudonimo": "bed13d27601ec165" },
+    { "nombre": "el mismo con espacios y mayúsculas", "correo": " Ana@Ejemplo.CO ", "seudonimo": "bed13d27601ec165" },
+    { "nombre": "una tilde en mayúscula", "correo": "JOSÉ@Ejemplo.co", "seudonimo": "9a4e4c71567953a7" },
+    { "nombre": "la misma tilde en minúscula", "correo": "josé@ejemplo.co", "seudonimo": "9a4e4c71567953a7" },
+    { "nombre": "vacío", "correo": "", "seudonimo": "e3b0c44298fc1c14" },
+    { "nombre": "nulo", "correo": null, "seudonimo": "e3b0c44298fc1c14" },
+    { "nombre": "sólo espacios", "correo": "   ", "seudonimo": "e3b0c44298fc1c14" }
+  ]
+}

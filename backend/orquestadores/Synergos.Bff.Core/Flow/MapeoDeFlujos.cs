@@ -41,7 +41,9 @@ public sealed record PaginaDeFlujo<T>(IReadOnlyList<T> Items, int Total, int Off
 /// <param name="Nombre">La base de los esquemas que publica: la clave del flujo en Pascal (<c>MuestraCita</c>).</param>
 /// <param name="Cuerpo">El esquema del cuerpo, si la operación lo lleva.</param>
 /// <param name="Datos">El esquema de <c>datos</c> en la respuesta.</param>
-public sealed record ContratoDeLaOperacion(string Nombre, JsonObject? Cuerpo, JsonObject Datos);
+/// <param name="NombreDelCuerpo">Cómo se publica el cuerpo si no es la entrada del flujo: el de una fase que
+/// continúa (<c>TiendaCompraCerrarEntrada</c>). Nulo: <c>{Nombre}Entrada</c>, el de abrir y cotizar.</param>
+public sealed record ContratoDeLaOperacion(string Nombre, JsonObject? Cuerpo, JsonObject Datos, string? NombreDelCuerpo = null);
 
 /// <summary>Un flujo genérico registrado en el host: lo que el mapeo por convención necesita de él.</summary>
 public sealed record FlujoGenerico(
@@ -163,9 +165,11 @@ public static class MapeoDeFlujos
                 : app.MapPost($"/v1/flujos/{clave}/{{id}}/{fase}", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
                     string id, JsonElement cuerpo, HttpRequest http, CancellationToken ct) => await ContinuarAsync(f, fase, id, http, cuerpo, ct));
 
+            // El cuerpo de una fase que continúa es SUYO (lo efímero de esa fase), no la entrada del flujo:
+            // con el mismo nombre, el último pisaba al de abrir en el contrato publicado (N-13 de Tienda).
             continuar.WithName($"{nombre}{Pascal(fase)}")
                 .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
-                .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeFase, datos));
+                .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeFase, datos, $"{nombre}{Pascal(fase)}Entrada"));
             if (conContacto) continuar.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
             Marcar(continuar, clave, fase);
         }

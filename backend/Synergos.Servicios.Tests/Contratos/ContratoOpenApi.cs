@@ -80,6 +80,7 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Fulfillment.Contracts.ShipmentResponse>("Fulfillment"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
         new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
+        new PiezaPublicada<Synergos.Bff.Reservas.Contracts.OfertaDeServicioResponse>("Reservas"),
     ];
 
     /// <summary>La pieza por el nombre de su ensamblado, que es también el del fichero.</summary>
@@ -171,11 +172,33 @@ internal static class ContratoOpenApi
     /// <c>{Flujo}Respuesta</c>, <c>{Flujo}Cotizacion</c>), que el generador del UI traduce como cualquier
     /// otro. Los genéricos que reemplazan dejan de publicarse.</para>
     /// </remarks>
-    private sealed class EsquemasDeFlujos
+    internal sealed class EsquemasDeFlujos
     {
         public Dictionary<string, OpenApiSchema> Propios { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>El cuerpo que ya se publicó con cada nombre, como JSON: dos distintos no comparten nombre.</summary>
+        private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
+
         public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "JsonElement"];
+
+        /// <summary>
+        /// El nombre con que se publica un cuerpo (N-13 de Tienda): <c>{Flujo}Entrada</c> el de abrir y cotizar, y
+        /// el suyo el de una fase que continúa. Dos cuerpos DISTINTOS con el mismo nombre no se publican: el último
+        /// pisaría al primero y el tipo generado del primero saldría con los campos del otro, con el suelo y las
+        /// sondas en verde (la misma clase de defecto que el <c>CreateSchemaReferenceId</c> de la F2).
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Si <paramref name="nombre"/> ya tiene otro cuerpo.</exception>
+        internal void RegistrarCuerpo(string nombre, JsonObject cuerpo)
+        {
+            var json = cuerpo.ToJsonString();
+            if (_cuerpos.TryGetValue(nombre, out var previo) && !string.Equals(previo, json, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Dos cuerpos distintos se publicarían como «{nombre}»: {previo} y {json}. Cada uno necesita su nombre.");
+            }
+            _cuerpos[nombre] = json;
+            Propios[nombre] = Esquema(cuerpo);
+        }
 
         public Task Operacion(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
         {
@@ -186,8 +209,8 @@ internal static class ContratoOpenApi
 
             if (contrato.Cuerpo is { } cuerpo)
             {
-                var nombre = contrato.Nombre + "Entrada";
-                Propios[nombre] = Esquema(cuerpo);
+                var nombre = contrato.NombreDelCuerpo ?? contrato.Nombre + "Entrada";
+                RegistrarCuerpo(nombre, cuerpo);
                 op.RequestBody = new OpenApiRequestBody
                 {
                     Required = true,

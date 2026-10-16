@@ -156,6 +156,8 @@ jobs:
 
       # ── 1. El «servidor» ────────────────────────────────────────────────
       - name: Preparar /opt/synergos como lo deja el despliegue
+        env:
+          ANTERIOR: ${{ steps.etiquetas.outputs.anterior }}
         run: |
           set -euo pipefail
           sudo install -d -o "$USER" -g "$USER" -m 755 "$SYNERGOS_DIR"
@@ -173,6 +175,14 @@ jobs:
           # shellcheck disable=SC2086
           cp $LISTA "$SYNERGOS_DIR/"
           chmod +x "$SYNERGOS_DIR"/*.sh
+
+          # El servidor de verdad tuvo en pie la versión anterior, y `deploy-remoto.sh`
+          # le guardó los ficheros con que la puso —los del commit de ESA versión—:
+          # el destino de la vuelta atrás. Se ponen los mismos, sacados de la historia.
+          install -d "$SYNERGOS_DIR/versiones/$ANTERIOR"
+          git show "$ANTERIOR:compose.prod.yml" > "$SYNERGOS_DIR/versiones/$ANTERIOR/compose.prod.yml"
+          git show "$ANTERIOR:Caddyfile" > "$SYNERGOS_DIR/versiones/$ANTERIOR/Caddyfile"
+          echo "| ficheros de \`${ANTERIOR:0:7}\` guardados, como en el servidor que la tuvo en pie | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
           # El `.env` que deja la preparación del servidor, más el dominio.
           bash tools/bootstrap-servidor.sh --solo-env "$SYNERGOS_DIR/.env"
@@ -381,11 +391,22 @@ jobs:
         working-directory: /opt/synergos
         env:
           ANTERIOR: ${{ steps.etiquetas.outputs.anterior }}
+          SHA: ${{ steps.etiquetas.outputs.sha }}
         run: |
           set -euo pipefail
           t=$SECONDS
           ./deploy-remoto.sh "$ANTERIOR"
-          echo "| vuelta a \`${ANTERIOR:0:7}\` | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+          # Lo que la versión nueva traía y la anterior no (la primera vez,
+          # `bff-reservas`) no puede quedar corriendo: sería una pieza de otra
+          # versión en pie, y la comprobación de etiquetas del script no la ve
+          # porque ya no es de su compose.
+          NUEVAS="$(docker ps --format '{{.Names}} {{.Image}}' | grep -F ":$SHA" || true)"
+          if [ -n "$NUEVAS" ]; then
+            echo "✗ tras volver siguen corriendo piezas de ${SHA:0:7}:"
+            echo "$NUEVAS"
+            exit 1
+          fi
+          echo "| vuelta a \`${ANTERIOR:0:7}\`, sin nada de \`${SHA:0:7}\` corriendo | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Humo público (3) — la versión anterior
         env:

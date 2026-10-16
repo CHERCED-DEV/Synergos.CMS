@@ -14,14 +14,18 @@ namespace Synergos.CMS.Interfaces;
 /// <para><b>La regla de cuál gana</b> (<see cref="Decidir"/>): lo que diga la configuración de negocio de la
 /// funcionalidad, si lo dice (con override por sitio, ADR 0137); si no, la puerta cuando ABRE el flujo —está
 /// en <c>Synergos:Puerta:Flujos</c> y su orquestador tiene destino—; si no, la directa.</para>
+///
+/// <para><b>Desde el núcleo N3 la regla es de cualquier flujo</b> (<see cref="CaminoDelFlujo"/>, y el servicio
+/// <see cref="ICaminoDeLosFlujos"/>): esto queda, con su API, como la pieza de la compra que la nombró, y
+/// delega allá.</para>
 /// </remarks>
 public static class CaminoDeCompra
 {
     /// <summary>La compra va por la puerta de los flujos, al orquestador.</summary>
-    public const string Puerta = "puerta";
+    public const string Puerta = CaminoDelFlujo.Puerta;
 
     /// <summary>La compra va por la ruta de la funcionalidad en el CMS.</summary>
-    public const string Directa = "directa";
+    public const string Directa = CaminoDelFlujo.Directa;
 
     /// <summary>
     /// El camino que gana: <paramref name="declarado"/> si la configuración lo dice; si no, la puerta cuando
@@ -30,15 +34,14 @@ public static class CaminoDeCompra
     /// <param name="declarado">El override de la configuración de negocio, ya normalizado; nulo si no hay.</param>
     /// <param name="laPuertaAbre">Si la puerta abre el flujo de la compra en este despliegue.</param>
     public static string Decidir(string? declarado, bool laPuertaAbre)
-        => declarado ?? (laPuertaAbre ? Puerta : Directa);
+        => CaminoDelFlujo.Decidir(declarado, laPuertaAbre);
 
     /// <summary>
     /// Lo que se escribió en la configuración, comparable: sin espacios y en minúsculas; vacío es nulo (no
     /// declara nada y decide la regla).
     /// </summary>
-    public static string? Normalizar(string? valor)
-        => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim().ToLowerInvariant();
+    public static string? Normalizar(string? valor) => CaminoDelFlujo.Normalizar(valor);
 
     /// <summary>Si <paramref name="camino"/> (normalizado) es uno de los dos, o nulo.</summary>
-    public static bool EsValido(string? camino) => camino is null or Puerta or Directa;
+    public static bool EsValido(string? camino) => CaminoDelFlujo.EsValido(camino);
 }

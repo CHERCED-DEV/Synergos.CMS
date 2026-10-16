@@ -1,0 +1,12 @@
+[
+  {
+    "_": "Las ofertas de los seis servicios del sitio /booking/ para la copia piloto de 011-booking-reserva: la clave, el nombre y el precio son los de su ficha (uSync Content); la duración sale del nombre (la valoración nutricional no la dice: 60 min, supuesto de la línea). Horario de lunes a viernes de 08:00 a 18:00 en Bogotá. El guion del director las publica por POST /v1/ofertas del orquestador; OfertasDelPilotoTests las publica en el arnés.",
+    "comunes": { "horario": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "desde": "08:00", "hasta": "18:00", "plazoCancelacionHoras": 24, "moneda": "COP", "zona": "America/Bogota" }
+  },
+  { "servicio": "ac898180-e618-44ba-9fc1-29cf0a2a71e6", "nombre": "Asesoría express · 30 min", "duracionMinutos": 30, "cupos": 1, "precio": 90000 },
+  { "servicio": "156beede-bf2b-447d-95a2-e89ff207a0a1", "nombre": "Auditorio · jornada", "duracionMinutos": 480, "cupos": 1, "precio": 480000 },
+  { "servicio": "4f0092ca-bf9e-468e-abf0-47bc5483103e", "nombre": "Consultoría estratégica · 60 min", "duracionMinutos": 60, "cupos": 1, "precio": 160000 },
+  { "servicio": "51e3c7f8-96f8-4458-a650-5adec6126174", "nombre": "Masaje terapéutico · 60 min", "duracionMinutos": 60, "cupos": 2, "precio": 140000 },
+  { "servicio": "678082a0-3387-4adb-9dad-2c8911387830", "nombre": "Plan nutricional · valoración", "duracionMinutos": 60, "cupos": 1, "precio": 110000 },
+  { "servicio": "5b622e11-1191-4c2a-b805-9f888bc5f87a", "nombre": "Sala de reuniones · 2 h", "duracionMinutos": 120, "cupos": 1, "precio": 120000 }
+]

@@ -449,11 +449,11 @@ public sealed class NegocioDeEventosTests
     }
 
     /// <summary>
-    /// La puerta de verdad, con los contratos incrustados: <paramref name="abierto"/> si
-    /// <c>Synergos:Puerta:Flujos</c> trae <c>eventos.compra</c>, y <paramref name="conDestino"/> si
-    /// <c>Synergos:Eventos:BaseUrl</c> le da destino al orquestador.
+    /// La puerta de verdad, con los contratos incrustados, y el camino de los flujos sobre ella:
+    /// <paramref name="abierto"/> si <c>Synergos:Puerta:Flujos</c> trae <c>eventos.compra</c>, y
+    /// <paramref name="conDestino"/> si <c>Synergos:Eventos:BaseUrl</c> le da destino al orquestador.
     /// </summary>
-    private static IPuertaDeLosFlujos Puerta(bool abierto, bool conDestino)
+    private static ICaminoDeLosFlujos Puerta(bool abierto, bool conDestino)
     {
         var ajustes = new PuertaSettings();
         if (abierto)
@@ -463,11 +463,12 @@ public sealed class NegocioDeEventosTests
 
         var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         monitor.CurrentValue.Returns(ajustes);
-        return new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? ["Eventos"] : []));
+        var puerta = new PuertaDeLosFlujos(TablaDeLaPuerta.Incrustada(), monitor, new DestinosDeLaPuerta(conDestino ? ["Eventos"] : []));
+        return new CaminoDeLosFlujos(puerta, monitor, NullLogger<CaminoDeLosFlujos>.Instance);
     }
 
-    private static EventosProps Resuelto(INegocioDelSitio<NegocioDeEventos> negocio, IPuertaDeLosFlujos puerta)
-        => new EventosResolutor(ElementoFalso.Fallback, negocio, puerta, NullLogger<EventosResolutor>.Instance)
+    private static EventosProps Resuelto(INegocioDelSitio<NegocioDeEventos> negocio, ICaminoDeLosFlujos caminos)
+        => new EventosResolutor(ElementoFalso.Fallback, negocio, caminos, NullLogger<EventosResolutor>.Instance)
             .Resolver(ElementoFalso.Con(("heading", "Cartelera"))).Props;
 
     private static StubEventTicketingService Motor(IPaymentProvider pagos, INegocioDelSitio<NegocioDeEventos>? negocio)

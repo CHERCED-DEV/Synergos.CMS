@@ -55,6 +55,16 @@ public static class LoQuePoneLaPuerta
     public static string Sujeto(string kind, Guid miembro) => $"{kind}:{miembro:n}";
 
     /// <summary>
+    /// El sujeto por el correo de la sesión (núcleo N3, NE-4 de 007): el <c>Kind</c> del flujo y el seudónimo
+    /// de ese correo, el mismo que usa el resto del CMS para una persona (<see cref="SeudonimoDePersona"/>).
+    /// </summary>
+    /// <remarks>
+    /// Para un flujo que entrega algo a quien se nombra por su correo: quien regala escribe el correo del
+    /// destinatario, y el orquestador deriva de él el mismo sujeto con que el destinatario llega aquí.
+    /// </remarks>
+    public static string SujetoPorCorreo(string kind, string correo) => $"{kind}:{SeudonimoDePersona.De(correo)}";
+
+    /// <summary>
     /// La llave que la puerta manda al orquestador: <c>pta-</c> y los primeros cuarenta hexadecimales de
     /// SHA-256 de <c>sujeto|flujo|llave del navegador</c>.
     /// </summary>
