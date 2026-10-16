@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -304,29 +305,24 @@ internal sealed class RentaDeAlquilerReal : IDisposable
     }
 
     /// <summary>
-    /// Las plantillas: la de la guardia, como la provisiona <c>tools/provisionar.plantillas.json</c>, y la del aviso
-    /// de la renta, provisional hasta T030 (que la lleva a ese fichero; entonces se lee de ahí, como hace Eventos).
+    /// Las plantillas, como las provisiona <c>tools/provisionar.plantillas.json</c>: la de la guardia y la del aviso de
+    /// la renta (T030). Leídas del fichero, el correo que se mira es el que sale en un servidor de verdad.
     /// </summary>
     private async Task Plantillas()
     {
         using var fichero = JsonDocument.Parse(File.ReadAllText(Path.Combine(Architecture.Proyectos.Raiz(), "tools", "provisionar.plantillas.json")));
-        var guardia = fichero.RootElement.EnumerateArray()
-            .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == "bff.compensacion.colgada");
-        await Post("notifications", "v1/templates", new
+        foreach (var clave in new[] { "bff.compensacion.colgada", "alquiler.renta.confirmada" })
         {
-            key = guardia.GetProperty("key").GetString(),
-            channel = guardia.GetProperty("channel").GetString(),
-            subject = guardia.GetProperty("subject").GetString(),
-            body = guardia.GetProperty("body").GetString(),
-        }, "plantilla-guardia");
-
-        await Post("notifications", "v1/templates", new
-        {
-            key = "alquiler.renta.confirmada",
-            channel = "Email",
-            subject = "Tu alquiler {numero}",
-            body = "<p>Hola {nombre}: tu alquiler {numero} en {sitio} quedó confirmado ({total}). {enlace}</p>",
-        }, "plantilla-renta");
+            var plantilla = fichero.RootElement.EnumerateArray()
+                .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == clave);
+            await Post("notifications", "v1/templates", new
+            {
+                key = clave,
+                channel = plantilla.GetProperty("channel").GetString(),
+                subject = plantilla.GetProperty("subject").GetString(),
+                body = plantilla.GetProperty("body").GetString(),
+            }, "plantilla-" + clave);
+        }
     }
 }
 
@@ -468,6 +464,49 @@ public sealed class RentaDeAlquilerRealTests
 
         var avisos = await r.Lista("notifications", "v1/deliveries?toKind=alquiler.arrendatario&toId=u-1");
         Assert.Single(avisos);
+    }
+
+    /// <summary>
+    /// El aviso de la renta (T030): UN correo por alquiler confirmado, con la plantilla de
+    /// <c>tools/provisionar.plantillas.json</c> —el número, lo cobrado, el enlace y la garantía retenida sin cobrarse—;
+    /// ninguno de más al repetir <c>cerrar</c>, y ninguno con el servicio de avisos caído, sin que el alquiler deje de
+    /// confirmarse.
+    /// </summary>
+    [Fact]
+    public async Task El_aviso_llega_una_vez_por_alquiler_y_con_el_servicio_caido_el_alquiler_se_confirma_igual()
+    {
+        using (var r = await ConOferta())
+        {
+            var (estado, cuerpo) = await r.Rentar();
+            Assert.True(estado == HttpStatusCode.OK, cuerpo.ToString());
+            await r.Sobre(Id(cuerpo), "cerrar", contacto: RentaDeAlquilerReal.Contacto());
+
+            var (asunto, html) = Correo(File.ReadAllText(Assert.Single(Directory.GetFiles(r.Buzon, "*.eml"))));
+            Assert.Equal($"Tu alquiler {cuerpo.GetProperty("numero").GetString()} está confirmado", asunto);
+            Assert.Contains("Hola Ana María", html, StringComparison.Ordinal);
+            Assert.Contains("https://sitio.ejemplo/alquiler/mis-alquileres", html, StringComparison.Ordinal);
+            Assert.Contains("retenida sin cobrarse", html, StringComparison.Ordinal);
+            Assert.Contains("420", html, StringComparison.Ordinal);
+        }
+
+        using var caido = await ConOferta(falla: x => CableQueAnota.Es(x, "POST", "^/v1/deliveries$") ? "notifications.unavailable" : null);
+        var (confirmado, renta) = await caido.Rentar();
+
+        Assert.True(confirmado == HttpStatusCode.OK, renta.ToString());
+        Assert.Equal("Completed", renta.GetProperty("estado").GetString());
+        Assert.Empty(Directory.Exists(caido.Buzon) ? Directory.GetFiles(caido.Buzon, "*.eml") : []);
+    }
+
+    /// <summary>El asunto (palabra codificada UTF-8) y el cuerpo HTML (Base64) de un <c>.eml</c> de la carpeta de recogida.</summary>
+    private static (string Asunto, string Html) Correo(string eml)
+    {
+        var corte = eml.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        var cabeceras = eml[..corte].Replace("\r\n ", " ", StringComparison.Ordinal).Replace("\r\n\t", " ", StringComparison.Ordinal);
+        var asunto = cabeceras.Split("\r\n").Single(l => l.StartsWith("Subject:", StringComparison.OrdinalIgnoreCase))["Subject:".Length..].Trim();
+        asunto = string.Concat(Regex.Matches(asunto, @"=\?utf-8\?B\?([^?]+)\?=", RegexOptions.IgnoreCase)
+            .Select(m => Encoding.UTF8.GetString(Convert.FromBase64String(m.Groups[1].Value))));
+        var html = Encoding.UTF8.GetString(Convert.FromBase64String(Regex.Replace(eml[(corte + 4)..], @"\s", string.Empty)));
+        return (asunto, html);
     }
 
     /// <summary>

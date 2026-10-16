@@ -416,4 +416,63 @@ public sealed class PlantillaDelAvisoTests
             Assert.True(f.StartsWith("Si ", StringComparison.Ordinal),
                 $"«{f}» promete «Mis entradas» sin condición, y ahí sólo están las del portador."));
     }
+
+    /// <summary>
+    /// La plantilla de la renta (línea 005, T030) usa justo los valores que el paso <c>notifications.avisar</c> manda
+    /// al final de <c>cerrar</c> en <c>alquiler.renta</c>: ni uno que no mande —la garantía no va en el correo— ni uno
+    /// que mande y no se lea.
+    /// </summary>
+    [Fact]
+    public async Task La_plantilla_de_la_renta_usa_justo_los_valores_que_manda_el_paso()
+    {
+        const string clave = "alquiler.renta.confirmada";
+        var (plantilla, valores) = await LoQueAvisaLaRenta(clave);
+
+        var relleno = NotificationRules.Fill(plantilla, valores);
+        Assert.True(relleno.IsOk, $"La plantilla «{clave}» no se rellena con lo que manda el paso: {relleno.Rejection?.Message}");
+        var sinLeer = valores.Keys
+            .Where(k => !plantilla.Subject.Contains("{" + k + "}", StringComparison.Ordinal)
+                        && !plantilla.Body.Contains("{" + k + "}", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(sinLeer.Count == 0,
+            $"El paso manda {string.Join(", ", sinLeer.Select(k => "{" + k + "}"))} y la plantilla «{clave}» no lo usa.");
+    }
+
+    /// <summary>
+    /// El correo de la renta dice que la garantía queda retenida SIN cobrarse (decisión 5 del lote 1) y no la cifra:
+    /// la cifra está en el contrato sellado del enlace, que es el comprobante.
+    /// </summary>
+    [Fact]
+    public async Task La_plantilla_de_la_renta_no_cobra_la_garantia_ni_la_cifra()
+    {
+        var (plantilla, valores) = await LoQueAvisaLaRenta("alquiler.renta.confirmada");
+
+        var relleno = NotificationRules.Fill(plantilla, valores);
+        Assert.True(relleno.IsOk, relleno.Rejection?.Message);
+        var (asunto, cuerpo) = relleno.Value;
+        var texto = Regex.Replace(cuerpo, "<[^>]+>", " ");
+
+        Assert.Contains(valores["numero"], asunto, StringComparison.Ordinal);
+        Assert.Contains("retenida sin cobrarse", texto, StringComparison.Ordinal);
+        Assert.Contains("https://sitio/alquiler/?alquiler=alq-1", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("{garantia}", plantilla.Body + plantilla.Subject, StringComparison.Ordinal);
+    }
+
+    /// <summary>Lo que el paso manda al avisar una renta, y la plantilla del fichero como la guarda la capacidad.</summary>
+    private static async Task<(Template Plantilla, IReadOnlyDictionary<string, string> Valores)> LoQueAvisaLaRenta(string clave)
+    {
+        var puerto = new PuertoQueApunta();
+        var definicion = new PasoDef("avisar", "notifications.avisar", new[] { "inquilino", "contacto", "total" },
+            Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null, clave);
+        var contexto = new FlowContext()
+            .Set("inquilino", Ref.Create("alquiler.arrendatario", "m1"))
+            .Set("contacto", new Contacto("ana@ejemplo.co", "Ana", "https://sitio/alquiler/?alquiler=alq-1", "Alquiler de prueba"))
+            .Set("total", Money.Of(210_000m, "COP"));
+
+        await new PasoAvisar(puerto).EjecutarAsync(
+            new EntradaDePaso("alq-1", Ref.Create("alquiler.renta", "alq-1"), definicion, contexto, null, null), CancellationToken.None);
+
+        Assert.Equal(clave, puerto.Plantilla);
+        return (ComoLaGuardaLaCapacidad(LaQuePide(clave)), puerto.Valores!);
+    }
 }
