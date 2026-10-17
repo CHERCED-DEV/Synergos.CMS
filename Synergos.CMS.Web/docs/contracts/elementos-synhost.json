@@ -158,10 +158,12 @@
         "Alquiler.Seal.Pending",
         "Alquiler.Seal.Unverified",
         "Alquiler.Seal.Verified",
+        "Alquiler.Staff.BadAmount",
         "Alquiler.Staff.Cancel",
         "Alquiler.Staff.Confirm",
         "Alquiler.Staff.Damage",
         "Alquiler.Staff.EmptyTitle",
+        "Alquiler.Staff.Failed",
         "Alquiler.Staff.Penalty",
         "Alquiler.Staff.Title",
         "Alquiler.Staff.Waiting"
