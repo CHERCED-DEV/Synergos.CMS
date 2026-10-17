@@ -103,6 +103,21 @@ public sealed class ArranqueDeLaRentaTests : IDisposable
             && m.Contains("«retener»", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void La_garantia_la_conserva_el_paso_comun_del_nucleo()
+    {
+        // NN-4 (lote 6, P7 = A): la reserva de la garantía la cierra payments.conservar, que el intérprete trata como un
+        // cierre que conserva, y ya no una salida propia que tenía que ir al final de «cerrar».
+        var conservar = LaRenta()["pasos"]!["conservar"]!;
+        Assert.Equal("payments.conservar", (string?)conservar["tipo"]);
+        Assert.Equal("retener", (string?)conservar["cierra_reserva"]);
+
+        using var fabrica = Orquestador(new Testigo());
+        var registro = fabrica.Services.GetRequiredService<IRegistroDePasos>();
+        Assert.True(registro.Para("payments.conservar") is { Conserva: true });
+        Assert.DoesNotContain(registro.Tipos, t => t.StartsWith("alquiler.conservar", StringComparison.Ordinal));
+    }
+
     private static IEnumerable<string> Mensajes(Exception? ex)
     {
         for (; ex is not null; ex = ex.InnerException) yield return ex.Message;

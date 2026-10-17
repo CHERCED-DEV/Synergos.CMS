@@ -114,7 +114,7 @@
     },
     "anotar": { "tipo": "alquiler.anotar", "lee": ["inquilino"] },
     "conservar": {
-      "tipo": "alquiler.conservar-garantia",
+      "tipo": "payments.conservar",
       "lee": ["garantiaId"],
       "cierra_reserva": "retener",
       "motivo": "no se pudo dejar retenida la garantía"

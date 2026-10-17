@@ -77,8 +77,8 @@ if (declarado)
 {
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
-    // El tramo (la regla del alquiler) y las salidas propias —la garantía (NN-4) y el índice por dueño (NN-7)—,
-    // provisionales hasta el núcleo.
+    // El tramo (la regla del alquiler) y la salida propia —el índice por dueño (NN-7)—, provisional hasta el núcleo.
+    // La garantía se conserva con el paso común (payments.conservar, NN-4).
     var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
     builder.Services.AddSingleton<AlquileresDeLaPuerta>();
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
