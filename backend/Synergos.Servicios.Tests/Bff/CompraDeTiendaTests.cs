@@ -212,6 +212,21 @@ internal sealed class CompraDeTiendaReal : IDisposable
         => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/tienda.compra/{id}/cancelar", sujeto));
 
     /// <summary>
+    /// Devolver parte de una compra (US 7): el flujo posterior <c>tienda.devolucion</c>, del personal —el sujeto es
+    /// quien devuelve, no quien compró—, como lo abre la puerta del CMS al llegar la RMA a «reembolsada».
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(string compra, object monto, string llave, string personal = "staff-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/tienda.devolucion") { Content = JsonContent.Create(new { compra, monto }) };
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"tienda.personal:{personal}");
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion);
+    }
+
+    /// <summary>Un monto en el cuerpo, como lo lee el tipo <c>dinero</c>.</summary>
+    public static object Pesos(decimal monto, string moneda = "COP") => new { amount = monto, currency = moneda };
+
+    /// <summary>
     /// Una promoción publicada en Pricing, como la crearía quien opera el sitio: <c>Percentage</c> en puntos básicos
     /// (1000 = 10 %) o <c>Fixed</c> en pesos.
     /// </summary>

@@ -24,14 +24,18 @@ public sealed class OrdenesConLasDeLaPuerta : IShopOrderService
     private readonly LibroDeComprasDeLaPuerta _libro;
     private readonly RegistroDeComprasDeLaTienda _registro;
     private readonly ILogger<OrdenesConLasDeLaPuerta> _log;
+    private readonly DevolucionesDeLaPuerta? _devoluciones;
 
+    /// <param name="devoluciones">Por dónde vuelve la plata de una compra de la puerta (US 7); sin ella, no vuelve.</param>
     public OrdenesConLasDeLaPuerta(
-        IShopOrderService motor, LibroDeComprasDeLaPuerta libro, RegistroDeComprasDeLaTienda registro, ILogger<OrdenesConLasDeLaPuerta> log)
+        IShopOrderService motor, LibroDeComprasDeLaPuerta libro, RegistroDeComprasDeLaTienda registro, ILogger<OrdenesConLasDeLaPuerta> log,
+        DevolucionesDeLaPuerta? devoluciones = null)
     {
         _motor = motor;
         _libro = libro;
         _registro = registro;
         _log = log;
+        _devoluciones = devoluciones;
     }
 
     public Task<ShopCheckoutResult> CheckoutAsync(IReadOnlyList<ShopCartItem> items, ShopCustomer customer, CancellationToken cancellationToken = default)
@@ -81,15 +85,31 @@ public sealed class OrdenesConLasDeLaPuerta : IShopOrderService
         => await _libro.LeerAsync(orderRef, cancellationToken).ConfigureAwait(false)
            ?? await _motor.GetOrderAsync(orderRef, cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Reembolsa por el motor una orden de la ruta directa; la de la puerta, todavía no (N-6).</summary>
+    /// <summary>
+    /// Reembolsa por quien cobró: una orden de la ruta directa, por el motor; una de la puerta, por el orquestador, con
+    /// la devolución posterior del personal (US 7). Si la plata no sale, lanza con el motivo y la devolución se queda
+    /// donde estaba.
+    /// </summary>
     public async Task<decimal> RefundAsync(string orderRef, decimal amount, string currency, string reason, CancellationToken cancellationToken = default)
     {
-        if (await _libro.LeerAsync(orderRef, cancellationToken).ConfigureAwait(false) is not null)
+        if (await _libro.LeerAsync(orderRef, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return await _motor.RefundAsync(orderRef, amount, currency, reason, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_devoluciones is null)
         {
             throw new InvalidOperationException(
-                "Esta compra salió por la puerta y su plata la tiene el orquestador: el reembolso por ese camino todavía no existe. " +
-                "La devolución queda recibida y se reembolsa cuando esté.");
+                "Esta compra salió por la puerta y su plata la tiene el orquestador, y este sitio no tiene por dónde devolverla. " +
+                "La devolución queda recibida.");
         }
-        return await _motor.RefundAsync(orderRef, amount, currency, reason, cancellationToken).ConfigureAwait(false);
+
+        var devolucion = await _devoluciones.DevolverAsync(orderRef, amount, currency, reason, cancellationToken).ConfigureAwait(false);
+        if (!devolucion.Bien)
+        {
+            _log.LogWarning("La devolución de una compra de la puerta no salió ({Codigo}); la RMA queda donde estaba.", devolucion.Codigo);
+            throw new InvalidOperationException($"La devolución no salió ({devolucion.Codigo}): {devolucion.Mensaje}");
+        }
+        return devolucion.Devuelto;
     }
 }

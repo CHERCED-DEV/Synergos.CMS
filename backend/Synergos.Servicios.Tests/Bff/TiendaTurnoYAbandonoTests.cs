@@ -170,7 +170,7 @@ public sealed class TiendaTurnoYAbandonoTests
         Assert.True(estadoCerrar == HttpStatusCode.OK, cerrada.ToString());
         Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
         EsTransitorio(estadoCancelar, cancelar, "tienda.compensation_in_flight");
-        Assert.DoesNotContain(t.Llamadas, l => l.EndsWith("/void", StringComparison.Ordinal) || l.EndsWith("/refunds", StringComparison.Ordinal));
+        Assert.DoesNotContain(t.Llamadas, l => l.EndsWith("/void", StringComparison.Ordinal) || l.EndsWith("/refund", StringComparison.Ordinal));
 
         // Y vuelta la calma, cancelar ya no puede deshacer una compra hecha.
         var (despues, _) = await t.Cancelar(id);

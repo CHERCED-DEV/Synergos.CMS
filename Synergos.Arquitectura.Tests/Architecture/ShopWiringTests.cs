@@ -185,6 +185,32 @@ public sealed class ShopWiringTests
         Assert.Contains("compra.Refunded", trozo, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La devolución de una compra de la PUERTA (004-tienda-compra, US 7) va por la puerta: el decorador de órdenes
+    /// recibe la pieza, y la pieza manda el flujo posterior por el reenvío genérico —sin cliente propio del
+    /// vertical—, con la llave de la devolución y leyendo lo devuelto de la respuesta.
+    /// </summary>
+    /// <remarks>
+    /// El decorador acepta la pieza como opcional (sin ella, una compra de la puerta no se reembolsa y lo dice): un
+    /// composer que se olvidara de pasarla dejaría todas las devoluciones de la puerta en «recibida» sin que nada
+    /// fallara al arrancar. Por eso se mira el cableado.
+    /// </remarks>
+    [Fact]
+    public void La_devolucion_de_una_compra_de_la_puerta_va_por_la_puerta_con_la_llave_de_la_devolucion()
+    {
+        var composer = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.Shop.cs"));
+        Assert.Contains("services.AddSingleton<DevolucionesDeLaPuerta>()", composer, StringComparison.Ordinal);
+        var decorador = composer.IndexOf("new OrdenesConLasDeLaPuerta(", StringComparison.Ordinal);
+        Assert.True(decorador > 0, "El composer ya no arma el decorador de órdenes: revisar este gate.");
+        Assert.Contains("sp.GetRequiredService<DevolucionesDeLaPuerta>()", composer[decorador..Math.Min(composer.Length, decorador + 500)], StringComparison.Ordinal);
+
+        var pieza = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Services", "DevolucionesDeLaPuerta.cs"));
+        Assert.Contains("_reenvio.EnviarAsync(", pieza, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateClient(", pieza, StringComparison.Ordinal);
+        Assert.Contains("[LoQuePoneLaPuerta.CabeceraDeLaLlave] = Llave(compra, motivo)", pieza, StringComparison.Ordinal);
+        Assert.Contains("TryGetProperty(\"monto\"", pieza, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void El_stub_sigue_siendo_el_default()
     {

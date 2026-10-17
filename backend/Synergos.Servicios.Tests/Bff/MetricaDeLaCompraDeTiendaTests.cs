@@ -27,6 +27,9 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
 
     private static readonly string[] DeDominio = ["Domain/PasoRevisarLineas.cs"];
 
+    /// <summary>La devolución (US 7): un flujo POSTERIOR del personal, declarado entero en su JSON (núcleo P6 y P8).</summary>
+    private static readonly string[] DeLaDevolucion = ["flujos/tienda.devolucion.json"];
+
     private static readonly string[] Interinos = ["Domain/TipoLineasDePedido.cs", "Domain/IntentosDeCodigo.cs", "Endpoints/CuponDeLaCompra.cs"];
 
     private static readonly string[] DeLaOferta = ["Domain/OfertaDeTienda.cs"];
@@ -77,7 +80,7 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(DeDominio).Concat(Interinos).Concat(DeLaOferta).Concat(DelMotorImperativo).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(DeDominio).Concat(DeLaDevolucion).Concat(Interinos).Concat(DeLaOferta).Concat(DelMotorImperativo).Order(StringComparer.Ordinal), enDisco);
     }
 
     [Fact]
@@ -89,7 +92,7 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
 
         var flujo = MetricaDelFlujoDeMuestraTests.LineasDeCodigo(region);
         salida.WriteLine($"MEDIDA: flujo {flujo} líneas (con los registros de los interinos) en {DelFlujo.Length} ficheros; "
-                         + $"dominio {Lineas(DeDominio)}; interinos (N-12, N-11) {Lineas(Interinos)}; oferta (R-9) {Lineas(DeLaOferta)}; "
+                         + $"dominio {Lineas(DeDominio)}; devolución {Lineas(DeLaDevolucion.Where(f => f.EndsWith(".cs", StringComparison.Ordinal)))} líneas de C# en {DeLaDevolucion.Length} fichero; interinos (N-12, N-11) {Lineas(Interinos)}; oferta (R-9) {Lineas(DeLaOferta)}; "
                          + $"motor imperativo {Lineas(DelMotorImperativo)}.");
         Assert.True(flujo <= 60, $"El C# propio del flujo son {flujo} líneas y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros y la meta es ≤ 4.");

@@ -204,11 +204,15 @@ public sealed partial class SeamComposer
 
         // El motor de arriba MÁS las órdenes de la puerta, una vez cada una (004-tienda-compra, US 6). Lo
         // leen el catálogo (Mis compras, reseñas, seguimiento, devolución) y el RMA de abajo.
+        // Y la plata de una orden de la puerta vuelve por el orquestador (US 7): la devolución posterior del personal,
+        // pedida por el reenvío de la puerta (núcleo P6 y P8 del lote 6).
+        services.AddSingleton<DevolucionesDeLaPuerta>();
         services.AddSingleton<IShopOrderService>(sp => new OrdenesConLasDeLaPuerta(
             motor(sp),
             sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
             sp.GetRequiredService<RegistroDeComprasDeLaTienda>(),
-            sp.GetRequiredService<ILogger<OrdenesConLasDeLaPuerta>>()));
+            sp.GetRequiredService<ILogger<OrdenesConLasDeLaPuerta>>(),
+            sp.GetRequiredService<DevolucionesDeLaPuerta>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 // Sin IPaymentProvider (#57): la devolución se la pide al seam de ÓRDENES, que
