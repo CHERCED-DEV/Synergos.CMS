@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Synergos.Core;
 using Synergos.Shared;
 
 namespace Synergos.Bff.Core;
@@ -41,6 +42,26 @@ public interface ISagaStore<TSaga> where TSaga : class, ISaga
     /// no un estado de la compensación.</para>
     /// </remarks>
     IReadOnlyList<TSaga> StartedBefore(DateTimeOffset limite);
+
+    /// <summary>
+    /// Las sagas de <paramref name="dueno"/>, de la más nueva a la más vieja (núcleo, NB-6 de 011 y NN-7 de 005).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Es «mis reservas», «mis alquileres»</b>: sin esto, una saga sólo se encontraba por el enlace del
+    /// aviso, y cada vertical escribía su propio índice dueño → saga (el pegamento de NN-7).</para>
+    ///
+    /// <para><b>Sólo las que saben de quién son</b> (<see cref="ISagaConDueno"/>): una saga sin dueño no es de
+    /// nadie, y devolverla sería enseñarle a uno la de otro.</para>
+    ///
+    /// <para><b>Recorre el almacén, como <c>ListReservations</c> de la agenda</b>, y por la misma razón: un índice
+    /// dueño → saga sería una segunda verdad que se desincroniza sin que nada falle. El coste es el de la
+    /// historia entera, el día que duela se cambia de almacén.</para>
+    ///
+    /// <para><b>Por defecto lanza</b>: los almacenes de prueba de las sagas tipadas no lo necesitan, y uno que
+    /// contestara vacío diría «no tiene nada» sin haber mirado.</para>
+    /// </remarks>
+    IReadOnlyList<TSaga> DeDueno(Ref dueno)
+        => throw new NotSupportedException($"{GetType().Name} no sabe listar las sagas de un dueño.");
 
     void Put(TSaga saga);
 
@@ -169,6 +190,15 @@ public sealed class FileSystemSagaStore<TSaga> : ISagaStore<TSaga> where TSaga :
     // tienen nada que abandonar. Una saga que ya se está deshaciendo no se "abandona" otra vez.
     public IReadOnlyList<TSaga> StartedBefore(DateTimeOffset limite)
         => Ordenar(Vivas().Where(s => s.Status == SagaStatus.Running && s.StartedAtUtc < limite));
+
+    public IReadOnlyList<TSaga> DeDueno(Ref dueno)
+    {
+        ArgumentNullException.ThrowIfNull(dueno);
+        return _store.Where(s => s is ISagaConDueno conDueno && conDueno.Dueno == dueno)
+            .OrderByDescending(s => s.StartedAtUtc)
+            .ThenBy(s => s.Id, StringComparer.Ordinal)
+            .ToList();
+    }
 
     private static IReadOnlyList<TSaga> Ordenar(IEnumerable<TSaga> sagas)
         => sagas

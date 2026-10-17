@@ -36,13 +36,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **5218 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **5292 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 3358 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 1314 | Core, Shared, las 20 `Api.*` y los 7 `Bff.*` |
+   | `Synergos.CMS.Tests` | 3369 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.Servicios.Tests` | 1377 | Core, Shared, las 20 `Api.*` y los 7 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 546 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -193,7 +193,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **5054**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **5292**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -278,7 +278,7 @@ Synergos.CMS/
     │                            Rejection→HTTP, libro de idempotencia,
     │                            JsonCollectionStore, correlación.
     │                            Solo puede referenciar Core — UNA flecha.
-    ├── capacidades/             LAS 20 CAPACIDADES, agnósticas. 139 endpoints.
+    ├── capacidades/             LAS 20 CAPACIDADES, agnósticas. 141 endpoints.
     │     Sessions · Booking · Identity · Audit · Notifications · Documents ·
     │     Catalog · Pricing · Cart · Orders · Payments · Inventory · Workflow ·
     │     Messaging · Signing · Consent · Engagement · Geo · Fulfillment ·
@@ -3091,13 +3091,13 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (5218 tests) — la solución integradora las lanza juntas:
+# Las tres suites (5292 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3358
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1225
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 539
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 3369
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 1377
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 546
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
 # de Bff.Eventos, Api.Pricing, Api.Inventory y Api.Payments. Se GENERA del host real en
@@ -3593,8 +3593,8 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > Actualizar al cerrar cada ola. Si esta sección envejece, el siguiente
 > agente propone lo que ya existe o da por hecho lo que no.
 
-**Construido y verificado:** 20 capacidades (139 endpoints, 248 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 5218 tests, gates de
+**Construido y verificado:** 20 capacidades (141 endpoints, 255 códigos
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 5292 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -3662,7 +3662,7 @@ segregación y molde en verde.
 > `IOrderTrackingService`, `IIdentityTokenIssuer`). Qué gana en cada par es decisión de producto y
 > está abierta; ningún gate vigila los pares todavía.
 
-> **Los 248 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
+> **Los 255 se cuentan, y el criterio es parte de la cifra** (#52). Decía **195**
 > y nadie la había vuelto a contar. Cuenta los códigos **literales distintos**
 > que las veinte construyen —el primer argumento de un `Rejection.*`, con
 > `{CodePrefix}` resuelto—, y por eso **excluye dos cosas que sí existen**: los

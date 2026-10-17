@@ -134,13 +134,74 @@ public sealed class ContratoDeFlujosGenericosTests
         Assert.Equal("""{"flujo":"muestra.cita","operacion":"consultar"}""", consultar["x-synergos-flujo"]!.ToJsonString());
         var respuesta = Esquema(doc, consultar["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
         var datos = respuesta["properties"]!["datos"]!["properties"]!.AsObject();
-        Assert.Equal(new[] { "total", "reservaId" }, datos.Select(p => p.Key));
+        Assert.Equal(new[] { "total", "reservaId", "cobroId" }, datos.Select(p => p.Key));
         Assert.Equal(new[] { "null", "string" }, datos["reservaId"]!["type"]!.AsArray().Select(t => (string)t!).Order(StringComparer.Ordinal));
         Assert.Equal("object", (string?)datos["total"]!["oneOf"]![0]!["type"]);
 
         var esquemas = doc["components"]!["schemas"]!.AsObject().Select(e => e.Key).ToList();
         Assert.DoesNotContain("RespuestaDeFlujo", esquemas);
         Assert.DoesNotContain("CotizacionDeFlujo", esquemas);
+    }
+
+    [Fact]
+    public async Task Listar_va_a_la_puerta_con_el_sujeto_y_publica_una_pagina_de_respuestas_tipadas()
+    {
+        // NB-6: «mis citas». Cada ítem con los datos del flujo, no con el diccionario genérico; el dueño lo pone la
+        // puerta, así que el sujeto es requerido y el dueño no es un parámetro de la consulta.
+        var doc = await Documento();
+        var listar = Op(doc, "/v1/flujos/muestra.cita", "get");
+
+        Assert.Equal("""{"flujo":"muestra.cita","operacion":"listar"}""", listar["x-synergos-flujo"]!.ToJsonString());
+        var parametros = listar["parameters"]!.AsArray().ToDictionary(p => (string)p!["name"]!, p => p!);
+        Assert.Equal(["X-Synergos-Sujeto", "estado", "limit", "offset"], parametros.Keys.Order(StringComparer.Ordinal));
+        Assert.True((bool?)parametros["X-Synergos-Sujeto"]["required"]);
+
+        var pagina = Esquema(doc, listar["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
+        Assert.Equal(["hasMore", "items", "offset", "total"], pagina["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        var item = Esquema(doc, pagina["properties"]!["items"]!["items"]);
+        Assert.Equal(new[] { "total", "reservaId", "cobroId" }, item["properties"]!["datos"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.DoesNotContain("PaginaDeFlujoOfRespuestaDeFlujo", doc["components"]!["schemas"]!.AsObject().Select(e => e.Key));
+    }
+
+    [Fact]
+    public async Task La_disponibilidad_va_a_la_puerta_sin_sujeto_y_publica_su_entrada_y_su_salida()
+    {
+        // NB-3: una lectura sin saga. Sin la cabecera del sujeto (la pide un invitado), con su propio cuerpo y su
+        // propia respuesta { flujo, datos }; el genérico no sale.
+        var doc = await Documento();
+        var leer = Op(doc, "/v1/flujos/muestra.cita/disponibilidad", "post");
+
+        Assert.Equal("""{"flujo":"muestra.cita","operacion":"disponibilidad"}""", leer["x-synergos-flujo"]!.ToJsonString());
+        Assert.DoesNotContain(leer["parameters"]?.AsArray() ?? [], p => (string?)p!["name"] == CabecerasDeLaPuerta.Sujeto);
+
+        var entrada = Esquema(doc, leer["requestBody"]!["content"]!["application/json"]!["schema"]);
+        Assert.Equal(["desde", "hasta", "profesional"], entrada["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        var salida = Esquema(doc, leer["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
+        var franjas = salida["properties"]!["datos"]!["properties"]!["franjas"]!;   // anulable, como toda la salida
+        Assert.Equal(["array", "null"], franjas["type"]!.AsArray().Select(t => (string)t!).Order(StringComparer.Ordinal));
+        Assert.Equal(["fin", "inicio", "libres"], franjas["items"]!["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain("LecturaDeFlujo", doc["components"]!["schemas"]!.AsObject().Select(e => e.Key));
+    }
+
+    [Fact]
+    public async Task Las_operaciones_de_un_flujo_del_personal_salen_marcadas_y_las_del_dueno_no()
+    {
+        // P8 = A del lote 6: la puerta del CMS pide el rol en lo que el contrato marca «acceso: personal», y la marca de un
+        // flujo del dueño no cambia. La fase que abre se llama «devolver», que ya es del vocabulario de la puerta.
+        var doc = await Documento();
+
+        Assert.Equal("""{"flujo":"muestra.reembolso","operacion":"devolver","acceso":"personal"}""",
+            Op(doc, "/v1/flujos/muestra.reembolso", "post")["x-synergos-flujo"]!.ToJsonString());
+        foreach (var (ruta, metodo) in new[]
+                 {
+                     ("/v1/flujos/muestra.reembolso/{id}", "get"), ("/v1/flujos/muestra.reembolso", "get"),
+                     ("/v1/flujos/muestra.reembolso/{id}/cancelar", "post"),
+                 })
+        {
+            Assert.Equal("personal", (string?)Op(doc, ruta, metodo)["x-synergos-flujo"]!["acceso"]);
+        }
+        Assert.Equal("""{"flujo":"muestra.devolucion","operacion":"devolver"}""",
+            Op(doc, "/v1/flujos/muestra.devolucion", "post")["x-synergos-flujo"]!.ToJsonString());
     }
 
     [Fact]

@@ -39,6 +39,12 @@ public sealed record CancellationPolicy(TimeSpan MinNoticeBeforeStart)
 /// Horario de apertura. <b>Vacío significa siempre abierto</b> — ver las notas.
 /// </param>
 /// <param name="Policy">Política de cancelación.</param>
+/// <param name="SlotMinutes">
+/// Cuánto dura una franja, si el recurso se reserva por franjas (núcleo, NB-1 de 011): una consulta de 30
+/// minutos, una clase de 90. Nulo: la ventana la decide quien reserva, como siempre. Es lo que deja que
+/// una franja de tres horas no se cobre como una de treinta minutos, y lo que da la grilla de las franjas
+/// libres (<see cref="BookingRules.CheckSlot"/>).
+/// </param>
 /// <remarks>
 /// <para><b>Por qué "vacío = siempre abierto" y no "vacío = cerrado".</b> Es lo que permite que
 /// la misma capacidad sirva a una agenda clínica y a una habitación de hotel. Una consulta
@@ -57,4 +63,5 @@ public sealed record Resource(
     int Capacity,
     string TimeZoneId,
     IReadOnlyList<OpeningRule> Opening,
-    CancellationPolicy Policy);
+    CancellationPolicy Policy,
+    int? SlotMinutes = null);

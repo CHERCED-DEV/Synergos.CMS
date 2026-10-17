@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
+using Synergos.Core;
 using Synergos.CMS.Tests.Architecture;
 
 namespace Synergos.CMS.Tests.Bff.FlujoDeMuestra;
@@ -82,7 +83,13 @@ public sealed class FlujoDeMuestraTests
 
         private async Task Aprovisionar(decimal precio, bool conPlantilla)
         {
-            await Post("booking", "v1/resources", new { subjectKind = "muestra.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC" }, "agenda");
+            // Con franja de 30 y horario de 08 a 20 todos los días (NB-1/NB-2): la hora de la muestra cae en su grilla, y
+            // la lectura de disponibilidad tiene franjas que contar.
+            await Post("booking", "v1/resources", new
+            {
+                subjectKind = "muestra.profesional", subjectId = "dra-1", capacity = 1, timeZoneId = "UTC", slotMinutes = 30,
+                opening = Enum.GetNames<DayOfWeek>().Select(d => new { day = d, from = "08:00", to = "20:00" }).ToArray(),
+            }, "agenda");
             await Post("pricing", "v1/prices", new
             {
                 subjectKind = "muestra.servicio", subjectId = "consulta", amount = new { amount = precio, currency = "COP" }, taxRateBasisPoints = 0,
@@ -136,6 +143,39 @@ public sealed class FlujoDeMuestraTests
         {
             var peticion = new HttpRequestMessage(HttpMethod.Get, $"v1/flujos/muestra.cita/{id}");
             peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
+            return Enviar(peticion);
+        }
+
+        /// <summary>La lectura de disponibilidad, SIN sujeto: la pide quien todavía no inició sesión (NB-3).</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Disponibilidad(object cuerpo)
+            => Enviar(new HttpRequestMessage(HttpMethod.Post, "v1/flujos/muestra.cita/disponibilidad") { Content = JsonContent.Create(cuerpo) });
+
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string consulta = "", string? sujeto = "u-1")
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Get, $"v1/flujos/muestra.cita{consulta}");
+            if (sujeto is not null) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
+            return Enviar(peticion);
+        }
+
+        /// <summary>Devolver una parte de una cita completada: la operación posterior, un flujo aparte (P6 = A).</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(
+            string cita, decimal monto, string llave, string sujeto = "u-1", string flujo = "muestra.devolucion", string clase = "muestra.paciente")
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/{flujo}")
+            {
+                Content = JsonContent.Create(new { cita, monto = new { amount = monto, currency = "COP" } }),
+            };
+            peticion.Headers.Add("Idempotency-Key", llave);
+            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"{clase}:{sujeto}");
+            return Enviar(peticion);
+        }
+
+        /// <summary>Una operación cualquiera de la muestra, con lo que pondría la puerta.</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Pedir(string ruta, object? cuerpo, string sujeto, string? llave = null)
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, ruta) { Content = JsonContent.Create(cuerpo ?? new { }) };
+            if (llave is not null) peticion.Headers.Add("Idempotency-Key", llave);
+            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto);
             return Enviar(peticion);
         }
 
@@ -208,6 +248,154 @@ public sealed class FlujoDeMuestraTests
         Assert.Equal("Captured", (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
         var avisos = (await m.Leer("notifications", "v1/deliveries?toKind=muestra.paciente&toId=u-1")).GetProperty("items");
         Assert.Equal(1, avisos.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task La_disponibilidad_la_ve_un_invitado_y_cuenta_lo_que_la_agenda_ya_aparto()
+    {
+        // NB-3 de 011: quien reserva quiere ver las horas antes de iniciar sesión. Sin sujeto, sin saga y sin apartar
+        // nada; la hora que otra cita ya apartó sale llena, porque lo libre lo cuenta la agenda real.
+        await using var m = await Muestra.Arrancar();
+        var (abrio, abierta) = await m.Abrir("cita-1");
+        Assert.True(abrio == HttpStatusCode.Created, abierta.ToString());
+
+        var (estado, lectura) = await m.Disponibilidad(new
+        {
+            profesional = new { kind = "muestra.profesional", id = "dra-1" },
+            desde = Inicio.AddHours(-1),
+            hasta = Inicio.AddHours(1),
+        });
+
+        Assert.True(estado == HttpStatusCode.OK, lectura.ToString());
+        Assert.Equal("muestra.cita", lectura.GetProperty("flujo").GetString());
+        var franjas = lectura.GetProperty("datos").GetProperty("franjas").EnumerateArray()
+            .Select(f => (f.GetProperty("inicio").GetDateTimeOffset(), f.GetProperty("libres").GetInt32()))
+            .ToList();
+        Assert.Equal(new[] { (Inicio.AddHours(-1), 1), (Inicio.AddMinutes(-30), 1), (Inicio, 0), (Inicio.AddMinutes(30), 1) }, franjas);
+
+        var (otraClase, problema) = await m.Disponibilidad(new
+        {
+            profesional = new { kind = "muestra.paciente", id = "dra-1" }, desde = Inicio, hasta = Inicio.AddHours(1),
+        });
+        Assert.Equal((HttpStatusCode.BadRequest, "muestra.entrada_invalida"), (otraClase, problema.GetProperty("code").GetString()));
+    }
+
+    [Fact]
+    public async Task Mis_citas_son_las_del_dueno_por_estado_y_por_pagina()
+    {
+        // NB-6 de 011 y NN-7 de 005: sin esto, una cita sólo se encontraba por el enlace del aviso. La segunda
+        // pide la MISMA hora, así que la agenda la rechaza y queda deshecha: dos sagas del mismo dueño en dos
+        // estados. Las de otro no salen nunca, y el dueño lo pone la puerta, no la consulta.
+        await using var m = await Muestra.Arrancar();
+        var (_, una) = await m.Abrir("cita-1");
+        var (cerro, _) = await m.Cerrar(una.GetProperty("id").GetString()!);
+        Assert.Equal(HttpStatusCode.OK, cerro);
+        var (rechazada, _) = await m.Abrir("cita-2");
+        Assert.Equal(HttpStatusCode.Conflict, rechazada);
+
+        var (estado, todas) = await m.Listar();
+        var (_, completadas) = await m.Listar("?estado=Completed");
+        var (_, pagina) = await m.Listar("?limit=1");
+        var (_, deOtro) = await m.Listar(sujeto: "u-2");
+
+        Assert.Equal(HttpStatusCode.OK, estado);
+        Assert.Equal(["cita-1", "cita-2"], todas.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetString()!).Order(StringComparer.Ordinal));
+        var completada = Assert.Single(completadas.GetProperty("items").EnumerateArray());
+        Assert.Equal(("cita-1", "Completed"), (completada.GetProperty("id").GetString(), completada.GetProperty("estado").GetString()));
+        Assert.Equal(50_000m, completada.GetProperty("datos").GetProperty("total").GetProperty("amount").GetDecimal());
+        Assert.Equal((1, 2, true), (pagina.GetProperty("items").GetArrayLength(), pagina.GetProperty("total").GetInt32(), pagina.GetProperty("hasMore").GetBoolean()));
+        Assert.Equal(0, deOtro.GetProperty("total").GetInt32());
+
+        var (inventado, problema) = await m.Listar("?estado=Pagada");
+        Assert.Equal((HttpStatusCode.BadRequest, "muestra.entrada_invalida"), (inventado, problema.GetProperty("code").GetString()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await m.Listar(sujeto: null)).Estado);
+    }
+
+    [Fact]
+    public async Task Lo_posterior_al_cierre_devuelve_una_parte_de_la_cita_una_vez_y_hasta_lo_cobrado()
+    {
+        // P6 = A del lote 6: devolver es un flujo aparte, posterior a muestra.cita, que lee su cobro con flow.leer-original
+        // y devuelve contra Payments real. La cita no se toca, y el tope acumulado lo pone la capacidad.
+        await using var m = await Muestra.Arrancar();
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+
+        var (antes, sinCerrar) = await m.Devolver(cita, 10_000m, "dev-0");
+        Assert.Equal((HttpStatusCode.Conflict, PasoLeerOriginal.NoCompletada), (antes, sinCerrar.GetProperty("code").GetString()));
+        Assert.Equal(HttpStatusCode.OK, (await m.Cerrar(cita)).Estado);
+        var cobro = m.Sagas.Find(cita)!.Datos["cobroId"].Valor!.Value.GetString()!;
+        async Task<decimal> Devuelto() => (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal();
+
+        var (devolvio, devolucion) = await m.Devolver(cita, 20_000m, "dev-1");
+        Assert.True(devolvio == HttpStatusCode.Created, devolucion.ToString());
+        Assert.Equal("Completed", devolucion.GetProperty("estado").GetString());
+        Assert.Equal(20_000m, await Devuelto());
+
+        Assert.Equal(HttpStatusCode.Created, (await m.Devolver(cita, 20_000m, "dev-1")).Estado);
+        Assert.Equal(20_000m, await Devuelto());
+
+        var (_, demas) = await m.Devolver(cita, 40_000m, "dev-2");
+        Assert.Equal("payments.refund_over_captured", demas.GetProperty("code").GetString());
+        Assert.Equal(20_000m, await Devuelto());
+
+        var (ajena, nada) = await m.Devolver(cita, 1_000m, "dev-3", sujeto: "u-2");
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (ajena, nada.GetProperty("code").GetString()));
+        Assert.Equal(20_000m, await Devuelto());
+        Assert.Equal(SagaStatus.Completed, m.Sagas.Find(cita)!.Status);
+    }
+
+    [Fact]
+    public async Task El_personal_devuelve_la_cita_de_otro_por_su_flujo_y_el_flujo_del_dueno_no_lo_deja()
+    {
+        // P8 = A del lote 6: muestra.reembolso es «acceso: personal». Quien pide no es el dueño de la cita —la puerta ya
+        // comprobó su rol—, así que flow.leer-original no aplica la regla de dueño; el sujeto es la persona del personal.
+        await using var m = await Muestra.Arrancar();
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, (await m.Cerrar(cita)).Estado);
+        var cobro = m.Sagas.Find(cita)!.Datos["cobroId"].Valor!.Value.GetString()!;
+
+        var (porElDueno, nada) = await m.Devolver(cita, 5_000m, "dev-p1", sujeto: "s-1", clase: "muestra.personal");
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (porElDueno, nada.GetProperty("code").GetString()));
+
+        var (estado, reembolso) = await m.Devolver(cita, 15_000m, "reemb-1", sujeto: "s-1", flujo: "muestra.reembolso", clase: "muestra.personal");
+        Assert.True(estado == HttpStatusCode.Created, reembolso.ToString());
+        Assert.Equal(15_000m, (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
+        Assert.Equal(Ref.Create("muestra.personal", "s-1"), m.Sagas.Find(reembolso.GetProperty("id").GetString()!)!.Dueno);
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_sigue_autorizada_al_completar_y_el_personal_la_liquida_despues()
+    {
+        // P7 + P6 + P8 del lote 6, contra Payments real: la garantía se retiene (payments.autorizar) y se conserva al
+        // cerrar (payments.conservar), así que la saga completa con la autorización VIVA; días después, alguien del
+        // personal la liquida con un flujo aparte: captura y devuelve lo que no se cobra.
+        await using var m = await Muestra.Arrancar();
+        const string Inquilino = "muestra.paciente:u-1";
+
+        var (abrio, abierta) = await m.Pedir("v1/flujos/muestra.garantia", new { garantia = new { amount = 300_000m, currency = "COP" } }, Inquilino, "gar-1");
+        Assert.True(abrio == HttpStatusCode.Created, abierta.ToString());
+        var alquiler = abierta.GetProperty("id").GetString()!;
+        var (cerro, cerrada) = await m.Pedir($"v1/flujos/muestra.garantia/{alquiler}/cerrar", null, Inquilino);
+        Assert.True(cerro == HttpStatusCode.OK, cerrada.ToString());
+        Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
+        var garantia = cerrada.GetProperty("datos").GetProperty("garantiaId").GetString()!;
+        Assert.DoesNotContain(m.Sagas.Find(alquiler)!.Compensations, c => c.IsPending);
+
+        var retenida = await m.Leer("payments", $"v1/payments/{garantia}");
+        Assert.Equal(("Authorized", 0m), (retenida.GetProperty("status").GetString(), retenida.GetProperty("refunded").GetProperty("amount").GetDecimal()));
+
+        var (liquido, liquidacion) = await m.Pedir(
+            "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1");
+        Assert.True(liquido == HttpStatusCode.Created, liquidacion.ToString());
+        Assert.Equal("Completed", liquidacion.GetProperty("estado").GetString());
+
+        var liquidada = await m.Leer("payments", $"v1/payments/{garantia}");
+        Assert.Equal(("Captured", 300_000m, 200_000m), (liquidada.GetProperty("status").GetString(),
+            liquidada.GetProperty("amount").GetProperty("amount").GetDecimal(), liquidada.GetProperty("refunded").GetProperty("amount").GetDecimal()));
+        Assert.Equal(HttpStatusCode.Created, (await m.Pedir(
+            "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1")).Estado);
+        Assert.Equal(200_000m, (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
     }
 
     [Fact]
@@ -335,15 +523,28 @@ public sealed class MetricaDelFlujoDeMuestraTests
         Assert.True(lineas <= 60, $"El C# propio de la muestra son {lineas} líneas y la meta es ≤ 60 (hoy un flujo declarado costaba ~316).");
     }
 
+    /// <summary>
+    /// SC-002, que es POR FLUJO: declarar uno toca su definición, sus pasos de dominio si los tiene, el arranque y la
+    /// configuración.
+    /// </summary>
+    /// <remarks>
+    /// La carpeta sirve varios flujos de muestra con UN arranque (la cita, la compra y las dos operaciones posteriores
+    /// al cierre del lote 6), así que contar la carpeta entera mediría cuántas muestras hay, no lo que cuesta una. Lo
+    /// que no es el arranque ni una definición no puede estar aquí sin contarse.
+    /// </remarks>
     [Fact]
-    public void Declararlo_toca_como_mucho_cuatro_ficheros_propios()
+    public void Declarar_un_flujo_toca_como_mucho_cuatro_ficheros_propios()
     {
         var propios = Directory.EnumerateFiles(Carpeta(), "*", SearchOption.AllDirectories)
             .Where(f => !f.EndsWith("Tests.cs", StringComparison.Ordinal))
             .ToList();
+        var definiciones = propios.Where(f => Path.GetFileName(Path.GetDirectoryName(f)) == "flujos" && f.EndsWith(".json", StringComparison.Ordinal)).ToList();
+        var deTodos = propios.Except(definiciones).ToList();
 
-        Assert.True(propios.Count is > 0 and <= 4,
-            $"Declarar la muestra tocó {propios.Count} ficheros propios ({string.Join(", ", propios.Select(Path.GetFileName))}) y la meta es ≤ 4.");
+        Assert.True(definiciones.Count > 0 && deTodos.Count > 0, "No se encontró la muestra: la medida dejó de ver.");
+        Assert.True(deTodos.Count + 1 <= 4,
+            $"Declarar un flujo toca su definición y {deTodos.Count} ficheros propios más ({string.Join(", ", deTodos.Select(Path.GetFileName))}) "
+            + "y la meta es ≤ 4.");
     }
 
     [Fact]

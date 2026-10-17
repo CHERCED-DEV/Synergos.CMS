@@ -50,6 +50,8 @@ public sealed partial class SeamComposer
         services.AddSingleton<FlujosColocables>();
         // Y los avisos en vivo que declara un flujo tras una operación (núcleo N3).
         services.AddSingleton<AvisoEnVivoDeLaPuerta>();
+        // Y el freno de lo que un flujo abre a invitados (NB-3): uno para todo el proceso, o no frenaría nada.
+        services.AddSingleton(_ => new FrenoDeLaPuerta());
         services.AddOptions<PuertaSettings>().Bind(builder.Config.GetSection(PuertaSettings.Seccion)).ValidateOnStart();
         services.AddSingleton<IValidateOptions<PuertaSettings>, ValidadorDeLaPuerta>();
     }
