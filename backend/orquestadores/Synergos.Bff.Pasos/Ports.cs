@@ -94,14 +94,32 @@ public interface INotificationsPort
         IdempotencyKey llave, CancellationToken ct);
 }
 
+/// <summary>Un apartado en la agenda: cuál es y hasta cuándo vale si nadie lo confirma.</summary>
+/// <param name="Id">El apartado.</param>
+/// <param name="Vence">Cuándo deja de valer (<c>HoldResponse.ExpiresAt</c>): lo que la pantalla puede decirle a quien
+/// reserva, porque lo dice el servidor (núcleo, NB-5 de 011 y NV-12 de 006).</param>
+public sealed record Apartado(string Id, DateTimeOffset Vence);
+
+/// <summary>Una franja del recurso y cuánto cupo le queda (núcleo, NB-3 de 011, sobre NB-2).</summary>
+/// <param name="Inicio">Cuándo empieza.</param>
+/// <param name="Fin">Cuándo termina.</param>
+/// <param name="Libres">Cuántas reservas más admite; cero: llena (la pantalla decide si la enseña).</param>
+public sealed record FranjaLibre(DateTimeOffset Inicio, DateTimeOffset Fin, int Libres);
+
 /// <summary>Hallar la agenda de un sujeto, apartar una ventana y confirmarla en <c>Api.Booking</c>.</summary>
 public interface IBookingPort
 {
+    /// <summary>
+    /// Las franjas del recurso entre <paramref name="desde"/> y <paramref name="hasta"/>, con lo libre de cada una:
+    /// lo que se ve antes de reservar (NB-3 de 011, sobre NB-2). Leer: no aparta nada.
+    /// </summary>
+    Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct);
+
     /// <summary>El identificador del recurso (la agenda) de <paramref name="sujeto"/>. Lo genera la capacidad: no se adivina.</summary>
     Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct);
 
-    /// <summary>Aparta la ventana en el recurso para <paramref name="paraQuien"/> y devuelve el apartado.</summary>
-    Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct);
+    /// <summary>Aparta la ventana en el recurso para <paramref name="paraQuien"/> y devuelve el apartado con su vencimiento.</summary>
+    Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct);
 
     /// <summary>Confirma el apartado: devuelve la reserva, que es sobre lo que se cancela después.</summary>
     Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct);

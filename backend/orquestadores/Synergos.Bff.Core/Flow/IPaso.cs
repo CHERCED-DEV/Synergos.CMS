@@ -31,6 +31,23 @@ public interface IPaso
     /// <summary>Cuántos valores produce, en orden: los <c>escribe</c> de la definición.</summary>
     int Escrituras { get; }
 
+    /// <summary>
+    /// Cuántas de sus ÚLTIMAS escrituras puede no nombrar una definición (núcleo, NB-5 de 011). Por defecto,
+    /// ninguna.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe para que un paso pueda decir algo más sin romper a quien ya lo usaba.</b> Apartar en la
+    /// agenda devolvía el apartado; ahora devuelve también cuándo vence, para que la pantalla diga cuánto
+    /// tiempo queda. Con el recuento exacto, todas las definiciones que ya apartaban dejarían de arrancar el
+    /// día que el paso escribe una cosa más.</para>
+    ///
+    /// <para><b>Sólo las últimas, y siempre en orden</b>: una definición nombra de
+    /// <c>Escrituras − EscriturasOpcionales</c> a <see cref="Escrituras"/> nombres, y se guardan los primeros
+    /// valores. El paso produce siempre todos; no sabe ni tiene que saber cuáles se leen. Saltarse una del
+    /// medio no se puede decir, y no hace falta: lo que no se lee no cuesta nada.</para>
+    /// </remarks>
+    int EscriturasOpcionales => 0;
+
     /// <summary>Qué llave de idempotencia pide: ninguna, la de <c>llave</c> o la de <c>llave_base</c>.</summary>
     LlaveRequerida Llave { get; }
 
@@ -48,6 +65,32 @@ public interface IPaso
     /// en un paso que no lo usa haría creer que ese paso pide permiso.
     /// </remarks>
     bool UsaProposito => false;
+
+    /// <summary>
+    /// Si cierra la reserva que nombra SIN consumirla (núcleo, P7 = A del lote 6, NN-4 de 005): lo reservado sobrevive
+    /// al cierre, como la garantía de un alquiler, que se resuelve días después. Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Cerrar así no cambia la compensación.</b> Mientras la saga no se complete, deshacerla sigue anulando
+    /// lo reservado: si un paso posterior de la misma fase falla, la garantía no queda retenida sin dueño. Completar
+    /// la marca hecha, como a todo lo armado, y entonces vive fuera de la saga.</para>
+    ///
+    /// <para><b>Lo que queda vivo se ve</b>: el validador exige que el id de lo reservado salga en la salida, para que
+    /// la operación posterior que lo liquida (P6) sepa cuál es, y que la reserva no declare <c>despues</c>: lo
+    /// conservado no se consumió.</para>
+    /// </remarks>
+    bool Conserva => false;
+
+    /// <summary>
+    /// Si lee la saga original de una operación posterior al cierre (núcleo, P6 = A del lote 6): <c>flow.leer-original</c>.
+    /// Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// Se cruza con <c>posterior_a</c> en los dos sentidos, como la plantilla: un flujo posterior sin quien lea la original
+    /// no sabría sobre qué opera, y un lector sin <c>posterior_a</c> no sabría de qué flujo es. Lo que escribe es lo que la
+    /// definición declara <c>{ "de": "original" }</c>, con ese tipo.
+    /// </remarks>
+    bool LeeLaOriginal => false;
 
     /// <summary>
     /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
@@ -109,7 +152,9 @@ public sealed class EntradaDePaso
     private readonly string? _alias;
     private readonly FlowContext? _item;
 
-    public EntradaDePaso(string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item, int? indice = null)
+    public EntradaDePaso(
+        string sagaId, Ref origen, PasoDef paso, FlowContext ctx, string? alias, FlowContext? item, int? indice = null,
+        FlujoDef? flujo = null, Ref? dueno = null)
     {
         SagaId = sagaId;
         Origen = origen;
@@ -118,7 +163,21 @@ public sealed class EntradaDePaso
         _alias = alias;
         _item = item;
         Indice = indice;
+        Flujo = flujo;
+        Dueno = dueno;
     }
+
+    /// <summary>
+    /// La definición del flujo que corre el paso (núcleo, lote 6): la necesita quien lee la original, para saber de qué
+    /// flujo es (<c>posterior_a</c>) y con qué tipo declara lo que lee. Nula fuera del intérprete.
+    /// </summary>
+    public FlujoDef? Flujo { get; }
+
+    /// <summary>
+    /// El dueño de la saga que corre el paso: el sujeto que puso la puerta (núcleo, lote 6). Nulo en una lectura sin
+    /// saga, que no tiene dueño, y fuera del intérprete.
+    /// </summary>
+    public Ref? Dueno { get; }
 
     /// <summary>La saga. Semilla de las llaves de idempotencia.</summary>
     public string SagaId { get; }

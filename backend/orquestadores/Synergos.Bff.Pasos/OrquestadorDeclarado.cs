@@ -59,8 +59,11 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
 
-        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion()));
-        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), propios));
+        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
+        // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
+        // de su original.
+        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(),
+            [new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), sp.GetRequiredService<TiposDeValor>()), .. propios]));
         return builder.AddFlujosGenericos(vocabulario, ensamblado);
     }
 }
@@ -75,10 +78,11 @@ public static class PasosComunes
             new PasoCotizacion(puertos), new PasoCotizacionSinCodigo(puertos), new PasoCotizacionOCero(puertos), new PasoDesglose(),
             new PasoPreciosPorLinea(),
             new PasoInventarioHallar(puertos), new PasoInventarioApartar(puertos), new PasoInventarioConsumir(puertos),
-            new PasoPagosAutorizar(puertos), new PasoPagosCapturar(puertos),
+            new PasoPagosAutorizar(puertos), new PasoPagosCapturar(puertos), new PasoPagosConservar(),
+            new PasoPagosDevolver(puertos), new PasoPagosAnular(puertos), new PasoAgendaCancelar(puertos),
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
-            new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos),
+            new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
             new PasoAvisar(puertos), new PasoUnaLinea(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
@@ -133,6 +137,74 @@ public sealed class TipoContacto : ITipoDeValor
             ["nombre"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
             ["enlace"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
             ["sitio"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+        },
+    };
+}
+
+/// <summary>
+/// <c>franjas</c>: las franjas de una agenda con lo libre de cada una, <c>[{ inicio, fin, libres }]</c> (núcleo, NB-3
+/// de 011). Lo que devuelve una lectura de disponibilidad; NO se guarda: una lista no es estado de una saga, y lo
+/// libre de hace un minuto no vale para nada.
+/// </summary>
+public sealed class TipoFranjas : ITipoDeValor
+{
+    private static readonly string[] Campos = ["inicio", "fin", "libres"];
+
+    public string Nombre => "franjas";
+    public Type Clr => typeof(IReadOnlyList<FranjaLibre>);
+    public bool Guardable => false;
+
+    public object Leer(JsonElement valor, string donde)
+    {
+        if (valor.ValueKind != JsonValueKind.Array) throw new FormatException($"{donde}: tiene que ser una lista de franjas.");
+
+        var instante = new Instante();
+        var franjas = new List<FranjaLibre>();
+        var i = 0;
+        foreach (var f in valor.EnumerateArray())
+        {
+            var aqui = $"{donde}[{i++}]";
+            if (f.ValueKind != JsonValueKind.Object) throw new FormatException($"{aqui}: tiene que ser un objeto {{ inicio, fin, libres }}.");
+            foreach (var p in f.EnumerateObject().Where(p => !Campos.Contains(p.Name, StringComparer.Ordinal)))
+            {
+                throw new FormatException($"{aqui}: trae «{p.Name}», y sólo admite inicio, fin y libres.");
+            }
+            if (!f.TryGetProperty("libres", out var libres) || !libres.TryGetInt32(out var cuantas) || cuantas < 0)
+            {
+                throw new FormatException($"{aqui}.libres: tiene que ser un entero sin signo.");
+            }
+            franjas.Add(new FranjaLibre(
+                (DateTimeOffset)instante.Leer(f.TryGetProperty("inicio", out var ini) ? ini : default, $"{aqui}.inicio"),
+                (DateTimeOffset)instante.Leer(f.TryGetProperty("fin", out var fin) ? fin : default, $"{aqui}.fin"),
+                cuantas));
+        }
+        return franjas;
+    }
+
+    public JsonNode Escribir(object valor)
+    {
+        var instante = new Instante();
+        return new JsonArray(((IReadOnlyList<FranjaLibre>)valor)
+            .Select(f => (JsonNode)new JsonObject
+            {
+                ["inicio"] = instante.Escribir(f.Inicio), ["fin"] = instante.Escribir(f.Fin), ["libres"] = f.Libres,
+            })
+            .ToArray());
+    }
+
+    public JsonObject Esquema() => new()
+    {
+        ["type"] = "array",
+        ["items"] = new JsonObject
+        {
+            ["type"] = "object",
+            ["required"] = new JsonArray(Campos.Select(c => (JsonNode?)c).ToArray()),
+            ["properties"] = new JsonObject
+            {
+                ["inicio"] = new Instante().Esquema(),
+                ["fin"] = new Instante().Esquema(),
+                ["libres"] = new JsonObject { ["type"] = "integer", ["format"] = "int32" },
+            },
         },
     };
 }

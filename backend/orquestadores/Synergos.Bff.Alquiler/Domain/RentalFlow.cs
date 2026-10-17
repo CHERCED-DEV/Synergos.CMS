@@ -28,19 +28,23 @@ public sealed class RentalFlow
     private readonly SagaEngine<RentalSaga> _sagas;
     private readonly TimeProvider _clock;
     private readonly ILogger<RentalFlow> _log;
+    private readonly HusoDelAlquiler _huso;
 
     /// <summary>Construye el flujo.</summary>
     /// <param name="caps">Las dos capacidades.</param>
     /// <param name="sagas">La máquina de sagas.</param>
     /// <param name="clock">El reloj.</param>
     /// <param name="log">Dónde se cuenta qué pasó.</param>
+    /// <param name="huso">El huso del despliegue, para el día de inicio; sin él, el de por defecto.</param>
     public RentalFlow(
-        AlquilerCapabilities caps, SagaEngine<RentalSaga> sagas, TimeProvider clock, ILogger<RentalFlow> log)
+        AlquilerCapabilities caps, SagaEngine<RentalSaga> sagas, TimeProvider clock, ILogger<RentalFlow> log,
+        HusoDelAlquiler? huso = null)
     {
         _caps = caps;
         _sagas = sagas;
         _clock = clock;
         _log = log;
+        _huso = huso ?? HusoDelAlquiler.De(null);
     }
 
     /// <summary>Un alquiler por su identificador.</summary>
@@ -232,13 +236,103 @@ public sealed class RentalFlow
     public async Task<Result<RentalSaga>> ReturnAsync(string rentalId, Money damage, CancellationToken ct)
         => await CerrarAsync(rentalId, damage, devolucion: true, ct);
 
-    /// <summary>Cancela un alquiler antes de que el equipo salga.</summary>
+    /// <summary>
+    /// Cancela un alquiler confirmado: cancela las reservas, DEVUELVE el alquiler entero y anula la garantía —o,
+    /// si cancela el personal con penalidad, la captura y devuelve G − P— (research R7, 005-P3).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El inquilino</b> cancela sólo antes del día de inicio (en el huso del despliegue) y sin penalidad:
+    /// la que mande se ignora. Desde ese día, <c>alquiler.already_started</c>; con la devolución declarada, la
+    /// cancela el personal. <b>El personal</b>, siempre que no esté devuelto, con la penalidad que fije.</para>
+    ///
+    /// <para><b>Antes no se devolvía el cobro</b> (el defecto vivo de la línea 005): cancelar soltaba las unidades y
+    /// la garantía y se quedaba con el alquiler capturado de algo que no se iba a usar.</para>
+    /// </remarks>
     /// <param name="rentalId">Cuál alquiler.</param>
-    /// <param name="penalty">Cuánto retener por cancelar.</param>
+    /// <param name="penalty">Cuánto retener de la garantía; sólo cuenta si cancela el personal.</param>
+    /// <param name="actor">Quién cancela.</param>
     /// <param name="ct">Cancelación.</param>
     /// <returns>El alquiler cancelado, o el rechazo.</returns>
-    public async Task<Result<RentalSaga>> CancelAsync(string rentalId, Money penalty, CancellationToken ct)
-        => await CerrarAsync(rentalId, penalty, devolucion: false, ct);
+    public async Task<Result<RentalSaga>> CancelAsync(string rentalId, Money penalty, QuienCancela actor, CancellationToken ct)
+    {
+        var buscado = _sagas.Get(rentalId);
+        if (!buscado.IsOk)
+        {
+            return buscado;
+        }
+
+        var saga = buscado.Value;
+        if (saga.Settled)
+        {
+            return saga.SettledAs == Cancelado
+                ? Result.Ok(saga)
+                : Result.Rejected<RentalSaga>(Rejection.Conflict("alquiler.not_cancellable",
+                    $"El alquiler {rentalId} ya se devolvió: no hay nada que cancelar."));
+        }
+
+        if (actor == QuienCancela.Inquilino)
+        {
+            if (saga.SettledAs == Declarado)
+            {
+                return Result.Rejected<RentalSaga>(Rejection.Conflict("alquiler.not_cancellable",
+                    $"El alquiler {rentalId} tiene la devolución declarada: lo resuelve el personal."));
+            }
+
+            if (saga.Status == SagaStatus.Completed && _huso.YaEmpezo(saga.Window, _clock.GetUtcNow()))
+            {
+                return Result.Rejected<RentalSaga>(Rejection.Conflict("alquiler.already_started",
+                    $"El alquiler {rentalId} empezó el {HusoDelAlquiler.DiaDeInicio(saga.Window):yyyy-MM-dd}: desde ese día lo cancela el personal."));
+            }
+
+            penalty = Money.Zero(saga.Deposit.Currency);
+        }
+
+        return await CerrarAsync(rentalId, penalty, devolucion: false, ct);
+    }
+
+    /// <summary>Cómo queda <see cref="RentalSaga.SettledAs"/> al cancelar.</summary>
+    public const string Cancelado = "cancelled";
+
+    /// <summary>
+    /// El inquilino declara que devolvió el equipo (decisión 5 del lote 1, #203): queda <c>declared</c> y la
+    /// garantía SIGUE retenida hasta que el personal confirme la devolución con el daño.
+    /// </summary>
+    /// <remarks>
+    /// <b>No llama a ninguna capacidad</b>: declarar no mueve plata. Lo que la mueve es <see cref="ReturnAsync"/>,
+    /// que acepta un alquiler declarado y uno sin declarar (S-2). Repetirlo devuelve lo mismo.
+    /// </remarks>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El alquiler declarado, o el rechazo.</returns>
+    public Task<Result<RentalSaga>> DeclareReturnAsync(string rentalId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var buscado = _sagas.Get(rentalId);
+        if (!buscado.IsOk)
+        {
+            return Task.FromResult(buscado);
+        }
+
+        var saga = buscado.Value;
+        if (saga.SettledAs == Declarado)
+        {
+            return Task.FromResult(Result.Ok(saga));
+        }
+
+        if (saga.Settled || saga.Status != SagaStatus.Completed)
+        {
+            return Task.FromResult(Result.Rejected<RentalSaga>(Rejection.Conflict(
+                "alquiler.not_declarable",
+                $"El alquiler {rentalId} no está reservado: no hay devolución que declarar.")));
+        }
+
+        var declarada = saga with { SettledAs = Declarado };
+        _sagas.Put(declarada);
+        return Task.FromResult(Result.Ok(declarada));
+    }
+
+    /// <summary>Cómo queda <see cref="RentalSaga.SettledAs"/> mientras la devolución espera al personal.</summary>
+    public const string Declarado = "declared";
 
     private async Task<Result<RentalSaga>> CerrarAsync(
         string rentalId, Money monto, bool devolucion, CancellationToken ct)
@@ -321,12 +415,24 @@ public sealed class RentalFlow
                     return Result.Rejected<RentalSaga>(cancelada.Rejection!);
                 }
             }
+
+            // Lo cobrado por un alquiler que no se va a usar se devuelve ENTERO. Con su llave: repetir la
+            // cancelación tras un fallo a medias no devuelve dos veces.
+            if (saga.RentalPaymentId is { } cobro && !saga.RentalTotal.IsZero)
+            {
+                var devuelto = await _caps.RefundAsync(
+                    cobro, saga.RentalTotal, "alquiler cancelado", saga.KeyFor("cancel:refund"), ct);
+                if (!devuelto.IsOk)
+                {
+                    return Result.Rejected<RentalSaga>(devuelto.Rejection!);
+                }
+            }
         }
 
         var cerrada = saga with
         {
             Settled = true,
-            SettledAs = devolucion ? "returned" : "cancelled",
+            SettledAs = devolucion ? "returned" : Cancelado,
             DamageCharged = monto,
         };
         _sagas.Put(cerrada);

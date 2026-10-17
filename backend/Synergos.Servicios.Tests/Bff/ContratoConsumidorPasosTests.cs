@@ -50,6 +50,7 @@ public sealed class ContratoConsumidorPasosTests
         ["HallarRecursoAsync"] = p => p.HallarRecursoAsync(Ref.Create("muestra.profesional", "dra-1"), Ct),
         ["ApartarVentanaAsync"] = p => p.ApartarVentanaAsync("rs-1", Ventana, Alguien, Llave, Ct),
         ["ConfirmarApartadoAsync"] = p => p.ConfirmarApartadoAsync("bh-1", Llave, Ct),
+        ["FranjasDelRecursoAsync"] = p => p.FranjasDelRecursoAsync("rs-1", Ventana.Start, Ventana.End.AddDays(1), Ct),
         ["LiberarApartadoAsync"] = p => p.LiberarApartadoAsync("bh-1", Ct),
         ["CancelarReservaAsync"] = p => p.CancelarReservaAsync("rv-1", Ct),
         ["PedirAvisoAsync"] = p => p.PedirAvisoAsync(

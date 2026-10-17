@@ -56,14 +56,22 @@ public sealed class BookingService
 
     // ── Recursos ────────────────────────────────────────────────────────────
 
+    /// <summary>La franja más larga que admite un recurso: un día. Una más larga no es una franja.</summary>
+    public const int MaxSlotMinutes = 24 * 60;
+
     public Result<Resource> RegisterResource(
         Ref subject, int capacity, string timeZoneId,
-        IReadOnlyList<OpeningRule> opening, CancellationPolicy policy, IdempotencyKey key)
+        IReadOnlyList<OpeningRule> opening, CancellationPolicy policy, IdempotencyKey key, int? slotMinutes = null)
     {
         if (capacity <= 0)
         {
             return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_capacity",
                 "Un recurso con capacidad cero o negativa no puede reservarse nunca.");
+        }
+        if (slotMinutes is <= 0 or > MaxSlotMinutes)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_slot_minutes",
+                $"La franja de un recurso dura entre 1 y {MaxSlotMinutes} minutos.");
         }
 
         lock (_gate)
@@ -77,7 +85,7 @@ public sealed class BookingService
             }
 
             var id = Guid.NewGuid().ToString("n");
-            var resource = new Resource(id, subject, capacity, timeZoneId, opening, policy);
+            var resource = new Resource(id, subject, capacity, timeZoneId, opening, policy, slotMinutes);
             _resources.Put(resource);
             _idempotency.Remember("resource", key, id);
             return Result.Ok(resource);
@@ -115,6 +123,98 @@ public sealed class BookingService
         return new Page<Resource>(todos.Skip(offset).Take(limit).ToList(), todos.Count, offset);
     }
 
+    /// <summary>
+    /// Cambia lo que el negocio puede cambiar de un recurso ya registrado —cupos, horario, plazo de aviso y
+    /// franja— sin tocar ninguna reserva, y dice cuáles de las vigentes quedan fuera (núcleo, NB-7 de 011 y
+    /// NN-6 de 005).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque un recurso sólo se registraba.</b> El editor que cambia el horario de un
+    /// servicio o las unidades de un equipo no tenía a dónde llevarlo, y la oferta lo rechazaba
+    /// (<c>reservas.oferta_no_actualizable</c>, <c>alquiler.units_change_unsupported</c>).</para>
+    ///
+    /// <para><b>Es registrarlo otra vez con lo que se puede cambiar</b>, entero y no por partes: quien publica
+    /// sabe el recurso completo, y por partes no se podría decir «ya no se reserva por franjas». El sujeto y
+    /// el huso no cambian: el sujeto es la identidad del recurso para quien lo busca, y cambiar el huso
+    /// movería en silencio cada hora del horario.</para>
+    ///
+    /// <para><b>No cancela nada, lo dice.</b> Una reserva vigente que con lo nuevo ya no cabría —fuera de la
+    /// franja, fuera de horario, o por encima de los cupos— sale en <see cref="Revision.Outside"/> con el
+    /// rechazo de la regla que la dejaría fuera, y sigue confirmada: cancelarla es una decisión con política
+    /// (avisar, devolver) que esta capacidad no toma. Por encima de los cupos salen las que se confirmaron
+    /// DESPUÉS: la primera en llegar conserva su lugar.</para>
+    ///
+    /// <para><b>Lo que NO mira, dicho:</b> los apartados vivos. Duran como mucho <see cref="MaxHoldTtl"/>, y
+    /// confirmar uno no vuelve a mirar el horario: uno tomado antes de la revisión puede confirmarse fuera
+    /// de lo nuevo. Se ve en la revisión siguiente, o en la lista de reservas.</para>
+    ///
+    /// <para><b>Con llave</b>: repetirla devuelve el recurso como está y lo que hoy queda fuera, sin volver a
+    /// escribir. Una llave que ya revisó otro recurso es un conflicto.</para>
+    /// </remarks>
+    public Result<Revision> ReviseResource(
+        string resourceId, int capacity, IReadOnlyList<OpeningRule> opening, CancellationPolicy policy,
+        int? slotMinutes, IdempotencyKey key)
+    {
+        if (capacity <= 0)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_capacity",
+                "Un recurso con capacidad cero o negativa no puede reservarse nunca.");
+        }
+        if (slotMinutes is <= 0 or > MaxSlotMinutes)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_slot_minutes",
+                $"La franja de un recurso dura entre 1 y {MaxSlotMinutes} minutos.");
+        }
+
+        lock (_gate)
+        {
+            var actual = _resources.Find(resourceId);
+            if (actual is null)
+            {
+                return Rejection.NotFound($"{BookingRules.CodePrefix}.resource_not_found", $"No existe el recurso {resourceId}.");
+            }
+
+            if (_idempotency.Find("revision", key) is { } yaEra)
+            {
+                return string.Equals(yaEra, resourceId, StringComparison.Ordinal)
+                    ? Result.Ok(new Revision(actual, Fuera(actual)))
+                    : Rejection.Conflict($"{BookingRules.CodePrefix}.idempotency_conflict", "La llave ya revisó otro recurso.");
+            }
+
+            var revisado = actual with { Capacity = capacity, Opening = opening, Policy = policy, SlotMinutes = slotMinutes };
+            _resources.Put(revisado);
+            _idempotency.Remember("revision", key, resourceId);
+            return Result.Ok(new Revision(revisado, Fuera(revisado)));
+        }
+    }
+
+    /// <summary>Las reservas vigentes que con <paramref name="resource"/> ya no cabrían, con su motivo.</summary>
+    /// <remarks>
+    /// Con las MISMAS reglas que apartar, en el mismo orden. Los cupos se cuentan por orden de confirmación
+    /// y sólo con las que caben: una que ya quedó fuera por el horario no le quita el lugar a otra.
+    /// </remarks>
+    private IReadOnlyList<OutsideReservation> Fuera(Resource resource)
+    {
+        var ahora = Now;
+        var vigentes = _reservations.ForResource(resource.Id)
+            .Where(r => r.IsActive && r.Window.End > ahora)
+            .OrderBy(r => r.ConfirmedAt)
+            .ThenBy(r => r.Id, StringComparer.Ordinal)
+            .ToList();
+
+        var fuera = new List<OutsideReservation>();
+        var caben = new List<TimeWindow>();
+        foreach (var r in vigentes)
+        {
+            var motivo = BookingRules.CheckSlot(resource, r.Window)
+                         ?? BookingRules.CheckOpeningHours(resource, r.Window)
+                         ?? BookingRules.CheckCapacity(resource, caben, r.Window);
+            if (motivo is null) caben.Add(r.Window);
+            else fuera.Add(new OutsideReservation(r, motivo));
+        }
+        return fuera;
+    }
+
     // ── Disponibilidad ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -140,10 +240,96 @@ public sealed class BookingService
         var solapadas = ocupadas.Count(w => w.Overlaps(window));
 
         var motivo = BookingRules.CheckNotInThePast(window, Now)
+                     ?? BookingRules.CheckSlot(resource, window)
                      ?? BookingRules.CheckOpeningHours(resource, window)
                      ?? BookingRules.CheckCapacity(resource, ocupadas, window);
 
         return Result.Ok((motivo is null, solapadas, resource.Capacity, motivo));
+    }
+
+    // ── Franjas libres (núcleo, NB-2 de 011) ────────────────────────────────
+
+    /// <summary>El rango más largo que se lista de una vez: una semana.</summary>
+    public static readonly TimeSpan MaxSlotRange = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Las franjas del recurso entre <paramref name="from"/> y <paramref name="to"/>, con lo libre de cada una.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Existe porque mostrar un día eran N preguntas.</b> <see cref="CheckAvailability"/> contesta
+    /// sobre UNA ventana; quien reserva quiere ver las horas del día, y la única que conoce a la vez el
+    /// horario, los cupos y la ocupación es esta capacidad. Que la grilla no sea suya lo sigue diciendo la
+    /// disponibilidad: la franja la DECLARA el recurso (<see cref="Resource.SlotMinutes"/>), y aquí sólo se
+    /// recorre.</para>
+    ///
+    /// <para><b>Sólo para un recurso que declara su franja Y su horario</b>
+    /// (<c>booking.slots_undefined</c> si no): la grilla se cuenta desde la apertura, y sin horario no hay
+    /// desde dónde contarla. Cada franja listada pasa <see cref="BookingRules.CheckSlot"/> y
+    /// <see cref="BookingRules.CheckOpeningHours"/>, y lo libre se cuenta con la MISMA ocupación que
+    /// apartar (<see cref="Occupied"/>): la lista no promete lo que apartar después niega.</para>
+    ///
+    /// <para><b>Todas, también las llenas</b>, con <c>Free</c> en cero: la pantalla decide si las enseña
+    /// tachadas. Las que ya empezaron no salen: no se pueden tomar.</para>
+    ///
+    /// <para><b>Acotado a una semana</b> (<c>booking.range_too_long</c>): el rango llega del navegador, y sin
+    /// tope un año de franjas de cinco minutos son cien mil filas por petición.</para>
+    ///
+    /// <para><b>El cambio de hora:</b> una hora local que no existe (el salto de primavera) no da franja; una
+    /// que existe dos veces se lee como la primera. Colombia no cambia de hora; un recurso en un huso que sí
+    /// pierde la franja del salto en vez de inventarla.</para>
+    /// </remarks>
+    public Result<SlotList> ListSlots(string resourceId, DateTimeOffset from, DateTimeOffset to)
+    {
+        if (to <= from)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.bad_range", "El rango termina antes de empezar.");
+        }
+        if (to - from > MaxSlotRange)
+        {
+            return Rejection.Invalid($"{BookingRules.CodePrefix}.range_too_long",
+                $"Las franjas se listan de a {MaxSlotRange.TotalDays:0} días como mucho.");
+        }
+
+        var resource = _resources.Find(resourceId);
+        if (resource is null)
+        {
+            return Rejection.NotFound($"{BookingRules.CodePrefix}.resource_not_found", $"No existe el recurso {resourceId}.");
+        }
+        if (resource.SlotMinutes is not { } minutos || resource.Opening.Count == 0)
+        {
+            return Rejection.Conflict($"{BookingRules.CodePrefix}.slots_undefined",
+                "El recurso no declara franja y horario: no tiene grilla que listar. Se pregunta por una ventana.");
+        }
+        if (BookingRules.Zone(resource, out var zone) is { } malHuso) return Result.Rejected<SlotList>(malHuso);
+
+        var ahora = Now;
+        var largo = TimeSpan.FromMinutes(minutos);
+        var ocupadas = Occupied(resourceId).ToList();
+        var franjas = new SortedDictionary<DateTimeOffset, Slot>();
+
+        var primerDia = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from, zone).DateTime);
+        var ultimoDia = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(to, zone).DateTime);
+        for (var dia = primerDia; dia <= ultimoDia; dia = dia.AddDays(1))
+        {
+            foreach (var regla in resource.Opening.Where(r => r.Day == dia.DayOfWeek))
+            {
+                var fin = regla.To.ToTimeSpan();
+                for (var t = regla.From.ToTimeSpan(); t + largo <= fin; t += largo)
+                {
+                    var local = dia.ToDateTime(TimeOnly.FromTimeSpan(t), DateTimeKind.Unspecified);
+                    if (zone.IsInvalidTime(local)) continue;
+
+                    var inicio = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, zone), TimeSpan.Zero);
+                    var ventana = TimeWindow.Starting(inicio, largo);
+                    if (ventana.Start < from || ventana.End > to || ventana.Start < ahora) continue;
+
+                    var tomadas = ocupadas.Count(w => w.Overlaps(ventana));
+                    franjas.TryAdd(inicio, new Slot(ventana, Math.Max(0, resource.Capacity - tomadas)));
+                }
+            }
+        }
+
+        return Result.Ok(new SlotList(resource.Id, minutos, resource.Capacity, franjas.Values.ToList()));
     }
 
     // ── Holds ───────────────────────────────────────────────────────────────
@@ -180,7 +366,9 @@ public sealed class BookingService
             // El orden importa: primero lo que depende solo de la petición, después lo que
             // depende del estado. Así el llamador que manda una ventana mala recibe "arreglá
             // lo que mandaste" y no "no hay cupo", que lo mandaría a reintentar en vano.
+            // La franja va antes que el horario: el largo es lo primero que quien reserva calculó mal.
             var motivo = BookingRules.CheckNotInThePast(window, Now)
+                         ?? BookingRules.CheckSlot(resource, window)
                          ?? BookingRules.CheckOpeningHours(resource, window)
                          ?? BookingRules.CheckCapacity(resource, Occupied(resourceId), window);
             if (motivo is not null) return Result.Rejected<Hold>(motivo);

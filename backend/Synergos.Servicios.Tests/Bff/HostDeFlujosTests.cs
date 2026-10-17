@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
@@ -121,6 +123,22 @@ public sealed class HostDeFlujosTests
         }
         """;
 
+    /// <summary>
+    /// La cita con una lectura sin saga (núcleo, NB-3 de 011): sus horas libres, sin dueño. La entrada de la lectura
+    /// va en otro orden que lo que lee su paso, para que cada mutación nombre UNA de las dos.
+    /// </summary>
+    private static readonly string CitaConLectura = Cita
+        .Replace("\"contacto\": { \"de\": \"contacto\" }", "\"contacto\": { \"de\": \"contacto\" }, \"desde\": \"instante\", \"hasta\": \"instante\"", StringComparison.Ordinal)
+        .Replace("\"efimera\": {", "\"lecturas\": { \"disponibilidad\": { \"entrada\": [\"desde\", \"hasta\", \"recurso\"], \"pasos\": [\"franjas\"], \"salida\": [\"franjas\"] } },\n  \"efimera\": {", StringComparison.Ordinal)
+        .Replace("\"pasos\": {", "\"pasos\": {\n    \"franjas\": { \"tipo\": \"booking.franjas\", \"lee\": [\"recurso\", \"desde\", \"hasta\"], \"escribe\": [\"franjas\"] },", StringComparison.Ordinal);
+
+    private static string MutarLectura(string antes, string despues)
+    {
+        Assert.True(CitaConLectura.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la definición con lectura ya no dice «{antes}». Revisar este test antes que el host.");
+        return CitaConLectura.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
     private static readonly Ref Paciente = Ref.Create("prueba.paciente", "u-1");
     private static readonly TimeWindow Hora = TimeWindow.Of(
         new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 20, 15, 30, 0, TimeSpan.Zero));
@@ -138,6 +156,9 @@ public sealed class HostDeFlujosTests
         public List<string> Llamadas { get; } = [];
         public bool RechazaAutorizar { get; set; }
 
+        /// <summary>Si está, cada llamada se escribe en el registro, como lo haría el cliente de una capacidad.</summary>
+        public ILogger? Log { get; set; }
+
         /// <summary>Rechaza sólo la autorización cuya llave termina en <c>|{esto}</c>.</summary>
         public string? RechazaLaLlave { get; set; }
 
@@ -153,12 +174,32 @@ public sealed class HostDeFlujosTests
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Ok("rs-1", $"hallar {sujeto}");
         public Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-1", $"permiso {proposito}");
-        public Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
-            => Ok("bh-1", $"apartar {recurso} {llave.Value}");
-        public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Ok("rv-1", $"confirmar {apartado}");
+        /// <summary>Cuándo vence el apartado falso: lo que <c>booking.apartar</c> escribe si la definición lo nombra.</summary>
+        public static readonly DateTimeOffset VenceElApartado = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
+
+        public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
+            => (await Ok("bh-1", $"apartar {recurso} {llave.Value}")).Map(id => new Apartado(id, VenceElApartado));
+
+        /// <summary>Si está, confirmar en la agenda se rechaza: el apartado venció.</summary>
+        public bool RechazaConfirmar { get; set; }
+
+        public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct)
+            => RechazaConfirmar
+                ? Task.FromResult(Result.Rejected<string>(Rejection.Conflict("booking.hold_expired", "guionado")))
+                : Ok("rv-1", $"confirmar {apartado}");
+
+        /// <summary>Dos franjas desde <c>desde</c>: una libre y una llena, para la lectura de disponibilidad (NB-3).</summary>
+        public Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+        {
+            Llamadas.Add($"franjas {recurso}");
+            Log?.LogInformation("Llamada {Llamada}", $"franjas {recurso}");
+            IReadOnlyList<FranjaLibre> franjas = [new(desde, desde.AddMinutes(30), 1), new(desde.AddMinutes(30), desde.AddMinutes(60), 0)];
+            return Task.FromResult(Result.Ok(franjas));
+        }
         public Task<Result<string>> AutorizarAsync(Ref paraQue, Ref pagador, Money monto, IdempotencyKey llave, CancellationToken ct)
         {
             Llamadas.Add($"autorizar {monto} {llave.Value}");
+            Log?.LogInformation("Llamada {Llamada}", $"autorizar {monto}");
             var tramo = llave.Value[(llave.Value.LastIndexOf('|') + 1)..];
             return Task.FromResult(RechazaAutorizar || tramo == RechazaLaLlave
                 ? Result.Rejected<string>(Rejection.Conflict("payments.payment_declined", "guionado"))
@@ -180,6 +221,7 @@ public sealed class HostDeFlujosTests
         private Task<Result<string>> Ok(string valor, string llamada)
         {
             Llamadas.Add(llamada);
+            Log?.LogInformation("Llamada {Llamada}", llamada);
             return Task.FromResult(Result.Ok(valor));
         }
     }
@@ -234,8 +276,14 @@ public sealed class HostDeFlujosTests
 
     private sealed class Banco : IDisposable
     {
-        public Banco(string definicion = Cita)
+        private readonly ILoggerFactory? _logs;
+
+        /// <param name="definicion">La definición.</param>
+        /// <param name="logs">Si está, el motor, el intérprete y los puertos escriben en él (NB-9); si no, en nada.</param>
+        public Banco(string definicion = Cita, ILoggerFactory? logs = null)
         {
+            _logs = logs;
+            Puertos.Log = logs?.CreateLogger("puertos");
             Flujo = FlujoDef.Leer(definicion);
             var vocabulario = new SagaVocabulary("prueba", "la cita");
             var deshacer = new DeshacerComun(Puertos, Puertos, Puertos, Puertos, []);
@@ -244,15 +292,19 @@ public sealed class HostDeFlujosTests
             Motor = new SagaEngine<SagaDeFlujo>(
                 almacen, new Compensator<SagaDeFlujo>(deshacer, TimeProvider.System, NullLogger<Compensator<SagaDeFlujo>>.Instance),
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
-                ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System, NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
+                ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System,
+                logs?.CreateLogger<SagaEngine<SagaDeFlujo>>() ?? NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
+            var tipos = TiposDeValor.Con(new TipoContacto(), new TipoFranjas());
             Registro = new RegistroDePasos(
             [
                 new PasoAgendaApartar(Puertos), new PasoAgendaConfirmar(Puertos), new PasoPagosAutorizar(Puertos),
                 new PasoPagosCapturar(Puertos), new PasoAvisar(Puertos),
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
+                new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
+                new PasoLeerOriginal(almacen, tipos), new PasoPagosDevolver(Puertos),
             ]);
-            Binding = new BindingDeFlujo(Flujo, TiposDeValor.Con(new TipoContacto()), Registro, deshacer.Tipos);
+            Binding = new BindingDeFlujo(Flujo, tipos, Registro, deshacer.Tipos);
         }
 
         public Falsos Puertos { get; } = new();
@@ -265,10 +317,14 @@ public sealed class HostDeFlujosTests
         public IReadOnlyList<string> Errores()
             => FlowValidator.Validar(Flujo, Registro, ContratoDelFlujo.De(Binding, Flujo.Fases.Select(f => f.Nombre).ToList()));
 
+        /// <summary>El flujo como lo ve el catálogo del orquestador, para cruzarlo con otro (lote 6).</summary>
+        public FlujoRegistrado Registrado() => new(Flujo, ContratoDelFlujo.De(Binding, Flujo.Fases.Select(f => f.Nombre).ToList()));
+
         public FachadaDeFlujo<SagaDeFlujo> Fachada()
         {
             var interprete = new FlowRunner<SagaDeFlujo>(
-                Motor, Registro, Flujo, Binding, Flujo.Fases.Select(f => f.Nombre).ToList(), TimeProvider.System, NullLogger.Instance);
+                Motor, Registro, Flujo, Binding, Flujo.Fases.Select(f => f.Nombre).ToList(), TimeProvider.System,
+                _logs?.CreateLogger("flujo") ?? NullLogger.Instance);
             return new FachadaDeFlujo<SagaDeFlujo>(Motor, interprete, Flujo, ReglasDeLaFachada.Para(new SagaVocabulary("prueba", "la cita")),
                 s => s.Flujo == Flujo.Clave);
         }
@@ -327,6 +383,158 @@ public sealed class HostDeFlujosTests
 
         Assert.Contains(errores, e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
         Assert.Throws<InvalidOperationException>(() => banco.Fachada());
+    }
+
+    [Fact]
+    public async Task El_apartado_dice_cuando_vence_si_la_definicion_lo_nombra()
+    {
+        // NB-5 de 011 y NV-12 de 006: la pantalla sólo puede decir cuánto tiempo queda si lo dice el servidor.
+        // La escritura nueva es OPCIONAL: la cita de arriba la ignora y sigue arrancando (todo este fichero).
+        var conVence = Mutar("\"escribe\": [\"apartadoId\"], \"llave\": \"hold\"", "\"escribe\": [\"apartadoId\", \"vence\"], \"llave\": \"hold\"")
+            .Replace("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"cobroId\", \"reservaId\", \"vence\"]", StringComparison.Ordinal);
+        Assert.Contains("\"reservaId\", \"vence\"]", conVence, StringComparison.Ordinal);
+
+        using (var banco = new Banco(conVence))
+        {
+            Assert.Empty(banco.Errores());
+            var abierta = await banco.Fachada().AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+
+            var vence = abierta.Value.Datos["vence"];
+            Assert.Equal("instante", vence.Tipo.TrimEnd('?'));
+            Assert.Equal(Falsos.VenceElApartado, DateTimeOffset.Parse(vence.Valor!.Value.GetString()!, System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        foreach (var escribe in new[] { "[]", "[\"apartadoId\", \"vence\", \"otro\"]" })
+        {
+            using var mal = new Banco(Mutar("\"escribe\": [\"apartadoId\"], \"llave\": \"hold\"", $"\"escribe\": {escribe}, \"llave\": \"hold\""));
+            Assert.Contains(mal.Errores(), e => e.Contains("«booking.apartar» produce 2, de las que las últimas 1 se pueden no nombrar", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Un registro que guarda cada línea con los ámbitos que tenía abiertos, como los ve el formateador de consola
+    /// (<c>IncludeScopes</c>): el texto de cada ámbito y sus valores por nombre.
+    /// </summary>
+    private sealed class RegistroConAmbitos : ILoggerProvider, ISupportExternalScope
+    {
+        private IExternalScopeProvider _ambitos = new LoggerExternalScopeProvider();
+
+        public List<(string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> Lineas { get; } = [];
+
+        public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _ambitos = scopeProvider;
+
+        public ILogger CreateLogger(string categoryName) => new Registrador(this);
+
+        public void Dispose() { }
+
+        private sealed class Registrador(RegistroConAmbitos dueno) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => dueno._ambitos.Push(state);
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                var textos = new List<string>();
+                var valores = new Dictionary<string, object?>(StringComparer.Ordinal);
+                dueno._ambitos.ForEachScope((ambito, _) =>
+                {
+                    textos.Add(ambito?.ToString() ?? string.Empty);
+                    if (ambito is IEnumerable<KeyValuePair<string, object?>> pares)
+                    {
+                        foreach (var (k, v) in pares) valores[k] = v;
+                    }
+                }, (object?)null);
+                lock (dueno.Lineas) dueno.Lineas.Add((formatter(state, exception), textos, valores));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Cada_linea_de_una_fase_y_de_lo_que_se_deshace_lleva_la_saga_y_su_numero()
+    {
+        // NB-9 de 011: medido en vivo, el número de una reserva salía cero veces en el registro del orquestador.
+        // Las llamadas a las capacidades las escribe quien llama, no el intérprete: si llevan la saga, la lleva
+        // todo lo de en medio. Al abrir (apartar, autorizar) y al deshacer (liberar, anular).
+        var registro = new RegistroConAmbitos();
+        using var logs = LoggerFactory.Create(b => b.AddProvider(registro).SetMinimumLevel(LogLevel.Trace));
+        using var banco = new Banco(logs: logs);
+        var fachada = banco.Fachada();
+
+        var abierta = await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None);
+        Assert.True((await fachada.CancelarAsync(abierta.Value.Id, Paciente, CancellationToken.None)).IsOk);
+
+        var llamadas = registro.Lineas.Where(l => l.Mensaje.StartsWith("Llamada ", StringComparison.Ordinal)).ToList();
+        foreach (var hecho in new[] { "apartar", "autorizar", "liberar", "anular" })
+        {
+            Assert.Contains(llamadas, l => l.Mensaje.Contains(hecho, StringComparison.Ordinal));
+        }
+        Assert.All(llamadas, l =>
+        {
+            Assert.Equal("cita-1", l.Valores.GetValueOrDefault("Saga"));
+            Assert.Equal("CITA1", l.Valores.GetValueOrDefault("NumeroDeSaga"));
+            Assert.Contains("Saga:cita-1 Numero:CITA1", l.Textos);   // lo que imprime la consola, no el nombre de un tipo
+        });
+    }
+
+    [Fact]
+    public async Task Una_lectura_corre_sin_saga_ni_dueno_y_devuelve_lo_que_declara()
+    {
+        // NB-3 de 011, el control: la definición con lectura arranca, y leer llama a la agenda y no escribe NADA en el
+        // almacén de sagas. Sin esto, la Theory de abajo pasaría también si toda lectura no arrancara.
+        using var banco = new Banco(CitaConLectura);
+        Assert.Empty(banco.Errores());
+        var desde = new DateTimeOffset(2026, 10, 20, 14, 0, 0, TimeSpan.Zero);
+
+        var leido = await banco.Fachada().LeerAsync("disponibilidad",
+            new FlowContext().Set("recurso", "rs-1").Set("desde", desde).Set("hasta", desde.AddHours(2)), CancellationToken.None);
+
+        Assert.True(leido.IsOk, leido.Rejection?.ToString());
+        Assert.Equal(new[] { 1, 0 }, leido.Value.Get<IReadOnlyList<FranjaLibre>>("franjas").Select(f => f.Libres));
+        Assert.Equal("franjas rs-1", Assert.Single(banco.Puertos.Llamadas));
+        var sagas = Path.Combine(banco.Raiz, "sagas");
+        Assert.False(Directory.Exists(sagas) && Directory.EnumerateFileSystemEntries(sagas).Any(), "Una lectura escribió en el almacén de sagas.");
+    }
+
+    public static TheoryData<string, string, string> LecturasMalDeclaradas() => new()
+    {
+        // un nombre que la puerta no conoce
+        { "\"disponibilidad\": {", "\"horas\": {", "no es una lectura de la puerta" },
+        // un sujeto en la entrada de una lectura: tendría dueño
+        { "\"entrada\": [\"desde\", \"hasta\", \"recurso\"]", "\"entrada\": [\"desde\", \"hasta\", \"recurso\", \"paciente\"]", "una lectura no tiene dueño" },
+        // un paso que aparta (con llave y reserva) dentro de la lectura
+        { "\"pasos\": [\"franjas\"]", "\"pasos\": [\"franjas\", \"apartar\"]", "una lectura no escribe en ninguna capacidad" },
+        // un paso de la lectura con llave y nada más: pedir llave es lo que hace un paso que escribe
+        { "\"escribe\": [\"franjas\"] }", "\"escribe\": [\"franjas\"], \"llave\": \"x\" }", "una lectura no escribe en ninguna capacidad" },
+        // un paso que lee algo que la lectura no tiene
+        { "\"entrada\": [\"desde\", \"hasta\", \"recurso\"]", "\"entrada\": [\"hasta\", \"recurso\"]", "«franjas» lee «desde», que ni entra en la lectura" },
+        // una salida que nadie escribe en la lectura
+        { "\"salida\": [\"franjas\"]", "\"salida\": [\"total\"]", "devuelve «total», que ni entra ni lo escribe un paso de ella" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LecturasMalDeclaradas))]
+    public void Una_lectura_mal_declarada_no_arranca(string antes, string despues, string mensaje)
+    {
+        using var banco = new Banco(MutarLectura(antes, despues));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Listar_no_trae_las_del_dueno_en_otro_flujo_del_mismo_almacen()
+    {
+        // NB-6: varios flujos genéricos de un orquestador comparten almacén. «Mis citas» no son «mis compras».
+        using var banco = new Banco();
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        banco.Motor.Put(new SagaDeFlujo("otra-1", "prueba.otro", Paciente, SagaStatus.Completed,
+            new Dictionary<string, ValorDeFlujo>(), new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(), [], null, DateTimeOffset.UtcNow));
+
+        var (items, total) = fachada.Listar(Paciente, null, 0, 10);
+
+        Assert.Equal(("cita-1", 1), (Assert.Single(items).Id, total));
+        Assert.Equal(2, banco.Motor.DeDueno(Paciente).Count);   // el almacén sí la tiene: la deja fuera la fachada
     }
 
     [Fact]
@@ -552,6 +760,230 @@ public sealed class HostDeFlujosTests
         Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
         Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.EndsWith("|deposit", StringComparison.Ordinal));
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("autorizar", StringComparison.Ordinal));
+    }
+
+    // ── La garantía que sobrevive al cierre (P7 = A, NN-4 de 005): payments.conservar ──────────
+
+    /// <summary>
+    /// La renta con el paso común: la garantía se conserva ANTES de confirmar las unidades, a propósito. Con un cierre
+    /// sin <c>despues</c> cualquiera, que confirmar fallara dejaría la garantía retenida sin dueño.
+    /// </summary>
+    private static readonly string RentaConservada = MutarRenta(
+        "\"conservar\": { \"tipo\": \"prueba.conservar\"", "\"conservar\": { \"tipo\": \"payments.conservar\"");
+
+    private static string MutarRenta(string antes, string despues, string? base_ = null)
+    {
+        var de = base_ ?? Renta;
+        Assert.True(de.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la renta ya no dice «{antes}». Revisar este test antes que el host.");
+        return de.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_queda_viva_fuera_de_la_saga_con_su_id_en_la_salida()
+    {
+        using var banco = new Banco(RentaConservada);
+        Assert.Empty(banco.Errores());
+        banco.Puertos.CobroPorLlave["deposit"] = "pg-garantia";
+        banco.Puertos.CobroPorLlave["rental"] = "pg-renta";
+        var fachada = banco.Fachada();
+
+        Assert.True((await fachada.AbrirAsync("renta-1", Paciente, EntradaDeRenta(1, 300_000m), CancellationToken.None)).IsOk);
+        var cerrada = await fachada.ContinuarAsync("cerrar", "renta-1", Paciente, new FlowContext(), CancellationToken.None);
+
+        Assert.True(cerrada.IsOk, cerrada.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
+        Assert.DoesNotContain(cerrada.Value.Compensations, c => c.IsPending);
+        Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.Contains("pg-garantia", StringComparison.Ordinal));
+        Assert.Equal("pg-garantia", cerrada.Value.Datos["garantiaId"].Valor!.Value.GetString());
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_antes_de_confirmar_se_anula_si_confirmar_falla()
+    {
+        using var banco = new Banco(RentaConservada);
+        banco.Puertos.CobroPorLlave["deposit"] = "pg-garantia";
+        banco.Puertos.CobroPorLlave["rental"] = "pg-renta";
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("renta-1", Paciente, EntradaDeRenta(1, 300_000m), CancellationToken.None)).IsOk);
+        banco.Puertos.RechazaConfirmar = true;
+
+        var r = await fachada.ContinuarAsync("cerrar", "renta-1", Paciente, new FlowContext(), CancellationToken.None);
+
+        Assert.Equal("booking.hold_expired", r.Rejection?.Code);
+        Assert.Contains("devolver pg-renta", banco.Puertos.Llamadas);
+        Assert.Contains("anular pg-garantia", banco.Puertos.Llamadas);
+        Assert.Contains("liberar bh-1", banco.Puertos.Llamadas);
+        Assert.Equal(SagaStatus.Compensated, banco.Motor.Find("renta-1")!.Status);
+    }
+
+    [Theory]
+    [InlineData("\"consumado_por\": \"conservar\", \"antes\": \"payments.anular\" }",
+        "\"consumado_por\": \"conservar\", \"antes\": \"payments.anular\", \"despues\": \"payments.devolver\" }",
+        "«conservar» conserva la reserva de «deposito», que declara «despues: payments.devolver»")]
+    [InlineData("\"salida\": [\"total\", \"garantia\", \"garantiaId\", \"cobroId\"]",
+        "\"salida\": [\"total\", \"garantia\", \"cobroId\"]",
+        "«conservar» conserva la reserva de «deposito» y su id no sale en la salida")]
+    public void Lo_que_se_conserva_no_declara_despues_y_su_id_sale_en_la_salida(string antes, string despues, string mensaje)
+    {
+        using (var control = new Banco(RentaConservada)) Assert.Empty(control.Errores());
+        using var banco = new Banco(MutarRenta(antes, despues, RentaConservada));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
+    }
+
+    // ── Lo posterior al cierre (P6 = A del lote 6): un flujo aparte que lee su original ──────────
+
+    /// <summary>
+    /// Devolver una parte de una cita ya completada: un flujo aparte, posterior a <c>prueba.cita</c>, que lee su cobro con
+    /// <c>flow.leer-original</c> y devuelve el monto que pide.
+    /// </summary>
+    private const string Devolucion = """
+        {
+          "clave": "prueba.devolucion",
+          "posterior_a": "prueba.cita",
+          "entrada": ["paciente", "cita", "monto"],
+          "tipos": {
+            "paciente": { "de": "sujeto" },
+            "cita": "texto",
+            "monto": "dinero",
+            "cobroId": { "tipo": "texto", "de": "original" }
+          },
+          "salida": ["cita", "monto"],
+          "fases": { "devolver": ["original", "devolver"] },
+          "pasos": {
+            "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["cobroId"] },
+            "devolver": { "tipo": "payments.devolver", "lee": ["cobroId", "monto"], "llave": "refund" }
+          }
+        }
+        """;
+
+    private static string MutarDevolucion(string antes, string despues)
+    {
+        Assert.True(Devolucion.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la devolución ya no dice «{antes}». Revisar este test antes que el host.");
+        return Devolucion.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
+    /// <summary>Una cita como la deja completada el flujo de la cita: su cobro guardado con el tipo con que se guarda.</summary>
+    private static SagaDeFlujo Original(string id, Ref dueno, SagaStatus estado = SagaStatus.Completed, string flujo = "prueba.cita",
+        string? cobro = "pg-1")
+        => new(id, flujo, dueno, estado,
+            new Dictionary<string, ValorDeFlujo>(StringComparer.Ordinal)
+            {
+                ["cobroId"] = new("texto?", cobro is null ? null : JsonSerializer.SerializeToElement(cobro)),
+            },
+            new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(StringComparer.Ordinal), [], null, DateTimeOffset.UtcNow);
+
+    private static FlowContext EntradaDeDevolucion(string cita, decimal monto = 20_000m) => new FlowContext()
+        .Set("paciente", Paciente).Set("cita", cita).Set("monto", Money.Of(monto, "COP"));
+
+    [Fact]
+    public async Task Lo_posterior_lee_el_cobro_de_la_original_completada_del_mismo_dueno_y_devuelve_esa_parte()
+    {
+        using var banco = new Banco(Devolucion);
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("cita-1", Paciente));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        Assert.Equal(["devolver pg-1"], banco.Puertos.Llamadas);
+        Assert.Equal(SagaStatus.Completed, banco.Motor.Find("cita-1")!.Status);
+    }
+
+    [Theory]
+    [InlineData("no-existe", "prueba.cita", "u-1")]
+    [InlineData("cita-1", "prueba.cita", "u-2")]
+    [InlineData("cita-1", "prueba.otra", "u-1")]
+    public async Task Una_original_que_no_existe_de_otro_dueno_o_de_otro_flujo_contesta_lo_mismo(string pedida, string flujo, string dueno)
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Ref.Create("prueba.paciente", dueno), flujo: flujo));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion(pedida), CancellationToken.None);
+
+        Assert.Equal((RejectionKind.NotFound, PasoLeerOriginal.NoEncontrada), (r.Rejection?.Kind, r.Rejection?.Code));
+        Assert.Empty(banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public async Task En_un_flujo_del_personal_lee_la_original_de_otro_dueno()
+    {
+        // P8 = A: quien pide es del personal, no el dueño de la cita; la puerta ya comprobó su rol.
+        using var banco = new Banco(MutarDevolucion("\"posterior_a\": \"prueba.cita\",", "\"posterior_a\": \"prueba.cita\", \"acceso\": \"personal\","));
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("cita-1", Ref.Create("prueba.paciente", "u-9")));
+
+        var r = await banco.Fachada().AbrirAsync("reemb-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(["devolver pg-1"], banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public void El_acceso_de_un_flujo_es_el_del_dueno_o_personal_y_nada_mas()
+    {
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(
+            MutarDevolucion("\"posterior_a\": \"prueba.cita\",", "\"posterior_a\": \"prueba.cita\", \"acceso\": \"dueno\",")));
+        Assert.Contains("«acceso» sólo admite «personal»", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Sobre_una_original_sin_completar_no_hay_nada_posterior()
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Paciente, SagaStatus.Running));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.Equal(PasoLeerOriginal.NoCompletada, r.Rejection?.Code);
+        Assert.Empty(banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public async Task Un_dato_que_la_original_no_tiene_es_un_rechazo_salvo_que_se_declare_anulable()
+    {
+        using var banco = new Banco(Devolucion);
+        banco.Motor.Put(Original("cita-1", Paciente, cobro: null));
+
+        var r = await banco.Fachada().AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+        Assert.Equal(PasoLeerOriginal.SinDato, r.Rejection?.Code);
+    }
+
+    [Theory]
+    [InlineData("\"posterior_a\": \"prueba.cita\",", "", "«cobroId» viene de la original y el flujo no declara «posterior_a»")]
+    [InlineData("\"posterior_a\": \"prueba.cita\"", "\"posterior_a\": \"prueba.devolucion\"", "es «posterior_a» sí mismo")]
+    [InlineData("\"fases\": { \"devolver\": [\"original\", \"devolver\"] }",
+        "\"fases\": { \"abrir\": [\"devolver\"], \"leer\": [\"original\"] }",
+        "«original» lee la original fuera de la fase que abre")]
+    [InlineData("\"escribe\": [\"cobroId\"] }", "\"escribe\": [] }", "«cobroId» viene de la original y «original» no lo escribe")]
+    [InlineData("\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": \"texto\"",
+        "«original» escribe «cobroId», que no se declara")]
+    public void Una_operacion_posterior_mal_declarada_no_arranca(string antes, string despues, string mensaje)
+    {
+        using var banco = new Banco(MutarDevolucion(antes, despues));
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_que_lee_de_la_original_tiene_que_salir_en_su_salida_y_con_el_mismo_tipo()
+    {
+        using var cita = new Banco();
+        using var devolucion = new Banco(Devolucion);
+        Assert.Empty(FlowValidator.ValidarPosteriores([cita.Registrado(), devolucion.Registrado()], devolucion.Registro));
+
+        using var sinCobro = new Banco(Mutar("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"reservaId\"]"));
+        Assert.Contains(FlowValidator.ValidarPosteriores([sinCobro.Registrado(), devolucion.Registrado()], devolucion.Registro),
+            e => e.Contains("lee «cobroId» de «prueba.cita», que no lo tiene en su salida", StringComparison.Ordinal));
+
+        using var otroTipo = new Banco(MutarDevolucion("\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": { \"tipo\": \"dinero\", \"de\": \"original\" }"));
+        Assert.Contains(FlowValidator.ValidarPosteriores([cita.Registrado(), otroTipo.Registrado()], otroTipo.Registro),
+            e => e.Contains("lee «cobroId» de «prueba.cita» como «dinero», y allí es «texto?»", StringComparison.Ordinal));
+
+        Assert.Contains(FlowValidator.ValidarPosteriores([devolucion.Registrado()], devolucion.Registro),
+            e => e.Contains("es posterior a «prueba.cita», y este orquestador no tiene ese flujo", StringComparison.Ordinal));
     }
 
     // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────

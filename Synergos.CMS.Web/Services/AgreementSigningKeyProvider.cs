@@ -83,4 +83,11 @@ public sealed class LazyAgreementSigner : IAgreementSigner
     /// <inheritdoc />
     public bool Matches(string? sealValue, AgreementSubject subject)
         => _inner.Value.Matches(sealValue, subject);
+
+    /// <inheritdoc />
+    public string Seal(AgreementOutcomeSubject outcome) => _inner.Value.Seal(outcome);
+
+    /// <inheritdoc />
+    public bool Matches(string? sealValue, AgreementOutcomeSubject outcome)
+        => _inner.Value.Matches(sealValue, outcome);
 }

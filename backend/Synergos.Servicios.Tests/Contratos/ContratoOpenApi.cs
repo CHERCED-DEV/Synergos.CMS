@@ -80,6 +80,7 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Fulfillment.Contracts.ShipmentResponse>("Fulfillment"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
         new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
+        new PiezaPublicada<Synergos.Bff.Alquiler.Contracts.RentalResponse>("Alquiler"),
         new PiezaPublicada<Synergos.Bff.Reservas.Contracts.OfertaDeServicioResponse>("Reservas"),
     ];
 
@@ -179,7 +180,8 @@ internal static class ContratoOpenApi
         /// <summary>El cuerpo que ya se publicó con cada nombre, como JSON: dos distintos no comparten nombre.</summary>
         private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
 
-        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "JsonElement"];
+        public static readonly string[] Reemplazados =
+            ["RespuestaDeFlujo", "CotizacionDeFlujo", "PaginaDeFlujoOfRespuestaDeFlujo", "LecturaDeFlujo", "JsonElement"];
 
         /// <summary>
         /// El nombre con que se publica un cuerpo (N-13 de Tienda): <c>{Flujo}Entrada</c> el de abrir y cotizar, y
@@ -225,6 +227,23 @@ internal static class ContratoOpenApi
             {
                 if (respuesta.Content is null || !respuesta.Content.TryGetValue("application/json", out var json)) continue;
 
+                // Una lectura sin saga (NB-3): { flujo, datos } con su salida, bajo su propio nombre.
+                if (contrato.NombreDeLaRespuesta is { } propio)
+                {
+                    Propios[propio] = Cotizacion(contrato.Datos);
+                    json.Schema = new OpenApiSchemaReference(propio, ctx.Document);
+                    continue;
+                }
+
+                // «Mis …» (NB-6): una página de respuestas del flujo, cada una con sus datos tipados.
+                if (op.OperationId?.EndsWith("Listar", StringComparison.Ordinal) == true)
+                {
+                    Propios[contrato.Nombre + "Respuesta"] = Respuesta(contrato.Datos);
+                    Propios[contrato.Nombre + "Pagina"] = Pagina(new OpenApiSchemaReference(contrato.Nombre + "Respuesta", ctx.Document));
+                    json.Schema = new OpenApiSchemaReference(contrato.Nombre + "Pagina", ctx.Document);
+                    continue;
+                }
+
                 var cotiza = op.OperationId?.EndsWith("Cotizar", StringComparison.Ordinal) == true;
                 var nombre = contrato.Nombre + (cotiza ? "Cotizacion" : "Respuesta");
                 Propios[nombre] = cotiza ? Cotizacion(contrato.Datos) : Respuesta(contrato.Datos);
@@ -254,6 +273,14 @@ internal static class ContratoOpenApi
         });
 
         private static OpenApiSchema Cotizacion(JsonObject datos) => Objeto(new() { ["flujo"] = Texto(), ["datos"] = Esquema(datos) });
+
+        private static OpenApiSchema Pagina(IOpenApiSchema item) => Objeto(new()
+        {
+            ["items"] = new OpenApiSchema { Type = JsonSchemaType.Array, Items = item },
+            ["total"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["offset"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["hasMore"] = new OpenApiSchema { Type = JsonSchemaType.Boolean },
+        });
 
         private static OpenApiSchema Texto() => new() { Type = JsonSchemaType.String };
 
@@ -481,18 +508,21 @@ internal static class ContratoOpenApi
     /// </summary>
     /// <remarks>
     /// Es lo que lee la puerta del CMS para armar su tabla, y el generador del UI para saber qué emitir.
-    /// Sin marca, la operación no existe para ninguno de los dos.
+    /// Sin marca, la operación no existe para ninguno de los dos. Una operación del personal (P8) lleva además
+    /// <c>acceso: personal</c>, y la del dueño no lo lleva: la marca de hoy no cambia.
     /// </remarks>
     private static Task Flujo(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
     {
         if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<OperacionEnLaPuerta>().FirstOrDefault() is { } marca)
         {
             op.Extensions ??= new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal);
-            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(new JsonObject
+            var json = new JsonObject
             {
                 ["flujo"] = marca.Flujo,
                 ["operacion"] = marca.Operacion,
-            });
+            };
+            if (marca.Personal) json["acceso"] = FlujoDef.AccesoDelPersonal;
+            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(json);
         }
 
         return Task.CompletedTask;
