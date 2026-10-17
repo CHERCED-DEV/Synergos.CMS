@@ -124,7 +124,8 @@ public sealed class ConsumidorCmsDeBffAlquilerTests
     {
         var grabadora = new Grabadora();
         var puerta = new HttpAlquilerDeLaPuerta(
-            new Fabrica(grabadora), Alquiler(), NullLogger<HttpAlquilerDeLaPuerta>.Instance, hayOrquestador: true);
+            new Fabrica(grabadora), Alquiler(), NullLogger<HttpAlquilerDeLaPuerta>.Instance, hayOrquestador: true,
+            cancelaPorElFlujo: false);
 
         await puerta.DeclareReturnAsync(Contrato(), "declarar-1");
         await puerta.ConfirmReturnAsync(Contrato(), 40_000m, "staff-1", "confirmar-1");
@@ -140,6 +141,36 @@ public sealed class ConsumidorCmsDeBffAlquilerTests
             Lee(liquidacion, Respuesta(op), ruta, malas);
         }
 
+        Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
+    }
+
+    /// <summary>
+    /// La cancelación del inquilino por el flujo posterior (NN-8, D-005-NN8) cabe en <c>AlquilerCancelacionAbrir</c>: la
+    /// llave y el sujeto declarados, el cuerpo sólo con el alquiler, y lo que lee de la saga posterior —su estado y el
+    /// alquiler que canceló— publicado. La del personal sigue yendo a la liquidación propia.
+    /// </summary>
+    [Fact]
+    public async Task Lo_que_manda_y_lee_la_cancelacion_por_el_flujo_posterior_cabe_en_AlquilerCancelacionAbrir()
+    {
+        var grabadora = new Grabadora();
+        var puerta = new HttpAlquilerDeLaPuerta(
+            new Fabrica(grabadora), Alquiler(), NullLogger<HttpAlquilerDeLaPuerta>.Instance, hayOrquestador: true,
+            cancelaPorElFlujo: true);
+
+        await puerta.CancelAsync(Contrato(), RentalCanceller.Renter, 0m, null, "cancelar-1");
+        await puerta.CancelAsync(Contrato(), RentalCanceller.Staff, 50_000m, "staff-1", "cancelar-2");
+
+        Assert.Equal(["/v1/flujos/alquiler.cancelacion", "/v1/alquileres/alq-1/cancelar-confirmado"],
+            grabadora.Llamadas.Select(l => l.Ruta));
+        var op = Operacion("POST", "/v1/flujos/alquiler.cancelacion")!.Value.Op;
+        Assert.Equal("AlquilerCancelacionAbrir", op.GetProperty("operationId").GetString());
+        Assert.True(DeclaraCabecera(op, "Idempotency-Key") && DeclaraCabecera(op, "X-Synergos-Sujeto"),
+            "Abrir la cancelación no declara la llave o el sujeto que el CMS manda.");
+
+        var malas = Juzgar(grabadora);
+        Lee(typeof(HttpAlquilerDeLaPuerta).GetNestedType("CancelacionWire", BindingFlags.NonPublic)!,
+            op.GetProperty("responses").GetProperty("201").GetProperty("content").GetProperty("application/json").GetProperty("schema"),
+            "AlquilerCancelacionAbrir", malas);
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
     }
 

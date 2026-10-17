@@ -143,11 +143,16 @@ public sealed partial class SeamComposer
             services.AddClienteDelArbolDeServicios(
                 HttpAlquilerDeLaPuerta.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 30));
         }
+        // Cancelar lo confirmado (NN-8, D-005-NN8): el inquilino por el flujo posterior alquiler.cancelacion o por la
+        // liquidación propia, que se conserva detrás de este interruptor; el personal, siempre por la propia.
+        var cancelaPorElFlujo = Interruptor.Modo(builder.Config, "Synergos:Alquiler:Cancellation",
+            new AlquilerSettings().Cancellation, AlquilerSettings.CancelacionPropia) == AlquilerSettings.CancelacionPosterior;
         services.AddSingleton<IAlquilerDeLaPuerta>(sp => new HttpAlquilerDeLaPuerta(
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
             sp.GetRequiredService<ILogger<HttpAlquilerDeLaPuerta>>(),
-            hayOrquestadorDeAlquiler));
+            hayOrquestadorDeAlquiler,
+            cancelaPorElFlujo));
 
         // El contrato de un alquiler de la PUERTA (línea 005, T024): se emite al leerlo, con lo que contesta el
         // orquestador, y «mis alquileres» reconcilia los completados que el registro no tiene. Mismo destino.
