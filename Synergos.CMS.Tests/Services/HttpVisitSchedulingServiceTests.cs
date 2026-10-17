@@ -34,7 +34,8 @@ public sealed class HttpVisitSchedulingServiceTests
         public HashSet<int> Tomadas { get; } = new();
 
         public HttpStatusCode HoldEstado { get; set; } = HttpStatusCode.Created;
-        public string HoldCodigo { get; set; } = "booking.insufficient_capacity";
+        // Los códigos que EMITE Api.Booking (BookingRules), no los que recordaba el cliente (D-2, 008).
+        public string HoldCodigo { get; set; } = "booking.at_capacity";
 
         /// <summary>Si viene, la capacidad no contesta: se cae la conexión.</summary>
         public bool Caida { get; set; }
@@ -134,6 +135,8 @@ public sealed class HttpVisitSchedulingServiceTests
         Assert.Equal(VisitAgenda.For("L1", Ahora).Select(s => s.Id), slots.Select(s => s.Id));
         Assert.All(slots.Where(s => s.StartUtc.Hour == 9), s => Assert.False(s.Available));
         Assert.All(slots.Where(s => s.StartUtc.Hour == 11), s => Assert.True(s.Available));
+        // Lo contestó la agenda: la visita por la puerta puede ofrecerlas (008, FR-020).
+        Assert.All(slots, s => Assert.True(s.Checked));
     }
 
     [Fact]
@@ -149,6 +152,8 @@ public sealed class HttpVisitSchedulingServiceTests
 
         Assert.NotEmpty(slots);
         Assert.All(slots, s => Assert.True(s.Available));
+        // Libres porque no se pudo saber, y marcadas así: la puerta no las ofrece (008, FR-020).
+        Assert.All(slots, s => Assert.False(s.Checked));
     }
 
     /// <summary>La capacidad acepta la conexión y no contesta nunca.</summary>
@@ -182,6 +187,7 @@ public sealed class HttpVisitSchedulingServiceTests
 
         Assert.NotEmpty(slots);
         Assert.All(slots, s => Assert.True(s.Available));
+        Assert.All(slots, s => Assert.False(s.Checked));
     }
 
     [Fact]
@@ -203,7 +209,10 @@ public sealed class HttpVisitSchedulingServiceTests
         var (svc, cap) = Nuevo();
         cap.RecursoEstado = HttpStatusCode.NotFound;
 
-        Assert.NotEmpty(await svc.GetSlotsAsync("L1"));
+        var franjas = await svc.GetSlotsAsync("L1");
+        Assert.NotEmpty(franjas);
+        // Sin recurso nadie contestó por el cupo: la puerta no las ofrece (008, FR-020).
+        Assert.All(franjas, s => Assert.False(s.Checked));
 
         var slot = VisitAgenda.For("L1", Ahora)[0].Id;
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.BookAsync("L1", slot, Ana));
@@ -335,7 +344,7 @@ public sealed class HttpVisitSchedulingServiceTests
         // en proceso: cada no lleva a una acción distinta (HU #33 §3).
         var (svc, cap) = Nuevo();
         cap.HoldEstado = HttpStatusCode.Conflict;
-        cap.HoldCodigo = "booking.insufficient_capacity";
+        cap.HoldCodigo = "booking.at_capacity";
         var slot = VisitAgenda.For("L1", Ahora)[0];
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.BookAsync("L1", slot.Id, Ana));
@@ -351,7 +360,7 @@ public sealed class HttpVisitSchedulingServiceTests
         foreach (var (codigo, esperado) in new[]
         {
             ("booking.outside_opening_hours", "fuera de la agenda"),
-            ("booking.in_the_past", "ya pasó"),
+            ("booking.window_in_the_past", "ya pasó"),
         })
         {
             var (svc, cap) = Nuevo();
@@ -371,7 +380,7 @@ public sealed class HttpVisitSchedulingServiceTests
         // cometió dos veces en este repo, y lo destapó levantar los procesos.
         var (svc, cap) = Nuevo();
         cap.HoldEstado = HttpStatusCode.Forbidden;
-        cap.HoldCodigo = "booking.insufficient_capacity";
+        cap.HoldCodigo = "booking.at_capacity";
         var slot = VisitAgenda.For("L1", Ahora)[0];
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.BookAsync("L1", slot.Id, Ana));

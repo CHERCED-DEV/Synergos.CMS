@@ -217,7 +217,8 @@ public sealed class UmbracoPropertyCatalogSource : ICatalogSource<PropertyDetail
         Lat: ReadCoordinate(node, "propertyLat"),
         Lng: ReadCoordinate(node, "propertyLng"),
         AgentName: node.Value<string>("propertyAgentName"),
-        AgentPhone: node.Value<string>("propertyAgentPhone"));
+        AgentPhone: node.Value<string>("propertyAgentPhone"),
+        AgentEmail: node.Value<string>("propertyAgentEmail"));
 
     /// <summary>
     /// Las URLs de la galería, en el orden en que el editor las puso.

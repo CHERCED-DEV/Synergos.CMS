@@ -7,10 +7,18 @@ namespace Synergos.CMS.Interfaces;
 /// inicio; <see cref="Available"/> indica si sigue libre (false = ya apartado/
 /// confirmado por otra visita).
 /// </summary>
+/// <param name="Id">El id de la franja en la agenda del listado.</param>
+/// <param name="StartUtc">El instante de inicio.</param>
+/// <param name="Available">Si sigue libre.</param>
+/// <param name="Checked">Si <paramref name="Available"/> lo contestó quien sabe del cupo. <c>false</c> es que se
+/// muestra libre por DEGRADACIÓN (la agenda no contestó, o el inmueble no tiene recurso): la ruta directa la
+/// ofrece igual y deja que agendar falle con su motivo; la visita por la puerta no la ofrece
+/// (008-propiedades-visita, FR-020).</param>
 public sealed record VisitSlot(
     string Id,
     DateTimeOffset StartUtc,
-    bool Available = true);
+    bool Available = true,
+    bool Checked = true);
 
 /// <summary>
 /// Datos de contacto del interesado que agenda la visita (caso degenerado del

@@ -1,2 +1,10 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Realty", Model.Content)
+@*
+    <synergos-flujo> envuelve el portal inmobiliario (008-propiedades-visita, ADR 0140 decisión 6): el coordinador sin
+    render que lleva la visita a la puerta cuando el sitio la declara por ahí (VisitPath, «directa» por defecto: entonces
+    es inocuo). La CLAVE la pone el servidor, no el bundle, y CoordinadorDePropiedadesEnLasVistasTests la cruza con la
+    tabla de la puerta y con Synergos:Puerta:Flujos. El style en línea es para antes de que el bundle defina la etiqueta.
+*@
+<synergos-flujo flujo="propiedades.visita" style="display:contents">
+    @await Html.PartialAsync("SynHost/Realty", Model.Content)
+</synergos-flujo>
