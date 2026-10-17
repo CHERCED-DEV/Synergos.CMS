@@ -77,16 +77,12 @@ if (declarado)
 {
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
 
-    // El tramo (la regla del alquiler) y la salida propia —el índice por dueño (NN-7)—, provisional hasta el núcleo.
-    // La garantía se conserva con el paso común (payments.conservar, NN-4).
+    // El tramo (la regla del alquiler) es el único paso propio. La garantía se conserva con el paso común
+    // (payments.conservar, NN-4) y «mis alquileres» lee la lista genérica del dueño («listar», NN-7).
     var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
-    builder.Services.AddSingleton<AlquileresDeLaPuerta>();
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
         sp.GetRequiredService<PuertosHttp>(),
-        [
-            .. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias),
-            .. AlquilerSalidasPropias.Pasos(sp.GetRequiredService<AlquileresDeLaPuerta>()),
-        ]));
+        AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias)));
 
     // Lo que pasa después del cierre, fuera de la puerta hasta el núcleo (lote 3, 005-P9; T051).
     builder.Services.AddSingleton<LiquidacionDeAlquiler>();

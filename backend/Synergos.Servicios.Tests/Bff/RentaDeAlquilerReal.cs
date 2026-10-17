@@ -219,10 +219,15 @@ internal sealed class RentaDeAlquilerReal : IDisposable
         return await Enviar(peticion);
     }
 
-    /// <summary>Los alquileres de la puerta del dueño (T024): con el sujeto que pone la puerta, o sin él.</summary>
-    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Mios(string? sujeto = null, bool sinSujeto = false)
+    /// <summary>
+    /// Los alquileres de la puerta del dueño con «listar» del host (NN-7): con el sujeto que pone la puerta, o sin él, y
+    /// por estado si se pide.
+    /// </summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Mios(
+        string? sujeto = null, bool sinSujeto = false, string? estado = null)
     {
-        using var peticion = new HttpRequestMessage(HttpMethod.Get, "v1/alquileres");
+        var ruta = "v1/flujos/alquiler.renta" + (estado is null ? "" : $"?estado={Uri.EscapeDataString(estado)}");
+        using var peticion = new HttpRequestMessage(HttpMethod.Get, ruta);
         if (!sinSujeto) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto ?? Sujeto());
         return await Enviar(peticion);
     }
@@ -524,21 +529,25 @@ public sealed class RentaDeAlquilerRealTests
         Assert.Equal(RentaDeAlquilerReal.Equipo, Texto(cuerpo, "equipo"));
         Assert.Equal(2, cuerpo.GetProperty("datos").GetProperty("cantidad").GetInt32());
 
-        var (enLista, mios) = await r.Mios();
+        var (enLista, mios) = await r.Mios(estado: "Completed");
         Assert.Equal(HttpStatusCode.OK, enLista);
         var item = Assert.Single(mios.GetProperty("items").EnumerateArray());
         Assert.Equal(Id(cuerpo), item.GetProperty("id").GetString());
-        Assert.Equal("Completed", item.GetProperty("status").GetString());
+        Assert.Equal("Completed", item.GetProperty("estado").GetString());
+        // Cada ítem trae la salida: lo que el CMS necesita para el contrato sin otra lectura.
+        Assert.Equal(RentaDeAlquilerReal.Equipo, item.GetProperty("datos").GetProperty("equipo").GetString());
 
         var (_, ajenos) = await r.Mios(RentaDeAlquilerReal.Sujeto("otro"));
         Assert.Empty(ajenos.GetProperty("items").EnumerateArray());
         var (sinSujeto, _) = await r.Mios(sinSujeto: true);
         Assert.Equal(HttpStatusCode.BadRequest, sinSujeto);
 
-        // Abierto y sin cerrar no se anota: todavía no se cobró nada.
+        // Abierto y sin cerrar está en la lista, pero no entre las completadas: todavía no se cobró nada.
         var (abierto, _) = await r.Abrir("alq-2", RentaDeAlquilerReal.Pedido(unidades: 1), RentaDeAlquilerReal.Sujeto("u-3"));
         Assert.Equal(HttpStatusCode.Created, abierto);
-        Assert.Empty((await r.Mios(RentaDeAlquilerReal.Sujeto("u-3"))).Cuerpo.GetProperty("items").EnumerateArray());
+        Assert.Equal("Running", Assert.Single(
+            (await r.Mios(RentaDeAlquilerReal.Sujeto("u-3"))).Cuerpo.GetProperty("items").EnumerateArray()).GetProperty("estado").GetString());
+        Assert.Empty((await r.Mios(RentaDeAlquilerReal.Sujeto("u-3"), estado: "Completed")).Cuerpo.GetProperty("items").EnumerateArray());
     }
 
     [Fact]

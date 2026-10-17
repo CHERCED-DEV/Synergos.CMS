@@ -24,7 +24,6 @@
     ],
     "cerrar": [
       "capturar",
-      "anotar",
       { "para_cada": "reservas:apartar", "como": "apartado", "pasos": ["confirmar"] },
       "conservar",
       "avisar"
@@ -112,7 +111,6 @@
       "cierra_reserva": "apartar",
       "motivo": "no se pudo confirmar una unidad"
     },
-    "anotar": { "tipo": "alquiler.anotar", "lee": ["inquilino"] },
     "conservar": {
       "tipo": "payments.conservar",
       "lee": ["garantiaId"],

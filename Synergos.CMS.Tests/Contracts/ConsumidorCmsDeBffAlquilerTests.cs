@@ -99,14 +99,23 @@ public sealed class ConsumidorCmsDeBffAlquilerTests
     }
 
     [Fact]
-    public void Lo_que_lee_la_reconciliacion_existe_en_ListDoorRentals()
+    public void Lo_que_lee_la_reconciliacion_existe_en_AlquilerRentaListar()
     {
-        var op = Raiz.GetProperty("paths").GetProperty("/v1/alquileres").GetProperty("get");
-        Assert.Equal("ListDoorRentals", op.GetProperty("operationId").GetString());
+        // «listar» del host (NN-7): la reconciliación pide por estado y por página, con el sujeto de la sesión.
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/flujos/alquiler.renta").GetProperty("get");
+        Assert.Equal("AlquilerRentaListar", op.GetProperty("operationId").GetString());
         Assert.True(DeclaraCabecera(op, "X-Synergos-Sujeto"), "La lista no declara el sujeto que la reconciliación manda.");
+        var consulta = op.GetProperty("parameters").EnumerateArray()
+            .Where(p => p.GetProperty("in").GetString() == "query")
+            .Select(p => p.GetProperty("name").GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Superset(new HashSet<string>(["estado", "offset", "limit"], StringComparer.Ordinal), consulta);
+
+        // La lista propia que la reemplazó se retiró con el índice y el paso que anotaba.
+        Assert.False(Raiz.GetProperty("paths").TryGetProperty("/v1/alquileres", out _), "Sigue publicada GET /v1/alquileres.");
 
         var malas = new List<string>();
-        Lee(typeof(ArtefactoDeAlquiler.ListaDto), Respuesta(op), "$", malas);
+        Lee(typeof(ArtefactoDeAlquiler.PaginaDto), Respuesta(op), "$", malas);
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
     }
 

@@ -143,15 +143,6 @@ public sealed record RentalSettlementResponse(
 /// <param name="StaffId">El seudónimo del personal, si cancela él; su clase la pone el orquestador.</param>
 public sealed record CancelDoorRentalRequest(string? Actor = null, MoneyPayload? Penalty = null, string? StaffId = null);
 
-/// <summary>Un alquiler de la puerta del dueño y en qué quedó (línea 005, T024).</summary>
-/// <param name="Id">La saga de <c>alquiler.renta</c>: su contrato se lee por la puerta.</param>
-/// <param name="Status">Running, Completed, Compensating, Compensated o CompensationFailed.</param>
-public sealed record DoorRentalItem(string Id, string Status);
-
-/// <summary>Los alquileres de la puerta del dueño, del más reciente al más viejo.</summary>
-/// <param name="Items">Los alquileres.</param>
-public sealed record DoorRentalsResponse(IReadOnlyList<DoorRentalItem> Items);
-
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>
 /// <param name="EquipmentId">Qué equipo.</param>
