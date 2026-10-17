@@ -184,6 +184,27 @@ public sealed class ContratoDeFlujosGenericosTests
     }
 
     [Fact]
+    public async Task Las_operaciones_de_un_flujo_del_personal_salen_marcadas_y_las_del_dueno_no()
+    {
+        // P8 = A del lote 6: la puerta del CMS pide el rol en lo que el contrato marca «acceso: personal», y la marca de un
+        // flujo del dueño no cambia. La fase que abre se llama «devolver», que ya es del vocabulario de la puerta.
+        var doc = await Documento();
+
+        Assert.Equal("""{"flujo":"muestra.reembolso","operacion":"devolver","acceso":"personal"}""",
+            Op(doc, "/v1/flujos/muestra.reembolso", "post")["x-synergos-flujo"]!.ToJsonString());
+        foreach (var (ruta, metodo) in new[]
+                 {
+                     ("/v1/flujos/muestra.reembolso/{id}", "get"), ("/v1/flujos/muestra.reembolso", "get"),
+                     ("/v1/flujos/muestra.reembolso/{id}/cancelar", "post"),
+                 })
+        {
+            Assert.Equal("personal", (string?)Op(doc, ruta, metodo)["x-synergos-flujo"]!["acceso"]);
+        }
+        Assert.Equal("""{"flujo":"muestra.devolucion","operacion":"devolver"}""",
+            Op(doc, "/v1/flujos/muestra.devolucion", "post")["x-synergos-flujo"]!.ToJsonString());
+    }
+
+    [Fact]
     public async Task Cerrar_cancelar_y_cotizar_van_a_la_puerta_y_lo_de_operacion_no()
     {
         var doc = await Documento();

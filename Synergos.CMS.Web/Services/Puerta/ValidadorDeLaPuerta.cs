@@ -45,10 +45,7 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
                 continue;
             }
 
-            if (!string.Equals(flujo.Acceso, AccesoDeLaPuerta.Miembro, StringComparison.Ordinal))
-            {
-                errores.Add($"{donde}:Acceso es «{flujo.Acceso}» y la puerta sólo sabe dar «{AccesoDeLaPuerta.Miembro}».");
-            }
+            RevisarAcceso(donde, ops, flujo, errores);
 
             if (ops.Any(o => o.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto))
                 && (flujo.SujetoKind is null || !Kind.IsMatch(flujo.SujetoKind)))
@@ -117,6 +114,48 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
     }
 
     /// <summary>
+    /// Quién pide (núcleo, P8 = A del lote 6): el miembro dueño, o el personal en las operaciones que el CONTRATO marca
+    /// como suyas. Se cruza en los dos sentidos, como el negocio: una operación del personal abierta a cualquier miembro
+    /// dejaría a uno devolver la compra de otro, y un acceso de personal sobre operaciones del dueño pediría un rol que
+    /// nadie puso a quien sólo quiere ver lo suyo.
+    /// </summary>
+    private static void RevisarAcceso(string donde, IReadOnlyList<OperacionDeLaPuerta> ops, FlujoDeLaPuertaSettings flujo, List<string> errores)
+    {
+        var personales = ops.Where(o => o.Personal).Select(o => o.Operacion).Order(StringComparer.Ordinal).ToList();
+        var delDueno = ops.Where(o => !o.Personal).Select(o => o.Operacion).Order(StringComparer.Ordinal).ToList();
+
+        switch (flujo.Acceso)
+        {
+            case AccesoDeLaPuerta.Miembro:
+                if (personales.Count > 0)
+                {
+                    errores.Add($"{donde}:Acceso es «{AccesoDeLaPuerta.Miembro}» y el contrato marca del personal "
+                        + $"{string.Join(", ", personales)}: cualquier miembro las pediría. Tiene que ser «{AccesoDeLaPuerta.Personal}», con sus Roles.");
+                }
+                break;
+            case AccesoDeLaPuerta.Personal:
+                if (delDueno.Count > 0)
+                {
+                    errores.Add($"{donde}:Acceso es «{AccesoDeLaPuerta.Personal}» y el contrato no marca del personal "
+                        + $"{string.Join(", ", delDueno)}: son operaciones del dueño.");
+                }
+                if (flujo.Roles.Count == 0 || flujo.Roles.Any(string.IsNullOrWhiteSpace))
+                {
+                    errores.Add($"{donde}:Roles está vacío o tiene uno en blanco: con «{AccesoDeLaPuerta.Personal}» hace falta al menos un rol que comprobar.");
+                }
+                break;
+            default:
+                errores.Add($"{donde}:Acceso es «{flujo.Acceso}» y la puerta sólo sabe dar «{AccesoDeLaPuerta.Miembro}» o «{AccesoDeLaPuerta.Personal}».");
+                break;
+        }
+
+        if (flujo.Roles.Count > 0 && !string.Equals(flujo.Acceso, AccesoDeLaPuerta.Personal, StringComparison.Ordinal))
+        {
+            errores.Add($"{donde}:Roles sólo vale con Acceso «{AccesoDeLaPuerta.Personal}»: así no lo comprobaría nadie.");
+        }
+    }
+
+    /// <summary>
     /// Lo que se abre a quien no inició sesión (NB-3 de 011): sólo una operación que no pone sujeto, ni llave, ni
     /// contacto. Lo dice el CONTRATO del orquestador, no un nombre: una operación de alguien no se vuelve de nadie
     /// porque la configuración la liste.
@@ -131,10 +170,10 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
                 errores.Add($"{donde}:Invitado abre «{operacion}», que no es una operación del flujo.");
             }
             else if (op.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto) || op.Declara(LoQuePoneLaPuerta.CabeceraDelContacto)
-                     || op.LargoDeLaLlave is not null)
+                     || op.LargoDeLaLlave is not null || op.Personal)
             {
-                errores.Add($"{donde}:Invitado abre «{operacion}», que pone un sujeto, una llave o un contacto: a quien no inició "
-                    + "sesión sólo se le abre una lectura sin dueño.");
+                errores.Add($"{donde}:Invitado abre «{operacion}», que pone un sujeto, una llave o un contacto, o es del personal: a "
+                    + "quien no inició sesión sólo se le abre una lectura sin dueño.");
             }
         }
         if (flujo.FrenoPorMinuto is <= 0)

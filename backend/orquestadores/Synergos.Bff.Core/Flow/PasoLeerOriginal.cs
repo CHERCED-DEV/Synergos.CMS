@@ -12,7 +12,8 @@ namespace Synergos.Bff.Core.Flow;
 /// barrido. La original está completada y no se toca —completar es la escritura que no se deshace—: este paso sólo la
 /// lee. Por eso no decide nada de una espera humana (aprobar una devolución): esa forma es otra pregunta.</para>
 ///
-/// <para><b>Sólo la del mismo dueño.</b> Una que no existe, que es de otro dueño o que es de otro flujo contesta lo
+/// <para><b>Sólo la del mismo dueño</b>, salvo en un flujo del personal (<c>acceso: personal</c>, P8), donde quien pide no
+/// es el dueño y la puerta ya comprobó su rol. Una que no existe, que es de otro dueño o que es de otro flujo contesta lo
 /// mismo, para no enseñar qué hay detrás. Y sólo una COMPLETADA: sobre una en curso, lo posterior todavía no existe
 /// (cancelarla es la operación cancelar de su propio flujo), y una deshecha no tiene nada que devolver.</para>
 ///
@@ -57,7 +58,8 @@ public sealed class PasoLeerOriginal(ISagaStore<SagaDeFlujo> almacen, TiposDeVal
         var id = entrada.Lee<string>(0);
 
         var original = string.IsNullOrWhiteSpace(id) ? null : almacen.Find(id);
-        if (original is null || !string.Equals(original.Flujo, deCual, StringComparison.Ordinal) || original.Dueno != entrada.Dueno)
+        if (original is null || !string.Equals(original.Flujo, deCual, StringComparison.Ordinal)
+            || (!flujo.EsDePersonal && original.Dueno != entrada.Dueno))
         {
             return Rechaza(Rejection.NotFound(NoEncontrada, $"No hay una «{deCual}» tuya con ese id."));
         }

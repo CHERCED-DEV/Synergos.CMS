@@ -29,6 +29,8 @@ namespace Synergos.CMS.Web.Controllers;
 ///   dónde vive su orquestador.</item>
 ///   <item>401 <c>puerta.sesion_requerida</c>, salvo en lo que el flujo abre a invitados (<c>Invitado</c>, NB-3: sólo
 ///   lecturas sin sujeto); eso pasa por su freno, y si se pide de más, 429 <c>puerta.demasiadas_peticiones</c>.</item>
+///   <item>403 <c>puerta.personal_requerido</c>: una operación del personal (P8) pedida por un miembro sin ninguno de los
+///   <c>Roles</c> del flujo.</item>
 ///   <item>403 <c>puerta.origen_no_permitido</c>, 415 <c>puerta.tipo_no_soportado</c> y 413
 ///   <c>puerta.cuerpo_demasiado_grande</c> (<see cref="FiltroMismoOrigenJson"/>).</item>
 ///   <item>400 <c>puerta.llave_requerida</c>, 400 <c>puerta.parametro_requerido</c> y 400
@@ -108,11 +110,20 @@ public sealed class FlujosController : ControllerBase
         }
         // Sin sesión sólo pasa lo que el flujo abre a invitados (NB-3), y sólo con freno: sin él, falla cerrada.
         Guid? miembro = _miembro.IsAuthenticated && _miembro.CurrentMemberKey is { } clave && clave != Guid.Empty ? clave : null;
-        var abierta = _freno is not null && ajustes.Invitado.Contains(op.Operacion, StringComparer.Ordinal);
+        var abierta = _freno is not null && !op.Personal && ajustes.Invitado.Contains(op.Operacion, StringComparer.Ordinal);
         if (miembro is null && !abierta)
         {
             return Fallo(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida",
                 "Hace falta iniciar sesión."));
+        }
+        // Una operación del personal (P8): el rol del miembro, que es lo que reemplaza a la regla de dueño de la original.
+        // Sin roles declarados no pasa nadie: el arranque ya no lo deja, y si llegara, falla cerrada. Uno en blanco no cuenta:
+        // HasAnyRole con la lista vacía deja pasar a cualquier miembro.
+        var roles = ajustes.Roles.Where(r => !string.IsNullOrWhiteSpace(r)).ToList();
+        if (op.Personal && (roles.Count == 0 || !_miembro.HasAnyRole(string.Join(',', roles))))
+        {
+            return Fallo(new FalloDeLaPuerta(StatusCodes.Status403Forbidden, "puerta.personal_requerido",
+                "Esta operación es del personal del negocio."));
         }
         if (abierta)
         {

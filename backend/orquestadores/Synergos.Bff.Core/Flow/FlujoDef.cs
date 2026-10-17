@@ -38,6 +38,9 @@ namespace Synergos.Bff.Core.Flow;
 /// <param name="Lecturas">Las lecturas sin saga, por su nombre en la puerta (núcleo, NB-3 de 011). Opcional.</param>
 /// <param name="PosteriorA">Si es una operación posterior al cierre (núcleo, P6 = A del lote 6): la clave del flujo cuya
 /// saga completada lee, del mismo orquestador. La lee <c>flow.leer-original</c> y no la toca. Opcional.</param>
+/// <param name="Acceso">Quién pide sus operaciones (núcleo, P8 = A del lote 6): sin valor, el dueño; <c>personal</c>, el
+/// personal del negocio, y entonces la puerta comprueba su rol y <c>flow.leer-original</c> no aplica la regla de dueño
+/// de la original. El sujeto es la persona del personal: el rastro de quién lo hizo. Opcional.</param>
 public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
@@ -47,8 +50,15 @@ public sealed record FlujoDef(
     IReadOnlyDictionary<string, TipoDeclarado>? Tipos = null,
     IReadOnlyList<string>? Salida = null,
     IReadOnlyDictionary<string, LecturaDef>? Lecturas = null,
-    string? PosteriorA = null)
+    string? PosteriorA = null,
+    string? Acceso = null)
 {
+    /// <summary>El único valor de <see cref="Acceso"/> que no es el del dueño.</summary>
+    public const string AccesoDelPersonal = "personal";
+
+    /// <summary>Si sus operaciones las pide el personal (P8) y no el dueño.</summary>
+    public bool EsDePersonal => string.Equals(Acceso, AccesoDelPersonal, StringComparison.Ordinal);
+
     /// <summary>Las lecturas: vacío si no declara ninguna.</summary>
     public IReadOnlyDictionary<string, LecturaDef> LecturasDeclaradas
         => Lecturas ?? new Dictionary<string, LecturaDef>(StringComparer.Ordinal);
@@ -266,7 +276,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas", "posterior_a");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas", "posterior_a", "acceso");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -337,7 +347,14 @@ internal static class LectorDeFlujo
 
             var posteriorA = raiz.TryGetProperty("posterior_a", out _) ? Texto(raiz, "posterior_a", donde) : null;
 
-            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas, posteriorA);
+            // Una lista cerrada: el dueño es lo que se dice no diciendo nada, y otro acceso mal escrito no puede caer a él.
+            var acceso = raiz.TryGetProperty("acceso", out _) ? Texto(raiz, "acceso", donde) : null;
+            if (acceso is not null && !string.Equals(acceso, FlujoDef.AccesoDelPersonal, StringComparison.Ordinal))
+            {
+                throw new FormatException($"{donde}: «acceso» sólo admite «{FlujoDef.AccesoDelPersonal}» (sin él, lo pide el dueño), y trae «{acceso}».");
+            }
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas, posteriorA, acceso);
         }
     }
 

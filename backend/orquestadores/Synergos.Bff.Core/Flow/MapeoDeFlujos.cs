@@ -115,6 +115,7 @@ public static class MapeoDeFlujos
         var nombre = Pascal(clave);
         var origen = f.Vocabulario.Origin;
         var abre = def.Fases[0].Nombre;
+        var personal = def.EsDePersonal;
         var datos = EsquemaDeDatos(f);
         var conNegocio = def.Entrada.Any(n => def.Tipos![n].Origen == OrigenDelValor.Negocio);
         var cuerpoDeAbrir = EsquemaDelCuerpo(f, def.Entrada);
@@ -132,7 +133,7 @@ public static class MapeoDeFlujos
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeAbrir, datos));
         if (conNegocio) abrir.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
-        Marcar(abrir, clave, abre);
+        Marcar(abrir, clave, abre, personal);
 
         if (SeAnticipa(f))
         {
@@ -148,7 +149,7 @@ public static class MapeoDeFlujos
               .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
               .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeAbrir, datos));
             if (conNegocio) cotizar.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
-            cotizar.EnLaPuerta(clave, "cotizar");
+            cotizar.EnLaPuerta(clave, "cotizar", personal);
         }
 
         app.MapGet($"/v1/flujos/{clave}/{{id}}", Results<Ok<RespuestaDeFlujo>, ProblemHttpResult> (string id, HttpRequest http) =>
@@ -157,7 +158,7 @@ public static class MapeoDeFlujos
             return f.Fachada.Consultar(id, dueno).Map(s => Respuesta(f, s)).ToHttp();
         }).WithName($"{nombre}Consultar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
-          .EnLaPuerta(clave, "consultar");
+          .EnLaPuerta(clave, "consultar", personal);
 
         // «Mis …» (NB-6 de 011, NN-7 de 005): las sagas del dueño en este flujo, de la más nueva a la más vieja, y
         // por estado si se pide. Sólo las suyas: el dueño es el sujeto que pone la puerta, no un parámetro.
@@ -183,7 +184,7 @@ public static class MapeoDeFlujos
                 items.Select(s => Respuesta(f, s)).ToList(), total, off, off + lim < total));
         }).WithName($"{nombre}Listar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
-          .EnLaPuerta(clave, "listar");
+          .EnLaPuerta(clave, "listar", personal);
 
         foreach (var lectura in def.LecturasDeclaradas.Values) MapLectura(app, f, nombre, lectura);
 
@@ -205,7 +206,7 @@ public static class MapeoDeFlujos
                 .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
                 .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeFase, datos, $"{nombre}{Pascal(fase)}Entrada"));
             if (conContacto) continuar.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
-            Marcar(continuar, clave, fase);
+            Marcar(continuar, clave, fase, personal);
         }
 
         app.MapPost($"/v1/flujos/{clave}/{{id}}/cancelar", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
@@ -215,7 +216,7 @@ public static class MapeoDeFlujos
             return (await f.Fachada.CancelarAsync(id, dueno, ct)).Map(s => Respuesta(f, s)).ToHttp();
         }).WithName($"{nombre}Cancelar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
-          .EnLaPuerta(clave, "cancelar");
+          .EnLaPuerta(clave, "cancelar", personal);
 
         // Volver a intentar lo que se rindió: la puerta de la persona a la que se le avisó. Sin marca.
         app.MapPost($"/v1/flujos/{clave}/{{id}}/reintentar", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
@@ -253,7 +254,7 @@ public static class MapeoDeFlujos
             : app.MapPost($"/v1/flujos/{clave}/{lectura.Nombre}", (JsonElement json, HttpRequest http, CancellationToken ct) => LeerLaLectura(http, json, ct));
         ruta.WithName(propio)
             .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpo, EsquemaDeDatos(f, lectura.Salida), $"{propio}Entrada", propio))
-            .EnLaPuerta(clave, lectura.Nombre);
+            .EnLaPuerta(clave, lectura.Nombre, f.Definicion.EsDePersonal);
         if (conNegocio) ruta.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
     }
 
@@ -267,10 +268,13 @@ public static class MapeoDeFlujos
         return (await f.Fachada.ContinuarAsync(fase, id, dueno, efimera, ct)).Map(s => Respuesta(f, s)).ToHttp();
     }
 
-    /// <summary>La operación va a la puerta si su nombre es del vocabulario fijo; si no, es sólo del orquestador.</summary>
-    private static void Marcar(RouteHandlerBuilder builder, string clave, string operacion)
+    /// <summary>
+    /// La operación va a la puerta si su nombre es del vocabulario fijo; si no, es sólo del orquestador. En un flujo del
+    /// personal (P8), marcada como tal: la puerta pide el rol y no la abre a nadie más.
+    /// </summary>
+    private static void Marcar(RouteHandlerBuilder builder, string clave, string operacion, bool personal)
     {
-        if (EnLaPuertaExtensions.Operaciones.Contains(operacion, StringComparer.Ordinal)) builder.EnLaPuerta(clave, operacion);
+        if (EnLaPuertaExtensions.Operaciones.Contains(operacion, StringComparer.Ordinal)) builder.EnLaPuerta(clave, operacion, personal);
     }
 
     /// <summary>Si la fase que abre se puede anticipar: ningún paso antes de reservar pide llave ni cierra.</summary>

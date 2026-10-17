@@ -39,7 +39,7 @@ public sealed class TablaDeLaPuertaTests
                 return (Uno, "no es de un orquestador");
             case "marca":
                 Op(doc, "/v1/ticket-purchases", "post")[TablaDeLaPuerta.MarcaDelFlujo]!["sobra"] = true;
-                return (Uno, "tiene que ser { flujo, operacion } y nada más");
+                return (Uno, "tiene que ser { flujo, operacion } o { flujo, operacion, acceso } y nada más");
             case "clave":
                 Op(doc, "/v1/ticket-purchases", "post")[TablaDeLaPuerta.MarcaDelFlujo] = Marca("compra", "abrir");
                 return (Uno, "no es una clave de flujo");

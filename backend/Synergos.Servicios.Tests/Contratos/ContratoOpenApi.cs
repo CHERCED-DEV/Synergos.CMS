@@ -506,18 +506,21 @@ internal static class ContratoOpenApi
     /// </summary>
     /// <remarks>
     /// Es lo que lee la puerta del CMS para armar su tabla, y el generador del UI para saber qué emitir.
-    /// Sin marca, la operación no existe para ninguno de los dos.
+    /// Sin marca, la operación no existe para ninguno de los dos. Una operación del personal (P8) lleva además
+    /// <c>acceso: personal</c>, y la del dueño no lo lleva: la marca de hoy no cambia.
     /// </remarks>
     private static Task Flujo(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
     {
         if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<OperacionEnLaPuerta>().FirstOrDefault() is { } marca)
         {
             op.Extensions ??= new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal);
-            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(new JsonObject
+            var json = new JsonObject
             {
                 ["flujo"] = marca.Flujo,
                 ["operacion"] = marca.Operacion,
-            });
+            };
+            if (marca.Personal) json["acceso"] = FlujoDef.AccesoDelPersonal;
+            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(json);
         }
 
         return Task.CompletedTask;

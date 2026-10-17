@@ -9,6 +9,8 @@ namespace Synergos.Bff.Core;
 /// </summary>
 /// <param name="Flujo">La clave del flujo, <c>dominio.flujo</c>: <c>eventos.compra</c>.</param>
 /// <param name="Operacion">Su nombre en la puerta, del vocabulario fijo de saga (<see cref="EnLaPuertaExtensions.Operaciones"/>).</param>
+/// <param name="Personal">Si la pide el personal y no el dueño (núcleo, P8 = A del lote 6): el contrato la publica con
+/// <c>acceso: personal</c>, y la puerta exige un miembro con uno de los roles que declara el despliegue.</param>
 /// <remarks>
 /// <para><b>La lista de lo que el navegador puede pedir la escribe el orquestador, y está cerrada por
 /// defecto.</b> El contrato publica la marca como <c>x-synergos-flujo</c>; el CMS incrusta el documento y
@@ -21,7 +23,7 @@ namespace Synergos.Bff.Core;
 /// los nombres coinciden con las fases de <c>flujos/*.json</c>. Atarlo a <c>BuyTickets</c> ataría el
 /// front a cada orquestador.</para>
 /// </remarks>
-public sealed record OperacionEnLaPuerta(string Flujo, string Operacion);
+public sealed record OperacionEnLaPuerta(string Flujo, string Operacion, bool Personal = false);
 
 /// <summary>Cómo se marca un endpoint para la puerta.</summary>
 public static class EnLaPuertaExtensions
@@ -32,21 +34,24 @@ public static class EnLaPuertaExtensions
     /// (<c>FlowRunner.AnticiparAsync</c>), para que quien compra vea el total —con su descuento— antes
     /// de pagar (ADR 0140, el cupón). <c>listar</c> tampoco: son las sagas del dueño, «mis reservas»
     /// (núcleo, NB-6 de 011). <c>disponibilidad</c> es una lectura sin saga ni dueño, lo que se ve antes de abrir
-    /// (NB-3). La misma lista vive en la puerta del CMS y en el generador del UI.
+    /// (NB-3). <c>devolver</c> es la fase que abre una operación posterior al cierre (lote 6, N-6 de 004). La misma lista
+    /// vive en la puerta del CMS y en el generador del UI.
     /// </remarks>
-    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "disponibilidad", "listar"];
+    public static readonly IReadOnlyList<string> Operaciones =
+        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "devolver", "disponibilidad", "listar"];
 
     /// <summary>Una clave de flujo: <c>dominio.flujo</c>, en minúsculas. Es lo que va en la ruta de la puerta.</summary>
     public static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
-    /// Expone el endpoint en la puerta del CMS como <paramref name="operacion"/> de <paramref name="flujo"/>.
+    /// Expone el endpoint en la puerta del CMS como <paramref name="operacion"/> de <paramref name="flujo"/>; con
+    /// <paramref name="personal"/>, como una operación del personal (P8).
     /// </summary>
     /// <remarks>
     /// Una marca mal escrita revienta al mapear el endpoint, al arrancar el orquestador: en la puerta
     /// sería una operación que nadie puede pedir, y el UI ya rechaza el documento entero.
     /// </remarks>
-    public static RouteHandlerBuilder EnLaPuerta(this RouteHandlerBuilder builder, string flujo, string operacion)
+    public static RouteHandlerBuilder EnLaPuerta(this RouteHandlerBuilder builder, string flujo, string operacion, bool personal = false)
     {
         ArgumentNullException.ThrowIfNull(builder);
         if (flujo is null || !ClaveDeFlujo.IsMatch(flujo))
@@ -59,6 +64,6 @@ public static class EnLaPuertaExtensions
                 $"«{operacion}» no es del vocabulario de la puerta ({string.Join(", ", Operaciones)}).", nameof(operacion));
         }
 
-        return builder.WithMetadata(new OperacionEnLaPuerta(flujo, operacion));
+        return builder.WithMetadata(new OperacionEnLaPuerta(flujo, operacion, personal));
     }
 }

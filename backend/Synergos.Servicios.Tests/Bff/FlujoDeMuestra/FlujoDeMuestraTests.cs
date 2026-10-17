@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
+using Synergos.Core;
 using Synergos.CMS.Tests.Architecture;
 
 namespace Synergos.CMS.Tests.Bff.FlujoDeMuestra;
@@ -157,14 +158,15 @@ public sealed class FlujoDeMuestraTests
         }
 
         /// <summary>Devolver una parte de una cita completada: la operación posterior, un flujo aparte (P6 = A).</summary>
-        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(string cita, decimal monto, string llave, string sujeto = "u-1")
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(
+            string cita, decimal monto, string llave, string sujeto = "u-1", string flujo = "muestra.devolucion", string clase = "muestra.paciente")
         {
-            var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/muestra.devolucion")
+            var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/{flujo}")
             {
                 Content = JsonContent.Create(new { cita, monto = new { amount = monto, currency = "COP" } }),
             };
             peticion.Headers.Add("Idempotency-Key", llave);
-            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"muestra.paciente:{sujeto}");
+            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"{clase}:{sujeto}");
             return Enviar(peticion);
         }
 
@@ -334,6 +336,26 @@ public sealed class FlujoDeMuestraTests
     }
 
     [Fact]
+    public async Task El_personal_devuelve_la_cita_de_otro_por_su_flujo_y_el_flujo_del_dueno_no_lo_deja()
+    {
+        // P8 = A del lote 6: muestra.reembolso es «acceso: personal». Quien pide no es el dueño de la cita —la puerta ya
+        // comprobó su rol—, así que flow.leer-original no aplica la regla de dueño; el sujeto es la persona del personal.
+        await using var m = await Muestra.Arrancar();
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, (await m.Cerrar(cita)).Estado);
+        var cobro = m.Sagas.Find(cita)!.Datos["cobroId"].Valor!.Value.GetString()!;
+
+        var (porElDueno, nada) = await m.Devolver(cita, 5_000m, "dev-p1", sujeto: "s-1", clase: "muestra.personal");
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (porElDueno, nada.GetProperty("code").GetString()));
+
+        var (estado, reembolso) = await m.Devolver(cita, 15_000m, "reemb-1", sujeto: "s-1", flujo: "muestra.reembolso", clase: "muestra.personal");
+        Assert.True(estado == HttpStatusCode.Created, reembolso.ToString());
+        Assert.Equal(15_000m, (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
+        Assert.Equal(Ref.Create("muestra.personal", "s-1"), m.Sagas.Find(reembolso.GetProperty("id").GetString()!)!.Dueno);
+    }
+
+    [Fact]
     public async Task Un_cobro_rechazado_suelta_la_hora_y_devuelve_el_rechazo_original()
     {
         await using var m = await Muestra.Arrancar(falla: r => Es(r, "POST", "^/v1/payments$") ? "payments.payment_declined" : null);
@@ -458,15 +480,28 @@ public sealed class MetricaDelFlujoDeMuestraTests
         Assert.True(lineas <= 60, $"El C# propio de la muestra son {lineas} líneas y la meta es ≤ 60 (hoy un flujo declarado costaba ~316).");
     }
 
+    /// <summary>
+    /// SC-002, que es POR FLUJO: declarar uno toca su definición, sus pasos de dominio si los tiene, el arranque y la
+    /// configuración.
+    /// </summary>
+    /// <remarks>
+    /// La carpeta sirve varios flujos de muestra con UN arranque (la cita, la compra y las dos operaciones posteriores
+    /// al cierre del lote 6), así que contar la carpeta entera mediría cuántas muestras hay, no lo que cuesta una. Lo
+    /// que no es el arranque ni una definición no puede estar aquí sin contarse.
+    /// </remarks>
     [Fact]
-    public void Declararlo_toca_como_mucho_cuatro_ficheros_propios()
+    public void Declarar_un_flujo_toca_como_mucho_cuatro_ficheros_propios()
     {
         var propios = Directory.EnumerateFiles(Carpeta(), "*", SearchOption.AllDirectories)
             .Where(f => !f.EndsWith("Tests.cs", StringComparison.Ordinal))
             .ToList();
+        var definiciones = propios.Where(f => Path.GetFileName(Path.GetDirectoryName(f)) == "flujos" && f.EndsWith(".json", StringComparison.Ordinal)).ToList();
+        var deTodos = propios.Except(definiciones).ToList();
 
-        Assert.True(propios.Count is > 0 and <= 4,
-            $"Declarar la muestra tocó {propios.Count} ficheros propios ({string.Join(", ", propios.Select(Path.GetFileName))}) y la meta es ≤ 4.");
+        Assert.True(definiciones.Count > 0 && deTodos.Count > 0, "No se encontró la muestra: la medida dejó de ver.");
+        Assert.True(deTodos.Count + 1 <= 4,
+            $"Declarar un flujo toca su definición y {deTodos.Count} ficheros propios más ({string.Join(", ", deTodos.Select(Path.GetFileName))}) "
+            + "y la meta es ≤ 4.");
     }
 
     [Fact]

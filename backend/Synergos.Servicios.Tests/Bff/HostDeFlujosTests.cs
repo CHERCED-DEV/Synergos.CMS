@@ -909,6 +909,28 @@ public sealed class HostDeFlujosTests
     }
 
     [Fact]
+    public async Task En_un_flujo_del_personal_lee_la_original_de_otro_dueno()
+    {
+        // P8 = A: quien pide es del personal, no el dueño de la cita; la puerta ya comprobó su rol.
+        using var banco = new Banco(MutarDevolucion("\"posterior_a\": \"prueba.cita\",", "\"posterior_a\": \"prueba.cita\", \"acceso\": \"personal\","));
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("cita-1", Ref.Create("prueba.paciente", "u-9")));
+
+        var r = await banco.Fachada().AbrirAsync("reemb-1", Paciente, EntradaDeDevolucion("cita-1"), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(["devolver pg-1"], banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public void El_acceso_de_un_flujo_es_el_del_dueno_o_personal_y_nada_mas()
+    {
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(
+            MutarDevolucion("\"posterior_a\": \"prueba.cita\",", "\"posterior_a\": \"prueba.cita\", \"acceso\": \"dueno\",")));
+        Assert.Contains("«acceso» sólo admite «personal»", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Sobre_una_original_sin_completar_no_hay_nada_posterior()
     {
         using var banco = new Banco(Devolucion);
