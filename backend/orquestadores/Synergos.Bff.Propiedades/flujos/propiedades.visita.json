@@ -6,9 +6,14 @@
     "inmueble": { "tipo": "ref", "kind": "realty.listado" },
     "ventana": "ventana",
     "modalidad": "texto?",
-    "contacto": { "de": "contacto" }
+    "contacto": { "de": "contacto" },
+    "desde": "instante",
+    "hasta": "instante"
   },
-  "salida": ["inmueble", "ventana", "modo"],
+  "salida": ["inmueble", "ventana", "modo", "reservaId"],
+  "lecturas": {
+    "disponibilidad": { "entrada": ["inmueble", "desde", "hasta"], "pasos": ["hallar", "franjas"], "salida": ["franjas"] }
+  },
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["validar", "hallar", "apartar"],
@@ -22,6 +27,7 @@
       "escribe": ["recursoId"],
       "motivo": "el inmueble no recibe visitas en línea"
     },
+    "franjas": { "tipo": "booking.franjas", "lee": ["recursoId", "desde", "hasta"], "escribe": ["franjas"] },
     "apartar": {
       "tipo": "booking.apartar",
       "lee": ["recursoId", "ventana", "interesado"],

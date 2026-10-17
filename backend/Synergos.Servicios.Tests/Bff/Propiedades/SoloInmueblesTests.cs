@@ -62,6 +62,18 @@ public sealed class SoloInmueblesTests
     }
 
     [Fact]
+    public async Task Una_ventana_fuera_de_la_grilla_del_inmueble_la_rechaza_la_agenda_y_no_queda_nada_tomado()
+    {
+        using var r = new VisitaReal();
+
+        var (estado, cuerpo) = await r.Abrir(cuerpo: VisitaReal.Cuerpo(inicio: VisitaReal.ALas(9, 30)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, estado);
+        Assert.Equal("booking.off_slot_grid", cuerpo.GetProperty("code").GetString());
+        Assert.Equal(0, await r.Ocupadas(inicio: VisitaReal.ALas(9, 30)));
+    }
+
+    [Fact]
     public async Task La_duracion_la_fija_el_despliegue()
     {
         using var r = new VisitaReal(ajustes: new Dictionary<string, string> { ["Propiedades:Visita:Minutos"] = "30" });

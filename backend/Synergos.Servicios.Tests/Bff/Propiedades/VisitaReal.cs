@@ -20,9 +20,10 @@ namespace Synergos.CMS.Tests.Bff.Propiedades;
 /// </summary>
 /// <remarks>
 /// <para>El inmueble se registra en la agenda como lo hace la herramienta de provisión (008-P4): la clase de la ruta
-/// directa (<c>realty.listado</c>), capacidad 1, el horario de visitas de 9:00 a 12:00 en la hora del sitio y dos horas
-/// de aviso para cancelar. Al lado, un profesional de Salud con el mismo horario: el recurso AJENO que la visita no
-/// puede tocar (NR-1).</para>
+/// directa (<c>realty.listado</c>), capacidad 1, el horario de visitas de 9:00 a 12:00 en la hora del sitio, franjas de
+/// 60 minutos (008-P3, NB-1) y dos horas de aviso para cancelar. Al lado, un profesional de Salud con el mismo horario:
+/// el recurso AJENO que la visita no puede tocar (NR-1); y un inmueble con un mes de aviso, donde toda visita confirmada
+/// ya está fuera de plazo (historia 8).</para>
 ///
 /// <para>Lo que ninguna capacidad real sabe hacer a pedido (fallar una confirmación) se inyecta en el cable con
 /// <c>falla</c>, sin tocar el orquestador.</para>
@@ -34,6 +35,7 @@ internal sealed class VisitaReal : IDisposable
     public const string Clase = "realty.listado";
     public const string Ajeno = "dr-1";
     public const string ClaseAjena = "salud.profesional";
+    public const string Tardio = "prop-tarde";
 
     private static readonly TimeZoneInfo Bogota = TimeZoneInfo.FindSystemTimeZoneById("America/Bogota");
 
@@ -55,8 +57,10 @@ internal sealed class VisitaReal : IDisposable
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking")
             .Levanta<Synergos.Api.Notifications.Contracts.SaveTemplateRequest>("notifications");
-        Registrar(Clase, Inmueble).GetAwaiter().GetResult();
-        Registrar(ClaseAjena, Ajeno).GetAwaiter().GetResult();
+        var franja = ajustes?.GetValueOrDefault("Propiedades:Visita:Minutos") is { } m ? int.Parse(m, System.Globalization.CultureInfo.InvariantCulture) : 60;
+        Registrar(Clase, Inmueble, franja).GetAwaiter().GetResult();
+        Registrar(ClaseAjena, Ajeno, franja).GetAwaiter().GetResult();
+        Registrar(Clase, Tardio, franja, avisoEnMinutos: 30 * 24 * 60).GetAwaiter().GetResult();
         PublicarPlantilla().GetAwaiter().GetResult();
 
         IHttpClientFactory fabrica = falla is null ? Capacidades : new ConFallo(Capacidades, falla);
@@ -139,6 +143,70 @@ internal sealed class VisitaReal : IDisposable
         return Enviar(peticion);
     }
 
+    /// <summary>Abrir y cerrar: una visita confirmada de <paramref name="quien"/>, y su id.</summary>
+    public async Task<string> Confirmada(string llave = "visita-1", string quien = "u-1", object? cuerpo = null)
+    {
+        var (abrio, abierta) = await Abrir(llave, quien, cuerpo);
+        Assert.True(abrio == HttpStatusCode.Created, abierta.ToString());
+        var id = abierta.GetProperty("id").GetString()!;
+        var (cerro, cerrada) = await Cerrar(id, quien);
+        Assert.True(cerro == HttpStatusCode.OK && cerrada.GetProperty("estado").GetString() == "Completed", cerrada.ToString());
+        return id;
+    }
+
+    /// <summary>
+    /// La lectura «disponibilidad» como la pide la puerta para un invitado: SIN la cabecera del sujeto (no la pone para
+    /// una operación abierta a invitados, núcleo NB-3).
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Disponibilidad(
+        DateTimeOffset desde, DateTimeOffset hasta, string inmueble = Inmueble, string clase = Clase)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/propiedades.visita/disponibilidad")
+        {
+            Content = JsonContent.Create(new { inmueble = new { kind = clase, id = inmueble }, desde, hasta }),
+        };
+        return Enviar(peticion);
+    }
+
+    /// <summary>
+    /// Pedir la cancelación de una visita YA confirmada: abre la operación posterior al cierre (008-P5, núcleo P6), que
+    /// comprueba que la visita es de quien pide y está confirmada, y no toca la agenda.
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> PedirCancelacion(string visita, string llave = "cancelar-1", string quien = "u-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/propiedades.visita-cancelacion")
+        {
+            Content = JsonContent.Create(new { visita }),
+        };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(quien));
+        return Enviar(peticion);
+    }
+
+    /// <summary>Confirmar la cancelación pedida: la agenda cancela la reserva, con su plazo.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> ConfirmarCancelacion(string id, string quien = "u-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/propiedades.visita-cancelacion/{id}/cerrar");
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(quien));
+        return Enviar(peticion);
+    }
+
+    /// <summary>Pedir y confirmar: lo que hace la pantalla. Contesta la primera que no salió bien, o la confirmación.</summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmada(string visita, string llave = "cancelar-1", string quien = "u-1")
+    {
+        var (abrio, abierta) = await PedirCancelacion(visita, llave, quien);
+        if (abrio is not (HttpStatusCode.Created or HttpStatusCode.OK)) return (abrio, abierta);
+        return await ConfirmarCancelacion(abierta.GetProperty("id").GetString()!, quien);
+    }
+
+    /// <summary>«Mis …» de un flujo: las sagas de <paramref name="quien"/> (núcleo NB-6), por estado si se pide.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string flujo, string quien = "u-1", string? estado = null)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Get, $"v1/flujos/{flujo}" + (estado is null ? "" : $"?estado={estado}"));
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(quien));
+        return Enviar(peticion);
+    }
+
     // ── Lo que quedó en las capacidades ─────────────────────────────────────
 
     public async Task<JsonElement> Leer(string capacidad, string ruta)
@@ -183,8 +251,8 @@ internal sealed class VisitaReal : IDisposable
         }
     }
 
-    /// <summary>El recurso en la agenda, con el horario de visitas: todos los días de 9:00 a 12:00 en Bogotá.</summary>
-    private async Task Registrar(string clase, string id)
+    /// <summary>El recurso en la agenda, con el horario de visitas: todos los días de 9:00 a 12:00 en Bogotá, por franjas de 60 minutos.</summary>
+    private async Task Registrar(string clase, string id, int franja, int avisoEnMinutos = 120)
     {
         using var http = Capacidades.CreateClient("booking");
         using var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/resources")
@@ -196,7 +264,8 @@ internal sealed class VisitaReal : IDisposable
                 capacity = 1,
                 timeZoneId = "America/Bogota",
                 opening = Enum.GetValues<DayOfWeek>().Select(d => new { day = d.ToString(), from = "09:00", to = "12:00" }).ToList(),
-                cancellationNoticeMinutes = 120,
+                cancellationNoticeMinutes = avisoEnMinutos,
+                slotMinutes = franja,
             }),
         };
         peticion.Headers.Add("Idempotency-Key", $"recurso-{clase}-{id}");

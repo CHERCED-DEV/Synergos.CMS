@@ -20,19 +20,28 @@ public sealed class ArranqueDePropiedadesTests
     }
 
     [Fact]
-    public void La_puerta_ve_abrir_cerrar_cancelar_consultar_cotizar_y_listar_y_nada_mas()
+    public void La_puerta_ve_de_la_visita_sus_fases_cancelar_consultar_cotizar_la_disponibilidad_y_listar_y_nada_mas()
     {
         using var r = new VisitaReal();
 
-        var marcadas = r.Servicios.GetRequiredService<EndpointDataSource>().Endpoints
+        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar", "disponibilidad", "listar"], Marcadas(r, "propiedades.visita"));
+    }
+
+    [Fact]
+    public void La_puerta_ve_de_la_cancelacion_pedirla_confirmarla_y_lo_comun_y_nada_mas()
+    {
+        using var r = new VisitaReal();
+
+        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar"], Marcadas(r, "propiedades.visita-cancelacion"));
+    }
+
+    private static List<string> Marcadas(VisitaReal r, string flujo)
+        => r.Servicios.GetRequiredService<EndpointDataSource>().Endpoints
             .SelectMany(e => e.Metadata.OfType<OperacionEnLaPuerta>())
-            .Where(o => o.Flujo == "propiedades.visita")
+            .Where(o => o.Flujo == flujo)
             .Select(o => o.Operacion)
             .Order(StringComparer.Ordinal)
             .ToList();
-
-        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar"], marcadas);
-    }
 
     [Fact]
     public void Una_zona_que_no_existe_no_deja_arrancar()

@@ -1,0 +1,19 @@
+{
+  "clave": "propiedades.visita-cancelacion",
+  "posterior_a": "propiedades.visita",
+  "entrada": ["interesado", "visita"],
+  "tipos": {
+    "interesado": { "de": "sujeto" },
+    "visita": "texto",
+    "reservaId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["visita"],
+  "fases": {
+    "abrir": ["original"],
+    "cerrar": ["cancelar"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["visita"], "escribe": ["reservaId"] },
+    "cancelar": { "tipo": "booking.cancelar", "lee": ["reservaId"], "motivo": "no se pudo cancelar la visita" }
+  }
+}

@@ -2397,6 +2397,14 @@
         "Realty.Visit"
       ],
       "claves": [
+        "Realty.Visit.Cancel",
+        "Realty.Visit.CancelAsk",
+        "Realty.Visit.CancelFailed",
+        "Realty.Visit.CancelNo",
+        "Realty.Visit.CancelTooLate",
+        "Realty.Visit.CancelYes",
+        "Realty.Visit.Cancelled",
+        "Realty.Visit.CancelledHeading",
         "Realty.Visit.DefaultMode",
         "Realty.Visit.FromEmail",
         "Realty.Visit.InPast",

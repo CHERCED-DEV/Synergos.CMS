@@ -42,14 +42,14 @@ public sealed class VisitaPorLaPuertaTests
     }
 
     [Fact]
-    public async Task La_respuesta_dice_inmueble_franja_y_modalidad_y_ningun_identificador_de_la_agenda()
+    public async Task La_respuesta_dice_inmueble_franja_y_modalidad_y_de_la_agenda_solo_la_reserva_que_cancela_lo_posterior()
     {
         using var r = new VisitaReal();
         var (_, abierta) = await r.Abrir(cuerpo: VisitaReal.Cuerpo(modalidad: "video"));
         var (_, cerrada) = await r.Cerrar(abierta.GetProperty("id").GetString()!);
 
         var datos = cerrada.GetProperty("datos");
-        Assert.Equal(["inmueble", "modo", "ventana"], datos.EnumerateObject().Select(p => p.Name).Order().ToList());
+        Assert.Equal(["inmueble", "modo", "reservaId", "ventana"], datos.EnumerateObject().Select(p => p.Name).Order().ToList());
         Assert.Equal(VisitaReal.Clase, datos.GetProperty("inmueble").GetProperty("kind").GetString());
         Assert.Equal(VisitaReal.Inmueble, datos.GetProperty("inmueble").GetProperty("id").GetString());
         Assert.Equal("video", datos.GetProperty("modo").GetString());

@@ -23,6 +23,9 @@ public sealed class MetricaDePropiedadesTests(ITestOutputHelper salida)
 
     private static readonly string[] Interinos = ["Domain/PasosDePropiedades.cs"];
 
+    /// <summary>Lo posterior al cierre (historia 8, 008-P5): otro flujo, sólo su definición, sin C#.</summary>
+    private static readonly string[] DeLaCancelacion = ["flujos/propiedades.visita-cancelacion.json"];
+
     private static string Raiz() => Proyectos.Dir("Synergos.Bff.Propiedades");
 
     private static int Lineas(IEnumerable<string> ficheros)
@@ -38,7 +41,7 @@ public sealed class MetricaDePropiedadesTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(Interinos).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(Interinos).Concat(DeLaCancelacion).Order(StringComparer.Ordinal), enDisco);
     }
 
     [Fact]
