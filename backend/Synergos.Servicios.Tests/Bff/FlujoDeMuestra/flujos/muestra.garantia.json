@@ -1,0 +1,24 @@
+{
+  "clave": "muestra.garantia",
+  "entrada": ["inquilino", "garantia"],
+  "tipos": {
+    "inquilino": { "de": "sujeto" },
+    "garantia": "dinero"
+  },
+  "salida": ["garantia", "garantiaId"],
+  "fases": {
+    "abrir": ["retener"],
+    "cerrar": ["conservar"]
+  },
+  "pasos": {
+    "retener": {
+      "tipo": "payments.autorizar",
+      "lee": ["inquilino", "garantia"],
+      "escribe": ["garantiaId"],
+      "llave": "deposit",
+      "motivo": "no se pudo retener la garantía",
+      "reserva": { "consumado_por": "conservar", "antes": "payments.anular", "motivo": "garantía no retenida" }
+    },
+    "conservar": { "tipo": "payments.conservar", "lee": ["garantiaId"], "cierra_reserva": "retener" }
+  }
+}

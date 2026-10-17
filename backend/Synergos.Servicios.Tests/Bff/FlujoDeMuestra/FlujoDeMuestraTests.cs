@@ -170,6 +170,15 @@ public sealed class FlujoDeMuestraTests
             return Enviar(peticion);
         }
 
+        /// <summary>Una operación cualquiera de la muestra, con lo que pondría la puerta.</summary>
+        public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Pedir(string ruta, object? cuerpo, string sujeto, string? llave = null)
+        {
+            var peticion = new HttpRequestMessage(HttpMethod.Post, ruta) { Content = JsonContent.Create(cuerpo ?? new { }) };
+            if (llave is not null) peticion.Headers.Add("Idempotency-Key", llave);
+            peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto);
+            return Enviar(peticion);
+        }
+
         public async Task<JsonElement> Leer(string capacidad, string ruta)
         {
             using var http = Capacidades.CreateClient(capacidad);
@@ -353,6 +362,40 @@ public sealed class FlujoDeMuestraTests
         Assert.True(estado == HttpStatusCode.Created, reembolso.ToString());
         Assert.Equal(15_000m, (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
         Assert.Equal(Ref.Create("muestra.personal", "s-1"), m.Sagas.Find(reembolso.GetProperty("id").GetString()!)!.Dueno);
+    }
+
+    [Fact]
+    public async Task La_garantia_conservada_sigue_autorizada_al_completar_y_el_personal_la_liquida_despues()
+    {
+        // P7 + P6 + P8 del lote 6, contra Payments real: la garantía se retiene (payments.autorizar) y se conserva al
+        // cerrar (payments.conservar), así que la saga completa con la autorización VIVA; días después, alguien del
+        // personal la liquida con un flujo aparte: captura y devuelve lo que no se cobra.
+        await using var m = await Muestra.Arrancar();
+        const string Inquilino = "muestra.paciente:u-1";
+
+        var (abrio, abierta) = await m.Pedir("v1/flujos/muestra.garantia", new { garantia = new { amount = 300_000m, currency = "COP" } }, Inquilino, "gar-1");
+        Assert.True(abrio == HttpStatusCode.Created, abierta.ToString());
+        var alquiler = abierta.GetProperty("id").GetString()!;
+        var (cerro, cerrada) = await m.Pedir($"v1/flujos/muestra.garantia/{alquiler}/cerrar", null, Inquilino);
+        Assert.True(cerro == HttpStatusCode.OK, cerrada.ToString());
+        Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
+        var garantia = cerrada.GetProperty("datos").GetProperty("garantiaId").GetString()!;
+        Assert.DoesNotContain(m.Sagas.Find(alquiler)!.Compensations, c => c.IsPending);
+
+        var retenida = await m.Leer("payments", $"v1/payments/{garantia}");
+        Assert.Equal(("Authorized", 0m), (retenida.GetProperty("status").GetString(), retenida.GetProperty("refunded").GetProperty("amount").GetDecimal()));
+
+        var (liquido, liquidacion) = await m.Pedir(
+            "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1");
+        Assert.True(liquido == HttpStatusCode.Created, liquidacion.ToString());
+        Assert.Equal("Completed", liquidacion.GetProperty("estado").GetString());
+
+        var liquidada = await m.Leer("payments", $"v1/payments/{garantia}");
+        Assert.Equal(("Captured", 300_000m, 200_000m), (liquidada.GetProperty("status").GetString(),
+            liquidada.GetProperty("amount").GetProperty("amount").GetDecimal(), liquidada.GetProperty("refunded").GetProperty("amount").GetDecimal()));
+        Assert.Equal(HttpStatusCode.Created, (await m.Pedir(
+            "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1")).Estado);
+        Assert.Equal(200_000m, (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
     }
 
     [Fact]
