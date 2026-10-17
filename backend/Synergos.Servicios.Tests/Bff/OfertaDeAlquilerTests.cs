@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Synergos.Bff.Alquiler.Clients;
 using Synergos.Bff.Alquiler.Domain;
 using Synergos.Bff.Core;
+using Synergos.Core;
 
 namespace Synergos.CMS.Tests.Bff;
 
@@ -30,10 +31,33 @@ public sealed class OfertaDeAlquilerTests
 
         public OfertaDeAlquiler Ofertas { get; }
 
+        public AlquilerCapabilities Clientes { get; }
+
         public Banco()
         {
-            Ofertas = new OfertaDeAlquiler(new AlquilerCapabilities(Capacidades),
+            Clientes = new AlquilerCapabilities(Capacidades);
+            Ofertas = new OfertaDeAlquiler(Clientes,
                 Options.Create(new SagaStorageOptions { Root = _raiz }), TimeProvider.System, NullLogger<OfertaDeAlquiler>.Instance);
+        }
+
+        /// <summary>Aparta y confirma una unidad del equipo en esa ventana, como lo haría una renta.</summary>
+        public async Task<string> Reservar(string equipo, TimeWindow ventana, string quien)
+        {
+            var recurso = await Clientes.FindResourceBySubjectAsync(RentalSubject.For(equipo), CancellationToken.None);
+            var apartado = await Clientes.HoldAsync(recurso.Value.Id, ventana, Ref.Create("alquiler.arrendatario", quien),
+                IdempotencyKey.Of($"hold-{quien}"), CancellationToken.None);
+            Assert.True(apartado.IsOk, apartado.Rejection?.ToString());
+            var reserva = await Clientes.ConfirmHoldAsync(apartado.Value.Id, IdempotencyKey.Of($"confirm-{quien}"), CancellationToken.None);
+            Assert.True(reserva.IsOk, reserva.Rejection?.ToString());
+            return reserva.Value.Id;
+        }
+
+        /// <summary>En qué estado está una reserva en la agenda.</summary>
+        public async Task<string?> EstadoDeLaReserva(string id)
+        {
+            using var http = Capacidades.CreateClient("booking");
+            var cuerpo = await http.GetFromJsonAsync<JsonElement>($"v1/reservations/{id}");
+            return cuerpo.GetProperty("status").GetString();
         }
 
         /// <summary>Lo que Pricing cotiza HOY para una unidad de ese sujeto.</summary>
@@ -105,17 +129,40 @@ public sealed class OfertaDeAlquilerTests
     }
 
     [Fact]
-    public async Task Otras_unidades_se_rechazan_y_queda_la_oferta_anterior()
+    public async Task Otras_unidades_revisan_el_recurso_y_la_oferta_queda_con_ellas()
     {
+        // NN-6: la agenda del núcleo revisa la capacidad de un recurso ya creado (`revise`).
         using var b = new Banco();
         Assert.True((await b.Ofertas.PublicarAsync(Andamio(unidades: 3), CancellationToken.None)).IsOk);
 
         var r = await b.Ofertas.PublicarAsync(Andamio(unidades: 4), CancellationToken.None);
 
-        Assert.False(r.IsOk);
-        Assert.Equal("alquiler.units_change_unsupported", r.Rejection!.Code);
-        Assert.Equal(3, b.Ofertas.Registrada("andamio-6m")!.Unidades);
-        Assert.Equal(3, await b.Unidades("andamio-6m"));
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(4, b.Ofertas.Registrada("andamio-6m")!.Unidades);
+        Assert.Equal(4, await b.Unidades("andamio-6m"));
+        Assert.Empty(r.Value.ReservasFuera!);
+    }
+
+    [Fact]
+    public async Task Bajar_las_unidades_no_cancela_nada_y_deja_con_nombre_lo_que_ya_no_cabe()
+    {
+        using var b = new Banco();
+        Assert.True((await b.Ofertas.PublicarAsync(Andamio(unidades: 3), CancellationToken.None)).IsOk);
+        var ventana = TimeWindow.Of(new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 12, 8, 0, 0, 0, TimeSpan.Zero));
+        var reservas = new[] { await b.Reservar("andamio-6m", ventana, "m-1"), await b.Reservar("andamio-6m", ventana, "m-2"),
+            await b.Reservar("andamio-6m", ventana, "m-3") };
+
+        var r = await b.Ofertas.PublicarAsync(Andamio(unidades: 1), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(1, await b.Unidades("andamio-6m"));
+        // Quedan fuera las confirmadas DESPUÉS: la primera en llegar conserva su lugar.
+        Assert.Equal(reservas[1..].Order(), r.Value.ReservasFuera!.Order());
+        foreach (var id in reservas) Assert.Equal("Confirmed", await b.EstadoDeLaReserva(id));
+
+        // Republicar sin cambiar las unidades no revisa otra vez, y lo que se sabe de la última no se borra.
+        var otra = await b.Ofertas.PublicarAsync(Andamio(unidades: 1, valorDia: 41_000m), CancellationToken.None);
+        Assert.Equal(reservas[1..].Order(), otra.Value.ReservasFuera!.Order());
     }
 
     [Theory]

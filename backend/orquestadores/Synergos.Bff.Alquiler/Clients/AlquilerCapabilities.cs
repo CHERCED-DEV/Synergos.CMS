@@ -168,6 +168,26 @@ public sealed class AlquilerCapabilities : CapabilityClients
             timeZoneId = "UTC",
         }, key, ct);
 
+    /// <summary>
+    /// Cambia las unidades del recurso de un equipo (NN-6, <c>POST /v1/resources/{id}/revise</c> del núcleo): lo vuelve
+    /// a registrar como se creó —siempre abierto, sin plazo de aviso ni franja— con la capacidad nueva.
+    /// </summary>
+    /// <remarks>
+    /// <b>No cancela nada.</b> Las reservas vigentes que con menos unidades ya no caben siguen confirmadas y vuelven en
+    /// <see cref="RevisionDto.Outside"/>, las confirmadas más tarde primero en quedar fuera.
+    /// </remarks>
+    /// <param name="resourceId">El recurso del equipo.</param>
+    /// <param name="capacity">Las unidades nuevas.</param>
+    /// <param name="key">La llave de idempotencia.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El recurso revisado y lo que quedó fuera, o el rechazo.</returns>
+    public Task<Result<RevisionDto>> ReviseResourceAsync(string resourceId, int capacity, IdempotencyKey key, CancellationToken ct)
+        => Post<RevisionDto>(Booking, $"v1/resources/{Uri.EscapeDataString(resourceId)}/revise", new
+        {
+            capacity,
+            cancellationNoticeMinutes = 0,
+        }, key, ct);
+
     /// <summary>Fija el precio de un sujeto, sin impuesto: el valor de la ficha es lo que se cobra.</summary>
     /// <param name="subject">Qué se cotiza.</param>
     /// <param name="amount">Cuánto.</param>
@@ -200,6 +220,19 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 /// <param name="SubjectId">El sujeto.</param>
 /// <param name="Capacity">Cuántas unidades admite a la vez.</param>
 public sealed record ResourceDto(string Id, string SubjectKind, string SubjectId, int Capacity);
+
+/// <summary>Un recurso revisado de <c>Api.Booking</c> y las reservas vigentes que ya no caben (NN-6).</summary>
+/// <param name="Resource">El recurso como quedó.</param>
+/// <param name="Outside">Las que quedaron fuera, sin cancelar.</param>
+public sealed record RevisionDto(ResourceDto Resource, IReadOnlyList<OutsideReservationDto> Outside);
+
+/// <summary>Una reserva vigente que con el recurso revisado ya no cabría, con la regla que la deja fuera.</summary>
+/// <param name="ReservationId">La reserva.</param>
+/// <param name="Start">Desde cuándo.</param>
+/// <param name="End">Hasta cuándo.</param>
+/// <param name="ReasonCode">El código de la regla (por encima de los cupos, en el alquiler).</param>
+/// <param name="Reason">Para el registro.</param>
+public sealed record OutsideReservationDto(string ReservationId, DateTimeOffset Start, DateTimeOffset End, string ReasonCode, string Reason);
 
 /// <summary>Un apartado de <c>Api.Booking</c>.</summary>
 /// <param name="Id">Su identificador.</param>

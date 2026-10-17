@@ -2280,7 +2280,8 @@
           "minDays",
           "maxDays",
           "units",
-          "retired"
+          "retired",
+          "outsideReservations"
         ],
         "type": "object",
         "properties": {
@@ -2318,6 +2319,12 @@
           },
           "retired": {
             "type": "boolean"
+          },
+          "outsideReservations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

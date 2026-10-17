@@ -189,6 +189,9 @@ public sealed class ConsumidorCmsDeBffAlquilerTests
         Assert.Equal("RetireEquipmentOffer",
             Operacion("POST", "/v1/ofertas/andamio-6m/retirar")!.Value.Op.GetProperty("operationId").GetString());
         var malas = Juzgar(grabadora);
+        // Lo que lee de la respuesta (NN-6): las reservas que bajar las unidades dejó fuera.
+        Lee(typeof(HttpEquipmentOfferPublisher).GetNestedType("OfertaWire", BindingFlags.NonPublic)!,
+            Respuesta(Operacion("POST", "/v1/ofertas")!.Value.Op), "PublishEquipmentOffer", malas);
         Assert.True(malas.Count == 0, string.Join(Environment.NewLine, malas));
         Assert.Contains("depositPerUnit", grabadora.Llamadas.First().Cuerpo, StringComparison.Ordinal);
     }
