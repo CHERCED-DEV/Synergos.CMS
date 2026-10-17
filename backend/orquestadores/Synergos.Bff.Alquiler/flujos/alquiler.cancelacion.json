@@ -1,0 +1,41 @@
+{
+  "clave": "alquiler.cancelacion",
+  "posterior_a": "alquiler.renta",
+  "entrada": ["inquilino", "alquiler"],
+  "tipos": {
+    "inquilino": { "de": "sujeto" },
+    "alquiler": "texto",
+    "cobroId": { "tipo": "texto", "de": "original" },
+    "total": { "tipo": "dinero", "de": "original" },
+    "ventana": { "tipo": "ventana", "de": "original" },
+    "garantiaId": { "tipo": "texto?", "de": "original" }
+  },
+  "salida": ["alquiler", "total"],
+  "fases": {
+    "abrir": ["original", "antes-del-inicio", "unidades", "devolver", "garantia"]
+  },
+  "pasos": {
+    "original": {
+      "tipo": "flow.leer-original",
+      "lee": ["alquiler"],
+      "escribe": ["cobroId", "total", "ventana", "garantiaId"]
+    },
+    "antes-del-inicio": { "tipo": "alquiler.antes-del-inicio", "lee": ["alquiler", "ventana"] },
+    "unidades": {
+      "tipo": "alquiler.cancelar-unidades",
+      "lee": ["alquiler"],
+      "motivo": "no se pudieron cancelar las unidades del alquiler"
+    },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "total"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver lo cobrado del alquiler"
+    },
+    "garantia": {
+      "tipo": "alquiler.anular-garantia",
+      "lee": ["garantiaId"],
+      "motivo": "no se pudo soltar la garantía"
+    }
+  }
+}

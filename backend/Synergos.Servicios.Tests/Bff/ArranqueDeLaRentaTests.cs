@@ -73,8 +73,24 @@ public sealed class ArranqueDeLaRentaTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, salud.StatusCode);
         Assert.True(testigo.Visto is { Succeeded: true }, $"El catálogo no pasó: {testigo.Visto?.FailureMessage}");
 
-        var renta = Assert.Single(fabrica.Services.GetServices<FlujoGenerico>());
-        Assert.Equal("alquiler.renta", renta.Definicion.Clave);
+        // La renta y su cancelación de lo confirmado, que es una operación posterior a ella (NN-8, D-005-NN8).
+        var flujos = fabrica.Services.GetServices<FlujoGenerico>().ToDictionary(f => f.Definicion.Clave);
+        Assert.Equal(["alquiler.cancelacion", "alquiler.renta"], flujos.Keys.Order(StringComparer.Ordinal));
+        Assert.Null(flujos["alquiler.renta"].Definicion.PosteriorA);
+        Assert.Equal("alquiler.renta", flujos["alquiler.cancelacion"].Definicion.PosteriorA);
+    }
+
+    [Fact]
+    public void La_cancelacion_lee_la_original_con_el_paso_comun_y_nombra_sus_pasos_propios()
+    {
+        // El registro del orquestador reemplaza al del núcleo: sin nombrarlo, flow.leer-original no estaría. Y los dos
+        // pasos de pegamento llevan su necesidad (NN-18, NN-19) hasta que el núcleo los cubra.
+        using var fabrica = Orquestador(new Testigo());
+        var registro = fabrica.Services.GetRequiredService<IRegistroDePasos>();
+        Assert.True(registro.Para(PasoLeerOriginal.Nombre) is { LeeLaOriginal: true });
+        Assert.Equal(
+            ["alquiler.antes-del-inicio", "alquiler.anular-garantia", "alquiler.cancelar-unidades", "alquiler.tramo"],
+            registro.Tipos.Where(t => t.StartsWith("alquiler.", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
     }
 
     [Fact]

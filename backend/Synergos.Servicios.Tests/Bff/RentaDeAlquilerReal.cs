@@ -220,6 +220,21 @@ internal sealed class RentaDeAlquilerReal : IDisposable
     }
 
     /// <summary>
+    /// Cancela lo confirmado por el flujo posterior <c>alquiler.cancelacion</c> (NN-8, D-005-NN8), como lo pide el CMS: el
+    /// inquilino con su sujeto, y la llave derivada del alquiler.
+    /// </summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarPorElFlujo(string id, string? sujeto = null, string? llave = null)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/alquiler.cancelacion")
+        {
+            Content = JsonContent.Create(new { alquiler = id }),
+        };
+        peticion.Headers.Add("Idempotency-Key", llave ?? $"cancelar-{id}");
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, sujeto ?? Sujeto());
+        return await Enviar(peticion);
+    }
+
+    /// <summary>
     /// Los alquileres de la puerta del dueño con «listar» del host (NN-7): con el sujeto que pone la puerta, o sin él, y
     /// por estado si se pide.
     /// </summary>

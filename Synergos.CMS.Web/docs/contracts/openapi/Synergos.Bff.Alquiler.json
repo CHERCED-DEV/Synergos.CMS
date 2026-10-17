@@ -339,6 +339,532 @@
         }
       }
     },
+    "/v1/flujos/alquiler.cancelacion": {
+      "post": {
+        "operationId": "AlquilerCancelacionAbrir",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 83,
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlquilerCancelacionEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlquilerCancelacionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "alquiler.cancelacion",
+          "operacion": "abrir"
+        }
+      },
+      "get": {
+        "operationId": "AlquilerCancelacionListar",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlquilerCancelacionPagina"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "alquiler.cancelacion",
+          "operacion": "listar"
+        }
+      }
+    },
+    "/v1/flujos/alquiler.cancelacion/{id}": {
+      "get": {
+        "operationId": "AlquilerCancelacionConsultar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlquilerCancelacionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "alquiler.cancelacion",
+          "operacion": "consultar"
+        }
+      }
+    },
+    "/v1/flujos/alquiler.cancelacion/{id}/cancelar": {
+      "post": {
+        "operationId": "AlquilerCancelacionCancelar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlquilerCancelacionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "alquiler.cancelacion",
+          "operacion": "cancelar"
+        }
+      }
+    },
+    "/v1/flujos/alquiler.cancelacion/{id}/reintentar": {
+      "post": {
+        "operationId": "AlquilerCancelacionReintentar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlquilerCancelacionRespuesta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/flujos/alquiler.renta": {
       "post": {
         "operationId": "AlquilerRentaAbrir",
@@ -1803,6 +2329,123 @@
   },
   "components": {
     "schemas": {
+      "AlquilerCancelacionEntrada": {
+        "required": [
+          "alquiler"
+        ],
+        "type": "object",
+        "properties": {
+          "alquiler": {
+            "type": "string"
+          }
+        }
+      },
+      "AlquilerCancelacionPagina": {
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlquilerCancelacionRespuesta"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AlquilerCancelacionRespuesta": {
+        "required": [
+          "id",
+          "flujo",
+          "numero",
+          "estado",
+          "datos",
+          "compensacionesPendientes",
+          "error",
+          "deshaciendo"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "flujo": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "alquiler",
+              "total"
+            ],
+            "type": "object",
+            "properties": {
+              "alquiler": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "total": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "amount": {
+                        "type": "number",
+                        "format": "decimal"
+                      },
+                      "currency": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "compensacionesPendientes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deshaciendo": {
+            "type": "boolean"
+          }
+        }
+      },
       "AlquilerRentaCotizacion": {
         "required": [
           "flujo",
