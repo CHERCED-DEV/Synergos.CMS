@@ -26,7 +26,9 @@ public sealed class ContratoConsumidorReservasTests
     {
         ["BuscarRecursoAsync"] = c => c.BuscarRecursoAsync(Servicio, Ct),
         ["RegistrarRecursoAsync"] = c => c.RegistrarRecursoAsync(Servicio, 2, "America/Bogota",
-            [new BloqueDeHorarioDto("Monday", "09:00", "13:00")], 1440, Llave, Ct),
+            [new BloqueDeHorarioDto("Monday", "09:00", "13:00")], 1440, 60, Llave, Ct),
+        ["RevisarRecursoAsync"] = c => c.RevisarRecursoAsync("res-1", 3,
+            [new BloqueDeHorarioDto("Tuesday", "08:00", "12:00")], 720, 30, Llave, Ct),
         ["FijarPrecioAsync"] = c => c.FijarPrecioAsync(Servicio, Money.Of(140_000m, "COP"), DateTimeOffset.UnixEpoch, Llave, Ct),
     };
 
@@ -50,7 +52,7 @@ public sealed class ContratoConsumidorReservasTests
     {
         var declarados = DelCliente().Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
 
-        Assert.True(declarados.Count >= 3, $"Se descubrieron {declarados.Count} métodos y son 3: el censo dejó de ver.");
+        Assert.True(declarados.Count >= 4, $"Se descubrieron {declarados.Count} métodos y son 4: el censo dejó de ver.");
         Assert.True(declarados.SequenceEqual(Recorrido.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal),
             $"CapacidadesDeLaOferta y el recorrido no coinciden. Sin recorrido: {string.Join(", ", declarados.Except(Recorrido.Keys))}; " +
             $"recorrido sin método: {string.Join(", ", Recorrido.Keys.Except(declarados))}");

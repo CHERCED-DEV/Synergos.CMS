@@ -11,7 +11,8 @@ namespace Synergos.CMS.Tests.Bff.Reservas;
 /// </summary>
 /// <remarks>
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y
-/// ≤ 4 ficheros. <b>Interino</b> = el paso de dominio que espera una pieza del núcleo (NB-1; el de NR-1 ya se retiró). <b>Oferta</b> =
+/// ≤ 4 ficheros. <b>Interino</b> = el paso de dominio que espera una pieza del núcleo: hoy ninguno (el de NR-1 y el de
+/// NB-1, <c>reservas.duracion</c>, se retiraron al llegar la clase en la definición y la franja en la agenda). <b>Oferta</b> =
 /// el código del vertical que la oferta genérica (P12, NB-8) retirará. Un fichero nuevo del orquestador que no
 /// esté en ninguna de las tres listas es rojo: no puede crecer sin decir de quién es.</para>
 /// </remarks>
@@ -20,7 +21,7 @@ public sealed class MetricaDeReservasTests(ITestOutputHelper salida)
     private static readonly string[] DelFlujo =
         ["Program.cs", "flujos/reservas.servicio.json", "appsettings.json", "Synergos.Bff.Reservas.csproj"];
 
-    private static readonly string[] Interinos = ["Domain/PasosDeReservas.cs"];
+    private static readonly string[] Interinos = [];
 
     private static readonly string[] DeLaOferta =
         ["Domain/OfertaDeReservas.cs", "Endpoints/OfertasEndpoints.cs", "Clients/CapacidadesDeLaOferta.cs", "Contracts/OfertaContracts.cs"];
@@ -50,7 +51,8 @@ public sealed class MetricaDeReservasTests(ITestOutputHelper salida)
         var interino = Lineas(Interinos);
         var oferta = Lineas(DeLaOferta);
 
-        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NB-1) {interino}; oferta (P12) {oferta}.");
+        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino {interino}; oferta (P12) {oferta}.");
+        Assert.True(interino == 0, $"Hay {interino} líneas de pasos interinos y no espera ninguna pieza del núcleo.");
         Assert.True(flujo <= 60, $"El C# propio del flujo son {flujo} líneas y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros y la meta es ≤ 4.");
     }
