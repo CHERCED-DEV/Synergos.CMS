@@ -1,2 +1,12 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Alquiler", Model.Content)
+@*
+    <synergos-flujo> envuelve la funcionalidad de Alquiler (ADR 0140; línea 005, T028): el coordinador sin render
+    de la renta, que la lleva a la puerta cuando el CMS declara ese camino (AlquilerProps.RentalPath). La CLAVE del
+    flujo la pone el servidor y no el bundle —nada en el DOM es frontera de confianza, y el atributo es una clave,
+    nunca una ruta—, y CoordinadorDeLaRentaEnLaVistaTests la cruza con la tabla de la puerta y con
+    Synergos:Puerta:Flujos. Con la ruta directa no estorba: el elemento no le pide nada. El style en línea es para
+    antes de que el bundle defina la etiqueta: un elemento desconocido es inline y cambiaría el layout del ítem.
+*@
+<synergos-flujo flujo="alquiler.renta" style="display:contents">
+    @await Html.PartialAsync("SynHost/Alquiler", Model.Content)
+</synergos-flujo>

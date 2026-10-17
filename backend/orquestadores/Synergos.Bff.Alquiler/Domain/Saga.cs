@@ -63,6 +63,9 @@ public sealed record UnitHold(string HoldId, string ResourceId, string? Reservat
 /// costó verlo: cancelar también cancela las reservas, así que deducirlo de «¿tiene reservas?»
 /// habría contestado «devuelto» de todo alquiler cancelado — una fabricación que sale de datos
 /// reales y por eso no se ve rara (<c>a_fabrication_can_be_a_derivation</c>).
+/// Antes de cerrarse puede valer <c>declared</c>: el inquilino declaró la devolución y el personal
+/// todavía no la confirmó (decisión 5 del lote 1). Ahí <paramref name="Settled"/> sigue en falso y la
+/// garantía, retenida.
 /// </param>
 /// <param name="Compensations">Lo que queda por deshacer.</param>
 /// <param name="LastError">El último rechazo, para que alguien lo lea.</param>
@@ -127,4 +130,24 @@ public static class RentalSubject
     /// <param name="sagaId">El identificador del alquiler.</param>
     /// <returns>El <c>Ref</c>.</returns>
     public static Ref DepositOf(string sagaId) => Ref.Create("alquiler.garantia", sagaId);
+
+    /// <summary>El <c>Kind</c> del valor del día de un tramo en <c>Api.Pricing</c>.</summary>
+    public const string KindTarifa = "alquiler.tarifa";
+
+    /// <summary>El <c>Kind</c> de la garantía por unidad en <c>Api.Pricing</c>.</summary>
+    public const string KindGarantiaUnidad = "alquiler.garantia-unidad";
+
+    /// <summary>
+    /// El precio del día de un tramo: <c>{equipo}@{desdeDias}</c>; la tarifa base es el tramo <c>@1</c>.
+    /// </summary>
+    /// <param name="equipmentRef">El slug del equipo.</param>
+    /// <param name="desdeDias">Desde cuántos días aplica.</param>
+    /// <returns>El <c>Ref</c>.</returns>
+    public static Ref TarifaOf(string equipmentRef, int desdeDias)
+        => Ref.Create(KindTarifa, $"{equipmentRef}@{desdeDias.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+
+    /// <summary>La garantía de UNA unidad de un equipo, como precio.</summary>
+    /// <param name="equipmentRef">El slug del equipo.</param>
+    /// <returns>El <c>Ref</c>.</returns>
+    public static Ref GarantiaUnidadOf(string equipmentRef) => Ref.Create(KindGarantiaUnidad, equipmentRef);
 }

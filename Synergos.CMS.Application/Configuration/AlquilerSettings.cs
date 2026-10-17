@@ -43,4 +43,13 @@ public sealed class AlquilerSettings
     /// allá.</para>
     /// </remarks>
     public int MaxRentalDays { get; init; } = 30;
+
+    /// <summary>El huso por defecto del despliegue: el mismo que <c>Alquiler:TimeZone</c> del orquestador.</summary>
+    public const string HusoPorDefecto = "America/Bogota";
+
+    /// <summary>
+    /// El huso del despliegue (IANA): en qué día está «hoy» para la regla de cancelar (el inquilino, antes del día de
+    /// inicio). El orquestador lee el mismo valor en <c>Alquiler:TimeZone</c>, con el mismo valor por defecto.
+    /// </summary>
+    public string TimeZone { get; init; } = HusoPorDefecto;
 }

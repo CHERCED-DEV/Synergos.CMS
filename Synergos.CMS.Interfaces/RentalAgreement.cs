@@ -25,6 +25,24 @@ namespace Synergos.CMS.Interfaces;
 /// moneda no se puede discutir.</param>
 /// <param name="IssuedUtc">Cuándo se emitió.</param>
 /// <param name="Seal">El sello, o vacío si el sellador no estaba disponible.</param>
+/// <param name="Camino">
+/// Por dónde salió el alquiler (<see cref="CaminoDeCompra"/>): lo que pasa después —declarar, devolver,
+/// cancelar— va al motor por el que salió, no al que el sitio declare hoy. Los contratos guardados antes
+/// de la puerta no lo traen y son de la ruta directa, que era la única.
+/// </param>
+/// <param name="SelladoPor">
+/// Quién lo selló: <c>local</c> (la llave del CMS) o <c>api:{llave}</c> (<c>Api.Signing</c>). Un contrato se
+/// comprueba siempre con quien lo selló; los de antes del interruptor los selló la llave local.
+/// </param>
+/// <param name="SelloPendiente">
+/// El servicio de firma no contestó al emitirlo: se emitió sin sello y se sella al volver. Nunca se sella
+/// con la llave local en su lugar.
+/// </param>
+/// <param name="Estado">
+/// En qué punto está el alquiler, tal como lo supo este CMS en su última operación: el registro es el modelo
+/// de LECTURA del vertical y la bandeja lo pinta sin preguntarle a nadie.
+/// </param>
+/// <param name="Desenlace">Cómo se cerró la devolución, con su propio sello; null mientras no se cierre.</param>
 public sealed record RentalAgreement(
     string RentalId,
     string RenterId,
@@ -37,4 +55,36 @@ public sealed record RentalAgreement(
     decimal DepositHeld,
     string Currency,
     DateTimeOffset IssuedUtc,
-    string Seal);
+    string Seal,
+    string Camino = CaminoDeCompra.Directa,
+    string SelladoPor = RentalAgreement.SelladoLocal,
+    bool SelloPendiente = false,
+    RentalState Estado = RentalState.Reserved,
+    DesenlaceDelAlquiler? Desenlace = null)
+{
+    /// <summary>El sellador de la llave local del CMS.</summary>
+    public const string SelladoLocal = "local";
+}
+
+/// <summary>
+/// Cómo se cerró la devolución de un alquiler: lo que confirmó el personal (decisión 5 del lote 1).
+/// </summary>
+/// <remarks>
+/// Lleva su PROPIO sello y no se mete en el del contrato: el sello del contrato afirma lo que se acordó al
+/// salir, y cambiarlo dejaría sin comprobar todo contrato ya emitido (lote 3, 005-P6).
+/// </remarks>
+/// <param name="ConfirmadoUtc">Cuándo lo confirmó el personal.</param>
+/// <param name="Danio">Cuánto se cobró de la garantía; cero sin daño.</param>
+/// <param name="GarantiaLiberada">Cuánto se liberó; null es «no consta», nunca cero.</param>
+/// <param name="Personal">Quién lo confirmó, por referencia: nunca su nombre ni su correo.</param>
+/// <param name="Sello">El sello del desenlace, o vacío si quedó pendiente.</param>
+/// <param name="SelladoPor">Quién lo selló.</param>
+/// <param name="SelloPendiente">Si el servicio de firma no contestó al sellarlo.</param>
+public sealed record DesenlaceDelAlquiler(
+    DateTimeOffset ConfirmadoUtc,
+    decimal Danio,
+    decimal? GarantiaLiberada,
+    string Personal,
+    string Sello,
+    string SelladoPor = RentalAgreement.SelladoLocal,
+    bool SelloPendiente = false);

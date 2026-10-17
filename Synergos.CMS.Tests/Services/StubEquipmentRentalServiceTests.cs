@@ -64,6 +64,23 @@ public sealed class StubEquipmentRentalServiceTests
         public override DateTimeOffset GetUtcNow() => new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
     }
 
+    /// <summary>
+    /// Sumar <c>Declared</c> no cambia el significado de los alquileres que el motor ya guardó.
+    /// </summary>
+    /// <remarks>
+    /// El motor guarda el estado como NÚMERO (sus opciones de JSON no llevan conversor de enum). Un estado
+    /// nuevo metido en medio correría los demás, y un alquiler guardado como devuelto se leería declarado:
+    /// con la garantía otra vez «retenida» y el botón de declarar ofrecido sobre algo ya cerrado.
+    /// </remarks>
+    [Fact]
+    public void Sumar_un_estado_no_cambia_el_numero_de_los_ya_guardados()
+    {
+        Assert.Equal(0, (int)RentalState.Reserved);
+        Assert.Equal(1, (int)RentalState.Returned);
+        Assert.Equal(2, (int)RentalState.Cancelled);
+        Assert.Equal(3, (int)RentalState.Declared);
+    }
+
     // Tarifa base 40 000; a 7 días 30 000; a 28 días 24 000. Los tres distintos a propósito.
     private static RentalEquipment Equipo(int units = 2, int minDays = 1, int maxDays = 30)
         => new(
@@ -82,11 +99,19 @@ public sealed class StubEquipmentRentalServiceTests
             Currency: "USD");
 
     private static StubEquipmentRentalService Motor(
-        out AlmacenEnMemoria almacen, RentalEquipment? equipo = null, int maxRentalDays = 30)
+        out AlmacenEnMemoria almacen, RentalEquipment? equipo = null, int maxRentalDays = 30, TimeProvider? reloj = null)
     {
         almacen = new AlmacenEnMemoria();
         return new StubEquipmentRentalService(
-            new CatalogoFalso(equipo ?? Equipo()), almacen, new RelojFijo(), maxRentalDays);
+            new CatalogoFalso(equipo ?? Equipo()), almacen, reloj ?? new RelojFijo(), maxRentalDays);
+    }
+
+    /// <summary>Un reloj que se mueve a mano.</summary>
+    private sealed class RelojMovil(DateTimeOffset inicio) : TimeProvider
+    {
+        public DateTimeOffset Ahora { get; set; } = inicio;
+
+        public override DateTimeOffset GetUtcNow() => Ahora;
     }
 
     private static RentalRequest Pedido(int dias = 3, int cantidad = 1, int desdeDia = 1)
@@ -304,7 +329,7 @@ public sealed class StubEquipmentRentalServiceTests
         var r = await motor.ReserveAsync(Pedido(), "k1");
         await motor.ReturnAsync(r.Rental!.RentalId, 0m, "k2");
 
-        var cancelado = await motor.CancelAsync(r.Rental.RentalId, 0m, "k3");
+        var cancelado = await motor.CancelAsync(r.Rental.RentalId, 0m, RentalCanceller.Staff, "k3");
 
         Assert.Equal("alquiler.not_cancellable", cancelado!.RejectionCode);
     }
@@ -316,7 +341,7 @@ public sealed class StubEquipmentRentalServiceTests
         var motor = Motor(out _);
 
         Assert.Null(await motor.ReturnAsync("ALQ-inexistente", 0m, "k1"));
-        Assert.Null(await motor.CancelAsync("ALQ-inexistente", 0m, "k2"));
+        Assert.Null(await motor.CancelAsync("ALQ-inexistente", 0m, RentalCanceller.Renter, "k2"));
     }
 
     [Fact]
@@ -326,5 +351,105 @@ public sealed class StubEquipmentRentalServiceTests
 
         Assert.Null(await motor.QuoteAsync(new RentalRequest(
             "no-existe", 1, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 4), "x")));
+    }
+
+    // ── Declarar y confirmar (decisión 5 del lote 1, #203; línea 005, T015) ──
+
+    [Fact]
+    public async Task Declarar_deja_la_garantia_RETENIDA_y_confirmar_despues_la_libera()
+    {
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+        var retenida = r.Rental!.DepositHeld;
+
+        var declarado = await motor.DeclareReturnAsync(r.Rental.RentalId, "k2");
+
+        Assert.Equal(RentalOutcome.Ok, declarado!.Outcome);
+        Assert.Equal(RentalState.Declared, declarado.Rental!.State);
+        Assert.Equal(retenida, declarado.Rental.DepositHeld);
+        Assert.True(retenida > 0m);
+
+        var devuelto = await motor.ReturnAsync(r.Rental.RentalId, 0m, "k3");
+
+        Assert.Equal(RentalState.Returned, devuelto!.Rental!.State);
+        Assert.Equal(0m, devuelto.Rental.DepositHeld);
+    }
+
+    [Fact]
+    public async Task Declarar_es_idempotente_y_no_vale_desde_otro_estado()
+    {
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+        var id = r.Rental!.RentalId;
+
+        Assert.Equal(RentalOutcome.Ok, (await motor.DeclareReturnAsync(id, "k2"))!.Outcome);
+        Assert.Equal(RentalOutcome.AlreadyDone, (await motor.DeclareReturnAsync(id, "k2"))!.Outcome);
+        Assert.Equal(RentalOutcome.AlreadyDone, (await motor.DeclareReturnAsync(id, "k3"))!.Outcome);
+
+        await motor.ReturnAsync(id, 0m, "k5");
+        Assert.Equal("alquiler.not_declarable", (await motor.DeclareReturnAsync(id, "k6"))!.RejectionCode);
+        Assert.Null(await motor.DeclareReturnAsync("ALQ-inexistente", "k7"));
+    }
+
+    // ── Cancelar lo confirmado (research R7; línea 005, T020) ──────────────
+
+    [Theory]
+    [InlineData(4, 30, true)]    // 23:30 en Bogotá del 30 de septiembre: ya es 1 de octubre en UTC
+    [InlineData(5, 10, false)]   // 00:10 en Bogotá del 1 de octubre, el día de inicio
+    public async Task El_inquilino_cancela_hasta_la_noche_anterior_en_el_huso_del_despliegue(int horaUtc, int minuto, bool puede)
+    {
+        var reloj = new RelojMovil(new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero));
+        var motor = Motor(out _, reloj: reloj);
+        var r = await motor.ReserveAsync(Pedido(), "k1");   // empieza el 1 de octubre
+
+        reloj.Ahora = new DateTimeOffset(2026, 10, 1, horaUtc, minuto, 0, TimeSpan.Zero);
+        var cancelado = await motor.CancelAsync(r.Rental!.RentalId, 0m, RentalCanceller.Renter, "k2");
+
+        if (puede)
+        {
+            Assert.Equal(RentalState.Cancelled, cancelado!.Rental!.State);
+        }
+        else
+        {
+            Assert.Equal("alquiler.already_started", cancelado!.RejectionCode);
+        }
+    }
+
+    [Fact]
+    public async Task La_penalidad_del_inquilino_se_ignora_y_la_del_personal_cuenta()
+    {
+        var motor = Motor(out _);
+        var delInquilino = await motor.ReserveAsync(Pedido(desdeDia: 1), "k1");
+        var delPersonal = await motor.ReserveAsync(Pedido(desdeDia: 10), "k2");
+
+        var porElInquilino = await motor.CancelAsync(delInquilino.Rental!.RentalId, 99_000m, RentalCanceller.Renter, "k3");
+        var porElPersonal = await motor.CancelAsync(delPersonal.Rental!.RentalId, 50_000m, RentalCanceller.Staff, "k4");
+
+        Assert.Equal(0m, porElInquilino!.Rental!.DamageCharged);
+        Assert.Equal(50_000m, porElPersonal!.Rental!.DamageCharged);
+        Assert.Equal(0m, porElPersonal.Rental.DepositHeld);
+    }
+
+    [Fact]
+    public async Task Lo_declarado_lo_cancela_el_personal_y_no_el_inquilino()
+    {
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+        await motor.DeclareReturnAsync(r.Rental!.RentalId, "k2");
+
+        Assert.Equal("alquiler.not_cancellable", (await motor.CancelAsync(r.Rental.RentalId, 0m, RentalCanceller.Renter, "k3"))!.RejectionCode);
+        Assert.Equal(RentalState.Cancelled, (await motor.CancelAsync(r.Rental.RentalId, 0m, RentalCanceller.Staff, "k4"))!.Rental!.State);
+    }
+
+    [Fact]
+    public async Task El_personal_confirma_sin_declaracion_previa()
+    {
+        // S-2: el personal recibe el equipo aunque el inquilino no lo haya declarado.
+        var motor = Motor(out _);
+        var r = await motor.ReserveAsync(Pedido(), "k1");
+
+        var devuelto = await motor.ReturnAsync(r.Rental!.RentalId, 0m, "k2");
+
+        Assert.Equal(RentalState.Returned, devuelto!.Rental!.State);
     }
 }
