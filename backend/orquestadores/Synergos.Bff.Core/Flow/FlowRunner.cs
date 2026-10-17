@@ -76,6 +76,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     private readonly TimeProvider _reloj;
     private readonly ILogger _log;
 
+    /// <summary>La entrada que es el dueño en un flujo genérico (el sujeto de la puerta); nula en uno tipado.</summary>
+    private readonly string? _sujeto;
+
     /// <param name="motor">La máquina de sagas del dominio.</param>
     /// <param name="pasos">Los pasos registrados.</param>
     /// <param name="flujo">La definición.</param>
@@ -104,7 +107,16 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         _binding = binding;
         _reloj = reloj;
         _log = log;
+        _sujeto = flujo.Entrada.FirstOrDefault(n => flujo.Tipos?.GetValueOrDefault(n)?.Origen == OrigenDelValor.Sujeto);
     }
+
+    /// <summary>
+    /// El dueño de la corrida, para el paso que lo necesita (lote 6, <c>flow.leer-original</c>): el de la saga si ya
+    /// nació, o el sujeto que entró si la fase que abre todavía no la sembró. Nulo sin saga ni sujeto (una lectura).
+    /// </summary>
+    private Ref? DuenoDe(Corrida corrida)
+        => corrida.Saga is ISagaConDueno conDueno ? conDueno.Dueno
+            : _sujeto is { } sujeto && corrida.Ctx.Has(sujeto) ? corrida.Ctx.Get<Ref>(sujeto) : null;
 
     /// <summary>Lo que una fase va llevando: la saga si ya nació, el contexto, y si hay algo sin guardar.</summary>
     private sealed class Corrida
@@ -163,6 +175,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         string fase, string sagaId, FlowContext entrada, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entrada);
+
+        // Cada línea de la fase —de cada paso y de cada llamada a una capacidad— lleva la saga y su número
+        // (NB-9). También la que abre: el número es el de la saga que nace con esta llamada.
+        using var ambito = AmbitoDeLaSaga.Abrir(_log, sagaId);
 
         var definicion = _flujo.Fase(fase);
         var abre = ReferenceEquals(definicion, _flujo.Fases[0]);
@@ -275,6 +291,36 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                 ? await BloqueAsync(bloque, corrida, ct)
                 : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, null, ct);
 
+            if (desenlace.Rechazo is { } rechazo) return Result.Rejected<FlowContext>(rechazo);
+            if (desenlace.Control == PasoResultado.SaltarFase) break;
+        }
+
+        return Result.Ok(corrida.Ctx);
+    }
+
+    /// <summary>
+    /// Corre una lectura sin saga (núcleo, NB-3 de 011): sus pasos en orden, sobre lo que entra, y devuelve el
+    /// contexto. No escribe nada en ningún sitio —ni saga, ni turno, ni compensación—, como anticipar.
+    /// </summary>
+    /// <param name="lectura">El nombre de la lectura en la definición.</param>
+    /// <param name="entrada">Lo que pone la fachada: su entrada declarada.</param>
+    /// <param name="ct">Cancelación.</param>
+    /// <returns>El contexto tras el último paso, o el rechazo ORIGINAL del paso que falló.</returns>
+    /// <remarks>
+    /// Que sus pasos no escriban en ninguna capacidad lo dijo el validador al arrancar
+    /// (<see cref="FlowValidator"/>): ninguno reserva, cierra, pide llave ni avisa. Por eso puede correr sin dueño.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si la definición no declara esa lectura.</exception>
+    public async Task<Result<FlowContext>> LeerAsync(string lectura, FlowContext entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var definicion = _flujo.LecturasDeclaradas.GetValueOrDefault(lectura)
+            ?? throw new InvalidOperationException($"El flujo «{_flujo.Clave}» no declara la lectura «{lectura}».");
+
+        var corrida = new Corrida(string.Empty, Ref.Create(_flujo.Clave, lectura), entrada, saga: null);
+        foreach (var id in definicion.Pasos)
+        {
+            var desenlace = await PasoAsync(_flujo.Pasos[id], corrida, null, null, null, ct);
             if (desenlace.Rechazo is { } rechazo) return Result.Rejected<FlowContext>(rechazo);
             if (desenlace.Control == PasoResultado.SaltarFase) break;
         }
@@ -418,7 +464,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         try
         {
             salida = await paso.EjecutarAsync(
-                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item, indice), ct);
+                new EntradaDePaso(corrida.SagaId, corrida.Origen, definicion, corrida.Ctx, alias, item, indice, _flujo, DuenoDe(corrida)), ct);
         }
         catch (Exception ex) when (definicion.SigueSiFalla && !(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
@@ -451,12 +497,15 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             return new Desenlace(PasoResultado.Abortar, rechazo, definicion.Motivo ?? $"falló el paso «{definicion.Id}»");
         }
 
-        if (salida.Valores.Count != definicion.Escribe.Count)
+        // El paso produce lo que dice producir; la definición nombra los primeros (NB-5: las últimas escrituras
+        // opcionales se pueden no nombrar). Que produzca menos de lo que la definición lee, o más de lo que
+        // declara, es un defecto del paso.
+        if (salida.Valores.Count < definicion.Escribe.Count || salida.Valores.Count > paso.Escrituras)
         {
             throw new InvalidOperationException(
                 $"«{definicion.Tipo}» produjo {salida.Valores.Count} valor(es) y declaró {paso.Escrituras}.");
         }
-        for (var i = 0; i < salida.Valores.Count; i++)
+        for (var i = 0; i < definicion.Escribe.Count; i++)
         {
             Ambito.Escribir(definicion.Escribe[i], salida.Valores[i], corrida.Ctx, alias, item);
         }
@@ -464,7 +513,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         if (definicion.Reserva is { } reserva) Reservar(corrida, definicion, reserva, salida, item);
         if (definicion.CierraReserva is { } cerrada)
         {
-            CerrarReserva(corrida, cerrada, _flujo.Pasos[cerrada].Reserva!, item, salida.Cerrado);
+            CerrarReserva(corrida, cerrada, _flujo.Pasos[cerrada].Reserva!, item, salida.Cerrado, paso.Conserva);
         }
 
         return new Desenlace(salida.Control, null, null);
@@ -532,8 +581,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// capturada no se puede, devolverla sí. La de después apunta a lo que el cierre produjo, o al
     /// objetivo anotado al reservar —el pozo, porque el apartado consumido ya no existe—. Sin
     /// <c>despues</c>, consumir deja la compensación hecha.
+    ///
+    /// Un cierre que CONSERVA (<see cref="IPaso.Conserva"/>, P7) no la toca: lo conservado no se consumió, así que
+    /// deshacer la saga antes de completarla lo sigue anulando, y completar la marca hecha como a todo lo armado.
     /// </remarks>
-    private void CerrarReserva(Corrida corrida, string reservante, ReservaDef reserva, FlowContext? item, string? objetivo)
+    private void CerrarReserva(
+        Corrida corrida, string reservante, ReservaDef reserva, FlowContext? item, string? objetivo, bool conserva)
     {
         var saga = corrida.Saga!;
         var cerrada = item is not null
@@ -541,7 +594,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             : Ledger(corrida).Legs(reservante).Single();
         DateTimeOffset? ahora = reserva.Despues is null ? _reloj.GetUtcNow() : null;
 
-        var cambiada = saga.WithCompensations(saga.Compensations
+        var cambiada = conserva ? saga : saga.WithCompensations(saga.Compensations
             .Select(c => c.Kind == reserva.Antes && c.IsPending && c.TargetId == cerrada.HoldId
                 ? reserva.Despues is { } despues
                     ? c with { Kind = despues, TargetId = objetivo ?? cerrada.CloseTargetId }

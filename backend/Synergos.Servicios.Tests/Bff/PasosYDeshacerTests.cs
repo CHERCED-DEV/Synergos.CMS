@@ -25,15 +25,25 @@ public sealed class PasosYDeshacerTests
         public Money Devolvible { get; set; } = Money.Of(1000m, "COP");
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Hacer("rs-1", $"hallar {sujeto}");
-        public Task<Result<string>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
-            => Hacer("bh-1", $"apartar {llave.Value}");
+        /// <summary>Cuándo vence el apartado falso (NB-5 de 011).</summary>
+        public static readonly DateTimeOffset Vence = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
+
+        public async Task<Result<Apartado>> ApartarAsync(string recurso, TimeWindow ventana, Ref paraQuien, IdempotencyKey llave, CancellationToken ct)
+            => (await Hacer("bh-1", $"apartar {llave.Value}")).Map(id => new Apartado(id, Vence));
         public Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct) => Hacer("rv-1", $"confirmar {llave.Value}");
+        public Task<Result<IReadOnlyList<FranjaLibre>>> FranjasAsync(string recurso, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct)
+            => Task.FromResult(Result.Ok<IReadOnlyList<FranjaLibre>>([new FranjaLibre(desde, hasta, 1)]));
         public Task<Result<string>> LiberarAsync(string apartado, CancellationToken ct) => Hacer(apartado, $"liberar {apartado}");
         public Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct) => Hacer(reserva, $"cancelar {reserva}");
         public Task<Result<string>> AnularAsync(string cobro, CancellationToken ct) => Hacer(cobro, $"anular {cobro}");
         public Task<Result<Money>> DevolvibleAsync(string cobro, CancellationToken ct) => Task.FromResult(Result.Ok(Devolvible));
+        public List<string> Motivos { get; } = [];
+
         public Task<Result<string>> DevolverAsync(string cobro, Money monto, string motivo, IdempotencyKey llave, CancellationToken ct)
-            => Hacer(cobro, $"devolver {cobro} {monto} {llave.Value}");
+        {
+            Motivos.Add(motivo);
+            return Hacer(cobro, $"devolver {cobro} {monto} {llave.Value}");
+        }
         public Task<Result<string>> SoltarAsync(string apartado, CancellationToken ct) => Hacer(apartado, $"soltar {apartado}");
         public Task<Result<string>> ReponerAsync(string pozo, int cantidad, IdempotencyKey llave, CancellationToken ct)
             => Hacer(pozo, $"reponer {pozo} {cantidad}");
@@ -84,7 +94,8 @@ public sealed class PasosYDeshacerTests
 
         Assert.Equal("apartar cita-1|hold", Assert.Single(agenda.Llamadas));
         Assert.Equal(new Reservado("bh-1"), salida.Reservado);
-        Assert.Equal(new object?[] { "bh-1" }, salida.Valores);
+        // El apartado y cuándo vence (NB-5): la definición nombra los que lee, en orden.
+        Assert.Equal(new object?[] { "bh-1", Agenda.Vence }, salida.Valores);
     }
 
     [Fact]
@@ -167,6 +178,43 @@ public sealed class PasosYDeshacerTests
         agenda.Devolvible = Money.Of(700m, "COP");
         Assert.Null(await deshacer.UndoAsync(Saga(devolver), devolver, CancellationToken.None));
         Assert.Equal("devolver pg-1 700 COP cita-1|refund:c9", Assert.Single(agenda.Llamadas));
+    }
+
+    // ── Lo posterior al cierre (núcleo, T071 del lote 6) ──────────────────────────────────────
+
+    [Fact]
+    public async Task Devolver_manda_el_monto_leido_con_la_llave_fija_y_el_motivo_es_la_operacion_que_devuelve()
+    {
+        var agenda = new Agenda();
+        var ctx = new FlowContext().Set("cobroId", "pg-1").Set("monto", Money.Of(30_000m, "COP"));
+
+        var salida = await new PasoPagosDevolver(agenda).EjecutarAsync(
+            new EntradaDePaso("dev-1", Ref.Create("prueba.devolucion", "dev-1"),
+                new PasoDef("devolver", "payments.devolver", ["cobroId", "monto"], [], "refund", null, null, null, null), ctx, null, null),
+            CancellationToken.None);
+
+        Assert.Null(salida.Rechazo);
+        Assert.Equal("devolver pg-1 30000 COP dev-1|refund", Assert.Single(agenda.Llamadas));
+        Assert.Equal("prueba.devolucion:dev-1", Assert.Single(agenda.Motivos));
+    }
+
+    [Fact]
+    public async Task Anular_y_cancelar_lo_confirmado_van_a_su_puerto_sin_llave_y_su_no_vuelve_tal_cual()
+    {
+        var agenda = new Agenda();
+        var ctx = new FlowContext().Set("garantiaId", "pg-9").Set("reservaId", "rv-7");
+
+        Assert.Null((await new PasoPagosAnular(agenda).EjecutarAsync(
+            Entrada("payments.anular", ["garantiaId"], null, null, ctx), CancellationToken.None)).Rechazo);
+        Assert.Null((await new PasoAgendaCancelar(agenda).EjecutarAsync(
+            Entrada("booking.cancelar", ["reservaId"], null, null, ctx), CancellationToken.None)).Rechazo);
+        Assert.Equal(new[] { "anular pg-9", "cancelar rv-7" }, agenda.Llamadas);
+
+        agenda.Rechaza = Rejection.Conflict("booking.cancellation_too_late", "fuera de plazo");
+        var tarde = await new PasoAgendaCancelar(agenda).EjecutarAsync(
+            Entrada("booking.cancelar", ["reservaId"], null, null, ctx), CancellationToken.None);
+        Assert.Equal("booking.cancellation_too_late", tarde.Rechazo?.Code);
+        Assert.Equal(PasoResultado.Abortar, tarde.Control);
     }
 
     [Fact]

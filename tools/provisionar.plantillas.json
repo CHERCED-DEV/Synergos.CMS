@@ -29,5 +29,12 @@
     "channel": "Email",
     "subject": "Tu visita {numero} quedó agendada",
     "body": "<p>Hola {nombre}:</p><p>Tu visita <b>{numero}</b> en {sitio} quedó agendada para el <b>{fecha}</b> a las <b>{hora}</b>, {modalidad}.</p><p>El inmueble y su dirección están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla. Si no puedes ir, escríbele al agente desde la ficha del inmueble.</p>"
+  },
+  {
+    "_": "El aviso al inquilino (línea 005, research R13): lo manda el paso notifications.avisar al final de «cerrar» en alquiler.renta, a quien alquiló y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDelAvisoTests los cruza en los dos sentidos. No lleva la cifra de la garantía —el paso no la manda, y el correo no es el comprobante—: dice que queda retenida sin cobrarse, y el contrato sellado con su cifra está en el enlace.",
+    "key": "alquiler.renta.confirmada",
+    "channel": "Email",
+    "subject": "Tu alquiler {numero} está confirmado",
+    "body": "<p>Hola {nombre}:</p><p>Confirmamos tu alquiler <b>{numero}</b> en {sitio}. Te cobramos <b>{total}</b>.</p><p>La garantía queda retenida sin cobrarse hasta que devuelvas el equipo y el personal lo revise.</p><p>Tu contrato sellado y las fechas están en <a href=\"{enlace}\">{enlace}</a>.</p>"
   }
 ]

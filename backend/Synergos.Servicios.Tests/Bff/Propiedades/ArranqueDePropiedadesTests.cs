@@ -20,7 +20,7 @@ public sealed class ArranqueDePropiedadesTests
     }
 
     [Fact]
-    public void La_puerta_ve_abrir_cerrar_cancelar_consultar_y_cotizar_y_nada_mas()
+    public void La_puerta_ve_abrir_cerrar_cancelar_consultar_cotizar_y_listar_y_nada_mas()
     {
         using var r = new VisitaReal();
 
@@ -31,7 +31,7 @@ public sealed class ArranqueDePropiedadesTests
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar"], marcadas);
+        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar"], marcadas);
     }
 
     [Fact]

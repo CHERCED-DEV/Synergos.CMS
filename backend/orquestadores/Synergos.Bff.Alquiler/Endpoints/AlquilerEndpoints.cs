@@ -1,11 +1,19 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Alquiler.Contracts;
 using Synergos.Bff.Alquiler.Domain;
+using Synergos.Bff.Core;
 using Synergos.Core;
 using Synergos.Shared;
 
 namespace Synergos.Bff.Alquiler.Endpoints;
 
 /// <summary>El borde del orquestador de Alquiler.</summary>
+/// <remarks>
+/// Cada endpoint declara su respuesta con el TIPO DE RETORNO y su nombre con <c>WithName</c>: de ahí sale el
+/// contrato publicado (<c>docs/contracts/openapi/Synergos.Bff.Alquiler.json</c>, ADR 0140), que el CMS cruza
+/// y el UI convierte en tipos. Estas rutas son las del flujo imperativo (<c>RentalFlow</c>), las que usa la
+/// ruta directa del CMS con <c>Synergos:Alquiler:Mode=Bff</c>; ninguna lleva marca de la puerta.
+/// </remarks>
 public static class AlquilerEndpoints
 {
     /// <summary>El prefijo de los códigos de rechazo de este borde.</summary>
@@ -16,7 +24,7 @@ public static class AlquilerEndpoints
     /// <returns>El mismo router.</returns>
     public static IEndpointRouteBuilder MapAlquilerEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/v1/rentals", async (
+        app.MapPost("/v1/rentals", async Task<Results<Created<RentalResponse>, ProblemHttpResult>> (
             ReserveRentalRequest req, HttpRequest http, RentalFlow flow, CancellationToken ct) =>
         {
             // La llave es obligatoria: reservar retiene plata, y un reintento sin llave la
@@ -51,16 +59,16 @@ public static class AlquilerEndpoints
                 renter, req.EquipmentId ?? string.Empty, req.Quantity ?? 1,
                 TimeWindow.Of(req.Start.Value, req.End.Value), total, garantia, key.Value, ct);
 
-            return r.Match(
-                s => Results.Created($"/v1/rentals/{s.Id}", RentalResponse.From(s)),
-                bad => bad.ToProblem());
-        });
+            return r.Map(RentalResponse.From).ToCreated(s => $"/v1/rentals/{s.RentalId}");
+        }).WithName("ReserveRental").ConLlaveDeSaga();
 
-        app.MapGet("/v1/rentals/{id}", (string id, RentalFlow flow) =>
-            flow.Get(id).Map(RentalResponse.From).ToHttp());
+        app.MapGet("/v1/rentals/{id}", Results<Ok<RentalResponse>, ProblemHttpResult> (string id, RentalFlow flow) =>
+            flow.Get(id).Map(RentalResponse.From).ToHttp()).WithName("GetRental");
 
-        app.MapPost("/v1/rentals/{id}/return", async (
-            string id, SettleRentalRequest? req, RentalFlow flow, CancellationToken ct) =>
+        // Devolver y cancelar exigen el cuerpo, aunque su monto pueda faltar (cero es legítimo): el CMS
+        // siempre lo manda, y un cuerpo opcional no se puede traducir a un tipo en el UI.
+        app.MapPost("/v1/rentals/{id}/return", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, SettleRentalRequest req, RentalFlow flow, CancellationToken ct) =>
         {
             if (!TryMonto(req, out var monto, out var malo))
             {
@@ -68,24 +76,74 @@ public static class AlquilerEndpoints
             }
 
             return (await flow.ReturnAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
-        });
+        }).WithName("ReturnRental");
 
-        app.MapPost("/v1/rentals/{id}/cancel", async (
-            string id, SettleRentalRequest? req, RentalFlow flow, CancellationToken ct) =>
+        // Cancelar lo confirmado (research R7): quién cancela decide la regla y la penalidad. Sin actor, el
+        // inquilino: es lo más restrictivo, y un cliente viejo que no lo mande no cobra penalidades por error.
+        app.MapPost("/v1/rentals/{id}/cancel", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, CancelRentalRequest req, RentalFlow flow, CancellationToken ct) =>
         {
-            if (!TryMonto(req, out var monto, out var malo))
+            if (!TryMonto(new SettleRentalRequest(req.Amount), out var monto, out var malo))
             {
                 return malo!;
             }
 
-            return (await flow.CancelAsync(id, monto, ct)).Map(RentalResponse.From).ToHttp();
-        });
+            if (!TryActor(req.Actor, out var actor))
+            {
+                return Invalid("bad_actor", "Quien cancela es «renter» o «staff».");
+            }
+
+            return (await flow.CancelAsync(id, monto, actor, ct)).Map(RentalResponse.From).ToHttp();
+        }).WithName("CancelRental");
+
+        // Declarar la devolución (decisión 5 del lote 1): sin cuerpo y sin plata; repetirla devuelve lo mismo.
+        app.MapPost("/v1/rentals/{id}/declare-return", async Task<Results<Ok<RentalResponse>, ProblemHttpResult>> (
+            string id, RentalFlow flow, CancellationToken ct) =>
+            (await flow.DeclareReturnAsync(id, ct)).Map(RentalResponse.From).ToHttp()).WithName("DeclareRentalReturn");
+
+        // La oferta de un equipo (lote 3, 005-P1): el precio de cada tramo y la garantía en Pricing, y el
+        // recurso con sus unidades en Booking. La llama el CMS al publicar la ficha, no un navegador, así que no
+        // lleva marca de la puerta. Repetirla no duplica nada; ver OfertaDeAlquiler.
+        app.MapPost("/v1/ofertas", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (
+            PublishEquipmentOfferRequest req, HttpRequest http, OfertaDeAlquiler ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out _, out var falta)) return falta!;
+
+            var oferta = new OfertaDeEquipo(req.EquipmentId, req.Currency, req.DailyRate,
+                req.Rates?.Select(t => new TramoDeTarifa(t.MinDays ?? 0, t.PerDay ?? 0m)).ToList(),
+                req.DepositPerUnit, req.MinDays, req.MaxDays, req.Units);
+            return (await ofertas.PublicarAsync(oferta, ct)).Map(EquipmentOfferResponse.From).ToHttp();
+        }).WithName("PublishEquipmentOffer").ConLlaveDeIdempotencia();
+
+        app.MapPost("/v1/ofertas/{equipmentId}/retirar", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (
+            string equipmentId, HttpRequest http, OfertaDeAlquiler ofertas, CancellationToken ct) =>
+        {
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out _, out var falta)) return falta!;
+            return (await ofertas.RetirarAsync(equipmentId, ct)).Map(EquipmentOfferResponse.From).ToHttp();
+        }).WithName("RetireEquipmentOffer").ConLlaveDeIdempotencia();
 
         return app;
     }
 
+    /// <summary>Quién cancela, en el cable: <c>renter</c> (o nada) y <c>staff</c>.</summary>
+    internal static bool TryActor(string? valor, out QuienCancela actor)
+    {
+        switch (valor?.Trim().ToLowerInvariant())
+        {
+            case null or "" or "renter":
+                actor = QuienCancela.Inquilino;
+                return true;
+            case "staff":
+                actor = QuienCancela.Personal;
+                return true;
+            default:
+                actor = QuienCancela.Inquilino;
+                return false;
+        }
+    }
+
     /// <summary>Cero es legítimo —devolver sin daño— así que la ausencia no se rechaza.</summary>
-    private static bool TryMonto(SettleRentalRequest? req, out Money monto, out IResult? malo)
+    private static bool TryMonto(SettleRentalRequest? req, out Money monto, out ProblemHttpResult? malo)
     {
         if (req?.Amount is null)
         {
@@ -104,7 +162,7 @@ public static class AlquilerEndpoints
     /// No se cae a cero: «cero» es un precio válido que no falla en ninguna parte hasta que
     /// alguien mira la factura (<c>bash_ifs_whitespace_shifts_fields</c>, el mismo corte).
     /// </remarks>
-    private static bool TryMoney(MoneyPayload? m, out Money monto, out IResult? malo)
+    private static bool TryMoney(MoneyPayload? m, out Money monto, out ProblemHttpResult? malo)
     {
         monto = Money.Zero(Money.Cop);
         malo = null;
@@ -120,6 +178,6 @@ public static class AlquilerEndpoints
         return true;
     }
 
-    private static IResult Invalid(string code, string detail)
+    private static ProblemHttpResult Invalid(string code, string detail)
         => Rejection.Invalid($"{CodePrefix}.{code}", detail).ToProblem();
 }

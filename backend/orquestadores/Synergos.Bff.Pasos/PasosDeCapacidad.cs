@@ -141,6 +141,84 @@ public sealed class PasoPagosCapturar(IPaymentsPort pagos) : IPaso
 }
 
 /// <summary>
+/// <c>payments.conservar</c>: lee el cobro y CIERRA su reserva sin capturarlo (núcleo, P7 = A del lote 6, NN-4 de 005).
+/// </summary>
+/// <remarks>
+/// <para><b>No llama a nada.</b> La autorización sigue viva en <c>Api.Payments</c>, con su id en la salida del
+/// flujo, y la resuelve la operación posterior: capturar una parte y devolver el resto, o anularla.</para>
+///
+/// <para><b>Hasta completar, deshacer la saga la sigue anulando</b> (<see cref="IPaso.Conserva"/>): el intérprete no le
+/// cambia la compensación, así que da igual en qué lugar de la fase vaya. Es lo que <c>alquiler.conservar-garantia</c>
+/// conseguía yendo al final.</para>
+/// </remarks>
+public sealed class PasoPagosConservar : IPaso
+{
+    public string Tipo => "payments.conservar";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+    public int Lecturas => 1;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool Conserva => true;
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entrada.Lee<string>(0));
+        return Task.FromResult(SalidaDePaso.Sigue());
+    }
+}
+
+// ── Lo posterior al cierre (núcleo, lote 6): mover plata sobre una saga ya completada ─────────
+// Los da un flujo aparte (P6 = A) después de leer la original. Van sobre el puerto de deshacer, que ya habla con
+// esas mismas rutas de Api.Payments: no hay método nuevo en el adaptador.
+
+/// <summary>
+/// <c>payments.devolver</c>: lee el cobro y el monto, y devuelve ESE monto con la llave fija del paso (núcleo, T071).
+/// </summary>
+/// <remarks>
+/// <para><b>El tope lo pone <c>Api.Payments</c>, no el paso</b>: devolver más de lo que queda por devolver es
+/// <c>payments.refund_over_captured</c>, también sumando lo que devolvieron otras sagas. Dos operaciones posteriores con
+/// llaves distintas no devuelven dos veces lo mismo.</para>
+///
+/// <para><b>El motivo es quién devuelve</b>: la operación posterior y su saga (<c>tienda.devolucion:…</c>). En el cobro
+/// queda escrito de qué saga salió cada devolución.</para>
+/// </remarks>
+public sealed class PasoPagosDevolver(IDeshacerCobros cobros) : IPaso
+{
+    public string Tipo => "payments.devolver";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+    public int Lecturas => 2;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Fija;
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var devuelto = await cobros.DevolverAsync(
+            entrada.Lee<string>(0), entrada.Lee<Money>(1), entrada.Origen.ToString(), entrada.Llave(), ct);
+        return devuelto.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(devuelto.Rejection!);
+    }
+}
+
+/// <summary><c>payments.anular</c>: lee el cobro y anula su autorización, sin capturar nada (núcleo, T071).</summary>
+/// <remarks>Suelta la garantía conservada (P7) cuando no se cobra nada. Anular es idempotente en la capacidad: sin llave.</remarks>
+public sealed class PasoPagosAnular(IDeshacerCobros cobros) : IPaso
+{
+    public string Tipo => "payments.anular";
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+    public int Lecturas => 1;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var anulado = await cobros.AnularAsync(entrada.Lee<string>(0), ct);
+        return anulado.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(anulado.Rejection!);
+    }
+}
+
+/// <summary>
 /// <c>notifications.avisar</c>: lee a quién, adónde y cuánto, y avisa con la plantilla que declara.
 /// </summary>
 /// <remarks>

@@ -262,6 +262,37 @@ public sealed class ClienteDelArbolDeServiciosTests
     }
 
     [Fact]
+    public async Task Una_escritura_sin_llave_marcada_repetible_por_la_saga_se_repite_si_es_pasajero()
+    {
+        // NP-4 de 005: devolver o cancelar una renta es idempotente por la saga del orquestador, que no lee ninguna
+        // llave. El cliente lo dice, y la pieza la repite sin que viaje una cabecera que nadie lee.
+        var guion = new Guion()
+            .Responde(HttpStatusCode.ServiceUnavailable, Rechazo("alquiler.busy", transient: true))
+            .Responde(HttpStatusCode.OK, "{}");
+        var m = Montar(guion);
+
+        using var res = await m.Cliente.SendAsync(Escritura(llaveDeIdempotencia: null).RepetiblePorLaSaga());
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal(2, guion.Recibidas.Count);
+        Assert.All(guion.Recibidas, r => Assert.False(r.Headers.Contains(ClienteDelArbolDeServicios.CabeceraDeIdempotencia)));
+    }
+
+    [Fact]
+    public async Task Repetible_por_la_saga_no_abre_un_rechazo_firme_ni_le_gana_al_veto()
+    {
+        // Las dos llaves siguen siendo dos: repetible Y pasajero. Y el veto manda sobre las dos.
+        var firme = new Guion().Responde(HttpStatusCode.Conflict, Rechazo("alquiler.not_returnable", transient: false));
+        var vetada = new Guion().Responde(HttpStatusCode.ServiceUnavailable, Rechazo("alquiler.busy", transient: true));
+
+        using (await Montar(firme).Cliente.SendAsync(Escritura(llaveDeIdempotencia: null).RepetiblePorLaSaga())) { }
+        using (await Montar(vetada).Cliente.SendAsync(Escritura(llaveDeIdempotencia: null).RepetiblePorLaSaga().NoSeRepite())) { }
+
+        Assert.Single(firme.Recibidas);
+        Assert.Single(vetada.Recibidas);
+    }
+
+    [Fact]
     public async Task Sin_respuesta_una_lectura_se_repite_hasta_que_contesta()
     {
         var guion = new Guion().NoContesta().NoContesta().Responde(HttpStatusCode.OK, "{}");

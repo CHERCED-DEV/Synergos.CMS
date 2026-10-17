@@ -44,6 +44,55 @@ public sealed class EquipmentAgreementLedger
             JsonSerializer.Serialize(agreement, Json), cancellationToken);
     }
 
+    /// <summary>
+    /// Anota el sello de un contrato que quedó pendiente, sobre lo que el registro tiene AHORA (línea 005, T022).
+    /// </summary>
+    /// <remarks>
+    /// Relee justo antes de escribir y sólo cambia el sello: el sello pudo tardar una llamada de red, y en ese rato
+    /// otra operación pudo anotar el estado del alquiler. Escribir el contrato leído antes lo pisaría.
+    /// </remarks>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="sello">El sello que por fin se obtuvo.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato sellado, o null si ya no consta.</returns>
+    public async Task<RentalAgreement?> AnotarSelloAsync(
+        string rentalId, SelloDelContrato sello, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sello);
+        var actual = await GetAsync(rentalId, cancellationToken).ConfigureAwait(false);
+        if (actual is null)
+        {
+            return null;
+        }
+
+        var sellado = actual with { Seal = sello.Valor, SelladoPor = sello.SelladoPor, SelloPendiente = sello.Pendiente };
+        await RecordAsync(sellado, cancellationToken).ConfigureAwait(false);
+        return sellado;
+    }
+
+    /// <summary>
+    /// Anota cómo se cerró la devolución, sobre lo que el registro tiene AHORA (línea 005, T025): sólo cambia el
+    /// desenlace, nunca lo pactado ni su sello.
+    /// </summary>
+    /// <param name="rentalId">Cuál alquiler.</param>
+    /// <param name="desenlace">El desenlace, con su propio sello.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>El contrato con su desenlace, o null si ya no consta.</returns>
+    public async Task<RentalAgreement?> AnotarDesenlaceAsync(
+        string rentalId, DesenlaceDelAlquiler desenlace, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(desenlace);
+        var actual = await GetAsync(rentalId, cancellationToken).ConfigureAwait(false);
+        if (actual is null)
+        {
+            return null;
+        }
+
+        var cerrado = actual with { Desenlace = desenlace };
+        await RecordAsync(cerrado, cancellationToken).ConfigureAwait(false);
+        return cerrado;
+    }
+
     /// <summary>El contrato de un alquiler, o null.</summary>
     /// <param name="rentalId">Cuál alquiler.</param>
     /// <param name="cancellationToken">Cancelación del request en curso.</param>
@@ -78,6 +127,25 @@ public sealed class EquipmentAgreementLedger
             .Where(a => a is not null && string.Equals(a.RenterId, renterId, StringComparison.Ordinal))
             .Select(a => a!)
             .OrderByDescending(a => a.IssuedUtc)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Los contratos de TODO el despliegue en un estado, del más viejo al más reciente: la bandeja del personal
+    /// (las devoluciones declaradas que esperan su confirmación, línea 005, T018).
+    /// </summary>
+    /// <param name="estado">El estado que se busca.</param>
+    /// <param name="cancellationToken">Cancelación del request en curso.</param>
+    /// <returns>Los contratos en ese estado. Vacío es «ninguno», que es cierto: el estado lo anota este borde.</returns>
+    public async Task<IReadOnlyList<RentalAgreement>> ListByStateAsync(
+        RentalState estado, CancellationToken cancellationToken = default)
+    {
+        var todos = await _store.ListAsync(ResourceType, cancellationToken).ConfigureAwait(false);
+        return todos
+            .Select(Deserializar)
+            .Where(a => a is not null && a.Estado == estado)
+            .Select(a => a!)
+            .OrderBy(a => a.IssuedUtc)
             .ToList();
     }
 

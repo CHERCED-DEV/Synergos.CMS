@@ -31,8 +31,8 @@ public sealed class PasoAgendaHallar(IBookingPort agenda) : IPaso
 }
 
 /// <summary>
-/// <c>booking.apartar</c>: lee el recurso, la ventana y para quién; aparta y escribe el apartado. RESERVA,
-/// una vez por saga, con llave FIJA.
+/// <c>booking.apartar</c>: lee el recurso, la ventana y para quién; aparta y escribe el apartado y —si la
+/// definición lo nombra— cuándo vence (<c>instante</c>). RESERVA, una vez por saga, con llave FIJA.
 /// </summary>
 /// <remarks>
 /// Lo reservado se deshace soltando el apartado (<c>booking.liberar</c>); una vez confirmado, cancelando la
@@ -42,9 +42,10 @@ public sealed class PasoAgendaApartar(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -70,9 +71,10 @@ public sealed class PasoAgendaApartarPorItem(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar-por-item";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.PorItem;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -137,9 +139,10 @@ public sealed class PasoAgendaApartarPorIndice(IBookingPort agenda) : IPaso
 {
     public string Tipo => "booking.apartar-por-indice";
     public int Lecturas => 3;
-    public int Escrituras => 1;
+    public int Escrituras => 2;
+    public int EscriturasOpcionales => 1;
     public LlaveRequerida Llave => LlaveRequerida.PorItem;
-    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string), typeof(DateTimeOffset)];
 
     public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -187,6 +190,54 @@ public sealed class PasoAgendaLiberar(IDeshacerAgenda agenda) : IPaso
     }
 }
 
+/// <summary>
+/// <c>booking.cancelar</c>: lee una reserva CONFIRMADA y la cancela (núcleo, T071 del lote 6; NB-4 de 011). Es el paso
+/// de la operación posterior que cancela lo confirmado.
+/// </summary>
+/// <remarks>
+/// El plazo lo decide la agenda con la política del recurso (<c>CheckCancellable</c>): fuera de plazo vuelve su
+/// <c>booking.cancellation_too_late</c> tal cual, y una ya cancelada, <c>booking.already_cancelled</c>.
+/// </remarks>
+public sealed class PasoAgendaCancelar(IDeshacerAgenda agenda) : IPaso
+{
+    public string Tipo => "booking.cancelar";
+    public int Lecturas => 1;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var cancelada = await agenda.CancelarAsync(entrada.Lee<string>(0), ct);
+        return cancelada.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(cancelada.Rejection!);
+    }
+}
+
+/// <summary>
+/// <c>booking.franjas</c>: lee el recurso, desde y hasta (<c>instante</c>), y escribe sus franjas con lo libre de cada
+/// una (<c>franjas</c>; núcleo, NB-3 de 011, sobre NB-2). El paso de una lectura de disponibilidad.
+/// </summary>
+/// <remarks>
+/// Lee, no aparta: sin llave y sin reserva, que es lo que deja correrlo en una lectura sin saga y sin dueño. Que
+/// la franja siga libre al apartarla no lo promete nadie: lo dice apartar, con su regla y en su momento.
+/// </remarks>
+public sealed class PasoAgendaFranjas(IBookingPort agenda) : IPaso
+{
+    public string Tipo => "booking.franjas";
+    public int Lecturas => 3;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(IReadOnlyList<FranjaLibre>)];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var franjas = await agenda.FranjasAsync(entrada.Lee<string>(0), entrada.Lee<DateTimeOffset>(1), entrada.Lee<DateTimeOffset>(2), ct);
+        return franjas.IsOk ? SalidaDePaso.Sigue(franjas.Value) : SalidaDePaso.Rechaza(franjas.Rejection!);
+    }
+}
+
 /// <summary>Lo que comparten los pasos de agenda.</summary>
 public static class PasosDeAgenda
 {
@@ -203,11 +254,15 @@ public static class PasosDeAgenda
             ? i.ToString(CultureInfo.InvariantCulture)
             : throw new InvalidOperationException($"El paso «{entrada.Paso.Id}» ({entrada.Paso.Tipo}) va por posición y no está dentro de un bloque.");
 
+    /// <remarks>
+    /// Escribe el apartado y, si la definición lo nombra, cuándo vence (NB-5 de 011, NV-12 de 006): la pantalla
+    /// sólo puede decir cuánto tiempo queda si lo dice el servidor.
+    /// </remarks>
     internal static async Task<SalidaDePaso> ApartarAsync(IBookingPort agenda, EntradaDePaso entrada, IdempotencyKey llave, CancellationToken ct)
     {
         var apartado = await agenda.ApartarAsync(entrada.Lee<string>(0), entrada.Lee<TimeWindow>(1), entrada.Lee<Ref>(2), llave, ct);
         return apartado.IsOk
-            ? SalidaDePaso.Reserva(new Reservado(apartado.Value), apartado.Value)
+            ? SalidaDePaso.Reserva(new Reservado(apartado.Value.Id), apartado.Value.Id, apartado.Value.Vence)
             : SalidaDePaso.Rechaza(apartado.Rejection!);
     }
 

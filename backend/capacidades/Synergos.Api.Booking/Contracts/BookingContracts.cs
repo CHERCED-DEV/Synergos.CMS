@@ -28,7 +28,18 @@ public sealed record CreateResourceRequest(
     int? Capacity = null,
     string? TimeZoneId = null,
     IReadOnlyList<OpeningRuleDto>? Opening = null,
-    int? CancellationNoticeMinutes = null);
+    int? CancellationNoticeMinutes = null,
+    int? SlotMinutes = null);
+
+/// <summary>
+/// Revisar un recurso: lo que se puede cambiar, ENTERO (registrarlo otra vez sin sujeto ni huso). Lo que no
+/// viene vale lo mismo que al registrar: capacidad 1, siempre abierto, sin plazo, sin franja.
+/// </summary>
+public sealed record ReviseResourceRequest(
+    int? Capacity = null,
+    IReadOnlyList<OpeningRuleDto>? Opening = null,
+    int? CancellationNoticeMinutes = null,
+    int? SlotMinutes = null);
 
 /// <summary>Tomar un bloqueo temporal sobre una ventana.</summary>
 public sealed record CreateHoldRequest(
@@ -40,6 +51,7 @@ public sealed record CreateHoldRequest(
     int? TtlMinutes = null);
 
 /// <summary>Cómo sale un recurso.</summary>
+/// <remarks><c>SlotMinutes</c> nulo: el recurso no se reserva por franjas.</remarks>
 public sealed record ResourceResponse(
     string Id,
     string SubjectKind,
@@ -47,12 +59,14 @@ public sealed record ResourceResponse(
     int Capacity,
     string TimeZoneId,
     IReadOnlyList<OpeningRuleDto> Opening,
-    int CancellationNoticeMinutes)
+    int CancellationNoticeMinutes,
+    int? SlotMinutes)
 {
     public static ResourceResponse From(Resource r) => new(
         r.Id, r.Subject.Kind, r.Subject.Id, r.Capacity, r.TimeZoneId,
         r.Opening.Select(o => new OpeningRuleDto(o.Day.ToString(), o.From.ToString("HH:mm"), o.To.ToString("HH:mm"))).ToList(),
-        (int)r.Policy.MinNoticeBeforeStart.TotalMinutes);
+        (int)r.Policy.MinNoticeBeforeStart.TotalMinutes,
+        r.SlotMinutes);
 }
 
 /// <summary>Cómo sale un hold.</summary>
@@ -104,6 +118,36 @@ public sealed record AvailabilityResponse(
     int Capacity,
     string? ReasonCode,
     string? Reason);
+
+/// <summary>Una reserva vigente que con el recurso revisado ya no cabría, y por qué.</summary>
+public sealed record OutsideReservationResponse(
+    string ReservationId, DateTimeOffset Start, DateTimeOffset End, string ReasonCode, string Reason);
+
+/// <summary>
+/// El recurso revisado y las reservas vigentes que ya no cabrían. Ninguna se canceló: decidir qué hacer con
+/// ellas es de quien revisó.
+/// </summary>
+public sealed record RevisionResponse(ResourceResponse Resource, IReadOnlyList<OutsideReservationResponse> Outside)
+{
+    public static RevisionResponse From(Revision r) => new(
+        ResourceResponse.From(r.Resource),
+        r.Outside.Select(o => new OutsideReservationResponse(
+            o.Reservation.Id, o.Reservation.Window.Start, o.Reservation.Window.End, o.Reason.Code, o.Reason.Message)).ToList());
+}
+
+/// <summary>Una franja y cuánto cupo le queda.</summary>
+public sealed record SlotResponse(DateTimeOffset Start, DateTimeOffset End, int Free);
+
+/// <summary>
+/// Las franjas de un recurso en un rango, también las llenas (<c>free</c> en cero): la pantalla decide si
+/// las enseña.
+/// </summary>
+public sealed record SlotListResponse(string ResourceId, int SlotMinutes, int Capacity, IReadOnlyList<SlotResponse> Items)
+{
+    public static SlotListResponse From(SlotList l) => new(
+        l.ResourceId, l.SlotMinutes, l.Capacity,
+        l.Items.Select(s => new SlotResponse(s.Window.Start, s.Window.End, s.Free)).ToList());
+}
 
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);

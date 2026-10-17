@@ -156,6 +156,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "rentalPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -163,7 +169,8 @@
         "heading": "Alquiler de equipos",
         "subheading": "Por días, con la garantía retenida y no cobrada",
         "category": "andamios",
-        "apiBase": "/api/alquiler"
+        "apiBase": "/api/alquiler",
+        "rentalPath": "directa"
       }
     },
     {
