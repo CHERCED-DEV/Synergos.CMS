@@ -1076,7 +1076,16 @@ public sealed class HostDeFlujosTests
             new ReservaDeFlujo("bh-3", "bh-3", 2, "rv-3"),
         ]));
 
-        var r = await banco.Fachada().AbrirAsync("can-1", Paciente, new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None);
+        var fachada = banco.Fachada();
+
+        // NR-8, en UNA fase: sólo cancela en la agenda, sin ningún paso con llave, y aun así no se anticipa. Cotizarla
+        // cancelaría sin saga; con una sola fase, un fallo no deja la mitad hecha en otra saga que el reintento repita.
+        Assert.False(fachada.SeAnticipa);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fachada.AnticiparAsync(
+            new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None));
+        Assert.Empty(banco.Puertos.Llamadas);
+
+        var r = await fachada.AbrirAsync("can-1", Paciente, new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None);
 
         Assert.True(r.IsOk, r.Rejection?.ToString());
         Assert.Equal(["cancelar rv-1", "cancelar rv-3"], banco.Puertos.Llamadas);
