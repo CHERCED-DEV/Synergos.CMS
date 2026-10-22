@@ -7,7 +7,8 @@ namespace Synergos.CMS.Tests.Controllers;
 /// <summary>
 /// El portal inmobiliario se pinta dentro del coordinador de la visita, y sólo él (008-propiedades-visita, T012 y
 /// T024): la clave que escribe la vista es la que pregunta el resolver y la que abre la puerta, y el enlace del aviso
-/// trae el parámetro que lee el participante.
+/// trae el parámetro que lee el participante. Dentro va el de la cancelación de una visita confirmada (008-P5): una
+/// operación posterior de la visita, que el gate general admite dentro de su original (núcleo T086).
 /// </summary>
 /// <remarks>
 /// <para><b>Lo general lo mira <see cref="CoordinadorDelFlujoEnLasVistasTests"/></b>: que toda clave colocada exista en la
@@ -24,6 +25,9 @@ public sealed class CoordinadorDePropiedadesEnLasVistasTests
     /// <summary>La vista del bloque: la única que coloca el flujo de la visita.</summary>
     private static readonly string VistaDelBloque = Path.Combine("Views", "Partials", "blockgrid", "Components", "elementSynRealty.cshtml");
 
+    /// <summary>El flujo posterior que el portal también pide (008-P5).</summary>
+    private const string FlujoDeLaCancelacion = "propiedades.visita-cancelacion";
+
     /// <summary>Lo que lee el participante (<c>AVISOS_DE_LOS_FLUJOS</c> del UI).</summary>
     private const string ParametroDelAviso = "visita={id}";
 
@@ -33,27 +37,27 @@ public sealed class CoordinadorDePropiedadesEnLasVistasTests
         var vistas = Vistas().Where(v => PintaElPortal.IsMatch(v.Texto)).ToList();
         Assert.True(vistas.Count > 0, "Ninguna vista pinta SynHost/Realty: el descubrimiento está roto.");
 
-        var fuera = vistas.Where(v => PintaElPortal.Matches(v.Texto).Any(m => ClaveQueEnvuelve(v.Texto, m.Index) != RealtyResolutor.FlujoDeLaVisita))
+        var fuera = vistas.Where(v => PintaElPortal.Matches(v.Texto).Any(m =>
+                ClaveQueEnvuelve(v.Texto, m.Index) != FlujoDeLaCancelacion
+                || ClaveQueEnvuelve(v.Texto, v.Texto.LastIndexOf("<synergos-flujo", m.Index, StringComparison.Ordinal)) != RealtyResolutor.FlujoDeLaVisita))
             .Select(v => v.Ruta).ToList();
         Assert.True(fuera.Count == 0,
-            $"Pintan el portal fuera de <synergos-flujo flujo=\"{RealtyResolutor.FlujoDeLaVisita}\">: {string.Join(", ", fuera)}.");
+            $"Pintan el portal fuera de <synergos-flujo flujo=\"{FlujoDeLaCancelacion}\"> dentro de <synergos-flujo flujo=\"{RealtyResolutor.FlujoDeLaVisita}\">: {string.Join(", ", fuera)}.");
     }
 
     [Fact]
-    public void El_flujo_de_la_visita_solo_envuelve_su_bloque_y_ninguna_vista_anida_dos_flujos()
+    public void Los_flujos_de_la_visita_solo_envuelven_su_bloque()
     {
         var colocaciones = Vistas()
             .SelectMany(v => Coordinador.Matches(v.Texto).Select(m => (v.Ruta, v.Texto, m.Index, Clave: Clave.Match(m.Groups[1].Value).Groups[1].Value)))
             .ToList();
 
-        var deLaVisita = colocaciones.Where(c => c.Clave == RealtyResolutor.FlujoDeLaVisita).Select(c => c.Ruta).Distinct().ToList();
-        Assert.Equal(new[] { VistaDelBloque }, deLaVisita.Select(r => r[r.IndexOf("Views", StringComparison.Ordinal)..]));
-
-        var anidadas = colocaciones
-            .Where(c => ClaveQueEnvuelve(c.Texto, c.Index) is not null)
-            .Select(c => c.Ruta)
-            .ToList();
-        Assert.True(anidadas.Count == 0, $"Una vista coloca un flujo dentro de otro: {string.Join(", ", anidadas)}.");
+        // Qué anidamiento vale (una posterior dentro de su original) lo decide el gate general, CoordinadorDelFlujoEnLasVistasTests.
+        foreach (var flujo in new[] { RealtyResolutor.FlujoDeLaVisita, FlujoDeLaCancelacion })
+        {
+            var donde = colocaciones.Where(c => c.Clave == flujo).Select(c => c.Ruta).Distinct().ToList();
+            Assert.Equal(new[] { VistaDelBloque }, donde.Select(r => r[r.IndexOf("Views", StringComparison.Ordinal)..]));
+        }
     }
 
     [Fact]
