@@ -314,9 +314,59 @@ public sealed class GovController : ControllerBase
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
 
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(detail, cancellationToken)));
+    }
+
+    // ── 6 bis. Subsanar (el ciudadano dueño) ────────────────────────────
+    // POST /api/gov/application/{id}/resubmit { note? } → { application:{...} }   🔒 sesión + dueño
+    //
+    // El ciudadano envía lo que se le pidió y el expediente vuelve a revisión (D-2 de 009). Sólo
+    // el dueño: subsanar el expediente de otro sería responder por él. Uno que ya volvió a revisión
+    // no hace nada (el doble clic, escenario 6 de la US1); desde cualquier otro estado, 409 con el
+    // motivo. Quien firma es la persona de la sesión, con la cara del ciudadano.
+    [HttpPost("application/{id}/resubmit")]
+    public async Task<IActionResult> Resubmit(
+        string id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ResubmitRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var (denied, actorKey) = RequireMember();
+        if (denied is not null) { return denied; }
+
+        var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Solicitud '{id}' no encontrada." });
+        }
+
+        var foreign = DenyIfForeignCase(detail, actorKey);
+        if (foreign is not null) { return foreign; }
+
+        CaseDetail updated;
+        try
+        {
+            updated = await _workflow.ResubmitAsync(
+                detail.CaseId, ActorDeLaSesion(CaseRoles.KindCiudadano), request?.Note, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            // El expediente existe: lo que no existe es «subsanar» en el proceso que lo lleva.
+            return Conflict(new { error = ex.Motivo() });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Motivo() });
+        }
+
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(updated, cancellationToken)));
+    }
+
+    /// <summary>El expediente hacia su dueño: la lectura y lo que devuelve subsanar son lo mismo.</summary>
+    private async Task<ApplicationDetailDto> ToApplicationDetailDtoAsync(CaseDetail detail, CancellationToken cancellationToken)
+    {
         var messages = await LoadMessagesAsync(detail, cancellationToken);
         var (actions, stale) = await AccionesAsync(detail.CaseId, CaseRoles.Ciudadano, cancellationToken);
-        return Ok(new ApplicationDetailResponse(new ApplicationDetailDto(
+        return new ApplicationDetailDto(
             Id: detail.CaseId,
             Reference: detail.Radicado,
             ServiceId: detail.TramiteId,
@@ -330,7 +380,7 @@ public sealed class GovController : ControllerBase
             Actions: actions,
             FeeMinor: ToFeeMinor(detail.FeeMinor, detail.Currency),
             FeeStatus: ToFeeStatusSlug(detail.FeeStatus),
-            Stale: stale)));
+            Stale: stale);
     }
 
     // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
@@ -1032,6 +1082,9 @@ public sealed class GovController : ControllerBase
 
     /// <summary>Tomar el expediente: la nota es opcional y el cuerpo también.</summary>
     public sealed record TakeRequest(string? Note);
+
+    /// <summary>Subsanar: un mensaje opcional para la entidad; el cuerpo también es opcional.</summary>
+    public sealed record ResubmitRequest(string? Note);
 
     /// <summary>
     /// Lo que el funcionario manda para poner un acto en conocimiento.
