@@ -22,6 +22,11 @@ namespace Synergos.CMS.Tests.Controllers;
 /// cartelera sin decir nada. Acá se fija el nombre; el cruce con lo que lee el UI
 /// (<c>AVISOS_DE_LOS_FLUJOS</c>) es <c>gate:avisos</c> (G-15), del lado del UI.</para>
 ///
+/// <para><b>Un flujo dentro de otro, sólo si es una operación posterior suya</b> (NR-10 de 008): la cancelación de una
+/// visita dentro de la visita. El coordinador ya deja subir lo ajeno —el de adentro atiende su flujo y el de afuera el
+/// suyo (<c>flujos.spec.ts</c> del UI)—, así que no hace falta tocarlo; lo que se decide es qué anidamiento es un
+/// error de la vista. La relación es la <c>posterior_a</c> de las definiciones de los orquestadores.</para>
+///
 /// <para><b>Lo que NO mira</b>: que el bundle defina la etiqueta ni que el participante la encuentre por
 /// ancestro (eso es del UI y del navegador), ni los <c>appsettings.&lt;Entorno&gt;.json</c>: la base es lo
 /// que reciben todos los entornos.</para>
@@ -33,6 +38,7 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     private static readonly Regex SinLayout = new(@"\sstyle=""display:\s*contents;?""", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex PintaEventos = new(@"PartialAsync\(\s*""SynHost/Eventos""", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Comentarios = new(@"@\*.*?\*@|<!--.*?-->", RegexOptions.CultureInvariant | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+    private static readonly Regex Etiqueta = new(@"<synergos-flujo\b[^>]*>|</synergos-flujo>", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>La clave elegida por el editor (núcleo N3): <c>var x = Colocables.Elegir(…, porDefecto: "clave");</c>.</summary>
     private static readonly Regex Elegida = new(
@@ -176,6 +182,93 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             var compone = System.Xml.Linq.XDocument.Load(elemento).Descendants("Composition").Any(c => (string?)c.Attribute("Key") == clave);
             Assert.True(compone, $"{ruta} lee la propiedad «flujo» y su bloque no compone compFlujo: el editor no tendría dónde elegir.");
         }
+    }
+
+    [Fact]
+    public void Un_flujo_solo_va_dentro_de_otro_si_es_una_operacion_posterior_suya()
+    {
+        var posteriores = PosterioresDeclarados();
+        var malos = Vistas()
+            .SelectMany(v => AnidadosQueNoSonPosteriores(v.Texto, posteriores).Select(m => $"{v.Ruta}: {m}"))
+            .ToList();
+
+        Assert.True(malos.Count == 0,
+            "Una vista coloca un flujo dentro de otro que no es su original: " + string.Join("; ", malos)
+            + ". Sólo una operación posterior va dentro de lo que la origina (posterior_a).");
+    }
+
+    [Fact]
+    public void La_regla_del_anidamiento_admite_solo_una_posterior_dentro_de_su_original()
+    {
+        var posteriores = new Dictionary<string, string>(StringComparer.Ordinal) { ["p.cancelacion"] = "p.visita" };
+        static string Abre(string clave) => $"<synergos-flujo flujo=\"{clave}\" style=\"display:contents\">";
+        const string Cierra = "</synergos-flujo>";
+
+        Assert.Empty(AnidadosQueNoSonPosteriores(Abre("p.visita") + Abre("p.cancelacion") + Cierra + Cierra, posteriores));
+        Assert.Empty(AnidadosQueNoSonPosteriores(Abre("p.visita") + Cierra + Abre("p.otra") + Cierra, posteriores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("p.cancelacion") + Abre("p.visita") + Cierra + Cierra, posteriores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("p.otra") + Abre("p.cancelacion") + Cierra + Cierra, posteriores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("p.visita") + Abre("p.visita") + Cierra + Cierra, posteriores));
+
+        // Después de un hermano cerrado, el de afuera sigue siendo el que envuelve: se cuenta con una pila.
+        Assert.Single(AnidadosQueNoSonPosteriores(
+            Abre("p.otra") + Abre("p.cancelacion") + Cierra + Abre("p.otra2") + Cierra + Cierra,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["p.cancelacion"] = "p.otra" }));
+        Assert.Empty(AnidadosQueNoSonPosteriores(
+            Abre("p.visita") + Abre("p.cancelacion") + Cierra + Abre("p.reprogramacion") + Cierra + Cierra,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["p.cancelacion"] = "p.visita", ["p.reprogramacion"] = "p.visita" }));
+    }
+
+    /// <summary>
+    /// Los <c>&lt;synergos-flujo&gt;</c> que una vista coloca dentro de otro que no es su original, en orden. Recorre
+    /// las etiquetas con una pila: un hermano ya cerrado no cuenta como el que envuelve.
+    /// </summary>
+    internal static IReadOnlyList<string> AnidadosQueNoSonPosteriores(string texto, IReadOnlyDictionary<string, string> posteriorA)
+    {
+        var malos = new List<string>();
+        var abiertos = new Stack<string?>();
+        foreach (Match etiqueta in Etiqueta.Matches(texto))
+        {
+            if (etiqueta.Value.StartsWith("</", StringComparison.Ordinal))
+            {
+                if (abiertos.Count > 0) abiertos.Pop();
+                continue;
+            }
+
+            var clave = ClaveColocada(texto, Coordinador.Match(texto, etiqueta.Index).Groups[1].Value, out _);
+            if (abiertos.Count > 0)
+            {
+                var afuera = abiertos.Peek();
+                if (clave is null || afuera is null || posteriorA.GetValueOrDefault(clave) != afuera)
+                {
+                    malos.Add($"<synergos-flujo flujo=\"{clave}\"> dentro de <synergos-flujo flujo=\"{afuera}\">");
+                }
+            }
+            abiertos.Push(clave);
+        }
+        return malos;
+    }
+
+    /// <summary>Lo que cada definición de los orquestadores declara <c>posterior_a</c>: clave → la de su original.</summary>
+    private static IReadOnlyDictionary<string, string> PosterioresDeclarados()
+    {
+        var separador = Path.DirectorySeparatorChar;
+        var definiciones = Directory.EnumerateFiles(Path.Combine(RepoRoot(), "backend", "orquestadores"), "*.json", SearchOption.AllDirectories)
+            .Where(f => string.Equals(Path.GetFileName(Path.GetDirectoryName(f)), "flujos", StringComparison.Ordinal))
+            .Where(f => !f.Contains($"{separador}bin{separador}", StringComparison.Ordinal) && !f.Contains($"{separador}obj{separador}", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(definiciones.Count >= 3, $"Se leyeron {definiciones.Count} definiciones de flujo: el descubrimiento está roto.");
+
+        var posteriores = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var definicion in definiciones)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(definicion));
+            if (doc.RootElement.TryGetProperty("posterior_a", out var original))
+            {
+                posteriores[doc.RootElement.GetProperty("clave").GetString()!] = original.GetString()!;
+            }
+        }
+        return posteriores;
     }
 
     /// <summary>

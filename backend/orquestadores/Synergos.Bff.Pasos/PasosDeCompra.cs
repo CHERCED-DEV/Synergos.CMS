@@ -94,6 +94,7 @@ public sealed class PasoCanastaCerrar(ICartPort canastas) : IPaso
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool ActuaSinLlave => true;
     public IReadOnlyList<Type> TiposDeEscritura => [];
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
@@ -143,6 +144,7 @@ public sealed class PasoPedidoCumplir(IOrdersPort pedidos) : IPaso
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool ActuaSinLlave => true;
     public IReadOnlyList<Type> TiposDeEscritura => [];
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)

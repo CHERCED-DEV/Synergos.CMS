@@ -17,7 +17,14 @@ public sealed record ValorDeFlujo(string Tipo, JsonElement? Valor);
 /// <param name="HoldId">Lo reservado en la capacidad.</param>
 /// <param name="CloseTargetId">Sobre qué se deshace una vez consumido.</param>
 /// <param name="Cantidad">Cuántas unidades, si el paso lo dijo: reponer existencias consumidas lo necesita.</param>
-public sealed record ReservaDeFlujo(string HoldId, string CloseTargetId, int? Cantidad = null);
+/// <param name="Cerrada">Sobre qué quedó al cerrarla (núcleo, NN-18 de 005): lo que produjo el cierre —la reserva
+/// confirmada de la agenda— o, si no produjo nada, <paramref name="CloseTargetId"/>. Nulo mientras no se cierre, y en una
+/// saga guardada antes de que existiera.</param>
+/// <remarks>
+/// Es lo que necesita una operación posterior que actúa sobre cada ítem: cancelar la reserva confirmada de cada unidad.
+/// Antes sólo constaba en la compensación que dejó el cierre, ya dada por hecha.
+/// </remarks>
+public sealed record ReservaDeFlujo(string HoldId, string CloseTargetId, int? Cantidad = null, string? Cerrada = null);
 
 /// <summary>
 /// La saga de un flujo que no tiene saga propia (núcleo N1): guarda lo que su definición necesita y nada
