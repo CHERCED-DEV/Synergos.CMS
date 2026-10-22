@@ -91,7 +91,7 @@ public sealed class GovControllerTests
 
         Assert.IsType<UnauthorizedObjectResult>(result);
         await _workflow.DidNotReceive().DecideAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>());
     }
 
     // ── filter (autenticado SIN rol funcionario): 403, no basta con estar logueado ─────
@@ -130,7 +130,7 @@ public sealed class GovControllerTests
         var status = Assert.IsType<ObjectResult>(result);
         Assert.Equal(403, status.StatusCode);
         await _workflow.DidNotReceive().DecideAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>());
     }
 
     // ── happy (funcionario): el guard deja pasar y delega en el seam ───────────────────
@@ -146,6 +146,31 @@ public sealed class GovControllerTests
 
         Assert.IsType<OkObjectResult>(result);
         await _tracking.Received(1).GetQueueAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── D-5 de 009: quien firma la decisión es la persona de la sesión ─────────────────
+
+    [Fact] // happy: el actor sale del GATE —clave, nombre y correo de la cuenta—, nunca del cuerpo
+    public async Task Decision_Officer_PassesTheSessionPersonAsActor()
+    {
+        Officer();
+        var clave = System.Guid.NewGuid();
+        _gate.CurrentMemberKey.Returns(clave);
+        _gate.CurrentMemberEmail.Returns("ana@entidad.gov.co");
+        _gate.CurrentMemberDisplayName.Returns("Ana Funcionaria");
+        _workflow.DecideAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1"));
+
+        var result = await BuildSut().Decision(ValidDecision, default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _workflow.Received(1).DecideAsync(
+            "case-1001", "approve", "ok",
+            Arg.Is<CaseActor>(a => a.Kind == CaseRoles.KindFuncionario
+                && a.Id == clave.ToString("N")
+                && a.Email == "ana@entidad.gov.co"
+                && a.DisplayName == "Ana Funcionaria"),
+            Arg.Any<CancellationToken>());
     }
 
     // ── control: el rol que se exige es el de funcionario, no uno cualquiera ────────────

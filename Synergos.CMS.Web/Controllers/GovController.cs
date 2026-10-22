@@ -176,6 +176,25 @@ public sealed class GovController : ControllerBase
         return null;
     }
 
+    /// <summary>
+    /// La persona de la sesión, como actor de una acción sobre el expediente (D-5 de 009).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sale del GATE, nunca del cuerpo</b>, como el dueño del expediente: quien firma una
+    /// decisión es quien está autenticado, no quien diga la petición. Antes toda decisión la firmaba
+    /// un actor de demo fijo y el control interno no podía saber quién decidió.</para>
+    /// <para>La identidad es la clave del miembro; el nombre y el correo, los de su cuenta.</para>
+    /// </remarks>
+    private CaseActor ActorDeLaSesion(string kind)
+    {
+        var correo = _gate.CurrentMemberEmail?.Trim() ?? string.Empty;
+        var id = _gate.CurrentMemberKey is Guid clave && clave != Guid.Empty
+            ? clave.ToString("N")
+            : (string.IsNullOrWhiteSpace(correo) ? "sin-identidad" : correo);
+        var nombre = _gate.CurrentMemberDisplayName?.Trim();
+        return new CaseActor(kind, id, string.IsNullOrWhiteSpace(nombre) ? correo : nombre, correo);
+    }
+
     // ══════════════════════ CIUDADANO ══════════════════════
 
     // ── 1. Catálogo de trámites ─────────────────────────────────────────
@@ -477,7 +496,9 @@ public sealed class GovController : ControllerBase
         CaseDetail updated;
         try
         {
-            updated = await _workflow.DecideAsync(request.CaseId.Trim(), request.Outcome.Trim(), request.Note ?? string.Empty, cancellationToken);
+            updated = await _workflow.DecideAsync(
+                request.CaseId.Trim(), request.Outcome.Trim(), request.Note ?? string.Empty,
+                ActorDeLaSesion(CaseRoles.KindFuncionario), cancellationToken);
         }
         catch (ArgumentException ex)
         {

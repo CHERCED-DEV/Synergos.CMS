@@ -10,12 +10,19 @@ namespace Synergos.CMS.Tests.Services;
 /// avanza + audita append-only + registra la resolución) / filter (decisiones ILEGALES
 /// rechazadas: sobre terminales) / idempotent (aplicar el outcome cuyo estado destino ya
 /// es el actual no re-audita — el caso central del dominio). Sobre los expedientes
-/// sembrados: case-1001 submitted, case-1002 in-review, case-1004 approved, case-1005
-/// rejected. ADR 0075.
+/// sembrados: case-1001 submitted, case-1002 in-review, case-1003 info-requested, case-1004
+/// approved, case-1005 rejected. ADR 0075.
 /// </summary>
+/// <remarks>
+/// <para><b>Es la v2 del proceso</b> (009-gobierno-tramite): se TOMA antes de decidir (P4) y lo
+/// que firma cada acción es la persona de la sesión, no un actor de demo (D-5).</para>
+/// </remarks>
 public class StubCaseWorkflowServiceTests
 {
     private static readonly DateTimeOffset Clock = new(2026, 7, 1, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly CaseActor Ana = new(
+        CaseRoles.KindFuncionario, "f-ana", "Ana Funcionaria", "ana@entidad.gov.co");
 
     private static (StubCaseWorkflowService Workflow, StubApplicationService Cases, RecordingAuditTrailWriter Audit) Make()
     {
@@ -36,9 +43,9 @@ public class StubCaseWorkflowServiceTests
         var (workflow, _, _) = Make();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            workflow.DecideAsync(string.Empty, "approve", "nota"));
+            workflow.DecideAsync(string.Empty, "approve", "nota", Ana));
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            workflow.DecideAsync("case-que-no-existe", "approve", "nota"));
+            workflow.DecideAsync("case-que-no-existe", "approve", "nota", Ana));
     }
 
     [Fact] // empty: outcome desconocido lanza ArgumentException
@@ -47,7 +54,16 @@ public class StubCaseWorkflowServiceTests
         var (workflow, _, _) = Make();
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            workflow.DecideAsync("case-1002", "maybe", "nota"));
+            workflow.DecideAsync("case-1002", "maybe", "nota", Ana));
+    }
+
+    [Fact] // empty: tomar NO es una decisión — no entra por DecideAsync
+    public async Task Decide_Take_IsNotAnOutcome()
+    {
+        var (workflow, _, _) = Make();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            workflow.DecideAsync("case-1001", "take", "nota", Ana));
     }
 
     [Fact] // happy: decisión legal avanza el estado + agrega timeline + audita + resuelve
@@ -55,7 +71,7 @@ public class StubCaseWorkflowServiceTests
     {
         var (workflow, cases, audit) = Make();
 
-        var updated = await workflow.DecideAsync("case-1002", "approve", "Licencia expedida.");
+        var updated = await workflow.DecideAsync("case-1002", "approve", "Licencia expedida.", Ana);
 
         Assert.Equal(CaseStatus.Resuelto, updated.Status);
         Assert.Equal("Aprobado", updated.CurrentStage);
@@ -77,23 +93,113 @@ public class StubCaseWorkflowServiceTests
     {
         var (workflow, _, audit) = Make();
 
-        var updated = await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.");
+        var updated = await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.", Ana);
 
         Assert.Equal(CaseStatus.Subsanacion, updated.Status);
         Assert.Null(updated.Decision); // request-info no es una resolución terminal
         Assert.Single(audit.Events);
     }
 
-    [Fact] // happy: el ciclo request-info → approve es legal (subsanación → aprobado)
-    public async Task Decide_InfoThenApprove_IsLegal()
+    /// <summary>
+    /// En subsanación el funcionario ya no decide: espera a que el ciudadano responda.
+    /// </summary>
+    /// <remarks>
+    /// En la v1 se podía aprobar un expediente al que se le acababa de pedir información, sin
+    /// que la información llegara. En la v2 de subsanación sólo se sale por la respuesta del
+    /// ciudadano, que lo devuelve a revisión (P8).
+    /// </remarks>
+    [Fact]
+    public async Task Decide_InfoThenApprove_IsIllegal_UntilTheCitizenAnswers()
+    {
+        var (workflow, cases, audit) = Make();
+
+        await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.", Ana);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workflow.DecideAsync("case-1002", "approve", "Licencia expedida sin subsanar.", Ana));
+
+        Assert.Equal(CaseStatus.Subsanacion, cases.FindCase("case-1002")!.Status);
+        Assert.Single(audit.Events); // la ilegal no se asienta
+    }
+
+    /// <summary>
+    /// Tomar antes de decidir (P4): un expediente recién radicado no se decide.
+    /// </summary>
+    /// <remarks>
+    /// <b>Es D-1 de 009.</b> Con la v1 nada llevaba un expediente a «en revisión»: se decidía
+    /// directo desde radicado y la cola no podía distinguir lo que alguien ya estaba mirando.
+    /// </remarks>
+    [Theory]
+    [InlineData("approve")]
+    [InlineData("reject")]
+    [InlineData("request-info")]
+    public async Task Decide_FromSubmitted_IsIllegal_TakeFirst(string outcome)
+    {
+        var (workflow, cases, audit) = Make();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            workflow.DecideAsync("case-1001", outcome, "sin tomar", Ana));
+
+        Assert.Contains("'submitted'", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(CaseStatus.Radicado, cases.FindCase("case-1001")!.Status);
+        Assert.Empty(audit.Events);
+    }
+
+    [Fact] // happy: tomar lleva de radicado a revisión y se asienta como paso, no como decisión
+    public async Task Take_MovesSubmittedToInReview_AndAuditsAsTransition()
+    {
+        var (workflow, cases, audit) = Make();
+
+        var updated = await workflow.TakeAsync("case-1001", Ana, null);
+
+        Assert.Equal(CaseStatus.EnRevision, updated.Status);
+        Assert.Null(updated.Decision);
+        Assert.Equal(CaseStatus.EnRevision, cases.FindCase("case-1001")!.Status);
+
+        var evt = Assert.Single(audit.Events);
+        Assert.Equal("gov.case-transition", evt.Action);
+        Assert.Contains("submitted → in-review (take)", evt.Detail);
+        Assert.Contains("Expediente tomado para revisión.", evt.Detail);
+    }
+
+    [Fact] // happy: tomado, ya se decide
+    public async Task Take_ThenApprove_IsLegal()
     {
         var (workflow, _, audit) = Make();
 
-        await workflow.DecideAsync("case-1002", "request-info", "Falta un documento.");
-        var final = await workflow.DecideAsync("case-1002", "approve", "Licencia expedida tras subsanar.");
+        await workflow.TakeAsync("case-1001", Ana, "La reviso yo.");
+        var final = await workflow.DecideAsync("case-1001", "approve", "Certificado expedido.", Ana);
 
         Assert.Equal(CaseStatus.Resuelto, final.Status);
-        Assert.Equal(2, audit.Events.Count); // una auditoría por decisión legal
+        Assert.Equal(2, audit.Events.Count); // una auditoría por acción legal
+    }
+
+    [Fact] // idempotent: tomar lo ya tomado no re-audita
+    public async Task Take_Twice_IsIdempotent()
+    {
+        var (workflow, _, audit) = Make();
+
+        await workflow.TakeAsync("case-1001", Ana, null);
+        var segunda = await workflow.TakeAsync("case-1001", Ana, null);
+
+        Assert.Equal(CaseStatus.EnRevision, segunda.Status);
+        Assert.Single(audit.Events);
+    }
+
+    [Fact] // filter: lo resuelto no se vuelve a tomar
+    public async Task Take_FromTerminalStates_Throws()
+    {
+        var (workflow, _, _) = Make();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.TakeAsync("case-1004", Ana, null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.TakeAsync("case-1005", Ana, null));
+    }
+
+    [Fact] // filter: en subsanación tampoco se toma — se espera al ciudadano
+    public async Task Take_FromInfoRequested_Throws()
+    {
+        var (workflow, _, _) = Make();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.TakeAsync("case-1003", Ana, null));
     }
 
     [Fact] // filter: los estados terminales no admiten nuevas decisiones
@@ -103,9 +209,9 @@ public class StubCaseWorkflowServiceTests
 
         // case-1004 approved y case-1005 rejected son terminales.
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.DecideAsync("case-1004", "reject", "reabrir"));
+            workflow.DecideAsync("case-1004", "reject", "reabrir", Ana));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            workflow.DecideAsync("case-1005", "approve", "reabrir"));
+            workflow.DecideAsync("case-1005", "approve", "reabrir", Ana));
     }
 
     [Fact] // idempotent: aprobar un expediente ya aprobado no re-audita ni cambia nada
@@ -114,7 +220,7 @@ public class StubCaseWorkflowServiceTests
         var (workflow, _, audit) = Make();
 
         // case-1004 ya está approved (Resuelto) → approve es idempotente.
-        var result = await workflow.DecideAsync("case-1004", "approve", "repetida");
+        var result = await workflow.DecideAsync("case-1004", "approve", "repetida", Ana);
 
         Assert.Equal(CaseStatus.Resuelto, result.Status);
         Assert.Empty(audit.Events); // sin doble efecto
@@ -125,9 +231,51 @@ public class StubCaseWorkflowServiceTests
     {
         var (workflow, cases, _) = Make();
 
-        var result = await workflow.DecideAsync("SG-2026-001001", "request-info", "por radicado");
+        var result = await workflow.DecideAsync("SG-2026-001002", "request-info", "por radicado", Ana);
 
         Assert.Equal(CaseStatus.Subsanacion, result.Status);
-        Assert.Equal(CaseStatus.Subsanacion, cases.FindCase("case-1001")!.Status);
+        Assert.Equal(CaseStatus.Subsanacion, cases.FindCase("case-1002")!.Status);
+    }
+
+    /// <summary>
+    /// Quien firma la decisión es la persona de la sesión, no el actor de demo (D-5 de 009).
+    /// </summary>
+    /// <remarks>
+    /// Antes toda decisión salía firmada por <see cref="GovCaseDecisionRecorder.OfficerActor"/>: el
+    /// control interno no podía saber quién decidió, y dos funcionarias eran la misma persona.
+    /// </remarks>
+    [Fact]
+    public async Task Decide_IsSignedByTheSessionPerson_NotTheDemoActor()
+    {
+        var (workflow, _, audit) = Make();
+
+        var updated = await workflow.DecideAsync("case-1002", "reject", "No cumple.", Ana);
+
+        Assert.Equal("ana@entidad.gov.co", updated.Decision!.DecidedBy);
+        var evt = Assert.Single(audit.Events);
+        Assert.Equal("ana@entidad.gov.co", evt.ActorEmail);
+        Assert.Equal("Ana Funcionaria", evt.ActorName);
+        Assert.DoesNotContain(audit.Events, e => e.ActorEmail == GovCaseDecisionRecorder.OfficerActor);
+    }
+
+    [Fact] // otra persona, otra firma: la firma sale del actor, no de una constante
+    public async Task Take_IsSignedByWhoeverTookIt()
+    {
+        var (workflow, _, audit) = Make();
+        var beto = new CaseActor(CaseRoles.KindFuncionario, "f-beto", "Beto", "beto@entidad.gov.co");
+
+        await workflow.TakeAsync("case-1001", beto, null);
+
+        Assert.Equal("beto@entidad.gov.co", Assert.Single(audit.Events).ActorEmail);
+    }
+
+    [Fact] // la firma cae al nombre, luego a la identidad y sólo sin ninguna al respaldo declarado
+    public void Firma_FallsBackToNameThenIdentityThenTheDeclaredFallback()
+    {
+        Assert.Equal("ana@entidad.gov.co", GovCaseDecisionRecorder.Firma(Ana));
+        Assert.Equal("Ana Funcionaria", GovCaseDecisionRecorder.Firma(Ana with { Email = " " }));
+        Assert.Equal("gov.funcionario:f-ana", GovCaseDecisionRecorder.Firma(Ana with { Email = "", DisplayName = "" }));
+        Assert.Equal(GovCaseDecisionRecorder.OfficerActor,
+            GovCaseDecisionRecorder.Firma(new CaseActor(CaseRoles.KindFuncionario, " ", "", "")));
     }
 }
