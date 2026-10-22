@@ -28,11 +28,12 @@ public sealed class ArranqueDePropiedadesTests
     }
 
     [Fact]
-    public void La_puerta_ve_de_la_cancelacion_pedirla_confirmarla_y_lo_comun_y_nada_mas()
+    public void La_puerta_ve_de_la_cancelacion_abrirla_cancelarla_consultarla_y_listarla_y_nada_mas()
     {
         using var r = new VisitaReal();
 
-        Assert.Equal(["abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar"], Marcadas(r, "propiedades.visita-cancelacion"));
+        // Una fase, y lo posterior no se anticipa (núcleo T085): ni «cerrar» ni «cotizar».
+        Assert.Equal(["abrir", "cancelar", "consultar", "listar"], Marcadas(r, "propiedades.visita-cancelacion"));
     }
 
     private static List<string> Marcadas(VisitaReal r, string flujo)

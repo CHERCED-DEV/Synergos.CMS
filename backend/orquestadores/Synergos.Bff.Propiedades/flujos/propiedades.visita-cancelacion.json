@@ -9,8 +9,7 @@
   },
   "salida": ["visita"],
   "fases": {
-    "abrir": ["original"],
-    "cerrar": ["cancelar"]
+    "abrir": ["original", "cancelar"]
   },
   "pasos": {
     "original": { "tipo": "flow.leer-original", "lee": ["visita"], "escribe": ["reservaId"] },

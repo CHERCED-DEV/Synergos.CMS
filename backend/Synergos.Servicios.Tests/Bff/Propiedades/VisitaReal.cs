@@ -169,10 +169,10 @@ internal sealed class VisitaReal : IDisposable
     }
 
     /// <summary>
-    /// Pedir la cancelación de una visita YA confirmada: abre la operación posterior al cierre (008-P5, núcleo P6), que
-    /// comprueba que la visita es de quien pide y está confirmada, y no toca la agenda.
+    /// Cancelar una visita YA confirmada: la operación posterior al cierre (008-P5, núcleo P6), en una fase: lee de la
+    /// original la reserva que dejó para lo posterior (sólo si es de quien pide y está confirmada) y la cancela.
     /// </summary>
-    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> PedirCancelacion(string visita, string llave = "cancelar-1", string quien = "u-1")
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmada(string visita, string llave = "cancelar-1", string quien = "u-1")
     {
         var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/propiedades.visita-cancelacion")
         {
@@ -183,21 +183,6 @@ internal sealed class VisitaReal : IDisposable
         return Enviar(peticion);
     }
 
-    /// <summary>Confirmar la cancelación pedida: la agenda cancela la reserva, con su plazo.</summary>
-    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> ConfirmarCancelacion(string id, string quien = "u-1")
-    {
-        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/propiedades.visita-cancelacion/{id}/cerrar");
-        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(quien));
-        return Enviar(peticion);
-    }
-
-    /// <summary>Pedir y confirmar: lo que hace la pantalla. Contesta la primera que no salió bien, o la confirmación.</summary>
-    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmada(string visita, string llave = "cancelar-1", string quien = "u-1")
-    {
-        var (abrio, abierta) = await PedirCancelacion(visita, llave, quien);
-        if (abrio is not (HttpStatusCode.Created or HttpStatusCode.OK)) return (abrio, abierta);
-        return await ConfirmarCancelacion(abierta.GetProperty("id").GetString()!, quien);
-    }
 
     /// <summary>«Mis …» de un flujo: las sagas de <paramref name="quien"/> (núcleo NB-6), por estado si se pide.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string flujo, string quien = "u-1", string? estado = null)

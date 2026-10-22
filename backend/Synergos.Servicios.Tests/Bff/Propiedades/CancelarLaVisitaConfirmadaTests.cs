@@ -7,12 +7,12 @@ namespace Synergos.CMS.Tests.Bff.Propiedades;
 /// <summary>
 /// Historia 8 de 008-propiedades-visita (008-P5, FR-025): quien agendó cancela su visita YA confirmada dentro del plazo
 /// de aviso del inmueble, como una operación posterior al cierre —el flujo aparte <c>propiedades.visita-cancelacion</c>,
-/// que lee la reserva de la visita original sin tocarla (núcleo P6)—. Contra la agenda real del arnés.
+/// que lee de la visita original la reserva que ella dejó para lo posterior, sin tocarla (núcleo P6, T082)—. Contra la
+/// agenda real del arnés.
 /// </summary>
 /// <remarks>
-/// En dos fases: abrir PIDE (comprueba que es suya y está confirmada, sin tocar la agenda) y cerrar CONFIRMA (la agenda
-/// cancela, con su plazo). En una sola, el host la tendría por anticipable y <c>cotizar</c> cancelaría la reserva sin
-/// saga: medido, NR-8 en <c>necesidades-del-nucleo.md</c>.
+/// En UNA fase: lo posterior ya no se anticipa (núcleo T085, NR-8 de 008), así que <c>cotizar</c> no corre la
+/// cancelación; el test de cotizar lo sigue vigilando.
 /// </remarks>
 public sealed class CancelarLaVisitaConfirmadaTests
 {
@@ -24,7 +24,7 @@ public sealed class CancelarLaVisitaConfirmadaTests
 
         var (estado, cuerpo) = await r.CancelarConfirmada(visita);
 
-        Assert.True(estado == HttpStatusCode.OK, cuerpo.ToString());
+        Assert.True(estado == HttpStatusCode.Created, cuerpo.ToString());
         Assert.Equal("Completed", cuerpo.GetProperty("estado").GetString());
         Assert.Equal(visita, cuerpo.GetProperty("datos").GetProperty("visita").GetString());
         Assert.Equal(["Cancelled"], await r.Reservas());
@@ -42,19 +42,6 @@ public sealed class CancelarLaVisitaConfirmadaTests
 
         var (_, original) = await r.Consultar(visita);
         Assert.Equal("Completed", original.GetProperty("estado").GetString());
-    }
-
-    [Fact]
-    public async Task Pedirla_no_toca_la_agenda()
-    {
-        using var r = new VisitaReal();
-        var visita = await r.Confirmada();
-
-        var (estado, cuerpo) = await r.PedirCancelacion(visita);
-
-        Assert.True(estado == HttpStatusCode.Created, cuerpo.ToString());
-        Assert.Equal("Running", cuerpo.GetProperty("estado").GetString());
-        Assert.Equal(["Confirmed"], await r.Reservas());
     }
 
     [Fact]
@@ -82,7 +69,7 @@ public sealed class CancelarLaVisitaConfirmadaTests
         var (_, primera) = await r.CancelarConfirmada(visita);
         var (estado, segunda) = await r.CancelarConfirmada(visita);
 
-        Assert.True(estado == HttpStatusCode.OK, segunda.ToString());
+        Assert.True(estado is HttpStatusCode.Created or HttpStatusCode.OK, segunda.ToString());
         Assert.Equal(primera.GetProperty("id").GetString(), segunda.GetProperty("id").GetString());
         Assert.Equal(["Cancelled"], await r.Reservas());
     }
@@ -111,19 +98,6 @@ public sealed class CancelarLaVisitaConfirmadaTests
 
         Assert.Equal(HttpStatusCode.NotFound, estado);
         Assert.Equal("flow.original_no_encontrada", cuerpo.GetProperty("code").GetString());
-        Assert.Equal(["Confirmed"], await r.Reservas());
-    }
-
-    [Fact]
-    public async Task Otra_persona_no_confirma_la_cancelacion_que_pidio_el_dueno()
-    {
-        using var r = new VisitaReal();
-        var visita = await r.Confirmada();
-        var (_, pedida) = await r.PedirCancelacion(visita);
-
-        var (estado, _) = await r.ConfirmarCancelacion(pedida.GetProperty("id").GetString()!, quien: "intruso");
-
-        Assert.Equal(HttpStatusCode.NotFound, estado);
         Assert.Equal(["Confirmed"], await r.Reservas());
     }
 

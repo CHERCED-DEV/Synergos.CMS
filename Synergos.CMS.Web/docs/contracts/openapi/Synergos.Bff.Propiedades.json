@@ -503,111 +503,6 @@
         }
       }
     },
-    "/v1/flujos/propiedades.visita-cancelacion/cotizar": {
-      "post": {
-        "operationId": "PropiedadesVisitaCancelacionCotizar",
-        "parameters": [
-          {
-            "name": "X-Synergos-Sujeto",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-synergos-puerta": true
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PropiedadesVisitaCancelacionEntrada"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PropiedadesVisitaCancelacionCotizacion"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          }
-        },
-        "x-synergos-flujo": {
-          "flujo": "propiedades.visita-cancelacion",
-          "operacion": "cotizar"
-        }
-      }
-    },
     "/v1/flujos/propiedades.visita-cancelacion/{id}": {
       "get": {
         "operationId": "PropiedadesVisitaCancelacionConsultar",
@@ -811,109 +706,6 @@
         "x-synergos-flujo": {
           "flujo": "propiedades.visita-cancelacion",
           "operacion": "cancelar"
-        }
-      }
-    },
-    "/v1/flujos/propiedades.visita-cancelacion/{id}/cerrar": {
-      "post": {
-        "operationId": "PropiedadesVisitaCancelacionCerrar",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Synergos-Sujeto",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-synergos-puerta": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PropiedadesVisitaCancelacionRespuesta"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          }
-        },
-        "x-synergos-flujo": {
-          "flujo": "propiedades.visita-cancelacion",
-          "operacion": "cerrar"
         }
       }
     },
@@ -1699,32 +1491,6 @@
           }
         }
       },
-      "PropiedadesVisitaCancelacionCotizacion": {
-        "required": [
-          "flujo",
-          "datos"
-        ],
-        "type": "object",
-        "properties": {
-          "flujo": {
-            "type": "string"
-          },
-          "datos": {
-            "required": [
-              "visita"
-            ],
-            "type": "object",
-            "properties": {
-              "visita": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              }
-            }
-          }
-        }
-      },
       "PropiedadesVisitaCancelacionEntrada": {
         "required": [
           "visita"
@@ -1832,8 +1598,7 @@
             "required": [
               "inmueble",
               "ventana",
-              "modo",
-              "reservaId"
+              "modo"
             ],
             "type": "object",
             "properties": {
@@ -1887,12 +1652,6 @@
                 ]
               },
               "modo": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "reservaId": {
                 "type": [
                   "null",
                   "string"
@@ -2093,8 +1852,7 @@
             "required": [
               "inmueble",
               "ventana",
-              "modo",
-              "reservaId"
+              "modo"
             ],
             "type": "object",
             "properties": {
@@ -2148,12 +1906,6 @@
                 ]
               },
               "modo": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "reservaId": {
                 "type": [
                   "null",
                   "string"

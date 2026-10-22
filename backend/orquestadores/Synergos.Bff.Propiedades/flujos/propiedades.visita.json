@@ -10,7 +10,8 @@
     "desde": "instante",
     "hasta": "instante"
   },
-  "salida": ["inmueble", "ventana", "modo", "reservaId"],
+  "salida": ["inmueble", "ventana", "modo"],
+  "para_lo_posterior": ["reservaId"],
   "lecturas": {
     "disponibilidad": { "entrada": ["inmueble", "desde", "hasta"], "pasos": ["hallar", "franjas"], "salida": ["franjas"] }
   },
