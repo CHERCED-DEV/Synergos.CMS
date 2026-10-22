@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Salud.Contracts;
@@ -26,6 +27,9 @@ namespace Synergos.CMS.Tests.Bff;
 internal sealed class CitaDeSaludReal : IDisposable
 {
     public const string Llave = "llave-de-salud";
+
+    /// <summary>La categoría con que el cable registra cada llamada a una capacidad.</summary>
+    public const string LlamadasAlArnes = "Synergos.Arnes.Llamadas";
     public static readonly DateTimeOffset Inicio = new(DateTimeOffset.UtcNow.Date.AddDays(10).AddHours(15), TimeSpan.Zero);
 
     private readonly string _raiz = Path.Combine(Path.GetTempPath(), "cita-salud-" + Guid.NewGuid().ToString("N"));
@@ -38,9 +42,11 @@ internal sealed class CitaDeSaludReal : IDisposable
     /// <param name="reloj">El reloj del orquestador (el del abandono); nulo, el del sistema.</param>
     /// <param name="conRecogida">Notifications deja cada correo como <c>.eml</c> en <see cref="Buzon"/>: el aviso se verifica
     /// abriendo el correo, nunca con el log.</param>
+    /// <param name="registro">Con registro, cada llamada a una capacidad deja su línea con los ámbitos que abrió el
+    /// orquestador, como el manejador de registro del cliente en un despliegue: el cable sustituye la fábrica.</param>
     public CitaDeSaludReal(decimal? precio = 50_000m, string? permiso = null, IReadOnlyCollection<string>? cae = null,
         IReadOnlyDictionary<string, string>? ajustes = null, TimeProvider? reloj = null, bool conRecogida = false,
-        IReadOnlyCollection<string>? rechaza = null)
+        IReadOnlyCollection<string>? rechaza = null, ILoggerProvider? registro = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking")
@@ -50,7 +56,10 @@ internal sealed class CitaDeSaludReal : IDisposable
                 "notifications", conRecogida ? [("Notifications:Pickup:Directory", Buzon)] : []);
         Aprovisionar(precio).GetAwaiter().GetResult();
 
-        var cable = new Cable(Capacidades, permiso, cae ?? [], rechaza ?? []);
+        var cable = new Cable(Capacidades, permiso, cae ?? [], rechaza ?? [])
+        {
+            Registro = registro?.CreateLogger(LlamadasAlArnes),
+        };
         _fabrica = new WebApplicationFactory<AppointmentResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("salud:Storage:Root", Raiz);
@@ -60,6 +69,7 @@ internal sealed class CitaDeSaludReal : IDisposable
             {
                 s.AddSingleton<IHttpClientFactory>(cable);
                 if (reloj is not null) s.AddSingleton(reloj);
+                if (registro is not null) s.AddLogging(l => l.AddProvider(registro).SetMinimumLevel(LogLevel.Trace));
             });
         });
         Orquestador = _fabrica.CreateClient();
@@ -201,6 +211,9 @@ internal sealed class CitaDeSaludReal : IDisposable
     {
         public List<string> Llamadas { get; } = [];
 
+        /// <summary>Si hay registro, cada llamada deja su línea.</summary>
+        public ILogger? Registro { get; init; }
+
         private string? Permiso { get; } = permiso;
 
         private IReadOnlyCollection<string> Cae { get; } = cae;
@@ -224,6 +237,7 @@ internal sealed class CitaDeSaludReal : IDisposable
             {
                 var ruta = $"{r.Method.Method} {r.RequestUri!.AbsolutePath}";
                 lock (cable.Llamadas) cable.Llamadas.Add(ruta);
+                cable.Registro?.LogInformation("Llamada {Metodo} {Ruta}", r.Method.Method, r.RequestUri.AbsolutePath);
 
                 if (ruta == "POST /v1/grants/check")
                 {
@@ -583,5 +597,74 @@ public sealed class LlaveUnaVezEnSaludTests
 
         Assert.True(cliente.DefaultRequestHeaders.TryGetValues(SharedKeyAuth.HeaderName, out var valores));
         Assert.Equal(["k-" + capacidad], valores);
+    }
+}
+
+/// <summary>
+/// La cita se sigue en el registro del orquestador por el NÚMERO que ve el paciente y que lleva el aviso (FR-024,
+/// SC-011): cada llamada a una capacidad dentro de una fase, y cada compensación, lo lleva en su ámbito, y ninguna
+/// línea lleva el correo ni el nombre del paciente.
+/// </summary>
+/// <remarks>
+/// La correlación de la puerta hasta cada capacidad no se ve aquí: el cable sustituye la fábrica de clientes y se
+/// salta el manejador que la propaga. Se verifica en vivo (bitácora de 003, T039).
+/// </remarks>
+public sealed class NumeroDeLaCitaEnElRegistroTests
+{
+    private static void TodasLoLlevan(
+        IEnumerable<(string Categoria, LogLevel Nivel, string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> lineas,
+        string saga, string numero)
+        => Assert.All(lineas, l =>
+        {
+            Assert.True(numero.Equals(l.Valores.GetValueOrDefault("NumeroDeSaga")), $"«{l.Mensaje}» no lleva el número {numero}.");
+            Assert.Equal(saga, l.Valores.GetValueOrDefault("Saga"));
+        });
+
+    private static List<(string Categoria, LogLevel Nivel, string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> Llamadas(
+        Reservas.RegistroConAmbitos registro)
+    {
+        lock (registro.Lineas) return registro.Lineas.Where(l => l.Categoria == CitaDeSaludReal.LlamadasAlArnes).ToList();
+    }
+
+    [Fact]
+    public async Task Cada_llamada_de_abrir_y_de_cerrar_lleva_el_numero_de_la_cita_y_ninguna_los_datos_del_paciente()
+    {
+        var registro = new Reservas.RegistroConAmbitos();
+        using var c = new CitaDeSaludReal(registro: registro);
+        lock (registro.Lineas) registro.Lineas.Clear();
+
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await c.Cerrar(id);
+
+        Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
+        var llamadas = Llamadas(registro);
+        foreach (var ruta in new[] { "/v1/grants/check", "/v1/quotes", "/v1/holds", "/v1/payments", "/capture", "/confirm", "/v1/deliveries" })
+        {
+            Assert.Contains(llamadas, l => l.Mensaje.Contains(ruta, StringComparison.Ordinal));
+        }
+        TodasLoLlevan(llamadas, id, abierta.GetProperty("numero").GetString()!);
+        lock (registro.Lineas)
+        {
+            Assert.DoesNotContain(registro.Lineas, l => l.Mensaje.Contains("paciente@ejemplo.co", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task Lo_que_se_deshace_tambien_lleva_el_numero()
+    {
+        var registro = new Reservas.RegistroConAmbitos();
+        using var c = new CitaDeSaludReal(rechaza: ["POST /v1/payments/*/capture"], registro: registro);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        lock (registro.Lineas) registro.Lineas.Clear();
+
+        var (estado, _) = await c.Cerrar(id);
+
+        Assert.NotEqual(HttpStatusCode.OK, estado);
+        List<(string Categoria, LogLevel Nivel, string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> deshacer;
+        lock (registro.Lineas) deshacer = registro.Lineas.Where(l => l.Categoria == "Synergos.Bff.Core.Compensator").ToList();
+        Assert.NotEmpty(deshacer);
+        TodasLoLlevan(deshacer.Concat(Llamadas(registro)), id, abierta.GetProperty("numero").GetString()!);
     }
 }
