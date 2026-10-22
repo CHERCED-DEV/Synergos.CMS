@@ -1824,6 +1824,51 @@ en rutas propias: `/v1/purchases` sigue siendo el del CMS y la puerta sirve `/v1
   y se frena por comprador; el país del envío es configuración del negocio; y la devolución de una compra de la puerta
   ya vuelve por el orquestador (antes la RMA se quedaba «recibida» con un mensaje honesto).
 
+## Segundo flujo: Salud, el hito (2026-10-22, 003)
+
+`salud.cita` es el segundo flujo declarado y la prueba que pedía esta ADR: si declarar un flujo cuesta casi sólo su
+JSON, el patrón escala. La cita imperativa sigue en `/v1/appointments` (la ruta directa del CMS) y la puerta sirve
+`/v1/flujos/salud.cita`, detrás de `salud:Flujos:Modo`.
+
+- **Medido** con `specs/003-salud-cita/medicion/medir-hito.mjs`, sin comentarios ni líneas en blanco, y con el
+  contrato previo y los defectos aparte. El orquestador quedó en **4 ficheros y 7 líneas de pegamento**
+  (el JSON, el arranque, el csproj y el appsettings del abandono), contado también a mano: **SUPERADO**
+  (≤ 60 y ≤ 4), sin pegamento del núcleo. Eventos costó 13 ficheros y 316 líneas sólo por declarar.
+  - El CMS: 6 ficheros y 42 líneas (el camino, el servicio y la zona en el negocio de Ehr; la vista con su
+    coordinador), frente a 14 y 815 de Eventos.
+  - El UI: 6 ficheros y 485 líneas propias (la estrategia por camino, el copago cotizado, la cita pendiente y su
+    cancelación, los avisos por `code`, el enlace del aviso), más 135 de una copia interina de la hora del sitio
+    (NN-19). Eventos, en la F4: 8 ficheros y 1155 líneas, con el cupón. El UI no es «casi sólo JSON»: es la
+    experiencia de la cita.
+- **Lo que el núcleo absorbió durante la línea**, y por eso el pegamento del orquestador bajó de 61 a 7 líneas:
+  - `consent.verificar`, con el propósito como dato (N2, NN-3);
+  - dos motores en un orquestador: cada saga en su carpeta y la llave una sola vez (NN-15);
+  - la clase de una referencia del cuerpo, declarada en la definición (NR-1, NN-16).
+- **Corregido** (cada uno con su mutante en rojo):
+  - **NR-1:** una referencia libre del cuerpo dejaba apartar la agenda de otro vertical; con la clase
+    declarada, el host contesta 400 `salud.entrada_invalida` sin llamar a nadie.
+  - **NN-15:** con dos motores en un orquestador, la llave viajaba dos veces y la capacidad contestaba 401, y
+    las dos sagas compartían carpeta y barrido.
+  - **P2:** el copago es cero sólo con `pricing.price_not_found`. Con precios caído, la cita ya no se agenda
+    gratis.
+  - **P8:** la ruta directa con orquestador daba por agendada una cita que seguía en curso. Ahora la cierra.
+- **La paridad, probada y no prometida:**
+  - las 34 pruebas del oráculo de compensación de la cita corren por los dos motores sobre el mismo guion
+    (`OraculoDeLaCita`, heredado por `CompensationTests` y `CompensacionDeLaCitaDeclaradaTests`); sólo cambia cómo
+    se llama la compensación que devuelve un cobro;
+  - cada llamada de abrir, de cerrar y de deshacer lleva en el registro el número de la cita, sin datos del
+    paciente.
+- **Verificado en vivo** en la copia piloto, sin miembro:
+  - el recorrido contra el orquestador (cotizar, abrir, cerrar, cancelar, la franja tomada, fuera de agenda, otra
+    clase, sin permiso);
+  - el `.eml`;
+  - la correlación de abrir y de cerrar en el registro de cada capacidad que tocan;
+  - la página con su `<synergos-flujo>`;
+  - la puerta sin sesión;
+  - la directa con 0 llamadas a la puerta.
+
+  Queda el recorrido en el navegador con un miembro de prueba, a pedido del arquitecto.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la
