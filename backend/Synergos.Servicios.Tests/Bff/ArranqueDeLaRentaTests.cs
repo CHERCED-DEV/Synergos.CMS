@@ -83,16 +83,24 @@ public sealed class ArranqueDeLaRentaTests : IDisposable
     }
 
     [Fact]
-    public void La_cancelacion_lee_la_original_con_el_paso_comun_y_nombra_sus_pasos_propios()
+    public void La_cancelacion_lee_lo_que_la_renta_deja_y_sus_unidades_y_la_garantia_las_mueven_los_pasos_comunes()
     {
-        // El registro del orquestador reemplaza al del núcleo: sin nombrarlo, flow.leer-original no estaría. Y los dos
-        // pasos de pegamento llevan su necesidad (NN-18, NN-19) hasta que el núcleo los cubra.
+        // El registro del orquestador reemplaza al del núcleo: sin nombrarlo, flow.leer-original no estaría. Desde el
+        // bloque 7c bis los dos pasos provisionales de T044 se fueron (NN-18, NN-19): queda la regla del día de inicio.
         using var fabrica = Orquestador(new Testigo());
         var registro = fabrica.Services.GetRequiredService<IRegistroDePasos>();
         Assert.True(registro.Para(PasoLeerOriginal.Nombre) is { LeeLaOriginal: true });
         Assert.Equal(
-            ["alquiler.antes-del-inicio", "alquiler.anular-garantia", "alquiler.cancelar-unidades", "alquiler.tramo"],
+            ["alquiler.antes-del-inicio", "alquiler.tramo"],
             registro.Tipos.Where(t => t.StartsWith("alquiler.", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+
+        var deja = LaRenta()["para_lo_posterior"]!.AsArray().Select(n => (string?)n).ToList();
+        Assert.Equal(["cobroId", "total", "ventana", "garantiaId", "reservas:apartar"], deja);
+
+        var cancelacion = fabrica.Services.GetServices<FlujoGenerico>().Single(f => f.Definicion.Clave == "alquiler.cancelacion").Definicion;
+        Assert.Equal("booking.cancelar", cancelacion.Pasos["cancelar"].Tipo);
+        Assert.Equal("payments.anular", cancelacion.Pasos["garantia"].Tipo);
+        Assert.Equal("garantiaId", cancelacion.Pasos["garantia"].OmitirSiFalta);
     }
 
     [Fact]

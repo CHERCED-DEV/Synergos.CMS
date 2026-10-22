@@ -80,16 +80,14 @@ if (declarado)
     // El tramo (la regla del alquiler) es el paso propio de la renta. La garantía se conserva con el paso común
     // (payments.conservar, NN-4) y «mis alquileres» lee la lista genérica del dueño («listar», NN-7). La cancelación de
     // lo confirmado (alquiler.cancelacion, NN-8) lee la original con flow.leer-original —este registro reemplaza al del
-    // núcleo, así que lo nombra— y suma su regla y los dos pasos de NN-18 y NN-19.
+    // núcleo, así que lo nombra— y suma su regla del día de inicio.
     var maxDias = builder.Configuration.GetValue("Alquiler:MaxRentalDays", 30);
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(
         sp.GetRequiredService<PuertosHttp>(),
         [
             new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), sp.GetRequiredService<TiposDeValor>()),
             .. AlquilerPasos.Propios(sp.GetRequiredService<OfertaDeAlquiler>(), maxDias),
-            .. CancelacionDeAlquiler.Pasos(
-                sp.GetRequiredService<LiquidacionDeAlquiler>(), sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(),
-                sp.GetRequiredService<PuertosHttp>(), sp.GetRequiredService<PuertosHttp>()),
+            .. CancelacionDeAlquiler.Pasos(sp.GetRequiredService<LiquidacionDeAlquiler>()),
         ]));
 
     // Lo que pasa después del cierre fuera de la puerta: declarar, confirmar y la cancelación propia, que el CMS sigue

@@ -298,8 +298,9 @@ public sealed class LiquidacionDeAlquiler
     /// </summary>
     /// <remarks>
     /// Al completar, el intérprete da por hechas las compensaciones armadas; el KIND sigue diciendo qué cierre produjo una
-    /// reserva (el «despues» de apartar), y su objetivo es la reserva. La ranura <c>reservas:apartar</c> no sirve: guarda
-    /// el apartado, no la reserva (NN-18).
+    /// reserva (el «despues» de apartar), y su objetivo es la reserva. Vale también para una renta guardada antes de que
+    /// el núcleo anotara el cierre de cada reserva (NN-18), que la cancelación posterior no puede recorrer: por eso la
+    /// cancelación del personal la sigue leyendo de aquí.
     /// </remarks>
     public static IReadOnlyList<string> ReservasConfirmadas(SagaDeFlujo saga)
     {

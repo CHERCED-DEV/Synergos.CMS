@@ -9,6 +9,7 @@
     "contacto": { "de": "contacto" }
   },
   "salida": ["total", "garantia", "garantiaId", "cobroId", "ventana", "equipo", "cantidad"],
+  "para_lo_posterior": ["cobroId", "total", "ventana", "garantiaId", "reservas:apartar"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": [
