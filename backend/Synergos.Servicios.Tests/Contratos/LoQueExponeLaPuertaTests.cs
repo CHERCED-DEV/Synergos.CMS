@@ -4,6 +4,7 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.CMS.Tests.Architecture;
 using Synergos.CMS.Tests.Bff.FlujoDeMuestra;
+using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Contratos;
 
@@ -23,6 +24,9 @@ namespace Synergos.CMS.Tests.Contratos;
 /// <para><b>La única excepción al sujeto sale de la declaración</b> (D-001-LECTURAS): una lectura sin saga que una
 /// definición del orquestador declara en <c>lecturas</c> (<c>disponibilidad</c>, NB-3) no tiene dueño, y va sin
 /// sujeto por diseño. No hay una lista escrita a mano: el gate lee los mismos <c>flujos/*.json</c> que el host.</para>
+///
+/// <para><b>Y el gate opuesto:</b> una lectura declarada no publica el sujeto, el contacto ni la llave. La puerta la abre
+/// sin sesión a quien la defina como de invitados, y no hay de quién ni adónde avisar, ni nada que repetir sin efecto.</para>
 /// </remarks>
 public sealed class LoQueExponeLaPuertaTests
 {
@@ -77,6 +81,20 @@ public sealed class LoQueExponeLaPuertaTests
             .Select(m => m.Op.ToString())
             .ToList();
 
+    /// <summary>Lo que una lectura no lleva: no tiene dueño, no avisa y no escribe nada que repetir.</summary>
+    private static readonly string[] NoVanEnUnaLectura = [CabecerasDeLaPuerta.Sujeto, CabecerasDeLaPuerta.Contacto, IdempotencyHeader.Name];
+
+    /// <summary>Las lecturas declaradas que publican una cabecera de <see cref="NoVanEnUnaLectura"/>, con su nombre.</summary>
+    internal static IReadOnlyList<string> LecturasConCabeceraDeMas(
+        IEnumerable<(OperacionPublicada Op, JsonObject Marca)> marcadas, IReadOnlySet<(string Flujo, string Lectura)> lecturas)
+        => marcadas
+            .Where(m => lecturas.Contains(((string)m.Marca["flujo"]!, (string)m.Marca["operacion"]!)))
+            .SelectMany(m => (m.Op.Op["parameters"]?.AsArray() ?? [])
+                .Where(p => (string?)p!["in"] == "header"
+                            && NoVanEnUnaLectura.Contains((string?)p["name"], StringComparer.OrdinalIgnoreCase))
+                .Select(p => $"{m.Op} ({(string?)p!["name"]})"))
+            .ToList();
+
     private static IEnumerable<(OperacionPublicada Op, JsonObject Marca)> Marcadas(JsonObject doc)
         => ContratoOpenApi.Operaciones(doc)
             .Where(o => o.Op[ContratoOpenApi.MarcaDelFlujo] is JsonObject)
@@ -94,6 +112,17 @@ public sealed class LoQueExponeLaPuertaTests
             + "declara en «lecturas» va sin él.");
     }
 
+    [Theory]
+    [MemberData(nameof(Orquestadores))]
+    public void Una_lectura_declarada_no_lleva_sujeto_contacto_ni_llave(string ensamblado)
+    {
+        var deMas = LecturasConCabeceraDeMas(Marcadas(ensamblado), LecturasDeclaradas(Assembly.Load(new AssemblyName(ensamblado))));
+
+        Assert.True(deMas.Count == 0,
+            $"{ensamblado} publica en una lectura declarada lo que una lectura no lleva: {string.Join(", ", deMas)}. "
+            + "Una lectura no tiene dueño, no avisa a nadie y no escribe nada que repetir.");
+    }
+
     [Fact]
     public async Task Va_sin_sujeto_exactamente_la_lectura_que_declara_su_definicion()
     {
@@ -108,6 +137,20 @@ public sealed class LoQueExponeLaPuertaTests
         Assert.Empty(SinSujeto(Marcadas(doc), lecturas));
         Assert.Equal([Lectura], SinSujeto(Marcadas(doc), new HashSet<(string, string)>()));
         Assert.Equal([Lectura], SinSujeto(Marcadas(doc), new HashSet<(string, string)> { ("muestra.compra", "disponibilidad") }));
+        Assert.Empty(LecturasConCabeceraDeMas(Marcadas(doc), lecturas));
+
+        // El gate opuesto: la misma lectura, si publicara el sujeto, el contacto o la llave, sale con su nombre.
+        var disponibilidad = doc["paths"]!["/v1/flujos/muestra.cita/disponibilidad"]!["post"]!.AsObject();
+        var cabeceras = disponibilidad["parameters"] as JsonArray ?? [];
+        disponibilidad["parameters"] = cabeceras;
+        foreach (var nombre in new[] { "x-synergos-sujeto", CabecerasDeLaPuerta.Contacto, IdempotencyHeader.Name })
+        {
+            cabeceras.Add(new JsonObject { ["name"] = nombre, ["in"] = "header", ["required"] = false });
+        }
+        Assert.Equal(
+            [$"{Lectura} (x-synergos-sujeto)", $"{Lectura} ({CabecerasDeLaPuerta.Contacto})", $"{Lectura} ({IdempotencyHeader.Name})"],
+            LecturasConCabeceraDeMas(Marcadas(doc), lecturas));
+        Assert.Empty(LecturasConCabeceraDeMas(Marcadas(doc), new HashSet<(string, string)>()));
 
         // Y una operación que no es una lectura sigue exigiéndolo aunque su flujo declare una.
         var consultar = doc["paths"]!["/v1/flujos/muestra.cita/{id}"]!["get"]!["parameters"]!.AsArray();
