@@ -3,6 +3,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.PublishedCache;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services.Catalog;
@@ -33,17 +34,20 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _settings;
     private readonly ICatalogSocialProof _socialProof;
+    private readonly IVariationContextAccessor _variacion;
     private readonly ILogger<UmbracoProductCatalogSource> _logger;
 
     public UmbracoProductCatalogSource(
         IUmbracoContextAccessor umbracoContextAccessor,
         IOptionsMonitor<CatalogSettings> settings,
         ICatalogSocialProof socialProof,
+        IVariationContextAccessor variacion,
         ILogger<UmbracoProductCatalogSource> logger)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
         _settings = settings;
         _socialProof = socialProof;
+        _variacion = variacion;
         _logger = logger;
     }
 
@@ -84,10 +88,7 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             return Array.Empty<CatalogProduct>();
         }
 
-        var siteRoot = umbracoContext.Content.GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
-            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
-                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+        var siteRoot = BuscarTienda(umbracoContext.Content, brandKey, _variacion);
 
         if (siteRoot is null)
         {
@@ -95,8 +96,7 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             return Array.Empty<CatalogProduct>();
         }
 
-        var products = siteRoot
-            .DescendantsOfType(ProductPageAlias)
+        var products = FichasDe(siteRoot, _variacion)
             .Select(Project)
             .Where(p => p is not null)
             .Select(p => p!)
@@ -161,8 +161,30 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
         }).ToList();
     }
 
-    private string? ResolveBrandKey()
-        => _settings.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
+    private string? ResolveBrandKey() => MarcaDeLaTienda(_settings.CurrentValue);
+
+    /// <summary>
+    /// El <c>siteRoot</c> de la tienda, recorriendo la caché publicada desde sus raíces, como lo ve este catálogo.
+    /// </summary>
+    /// <remarks>
+    /// Lo comparten este catálogo y <see cref="TiendaEnElContenido"/>, y no es un detalle: durante un import la caché
+    /// puede tener un nodo por id sin que el recorrido desde las raíces lo alcance todavía. Una comprobación que mirara
+    /// por otro camino diría «la veo» mientras el catálogo no la ve (medido en el gate de reconstrucción de uSync).
+    /// </remarks>
+    internal static IPublishedContent? BuscarTienda(IPublishedContentCache cache, string marca, IVariationContextAccessor variacion)
+        => cache.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>(variacion))
+            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
+                && string.Equals(c.GetProperty("brandKey")?.GetValue()?.ToString()?.Trim(), marca, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Las fichas de la tienda, por el mismo recorrido (ver <see cref="BuscarTienda"/>).</summary>
+    internal static IEnumerable<IPublishedContent> FichasDe(IPublishedContent tienda, IVariationContextAccessor variacion)
+        => tienda.DescendantsOfType(variacion, ProductPageAlias);
+
+    /// <summary>El <c>brandKey</c> del <c>siteRoot</c> de la tienda, o nulo si el despliegue no lo dice.</summary>
+    /// <remarks>Lo comparten este catálogo y <see cref="TiendaEnElContenido"/>: una sola regla de alcance.</remarks>
+    internal static string? MarcaDeLaTienda(CatalogSettings ajustes)
+        => ajustes.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
             ? b.Trim()
             : null;
 

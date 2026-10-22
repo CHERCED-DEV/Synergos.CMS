@@ -117,6 +117,18 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
 
         var cita = await EnviarAsync(req, key, cancellationToken).ConfigureAwait(false);
 
+        // Las DOS fases (003-salud-cita, P8 del lote 2). El orquestador agenda en dos tiempos: abrir
+        // aparta el cupo y AUTORIZA el copago, confirmar lo captura y confirma el cupo. Esto se quedaba
+        // en la primera y contestaba «booked»: el copago nunca se cobraba, el cupo nunca se confirmaba y
+        // vencía, y el paciente llegaba a una hora que nadie le guardó. Una cita que ya volvió completa
+        // (el reintento con la misma llave) no se confirma otra vez.
+        if (cita.Status == "Running") cita = await ConfirmarAsync(cita.Id, cancellationToken).ConfigureAwait(false);
+        if (cita.Status != "Completed")
+        {
+            _log.LogWarning("La cita {Id} quedó {Status} tras agendar: no se informa como agendada.", cita.Id, cita.Status ?? "-");
+            throw new InvalidOperationException("No pudimos confirmar la cita. No quedó reservada.");
+        }
+
         return new ClinicalAppointment(
             Id: cita.Id,
             PatientId: request.PatientId,
@@ -280,6 +292,49 @@ public sealed class HttpClinicalSchedulingService : IClinicalSchedulingService
             // según el origen haría que encender el modo Bff cambiara los códigos HTTP.
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(problema?.Detalle) ? "No pudimos agendar la cita." : problema!.Detalle!);
+        }
+    }
+
+    /// <summary>La segunda fase: capturar el copago y confirmar el cupo.</summary>
+    /// <remarks>
+    /// Si el orquestador la rechaza, la saga ya está deshecha (soltó el cupo, anuló o devolvió el cobro):
+    /// queda decir la verdad con su motivo. Si no contesta, se PREGUNTA cómo quedó, como al agendar: un
+    /// timeout no dice «no se confirmó».
+    /// </remarks>
+    private async Task<AppointmentDto> ConfirmarAsync(string id, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"v1/appointments/{Uri.EscapeDataString(id)}/confirm");
+        HttpResponseMessage res;
+        try
+        {
+            res = await _clients.CreateClient(BffClientName).SendAsync(req, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            _log.LogWarning(ex, "Confirmar la cita {Id} no respondió; se consulta cómo quedó.", id);
+            return await BuscarAsync(id, ct).ConfigureAwait(false)
+                   ?? throw new InvalidOperationException("No pudimos confirmar la cita. No quedó reservada.", ex);
+        }
+
+        using (res)
+        {
+            if (res.IsSuccessStatusCode)
+            {
+                return await res.Content.ReadFromJsonAsync<AppointmentDto>(Json, ct).ConfigureAwait(false)
+                       ?? throw new InvalidOperationException("No pudimos confirmar la cita: la respuesta vino vacía.");
+            }
+
+            var problema = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
+            _log.LogWarning("Salud rechazó confirmar la cita {Id} con {Status} ({Code}): {Detalle}",
+                id, (int)res.StatusCode, problema?.Codigo ?? "-", problema?.Detalle ?? "-");
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(problema?.Detalle) || res.StatusCode == HttpStatusCode.Unauthorized
+                    ? "No pudimos confirmar la cita. No quedó reservada."
+                    : problema!.Detalle!);
         }
     }
 

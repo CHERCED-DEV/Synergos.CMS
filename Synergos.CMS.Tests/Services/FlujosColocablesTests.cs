@@ -15,6 +15,9 @@ public sealed class FlujosColocablesTests
     private const string Expuesto = "eventos.compra";
     private const string PorDefecto = "eventos.compra";
 
+    /// <summary>Un flujo que ninguna puerta expone (`salud.cita` lo era hasta que 003 publicó su contrato).</summary>
+    private const string SinContrato = "prueba.sin_contrato";
+
     private static (FlujosColocables Colocables, LogQueCuenta Log) Colocables(params string[] declarados)
     {
         var ajustes = new PuertaSettings();
@@ -55,9 +58,9 @@ public sealed class FlujosColocablesTests
         Assert.Equal(1, log.Avisos);
 
         // Lo declara el sitio pero ninguna puerta lo expone.
-        var (sinContrato, otroLog) = Colocables(Expuesto, "salud.cita");
-        Assert.False(sinContrato.EsColocable("salud.cita"));
-        Assert.Equal(PorDefecto, sinContrato.Elegir("salud.cita", PorDefecto));
+        var (sinContrato, otroLog) = Colocables(Expuesto, SinContrato);
+        Assert.False(sinContrato.EsColocable(SinContrato));
+        Assert.Equal(PorDefecto, sinContrato.Elegir(SinContrato, PorDefecto));
         Assert.Equal(1, otroLog.Avisos);
     }
 
