@@ -6,7 +6,7 @@
     "paciente": { "de": "sujeto" },
     "cita": "texto",
     "devolver": "dinero",
-    "cobroId": { "tipo": "texto", "de": "original" },
+    "cobroId": { "tipo": "texto?", "de": "original" },
     "apartados": { "de": "original", "reservas": "apartar" }
   },
   "salida": ["cita", "devolver"],
@@ -24,6 +24,7 @@
       "tipo": "payments.devolver",
       "lee": ["cobroId", "devolver"],
       "llave": "refund",
+      "omitir_si_falta": "cobroId",
       "motivo": "no se pudo devolver el cobro"
     }
   }

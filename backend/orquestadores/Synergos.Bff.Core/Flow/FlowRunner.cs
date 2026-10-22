@@ -472,6 +472,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             return Desenlace.Sigue;
         }
 
+        // Lo que no existe no se deshace ni se devuelve (NN-19): el cobro de una reserva gratis, la garantía que no se
+        // pidió. El paso no corre, y lo que escribiría queda nulo, como al omitir un cobro de cero.
+        if (definicion.OmitirSiFalta is { } dato && Ambito.Leer<object?>(dato, corrida.Ctx, alias, item) is null)
+        {
+            foreach (var nombre in definicion.Escribe) Ambito.Escribir(nombre, null, corrida.Ctx, alias, item);
+            return Desenlace.Sigue;
+        }
+
         var paso = _pasos.Para(definicion.Tipo)!;
         SalidaDePaso salida;
         try

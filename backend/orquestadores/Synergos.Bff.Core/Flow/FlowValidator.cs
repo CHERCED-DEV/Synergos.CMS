@@ -60,6 +60,7 @@ public static class FlowValidator
         RevisarPosterior(flujo, registro, donde, errores);
         RevisarParaLoPosterior(flujo, contrato, errores);
         RevisarOmitirSiCero(flujo, errores);
+        RevisarOmitirSiFalta(flujo, registro, contrato, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
 
@@ -136,6 +137,7 @@ public static class FlowValidator
                 // Un tipo que pide llave obliga a declararla (RevisarTipos), así que mirar la llave declarada basta.
                 if (paso.Reserva is not null || paso.CierraReserva is not null || paso.Llave is not null || paso.LlaveBase is not null
                     || paso.Plantilla is not null || paso.AlFallar is not null || paso.OmitirSiCero is not null
+                    || paso.OmitirSiFalta is not null
                     || registro.Para(paso.Tipo) is { ActuaSinLlave: true })
                 {
                     errores.Add($"{aqui} da el paso «{id}», que reserva, cierra, pide llave, avisa u omite: una lectura no escribe "
@@ -1021,6 +1023,39 @@ public static class FlowValidator
             if (!paso.Lee.Contains(paso.OmitirSiCero!, StringComparer.Ordinal))
             {
                 errores.Add($"«{paso.Id}» se omite si «{paso.OmitirSiCero}» es cero y no lo lee.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>omitir_si_falta</c> (NN-19): en un paso que no reserva, sobre algo que el paso lee y que puede faltar.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Que no reserve</b>: el que reserva ya tiene su forma de saltarse, <c>omitir_si_cero</c>, y su cierre lo
+    /// sigue solo. Éste es el paso que actúa sobre algo que la saga ya tiene —devolver el cobro, anular la garantía—, y
+    /// cuando no lo tiene no hay nada que hacer.</para>
+    ///
+    /// <para><b>Que pueda faltar</b>: en una saga genérica, el tipo de ese dato es anulable. Uno obligatorio nunca falta,
+    /// y omitir sobre él es una regla que nadie cumple.</para>
+    /// </remarks>
+    private static void RevisarOmitirSiFalta(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => p.OmitirSiFalta is not null).OrderBy(p => p.Id, StringComparer.Ordinal))
+        {
+            var dato = paso.OmitirSiFalta!;
+            if (paso.Reserva is not null)
+            {
+                errores.Add($"«{paso.Id}» declara «omitir_si_falta» y reserva: lo que reserva se salta con «omitir_si_cero», y su cierre lo sigue solo.");
+            }
+            if (!paso.Lee.Contains(dato, StringComparer.Ordinal))
+            {
+                errores.Add($"«{paso.Id}» se omite si falta «{dato}» y no lo lee.");
+                continue;
+            }
+            if (contrato.Tipos is { } tipos && !dato.Contains('.', StringComparison.Ordinal)
+                && BindingDeFlujo.TipoDe(flujo, tipos, registro, dato) is { Anulable: false } tipo)
+            {
+                errores.Add($"«{paso.Id}» se omite si falta «{dato}», y «{dato}» es «{tipo.Declarado}»: no es anulable, así que nunca falta.");
             }
         }
     }

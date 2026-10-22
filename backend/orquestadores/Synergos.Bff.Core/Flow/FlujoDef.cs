@@ -152,6 +152,9 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// escribe el dominio y vive en <c>Api.Notifications</c>, el flujo sólo dice cuál.</param>
 /// <param name="Proposito">Para qué propósito comprueba el permiso un paso de consentimiento. Es un dato
 /// de la definición, como la plantilla del aviso, y no del C# (núcleo N2, NN-3 de Salud).</param>
+/// <param name="OmitirSiFalta">Un dato anulable que el paso lee: si falta, el paso no corre y lo que escribiría queda
+/// nulo (núcleo, NN-19 de 005 y 011). Es lo que no existe: devolver el cobro de una reserva gratis, anular la garantía
+/// de un equipo que no la pidió. Sólo en un paso que no reserva: el que reserva se salta con <c>omitir_si_cero</c>.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -165,7 +168,8 @@ public sealed record PasoDef(
     string? AlFallar = null,
     string? OmitirSiCero = null,
     string? Plantilla = null,
-    string? Proposito = null)
+    string? Proposito = null,
+    string? OmitirSiFalta = null)
 {
     /// <summary><c>al_fallar: seguir</c>: el fallo se anota y la fase sigue.</summary>
     public const string Seguir = "seguir";
@@ -510,7 +514,7 @@ internal static class LectorDeFlujo
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
-            "omitir_si_cero", "plantilla", "proposito");
+            "omitir_si_cero", "plantilla", "proposito", "omitir_si_falta");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && alFallar is not (PasoDef.Seguir or PasoDef.Soltar))
@@ -542,7 +546,8 @@ internal static class LectorDeFlujo
             alFallar,
             Opcional(nodo, "omitir_si_cero", aqui),
             Opcional(nodo, "plantilla", aqui),
-            Opcional(nodo, "proposito", aqui));
+            Opcional(nodo, "proposito", aqui),
+            Opcional(nodo, "omitir_si_falta", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

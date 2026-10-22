@@ -434,6 +434,26 @@ public sealed class FlujoDeMuestraTests
     }
 
     [Fact]
+    public async Task Cancelar_una_cita_gratis_cancela_la_hora_y_no_devuelve_nada()
+    {
+        // NN-19: la cita gratis no tiene cobro (omitir_si_cero lo saltó), así que devolverlo no existe: el paso se omite
+        // porque falta un dato anulable, y la cancelación completa con la hora cancelada en la agenda real.
+        await using var m = await Muestra.Arrancar(precio: 0m);
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Cerrar(cita);
+        var reserva = cerrada.GetProperty("datos").GetProperty("reservaId").GetString()!;
+        Assert.Equal(JsonValueKind.Null, m.Sagas.Find(cita)!.Datos["cobroId"].Valor?.ValueKind ?? JsonValueKind.Null);
+
+        var (cancelo, cancelacion) = await m.Pedir(
+            "v1/flujos/muestra.cancelacion", new { cita, devolver = new { amount = 0m, currency = "COP" } }, "muestra.paciente:u-1", "can-1");
+
+        Assert.True(cancelo == HttpStatusCode.Created, cancelacion.ToString());
+        Assert.Equal("Completed", cancelacion.GetProperty("estado").GetString());
+        Assert.Equal("Cancelled", (await m.Leer("booking", $"v1/reservations/{reserva}")).GetProperty("status").GetString());
+    }
+
+    [Fact]
     public async Task Soltar_la_garantia_no_publica_cotizar_y_abrirla_la_anula()
     {
         // NR-8 de 008: muestra.liberacion anula la garantía en la fase que abre, con un paso que no pide llave. Si se

@@ -508,6 +508,8 @@ public sealed class HostDeFlujosTests
         { "\"pasos\": [\"franjas\"]", "\"pasos\": [\"franjas\", \"apartar\"]", "una lectura no escribe en ninguna capacidad" },
         // un paso de la lectura con llave y nada más: pedir llave es lo que hace un paso que escribe
         { "\"escribe\": [\"franjas\"] }", "\"escribe\": [\"franjas\"], \"llave\": \"x\" }", "una lectura no escribe en ninguna capacidad" },
+        // un paso de la lectura que se omite si falta algo: una lectura no omite nada (NN-19)
+        { "\"escribe\": [\"franjas\"] }", "\"escribe\": [\"franjas\"], \"omitir_si_falta\": \"desde\" }", "una lectura no escribe en ninguna capacidad" },
         // un paso que lee algo que la lectura no tiene
         { "\"entrada\": [\"desde\", \"hasta\", \"recurso\"]", "\"entrada\": [\"hasta\", \"recurso\"]", "«franjas» lee «desde», que ni entra en la lectura" },
         // una salida que nadie escribe en la lectura
@@ -1147,6 +1149,59 @@ public sealed class HostDeFlujosTests
         var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(MutarCancelacion(
             "{ \"de\": \"original\", \"reservas\": \"apartar\" }", "{ \"de\": \"original\", \"reservas\": \"apartar\", \"tipo\": \"texto\" }")));
         Assert.Contains("tipo", ex.Message, StringComparison.Ordinal);
+    }
+
+    // ── Omitir un paso que no reserva si falta un dato anulable (NN-19 de 005 y 011) ──────────────
+
+    /// <summary>La devolución de una cita que puede no tener cobro: el paso se omite si falta.</summary>
+    private static readonly string DevolucionSiHayCobro = MutarDevolucion(
+            "\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": { \"tipo\": \"texto?\", \"de\": \"original\" }")
+        .Replace("\"llave\": \"refund\" }", "\"llave\": \"refund\", \"omitir_si_falta\": \"cobroId\" }", StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Un_paso_que_no_reserva_se_omite_si_falta_su_dato_y_corre_si_esta()
+    {
+        using var banco = new Banco(DevolucionSiHayCobro);
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("gratis", Paciente, cobro: null));
+        banco.Motor.Put(Original("pagada", Paciente));
+        var fachada = banco.Fachada();
+
+        var gratis = await fachada.AbrirAsync("dev-1", Paciente, EntradaDeDevolucion("gratis"), CancellationToken.None);
+        Assert.True(gratis.IsOk, gratis.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, gratis.Value.Status);
+        Assert.Empty(banco.Puertos.Llamadas);
+
+        var pagada = await fachada.AbrirAsync("dev-2", Paciente, EntradaDeDevolucion("pagada"), CancellationToken.None);
+        Assert.True(pagada.IsOk, pagada.Rejection?.ToString());
+        Assert.Equal(["devolver pg-1"], banco.Puertos.Llamadas);
+    }
+
+    public static TheoryData<string, string, string> OmitirSiFaltaMalDeclarado() => new()
+    {
+        // sobre algo que el paso no lee
+        { "\"omitir_si_falta\": \"cobroId\"", "\"omitir_si_falta\": \"cita\"", "«devolver» se omite si falta «cita» y no lo lee" },
+        // sobre algo que nunca falta
+        { "\"cobroId\": { \"tipo\": \"texto?\", \"de\": \"original\" }", "\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }",
+            "«devolver» se omite si falta «cobroId», y «cobroId» es «texto»: no es anulable" },
+    };
+
+    [Theory]
+    [MemberData(nameof(OmitirSiFaltaMalDeclarado))]
+    public void Omitir_si_falta_mal_declarado_no_arranca(string antes, string despues, string mensaje)
+    {
+        Assert.True(DevolucionSiHayCobro.Contains(antes, StringComparison.Ordinal), $"La mutación no entra: «{antes}».");
+        using var banco = new Banco(DevolucionSiHayCobro.Replace(antes, despues, StringComparison.Ordinal));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_que_reserva_no_se_omite_si_falta_algo()
+    {
+        using var banco = new Banco(Mutar("\"omitir_si_cero\": \"monto\",", "\"omitir_si_cero\": \"monto\", \"omitir_si_falta\": \"paciente\","));
+
+        Assert.Contains(banco.Errores(), e => e.Contains("«autorizar» declara «omitir_si_falta» y reserva", StringComparison.Ordinal));
     }
 
     // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────
