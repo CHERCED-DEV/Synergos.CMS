@@ -49,6 +49,8 @@ public sealed partial class SeamComposer
             ActivatorUtilities.CreateInstance<UmbracoEquipmentCatalogSource>(sp));
         services.AddSingleton<ICatalogSource<RentalEquipment>>(sp =>
             sp.GetRequiredService<UmbracoEquipmentCatalogSource>());
+        // La raíz del sitio con la MISMA regla del catálogo: la pregunta de la oferta al publicar (línea 005).
+        services.AddSingleton<IRaizDelAlquiler>(sp => sp.GetRequiredService<UmbracoEquipmentCatalogSource>());
         services.AddSingleton<IEquipmentCatalogProvider>(sp =>
             IsCmsSource(sp, UmbracoEquipmentCatalogSource.Vertical)
                 ? new CatalogEquipmentCatalogProvider(sp.GetRequiredService<ICatalogSource<RentalEquipment>>())

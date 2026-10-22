@@ -198,6 +198,17 @@ public sealed class AlquilerWiringTests
     }
 
     [Fact]
+    public void La_oferta_al_publicar_pregunta_por_la_raiz_con_la_regla_del_catalogo()
+    {
+        // El manejador la pide por constructor: sin el registro, publicar un equipo sólo fallaría en vivo. Y la responde
+        // la MISMA fuente del catálogo, para que «se ve la raíz» y «el catálogo la encuentra» no se separen.
+        var composer = FuenteDe("SeamComposer.Alquiler.cs", "Synergos.CMS.Web", "Composers");
+
+        Assert.Contains("AddSingleton<IRaizDelAlquiler>(sp => sp.GetRequiredService<UmbracoEquipmentCatalogSource>())",
+            composer, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void El_catalogo_de_Alquiler_NO_sale_a_la_red()
     {
         // El eje 1 sale del árbol de contenido y cablearlo a Api.Catalog sería un RETROCESO: el
