@@ -252,6 +252,9 @@ public sealed class ShopWiringTests
     /// <para><b>Con el editor, en los dos sentidos</b>: publicar sin retirar deja vendiéndose lo que la ficha ya
     /// no muestra, y es el defecto que nadie ve, porque comprar sigue funcionando. <b>Nunca al arrancar</b>
     /// (ADR 0013): se mira qué notificaciones atienden los dos manejadores, no sólo que estén registrados.</para>
+    ///
+    /// <para><b>Con su pregunta por la tienda registrada</b> (<c>ITiendaEnElContenido</c>, el rojo del CI de
+    /// 2026-10-22): sin ella el manejador no se construye, y es cada publicar del editor el que falla.</para>
     /// </remarks>
     [Fact]
     public void La_oferta_de_la_tienda_va_por_el_orquestador_sigue_al_editor_y_nunca_corre_al_arrancar()
@@ -263,6 +266,7 @@ public sealed class ShopWiringTests
 
         var composer = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.Shop.cs"));
         Assert.Contains("AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTiendaAlPublicar>()", composer, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<ITiendaEnElContenido, TiendaEnElContenido>()", composer, StringComparison.Ordinal);
         foreach (var retiro in NotificacionesDeLaOferta.Skip(1))
         {
             Assert.Contains($"AddNotificationAsyncHandler<{retiro}, OfertaDeTiendaAlRetirar>()", composer, StringComparison.Ordinal);

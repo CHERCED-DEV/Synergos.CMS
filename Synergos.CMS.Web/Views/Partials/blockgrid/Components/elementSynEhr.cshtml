@@ -1,2 +1,12 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Ehr", Model.Content)
+@*
+    <synergos-flujo> envuelve el portal clínico (003-salud-cita, como Eventos en la F4 de la ADR 0140): el
+    coordinador sin render de la cita, que la lleva a la puerta. La CLAVE la pone el servidor, nunca el
+    bundle (nada en el DOM es frontera de confianza, y el atributo es una clave, no una ruta), y es la de
+    EhrResolutor.FlujoDeLaCita; PuertaDeLaCitaTests la cruza con la tabla de la puerta y con
+    Synergos:Puerta:Flujos. Con el camino «directa» es inocuo. El style en línea es para antes de que el
+    bundle defina la etiqueta: un elemento desconocido es inline y cambiaría el layout del ítem del BlockGrid.
+*@
+<synergos-flujo flujo="salud.cita" style="display:contents">
+    @await Html.PartialAsync("SynHost/Ehr", Model.Content)
+</synergos-flujo>
