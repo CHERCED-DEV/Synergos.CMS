@@ -158,6 +158,9 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
     public Task<Result<FlowContext>> LeerAsync(string lectura, FlowContext entrada, CancellationToken ct)
         => _flujo.LeerAsync(lectura, entrada, ct);
 
+    /// <summary>Si la fase que abre se puede anticipar: lo que decide si el flujo publica «cotizar».</summary>
+    public bool SeAnticipa => _flujo.SeAnticipa;
+
     /// <summary>La fase que abre, anticipada hasta antes de reservar, sin escribir nada (ADR 0140, el cupón).</summary>
     public Task<Result<FlowContext>> AnticiparAsync(FlowContext entrada, CancellationToken ct)
         => _flujo.AnticiparAsync(_abre, entrada, ct);

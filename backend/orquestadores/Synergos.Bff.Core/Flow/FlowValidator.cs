@@ -84,7 +84,8 @@ public static class FlowValidator
     /// <remarks>
     /// <para><b>No escribe en ninguna capacidad</b>, y es lo que la deja abrirse a quien todavía no inició sesión:
     /// ningún paso de una lectura reserva, cierra, pide llave, avisa ni sigue si falla. Uno con llave es uno que
-    /// escribe, como en <c>FlowRunner.AnticiparAsync</c>.</para>
+    /// escribe, como en <c>FlowRunner.AnticiparAsync</c>, y también uno que actúa sin ella (<see cref="IPaso.ActuaSinLlave"/>,
+    /// NR-8 de 008): anular o cancelar es escribir aunque no se pida llave.</para>
     ///
     /// <para><b>Sin dueño</b>: su entrada viene del cuerpo o del negocio del sitio, nunca del sujeto ni del contacto
     /// de la sesión. La pide un invitado; con un sujeto sería una operación de alguien.</para>
@@ -133,7 +134,8 @@ public static class FlowValidator
                 }
                 // Un tipo que pide llave obliga a declararla (RevisarTipos), así que mirar la llave declarada basta.
                 if (paso.Reserva is not null || paso.CierraReserva is not null || paso.Llave is not null || paso.LlaveBase is not null
-                    || paso.Plantilla is not null || paso.AlFallar is not null || paso.OmitirSiCero is not null)
+                    || paso.Plantilla is not null || paso.AlFallar is not null || paso.OmitirSiCero is not null
+                    || registro.Para(paso.Tipo) is { ActuaSinLlave: true })
                 {
                     errores.Add($"{aqui} da el paso «{id}», que reserva, cierra, pide llave, avisa u omite: una lectura no escribe "
                         + "en ninguna capacidad.");

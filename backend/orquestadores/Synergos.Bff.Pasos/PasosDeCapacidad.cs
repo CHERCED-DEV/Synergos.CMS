@@ -89,6 +89,7 @@ public sealed class PasoInventarioConsumir(IInventoryPort existencias) : IPaso
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool ActuaSinLlave => true;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -209,6 +210,7 @@ public sealed class PasoPagosAnular(IDeshacerCobros cobros) : IPaso
     public int Lecturas => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool ActuaSinLlave => true;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {

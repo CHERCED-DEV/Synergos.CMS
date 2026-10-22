@@ -12,6 +12,7 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Core;
 using Synergos.CMS.Tests.Architecture;
+using Synergos.CMS.Tests.Contratos;
 
 namespace Synergos.CMS.Tests.Bff.FlujoDeMuestra;
 
@@ -396,6 +397,33 @@ public sealed class FlujoDeMuestraTests
         Assert.Equal(HttpStatusCode.Created, (await m.Pedir(
             "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1")).Estado);
         Assert.Equal(200_000m, (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Soltar_la_garantia_no_publica_cotizar_y_abrirla_la_anula()
+    {
+        // NR-8 de 008: muestra.liberacion anula la garantía en la fase que abre, con un paso que no pide llave. Si se
+        // anticipara, «cotizar» la anularía sin saga, sin llave y sin rastro: no se publica, y la garantía sigue viva.
+        var doc = await ContratoDeFlujosGenericosTests.Documento();
+        Assert.NotNull(doc["paths"]!["/v1/flujos/muestra.cita/cotizar"]);
+        Assert.NotNull(doc["paths"]!["/v1/flujos/muestra.liberacion"]);
+        Assert.Null(doc["paths"]!["/v1/flujos/muestra.liberacion/cotizar"]);
+
+        await using var m = await Muestra.Arrancar();
+        const string Inquilino = "muestra.paciente:u-1";
+        var (_, abierta) = await m.Pedir("v1/flujos/muestra.garantia", new { garantia = new { amount = 300_000m, currency = "COP" } }, Inquilino, "gar-1");
+        var alquiler = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Pedir($"v1/flujos/muestra.garantia/{alquiler}/cerrar", null, Inquilino);
+        var garantia = cerrada.GetProperty("datos").GetProperty("garantiaId").GetString()!;
+
+        var (cotizo, _) = await m.Pedir("v1/flujos/muestra.liberacion/cotizar", new { alquiler }, Inquilino);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, cotizo);
+        Assert.Equal("Authorized", (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("status").GetString());
+
+        var (solto, liberacion) = await m.Pedir("v1/flujos/muestra.liberacion", new { alquiler }, Inquilino, "lib-1");
+        Assert.True(solto == HttpStatusCode.Created, liberacion.ToString());
+        Assert.Equal("Completed", liberacion.GetProperty("estado").GetString());
+        Assert.Equal("Voided", (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("status").GetString());
     }
 
     [Fact]

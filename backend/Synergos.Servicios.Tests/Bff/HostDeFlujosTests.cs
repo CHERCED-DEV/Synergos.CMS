@@ -303,6 +303,7 @@ public sealed class HostDeFlujosTests
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
                 new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
                 new PasoLeerOriginal(almacen, tipos), new PasoPagosDevolver(Puertos),
+                new PasoPagosAnular(Puertos), new PasoAgendaCancelar(Puertos),
             ]);
             Binding = new BindingDeFlujo(Flujo, tipos, Registro, deshacer.Tipos);
         }
@@ -1064,5 +1065,75 @@ public sealed class HostDeFlujosTests
         Assert.True(cotizada.IsOk, cotizada.Rejection?.ToString());
         Assert.Equal(Money.Of(30_000m, "COP"), cotizada.Value.Get<Money>("total"));
         Assert.DoesNotContain(banco.Puertos.Llamadas, l => l.StartsWith("apartar", StringComparison.Ordinal) || l.StartsWith("autorizar", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Anular el cobro de una cita completada en UNA fase (NR-8 de 008): un paso que actúa sin pedir llave, como
+    /// <c>booking.cancelar</c>, en la fase que abre.
+    /// </summary>
+    private const string Anulacion = """
+        {
+          "clave": "prueba.anulacion",
+          "posterior_a": "prueba.cita",
+          "entrada": ["paciente", "cita"],
+          "tipos": {
+            "paciente": { "de": "sujeto" },
+            "cita": "texto",
+            "cobroId": { "tipo": "texto", "de": "original" }
+          },
+          "salida": ["cita"],
+          "fases": { "anular": ["original", "anular"] },
+          "pasos": {
+            "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["cobroId"] },
+            "anular": { "tipo": "payments.anular", "lee": ["cobroId"] }
+          }
+        }
+        """;
+
+    [Fact]
+    public async Task Una_posterior_que_anula_en_su_primera_fase_no_se_anticipa_ni_anula_nada()
+    {
+        // NR-8 de 008: «cotizar» ejecutaba la fase que abre sin saga, sin llave y sin rastro, y un paso sin llave no es un
+        // paso sin efecto. Anticipar no escribe nada; esta fase escribe, así que no se anticipa.
+        using var banco = new Banco(Anulacion);
+        Assert.Empty(banco.Errores());
+        banco.Motor.Put(Original("cita-1", Paciente));
+        var fachada = banco.Fachada();
+
+        Assert.False(fachada.SeAnticipa);
+        var e = await Assert.ThrowsAsync<InvalidOperationException>(() => fachada.AnticiparAsync(
+            new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None));
+        Assert.Contains("anular", e.Message, StringComparison.Ordinal);
+        Assert.Empty(banco.Puertos.Llamadas);
+
+        // El control: abrirla de verdad sí anula, con su saga.
+        var abierta = await fachada.AbrirAsync("anu-1", Paciente, new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None);
+        Assert.True(abierta.IsOk, abierta.Rejection?.ToString());
+        Assert.Equal(["anular pg-1"], banco.Puertos.Llamadas);
+    }
+
+    [Fact]
+    public void Lo_que_se_anticipa_sigue_igual_si_antes_de_reservar_nada_actua()
+    {
+        using var renta = new Banco(Renta);
+        using var cita = new Banco();
+        using var devolucion = new Banco(Devolucion);
+
+        Assert.True(renta.Fachada().SeAnticipa);
+        Assert.True(cita.Fachada().SeAnticipa);
+        Assert.False(devolucion.Fachada().SeAnticipa);   // pide llave: ya no se anticipaba
+    }
+
+    [Fact]
+    public void Una_lectura_no_da_un_paso_que_actua_sin_llave()
+    {
+        var conAnular = MutarLectura("\"pasos\": [\"franjas\"]", "\"pasos\": [\"franjas\", \"anular\"]")
+            .Replace("\"franjas\": { \"tipo\": \"booking.franjas\"",
+                "\"anular\": { \"tipo\": \"payments.anular\", \"lee\": [\"recurso\"] }, \"franjas\": { \"tipo\": \"booking.franjas\"",
+                StringComparison.Ordinal);
+        using var banco = new Banco(conAnular);
+
+        Assert.Contains(banco.Errores(), e => e.Contains("da el paso «anular»", StringComparison.Ordinal)
+                                              && e.Contains("una lectura no escribe en ninguna capacidad", StringComparison.Ordinal));
     }
 }

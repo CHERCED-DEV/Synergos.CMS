@@ -93,6 +93,20 @@ public interface IPaso
     bool LeeLaOriginal => false;
 
     /// <summary>
+    /// Si cambia algo en una capacidad SIN pedir llave (NR-8 de 008): deshacer lo que ya existe —soltar un apartado,
+    /// cancelar una reserva, anular un cobro— o cerrarlo —consumir, cumplir, cerrar una canasta—. Por defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin llave no es sin efecto.</b> Estos pasos no la piden porque la capacidad ya los hace idempotentes:
+    /// anular dos veces es anular una. Pero escriben, y lo que no escribe en ninguna capacidad es lo único que puede
+    /// correr sin saga: anticipar («cotizar») y una lectura (NB-3). Un paso así en el tramo que se anticipa hace que
+    /// la fase no se anticipe, y en una lectura no arranca.</para>
+    ///
+    /// <para>Lo declara el paso, no la definición: es lo que el paso hace, como la llave que pide.</para>
+    /// </remarks>
+    bool ActuaSinLlave => false;
+
+    /// <summary>
     /// El tipo de cada valor que produce, en el orden de <see cref="Escrituras"/>; <c>null</c> si no lo
     /// declara (por defecto).
     /// </summary>
