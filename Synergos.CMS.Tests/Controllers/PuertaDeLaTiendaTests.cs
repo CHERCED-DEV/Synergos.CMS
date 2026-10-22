@@ -35,6 +35,8 @@ public sealed class PuertaDeLaTiendaTests
         [
             new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m)),
             new SeccionDeNegocioRegistrada("Storefront", typeof(NegocioDeStorefront), _ => new NegocioDeStorefront("/api/shop")),
+            // El appsettings comiteado abre también la cita (003): su negocio vive en la sección de Ehr.
+            new SeccionDeNegocioRegistrada("Ehr", typeof(NegocioDeEhr), _ => new EhrFeatureSettings().Para(null)),
         ],
         new ServiceCollection().BuildServiceProvider());
 
