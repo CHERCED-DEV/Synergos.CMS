@@ -33,7 +33,8 @@ public sealed class ContratoDeFlujosGenericosTests
         }
     }
 
-    private static async Task<JsonObject> Documento()
+    /// <summary>El contrato que publica el host de la muestra con sus flujos (también lo usa el gate de la puerta).</summary>
+    internal static async Task<JsonObject> Documento()
     {
         var raiz = Path.Combine(Path.GetTempPath(), "contrato-muestra-" + Guid.NewGuid().ToString("N"));
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
