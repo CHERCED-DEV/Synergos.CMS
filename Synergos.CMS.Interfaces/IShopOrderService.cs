@@ -96,7 +96,10 @@ public sealed record ShopOrder(
     // A dónde va, capturada en el checkout. Vive en la orden porque el que la necesita es
     // CONFIRM, un paso después: el cliente no la vuelve a mandar y sin guardarla se pierde
     // entre los dos. Aditivo → las órdenes anteriores quedan sin dirección, que es la verdad.
-    ShopShippingAddress? ShipTo = null);
+    ShopShippingAddress? ShipTo = null,
+    // La compra salió por la puerta (004-tienda-compra): la cobró el orquestador, y su devolución vuelve
+    // por él. Aditivo → las órdenes anteriores son de la ruta directa, que es la verdad.
+    bool ViaGate = false);
 
 /// <summary>
 /// A dónde se despacha la compra.

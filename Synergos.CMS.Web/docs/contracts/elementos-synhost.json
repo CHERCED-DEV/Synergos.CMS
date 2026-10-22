@@ -2461,17 +2461,29 @@
         "Booking.Slot.Errors.Past",
         "Booking.Slot.Errors.Payment",
         "Booking.Slot.Errors.Taken",
+        "Booking.Slot.Full",
+        "Booking.Slot.HeldUntil",
         "Booking.Slot.ManageWithBusiness",
         "Booking.Slot.Minutes",
+        "Booking.Slot.MyBookings",
+        "Booking.Slot.NoBookings",
+        "Booking.Slot.NoTimesLeft",
         "Booking.Slot.NotConfigured",
         "Booking.Slot.Number",
+        "Booking.Slot.PastBookings",
         "Booking.Slot.Pending",
         "Booking.Slot.Quoting",
         "Booking.Slot.Reserve",
         "Booking.Slot.SignIn",
+        "Booking.Slot.States.Compensated",
+        "Booking.Slot.States.Compensating",
+        "Booking.Slot.States.CompensationFailed",
+        "Booking.Slot.States.Completed",
+        "Booking.Slot.States.Running",
         "Booking.Slot.Time",
         "Booking.Slot.Total",
-        "Booking.Slot.Unavailable"
+        "Booking.Slot.Unavailable",
+        "Booking.Slot.Upcoming"
       ],
       "campos": [
         {
@@ -2994,7 +3006,36 @@
       "nombre": "storefront",
       "tipo": "funcionalidad",
       "record": "StorefrontProps",
-      "diccionario": [],
+      "diccionario": [
+        "Storefront.Purchase"
+      ],
+      "claves": [
+        "Storefront.Purchase.ConfirmPending",
+        "Storefront.Purchase.Failed",
+        "Storefront.Purchase.InProgress",
+        "Storefront.Purchase.LinkSignIn",
+        "Storefront.Purchase.NotFound",
+        "Storefront.Purchase.NotOnSale",
+        "Storefront.Purchase.OutOfStock",
+        "Storefront.Purchase.PaymentDeclined",
+        "Storefront.Purchase.PendingCancel",
+        "Storefront.Purchase.PendingCancelled",
+        "Storefront.Purchase.PendingFound",
+        "Storefront.Purchase.PendingResume",
+        "Storefront.Purchase.PromoExpired",
+        "Storefront.Purchase.PromoFixed",
+        "Storefront.Purchase.PromoRemoved",
+        "Storefront.Purchase.PromoTooMany",
+        "Storefront.Purchase.PromoUnknown",
+        "Storefront.Purchase.Refunded",
+        "Storefront.Purchase.Retry",
+        "Storefront.Purchase.SessionRequired",
+        "Storefront.Purchase.SignIn",
+        "Storefront.Purchase.SignInText",
+        "Storefront.Purchase.SignInTitle",
+        "Storefront.Purchase.Unavailable",
+        "Storefront.Purchase.Unknown"
+      ],
       "campos": [
         {
           "nombre": "heading",
@@ -3013,13 +3054,27 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "purchasePath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "shippingCountry",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Compra en nuestra tienda online",
         "subheading": "Catálogo, carrito y checkout",
-        "apiBase": "/api/shop"
+        "apiBase": "/api/shop",
+        "purchasePath": "directa",
+        "shippingCountry": "CO"
       }
     },
     {

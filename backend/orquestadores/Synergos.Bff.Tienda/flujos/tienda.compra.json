@@ -1,0 +1,108 @@
+{
+  "clave": "tienda.compra",
+  "entrada": ["comprador", "lineas", "promocion", "transportadora"],
+  "tipos": {
+    "comprador": { "de": "sujeto" },
+    "lineas": { "lista": { "producto": { "tipo": "ref", "kind": "tienda.producto" }, "cantidad": "entero" } },
+    "promocion": "texto?",
+    "transportadora": { "de": "negocio", "campo": "carrier", "tipo": "texto" },
+    "direccion": "direccion",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["lineasDelPedido", "subtotal", "descuento", "impuesto", "total", "pedido", "envio", "cobroId"],
+  "para_lo_posterior": ["cobroId"],
+  "efimera": { "cerrar": ["direccion", "contacto"] },
+  "fases": {
+    "abrir": [
+      "revisar",
+      "cotizar",
+      "desglose",
+      "precios",
+      { "para_cada": "lineas", "como": "linea", "pasos": ["hallar", "apartar"] },
+      "pedir",
+      "autorizar"
+    ],
+    "cerrar": [
+      "capturar",
+      { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["consumir"] },
+      "despachar",
+      "cumplir",
+      "avisar"
+    ]
+  },
+  "pasos": {
+    "revisar": { "tipo": "tienda.revisar-lineas", "lee": ["lineas"], "escribe": ["aCotizar"] },
+    "cotizar": { "tipo": "pricing.cotizar", "lee": ["aCotizar", "promocion"], "escribe": ["cotizacion"] },
+    "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
+    "precios": { "tipo": "pricing.precios-por-linea", "lee": ["aCotizar", "cotizacion"], "escribe": ["lineasDelPedido"] },
+    "hallar": {
+      "tipo": "inventory.hallar",
+      "lee": ["linea.producto"],
+      "escribe": ["linea.itemId"],
+      "motivo": "no hay existencias declaradas"
+    },
+    "apartar": {
+      "tipo": "inventory.apartar",
+      "lee": ["linea.itemId", "linea.cantidad"],
+      "escribe": ["linea.holdId"],
+      "llave_base": "hold",
+      "motivo": "no se pudo apartar la mercancía",
+      "reserva": {
+        "consumado_por": "consumir",
+        "antes": "inventory.soltar",
+        "despues": "inventory.reponer",
+        "motivo": "compra no confirmada"
+      }
+    },
+    "pedir": {
+      "tipo": "orders.crear",
+      "lee": ["comprador", "lineasDelPedido", "total"],
+      "escribe": ["pedido"],
+      "llave": "order",
+      "motivo": "no se pudo registrar el pedido",
+      "reserva": { "consumado_por": "cumplir", "antes": "orders.cancelar", "motivo": "compra no confirmada" }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["comprador", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "compra no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "consumir": {
+      "tipo": "inventory.consumir",
+      "lee": ["hold.holdId"],
+      "cierra_reserva": "apartar",
+      "motivo": "no se pudo consumir la mercancía apartada"
+    },
+    "despachar": {
+      "tipo": "fulfillment.despachar",
+      "lee": ["pedido", "direccion", "transportadora"],
+      "escribe": ["envio"],
+      "llave": "ship",
+      "motivo": "no se pudo despachar tras cobrar"
+    },
+    "cumplir": { "tipo": "orders.cumplir", "lee": ["pedido"], "cierra_reserva": "pedir", "al_fallar": "seguir" },
+    "avisar": {
+      "tipo": "notifications.avisar",
+      "lee": ["comprador", "contacto", "total"],
+      "llave": "avisar",
+      "plantilla": "tienda.compra.confirmada",
+      "al_fallar": "seguir"
+    }
+  }
+}

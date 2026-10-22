@@ -60,6 +60,14 @@ public sealed class ConsumidorCmsDeBffReservasTests
             string.Join(Environment.NewLine, malas.Select(m => "  " + m)));
         // Y el recorrido no fue en vano: el cuerpo trae el horario con sus bloques.
         Assert.Contains("\"desde\"", cuerpo, StringComparison.Ordinal);
+
+        // Y lo que lee de la respuesta —las reservas que el horario nuevo dejó fuera— es un entero que el orquestador publica.
+        var campo = Synergos.CMS.Web.Services.Reservas.PublicadorDeOfertasDeReservas.CampoReservasFuera;
+        var respuesta = op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        var nombre = respuesta.GetProperty("$ref").GetString()!.Split('/').Last();
+        var propiedades = Raiz.GetProperty("components").GetProperty("schemas").GetProperty(nombre).GetProperty("properties");
+        Assert.True(propiedades.TryGetProperty(campo, out var fuera), $"{nombre} no publica «{campo}».");
+        Assert.Equal("integer", fuera.GetProperty("type").GetString());
     }
 
     /// <summary>

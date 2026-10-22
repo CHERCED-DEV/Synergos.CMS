@@ -378,6 +378,100 @@
         }
       }
     },
+    "/v1/flujos/reservas.servicio/disponibilidad": {
+      "post": {
+        "operationId": "ReservasServicioDisponibilidad",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservasServicioDisponibilidadEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservasServicioDisponibilidad"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "reservas.servicio",
+          "operacion": "disponibilidad"
+        }
+      }
+    },
     "/v1/flujos/reservas.servicio/{id}": {
       "get": {
         "operationId": "ReservasServicioConsultar",
@@ -1073,7 +1167,8 @@
           "cupos",
           "precio",
           "moneda",
-          "retirada"
+          "retirada",
+          "reservasFuera"
         ],
         "type": "object",
         "properties": {
@@ -1097,6 +1192,10 @@
           },
           "retirada": {
             "type": "boolean"
+          },
+          "reservasFuera": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1248,7 +1347,8 @@
             "required": [
               "servicio",
               "ventana",
-              "total"
+              "total",
+              "vence"
             ],
             "type": "object",
             "properties": {
@@ -1323,8 +1423,99 @@
                     "type": "null"
                   }
                 ]
+              },
+              "vence": {
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "format": "date-time"
               }
             }
+          }
+        }
+      },
+      "ReservasServicioDisponibilidad": {
+        "required": [
+          "flujo",
+          "datos"
+        ],
+        "type": "object",
+        "properties": {
+          "flujo": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "franjas"
+            ],
+            "type": "object",
+            "properties": {
+              "franjas": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "required": [
+                    "inicio",
+                    "fin",
+                    "libres"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "inicio": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "fin": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "libres": {
+                      "type": "integer",
+                      "format": "int32"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ReservasServicioDisponibilidadEntrada": {
+        "required": [
+          "servicio",
+          "desde",
+          "hasta"
+        ],
+        "type": "object",
+        "properties": {
+          "servicio": {
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "reservas.servicio"
+                ],
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -1429,7 +1620,8 @@
             "required": [
               "servicio",
               "ventana",
-              "total"
+              "total",
+              "vence"
             ],
             "type": "object",
             "properties": {
@@ -1504,6 +1696,13 @@
                     "type": "null"
                   }
                 ]
+              },
+              "vence": {
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "format": "date-time"
               }
             }
           },

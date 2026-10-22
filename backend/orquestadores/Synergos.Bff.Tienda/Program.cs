@@ -1,4 +1,6 @@
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
 using Synergos.Bff.Tienda.Clients;
 using Synergos.Bff.Tienda.Domain;
 using Synergos.Bff.Tienda.Endpoints;
@@ -34,22 +36,56 @@ var builder = WebApplication.CreateBuilder(args);
 // El hilo que permite seguir una compra por los seis procesos (HU #28).
 builder.AddCorrelation();
 
+// En minúscula porque es el prefijo de los códigos de rechazo (tienda.saga_not_found).
+// Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
+// mayúsculas, así que "tienda:Alerts" encuentra "Tienda:Alerts" del appsettings.
+var vocabulario = new SagaVocabulary("tienda", "la compra");
+
 builder.AddSagaMachinery<PurchaseSaga, TiendaCompensationExecutor>(
-    // En minúscula porque es el prefijo de los códigos de rechazo (tienda.saga_not_found).
-    // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
-    // mayúsculas, así que "tienda:Alerts" encuentra "Tienda:Alerts" del appsettings.
-    new SagaVocabulary("tienda", "la compra"),
+    vocabulario,
     TiendaCapabilities.Cart, TiendaCapabilities.Pricing, TiendaCapabilities.Inventory,
     TiendaCapabilities.Orders, TiendaCapabilities.Payments, TiendaCapabilities.Fulfillment);
 
 builder.Services.AddSingleton<TiendaCapabilities>();
 builder.Services.AddSingleton<PurchaseFlow>();
 
+// La oferta del catálogo (004-tienda-compra, R-9): el CMS publica precio y existencias de cada producto y
+// esto los deja en Pricing e Inventory, con los sujetos de las dos compras (la de la puerta y la de arriba).
+builder.Services.AddSingleton<OfertaDeTienda>();
+
+// La compra por la puerta (ADR 0140): flujos/tienda.compra.json sobre el host genérico, en sus propias
+// rutas (/v1/flujos/tienda.compra…), que sólo sirve el flujo declarado; /v1/purchases sigue siendo del
+// motor imperativo de arriba, que el CMS llama. Por eso el modo arranca en «declarado» (lote 2, matiz
+// 1): «imperativo» apaga la puerta de la tienda sin tocar el otro camino.
+var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
+if (declarado)
+{
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, new PasoRevisarLineas());
+
+    // Interino de N-12: los tipos del host más las líneas del pedido (TipoLineasDePedido).
+    builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoLineasDePedido()));
+
+    // El tope de códigos de promoción que no sirven por comprador (US 8; copia declarada del de Eventos hasta
+    // N-11): «cotizar» y «abrir» con código contestan distinto a uno que no existe, a uno vencido y a uno que
+    // vale. Tienda:Cupon:FallosPorVentana (10) y Tienda:Cupon:Ventana (00:15:00) los ajusta el despliegue.
+    builder.Services.AddSingleton(sp =>
+    {
+        var configuracion = sp.GetRequiredService<IConfiguration>();
+        return new IntentosDeCodigo(
+            sp.GetRequiredService<TimeProvider>(),
+            configuracion.GetValue("Tienda:Cupon:FallosPorVentana", IntentosDeCodigo.TopePorDefecto),
+            configuracion.GetValue("Tienda:Cupon:Ventana", IntentosDeCodigo.VentanaPorDefecto));
+    });
+}
+
 var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Tienda:ApiKey"]);
 app.MapTiendaEndpoints();
+// Las rutas del flujo las pone el host genérico; el cupón (recortar el código y frenar los que no sirven) se les
+// cuelga como filtro de un grupo sin prefijo —las rutas no cambian—, porque la línea no toca el mapeo del núcleo.
+if (declarado) app.MapGroup(string.Empty).AddEndpointFilter<CuponDeLaCompra>().MapFlujosDeclarados();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
