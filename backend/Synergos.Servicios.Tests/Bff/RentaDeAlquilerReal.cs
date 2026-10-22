@@ -830,7 +830,7 @@ public sealed class RentaDeAlquilerRealTests
     /// </summary>
     /// <remarks>
     /// Lo que N1 registra por petición es la línea de la correlación (con la ruta, que nombra el alquiler); una
-    /// línea POR PASO con el número no la da el intérprete hoy (NN-18 de la línea 005).
+    /// línea POR PASO con el número no la da el intérprete hoy (NN-20 de la línea 005; se anotó como NN-18).
     /// </remarks>
     [Fact]
     public async Task Cada_peticion_se_sigue_por_su_correlacion_y_el_registro_no_lleva_el_contacto()
