@@ -21,6 +21,13 @@ namespace Synergos.CMS.Web.Notifications;
 /// catálogo omite (sin SKU, sin un precio inequívoco) no tiene ficha, y tampoco oferta: la que tuviera se
 /// RETIRA, para que no se siga vendiendo lo que la ficha ya no muestra.</para>
 ///
+/// <para><b>Antes de pedir el producto, pregunta si el catálogo ya ve la ficha en la tienda</b>
+/// (<see cref="ITiendaEnElContenido"/>, sin log). Al publicar en lote —un import del árbol entero, una restauración, la
+/// caché sin calentar— una ficha puede publicarse antes de que el catálogo alcance su <c>siteRoot</c>: es pasajero, y
+/// entonces no se retira nada ni se pregunta al catálogo (que dejaría un ERR que es para las páginas); queda un aviso y
+/// se repara republicando. Una ficha de otro sitio tampoco se toca. Retirar es sólo para lo que el catálogo, viendo la
+/// ficha en la tienda, omite de verdad.</para>
+///
 /// <para><b>Nunca tumba el publicar</b>: el contenido ya se guardó cuando esto corre. Lo que falle queda en
 /// el log, y se repara republicando.</para>
 /// </remarks>
@@ -33,17 +40,20 @@ public sealed class OfertaDeTiendaAlPublicar : INotificationAsyncHandler<Content
     private readonly IProductCatalogProvider _catalogo;
     private readonly ITiendaOfferPublisher _ofertas;
     private readonly IOptionsMonitor<CatalogSettings> _fuentes;
+    private readonly ITiendaEnElContenido _tienda;
     private readonly ILogger<OfertaDeTiendaAlPublicar> _log;
 
     public OfertaDeTiendaAlPublicar(
         IProductCatalogProvider catalogo,
         ITiendaOfferPublisher ofertas,
         IOptionsMonitor<CatalogSettings> fuentes,
+        ITiendaEnElContenido tienda,
         ILogger<OfertaDeTiendaAlPublicar> log)
     {
         _catalogo = catalogo;
         _ofertas = ofertas;
         _fuentes = fuentes;
+        _tienda = tienda;
         _log = log;
     }
 
@@ -60,6 +70,15 @@ public sealed class OfertaDeTiendaAlPublicar : INotificationAsyncHandler<Content
         {
             var sku = contenido.GetValue<string>(PropiedadDelSku)?.Trim();
             if (string.IsNullOrEmpty(sku)) continue;
+
+            if (!_tienda.Ve(contenido.Key))
+            {
+                _log.LogWarning(
+                    "Se publicó el producto {Sku} y el catálogo no lo ve en la tienda (todavía no está en la caché, como en "
+                    + "un import, o es de otro sitio): no se toca su oferta. Si es de la tienda, se repara republicando "
+                    + "(POST /api/shop/oferta/republicar).", sku);
+                continue;
+            }
 
             try
             {
