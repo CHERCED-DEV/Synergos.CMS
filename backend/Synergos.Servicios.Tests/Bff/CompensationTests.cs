@@ -8,8 +8,53 @@ using Synergos.Core;
 
 namespace Synergos.CMS.Tests.Bff;
 
+/// <summary>Lo que el oráculo mira de una cita, por cualquiera de los dos motores: la saga, la reserva y el copago.</summary>
+/// <param name="Saga">La saga tal como la guardó el motor.</param>
+/// <param name="ReservationId">La reserva que devolvió Booking al confirmar; nula mientras no se confirme.</param>
+/// <param name="Total">El copago con que se agendó.</param>
+internal sealed record CitaVista(ISaga Saga, string? ReservationId, Money Total) : ISaga
+{
+    public string Id => Saga.Id;
+    public SagaStatus Status => Saga.Status;
+    public IReadOnlyList<Compensation> Compensations => Saga.Compensations;
+    public DateTimeOffset StartedAtUtc => Saga.StartedAtUtc;
+    public DateTimeOffset? AlertedAtUtc => Saga.AlertedAtUtc;
+    public int AlertsSent => Saga.AlertsSent;
+}
+
 /// <summary>
-/// Cubre la compensación cruzada de <see cref="AppointmentFlow"/>.
+/// Lo que el oráculo le pide a un motor de la cita, con los nombres de <see cref="AppointmentFlow"/>: el imperativo
+/// lo cumple con el flujo de siempre; el declarado, por las rutas de la puerta.
+/// </summary>
+internal interface IFlujoDeLaCita
+{
+    /// <summary>El tipo de compensación con que este motor devuelve un cobro ya capturado.</summary>
+    string Devolver { get; }
+
+    Task<Result<CitaVista>> ScheduleAsync(
+        Ref patient, Ref professional, string resourceId, Ref service, TimeWindow window, string sagaId, CancellationToken ct);
+
+    Task<Result<CitaVista>> ConfirmAsync(string sagaId, CancellationToken ct);
+
+    Task<Result<CitaVista>> CancelAsync(string sagaId, CancellationToken ct);
+
+    Task<Result<CitaVista>> RetryStuckAsync(string sagaId, CancellationToken ct);
+
+    Task<Result<Money>> CopagoAsync(Ref service, CancellationToken ct);
+
+    Result<CitaVista> Get(string id);
+
+    IReadOnlyList<ISaga> PendingCompensations();
+}
+
+/// <summary>Lo que llama el barrido: una vuelta de compensación sobre una saga.</summary>
+internal interface IMotorDeLaCita
+{
+    Task CompensateAsync(string sagaId, string reason, CancellationToken ct);
+}
+
+/// <summary>
+/// Cubre la compensación cruzada de la cita, por cualquiera de sus dos motores.
 /// </summary>
 /// <remarks>
 /// <para>Es lo único que este orquestador aporta y que ninguna capacidad puede aportar. Los
@@ -19,10 +64,15 @@ namespace Synergos.CMS.Tests.Bff;
 /// <para>Las capacidades se simulan con un <see cref="HttpMessageHandler"/> guionado: es la
 /// única forma de que un test provoque <i>a voluntad</i> que Booking se caiga justo entre el
 /// cobro y la confirmación. Con procesos reales ese instante no se puede elegir.</para>
+///
+/// <para><b>Partido en base y conductor</b> (línea 003, research R4): las aserciones son las de siempre y las
+/// corre cada motor sobre el MISMO guion. <see cref="CompensationTests"/> construye <see cref="AppointmentFlow"/>
+/// como siempre; <see cref="CompensacionDeLaCitaDeclaradaTests"/> levanta el host de <c>salud.cita</c>. Lo único
+/// que cada motor dice por su cuenta es cómo se llama la compensación que devuelve un cobro.</para>
 /// </remarks>
-public sealed class CompensationTests
+public abstract class OraculoDeLaCita
 {
-    private sealed class RelojFalso : TimeProvider
+    private protected sealed class RelojFalso : TimeProvider
     {
         private DateTimeOffset _now;
         public RelojFalso(DateTimeOffset inicio) => _now = inicio;
@@ -31,7 +81,7 @@ public sealed class CompensationTests
     }
 
     /// <summary>Capacidades guionadas: cada ruta responde lo que se le diga, y cuenta las llamadas.</summary>
-    private sealed class CapacidadesFalsas : HttpMessageHandler
+    private protected sealed class CapacidadesFalsas : HttpMessageHandler
     {
         private readonly Dictionary<string, Func<HttpRequestMessage, HttpResponseMessage>> _rutas = new(StringComparer.Ordinal);
 
@@ -92,7 +142,7 @@ public sealed class CompensationTests
                 : string.Equals(patron, clave, StringComparison.Ordinal);
     }
 
-    private sealed class FabricaFalsa : IHttpClientFactory
+    private protected sealed class FabricaFalsa : IHttpClientFactory
     {
         private readonly CapacidadesFalsas _handler;
         public FabricaFalsa(CapacidadesFalsas h) => _handler = h;
@@ -100,37 +150,26 @@ public sealed class CompensationTests
             => new(_handler, disposeHandler: false) { BaseAddress = new Uri("http://capacidad.local/") };
     }
 
-    private sealed class MemoriaSagas : ISagaStore<AppointmentSaga>
-    {
-        private readonly Dictionary<string, AppointmentSaga> _s = new(StringComparer.Ordinal);
-        public AppointmentSaga? Find(string id) => _s.GetValueOrDefault(id);
-        public IReadOnlyList<AppointmentSaga> WithPendingCompensations()
-            => _s.Values.Where(x => x.IsUnwinding() && x.Pending().Count > 0).ToList();
-        public IReadOnlyList<AppointmentSaga> StartedBefore(DateTimeOffset limite)
-            => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
-
-        public void Put(AppointmentSaga saga) => _s[saga.Id] = saga;
-
-        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
-        public void Invalidate() { }
-    }
-
-    private static readonly DateTimeOffset Ahora = new(2026, 3, 2, 10, 0, 0, TimeSpan.Zero);
-    private static readonly Ref Paciente = Ref.Create("salud.paciente", "p-1");
-    private static readonly Ref Profesional = Ref.Create("salud.profesional", "dr-1");
-    private static readonly Ref Servicio = Ref.Create("salud.servicio", "consulta");
-    private static readonly TimeWindow Cita = TimeWindow.Of(Ahora.AddDays(1), Ahora.AddDays(1).AddMinutes(30));
+    protected static readonly DateTimeOffset Ahora = new(2026, 3, 2, 10, 0, 0, TimeSpan.Zero);
+    protected static readonly Ref Paciente = Ref.Create("salud.paciente", "p-1");
+    protected static readonly Ref Profesional = Ref.Create("salud.profesional", "dr-1");
+    protected static readonly Ref Servicio = Ref.Create("salud.servicio", "consulta");
+    protected static readonly TimeWindow Cita = TimeWindow.Of(Ahora.AddDays(1), Ahora.AddDays(1).AddMinutes(30));
 
     // El motor va en el contexto porque es lo que el BARRIDO llama. Simular una vuelta del
     // barrido a través del flujo probaría un proxy; llamando al motor se prueba el camino real.
-    private sealed record Contexto(
-        AppointmentFlow Flow, CapacidadesFalsas Caps, MemoriaSagas Sagas, RelojFalso Reloj,
-        SagaEngine<AppointmentSaga> Motor);
+    private protected sealed record Contexto(
+        IFlujoDeLaCita Flow, CapacidadesFalsas Caps, Func<string, ISaga?> Sagas, RelojFalso Reloj,
+        IMotorDeLaCita Motor);
 
     /// <summary>Guion del camino feliz: todo responde bien.</summary>
-    private static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
+    /// <remarks>
+    /// La cotización va con la forma entera de <c>Api.Pricing</c>: el imperativo sólo lee el total, el declarado la
+    /// desglosa (<c>pricing.desglose</c>) y sin subtotal ni impuesto no tendría qué leer.
+    /// </remarks>
+    private protected static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
         .Ok("POST /v1/grants/check", """{"id":"g1","active":true}""")
-        .Ok("POST /v1/quotes", """{"total":{"amount":50000,"currency":"COP"}}""")
+        .Ok("POST /v1/quotes", """{"subtotal":{"amount":50000,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":50000,"currency":"COP"}}""")
         .Ok("POST /v1/holds", """{"id":"h1","resourceId":"r1","expiresAt":"2026-03-03T10:10:00+00:00"}""")
         .Ok("POST /v1/payments/pg1/capture", """{"id":"pg1","status":"Captured","amount":{"amount":50000,"currency":"COP"},"refundable":{"amount":50000,"currency":"COP"}}""")
         .Ok("POST /v1/payments/pg1/void", """{"id":"pg1","status":"Voided","amount":{"amount":50000,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}""")
@@ -142,7 +181,7 @@ public sealed class CompensationTests
         .Ok("POST /v1/deliveries", """{"id":"d1","status":"Sent"}""");
 
     /// <summary>Una guardia configurada, que es lo que un despliegue de verdad tiene.</summary>
-    private static AlertOptions Guardia() => new()
+    protected static AlertOptions Guardia() => new()
     {
         ToKind = "salud.guardia",
         ToId = "operaciones",
@@ -150,24 +189,11 @@ public sealed class CompensationTests
         TemplateKey = "salud.compensacion.colgada",
     };
 
-    private static Contexto Nuevo(CapacidadesFalsas caps, AlertOptions? alertas = null)
-    {
-        var sagas = new MemoriaSagas();
-        var reloj = new RelojFalso(Ahora);
-        var fabrica = new FabricaFalsa(caps);
-        var api = new SaludCapabilities(fabrica);
-        var vocabulario = new SagaVocabulary("salud", "la cita");
-        var comp = new Compensator<AppointmentSaga>(new SaludCompensationExecutor(api), reloj, NullLogger<Compensator<AppointmentSaga>>.Instance);
-        var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(alertas ?? Guardia()));
-        var motor = new SagaEngine<AppointmentSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
-            NullLogger<SagaEngine<AppointmentSaga>>.Instance);
-        return new Contexto(
-            new AppointmentFlow(api, motor, reloj, NullLogger<AppointmentFlow>.Instance),
-            caps, sagas, reloj, motor);
-    }
+    /// <summary>Un motor nuevo sobre esas capacidades, con esa guardia (la de <see cref="Guardia"/> si no se da).</summary>
+    private protected abstract Contexto Nuevo(CapacidadesFalsas caps, AlertOptions? alertas = null);
 
     /// <summary>Lleva la saga hasta rendirse: agotar los intentos con la capacidad caída.</summary>
-    private static async Task<AppointmentSaga> HastaRendirse(Contexto ctx, string id = "saga-1")
+    private static async Task<CitaVista> HastaRendirse(Contexto ctx, string id = "saga-1")
     {
         var agendada = await Agendar(ctx.Flow, id);
         await ctx.Flow.ConfirmAsync(id, CancellationToken.None);
@@ -186,7 +212,7 @@ public sealed class CompensationTests
         .Falla("POST /v1/holds/h1/confirm", HttpStatusCode.Gone, "booking.hold_expired")
         .Caida("GET /v1/payments/pg1");
 
-    private static Task<Result<AppointmentSaga>> Agendar(AppointmentFlow flow, string id = "saga-1")
+    private static Task<Result<CitaVista>> Agendar(IFlujoDeLaCita flow, string id = "saga-1")
         => flow.ScheduleAsync(Paciente, Profesional, "r1", Servicio, Cita, id, CancellationToken.None);
 
     // ── El camino feliz, para tener contra qué contrastar ────────────────────
@@ -273,7 +299,7 @@ public sealed class CompensationTests
 
         var saga = flow.Get(agendada.Value.Id).Value;
         Assert.Equal(SagaStatus.Compensating, saga.Status);
-        Assert.Contains(saga.Pending(), c => c.Kind == SaludCompensations.RefundPayment);
+        Assert.Contains(saga.Pending(), c => c.Kind == flow.Devolver);
         Assert.Single(flow.PendingCompensations());
     }
 
@@ -722,7 +748,7 @@ public sealed class CompensationTests
     {
         // Un pago de cero lo rechazaría Payments, y registrarlo ensuciaría la conciliación con
         // filas que no corresponden a ningún movimiento.
-        var caps = Feliz().Ok("POST /v1/quotes", """{"total":{"amount":0,"currency":"COP"}}""");
+        var caps = Feliz().Ok("POST /v1/quotes", """{"subtotal":{"amount":0,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":0,"currency":"COP"}}""");
         var (flow, _, _, _, _) = Nuevo(caps);
 
         var agendada = await Agendar(flow);
@@ -742,7 +768,7 @@ public sealed class CompensationTests
     {
         var (flow, _, _, _, _) = Nuevo(Feliz());
 
-        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var cotizado = (await flow.CopagoAsync(Servicio, CancellationToken.None)).Value;
         var agendada = await Agendar(flow);
 
         Assert.Equal(Money.Of(50_000m, "COP"), cotizado);
@@ -752,13 +778,102 @@ public sealed class CompensationTests
     [Fact]
     public async Task Sin_precio_publicado_la_cotizacion_es_cero_como_al_agendar()
     {
-        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.NotFound, "pricing.no_price");
+        // El código es el de Api.Pricing (PricingService: price_not_found). El guion decía «no_price»,
+        // que ninguna capacidad emite: con «cualquier falla = cero» daba igual, con la regla de P2 no.
+        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.NotFound, "pricing.price_not_found");
         var (flow, _, _, _, _) = Nuevo(caps);
 
-        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var cotizado = (await flow.CopagoAsync(Servicio, CancellationToken.None)).Value;
         var agendada = await Agendar(flow);
 
         Assert.True(cotizado.IsZero);
         Assert.Equal(cotizado, agendada.Value.Total);
+    }
+
+    [Fact]
+    public async Task Con_precios_caido_no_se_agenda_gratis_ni_se_aparta_nada()
+    {
+        // P2 (lote 2): sólo la AUSENCIA de precio es cero. Una caída rechaza, y antes de tomar el cupo:
+        // un cupo tomado y soltado es una compensación que no hacía falta.
+        var caps = Feliz().Falla("POST /v1/quotes", System.Net.HttpStatusCode.ServiceUnavailable, "pricing.unavailable");
+        var (flow, _, _, _, _) = Nuevo(caps);
+
+        var cotizado = await flow.CopagoAsync(Servicio, CancellationToken.None);
+        var r = await Agendar(flow);
+
+        Assert.Equal("pricing.unavailable", cotizado.Rejection!.Code);
+        Assert.Equal("pricing.unavailable", r.Rejection!.Code);
+        Assert.Equal(0, caps.Veces("POST", "/v1/holds"));
+        Assert.Equal(0, caps.Veces("POST", "/v1/payments"));
+    }
+}
+
+/// <summary>
+/// El oráculo de la cita (<see cref="OraculoDeLaCita"/>) por el flujo IMPERATIVO: <see cref="AppointmentFlow"/>
+/// construido a mano como siempre, sobre un almacén en memoria.
+/// </summary>
+public sealed class CompensationTests : OraculoDeLaCita
+{
+    private sealed class MemoriaSagas : ISagaStore<AppointmentSaga>
+    {
+        private readonly Dictionary<string, AppointmentSaga> _s = new(StringComparer.Ordinal);
+        public AppointmentSaga? Find(string id) => _s.GetValueOrDefault(id);
+        public IReadOnlyList<AppointmentSaga> WithPendingCompensations()
+            => _s.Values.Where(x => x.IsUnwinding() && x.Pending().Count > 0).ToList();
+        public IReadOnlyList<AppointmentSaga> StartedBefore(DateTimeOffset limite)
+            => _s.Values.Where(x => x.Status == SagaStatus.Running && x.StartedAtUtc < limite).ToList();
+
+        public void Put(AppointmentSaga saga) => _s[saga.Id] = saga;
+
+        // Un fake en memoria no tiene caché que vaciar: la verdad ES el diccionario (#34).
+        public void Invalidate() { }
+    }
+
+    private protected override Contexto Nuevo(CapacidadesFalsas caps, AlertOptions? alertas = null)
+    {
+        var sagas = new MemoriaSagas();
+        var reloj = new RelojFalso(Ahora);
+        var fabrica = new FabricaFalsa(caps);
+        var api = new SaludCapabilities(fabrica);
+        var vocabulario = new SagaVocabulary("salud", "la cita");
+        var comp = new Compensator<AppointmentSaga>(new SaludCompensationExecutor(api), reloj, NullLogger<Compensator<AppointmentSaga>>.Instance);
+        var aviso = new CompensationAlert(fabrica, vocabulario, Options.Create(alertas ?? Guardia()));
+        var motor = new SagaEngine<AppointmentSaga>(sagas, comp, aviso, ArriendoDePrueba.Nuevo(), vocabulario, reloj,
+            NullLogger<SagaEngine<AppointmentSaga>>.Instance);
+        return new Contexto(
+            new FlujoImperativo(new AppointmentFlow(api, motor, reloj, NullLogger<AppointmentFlow>.Instance)),
+            caps, sagas.Find, reloj, new MotorImperativo(motor));
+    }
+
+    /// <summary>El flujo de siempre; de cada cita, lo que el oráculo mira.</summary>
+    private sealed class FlujoImperativo(AppointmentFlow flow) : IFlujoDeLaCita
+    {
+        public string Devolver => SaludCompensations.RefundPayment;
+
+        public async Task<Result<CitaVista>> ScheduleAsync(
+            Ref patient, Ref professional, string resourceId, Ref service, TimeWindow window, string sagaId, CancellationToken ct)
+            => Vista(await flow.ScheduleAsync(patient, professional, resourceId, service, window, sagaId, ct));
+
+        public async Task<Result<CitaVista>> ConfirmAsync(string sagaId, CancellationToken ct)
+            => Vista(await flow.ConfirmAsync(sagaId, ct));
+
+        public async Task<Result<CitaVista>> CancelAsync(string sagaId, CancellationToken ct)
+            => Vista(await flow.CancelAsync(sagaId, ct));
+
+        public async Task<Result<CitaVista>> RetryStuckAsync(string sagaId, CancellationToken ct)
+            => Vista(await flow.RetryStuckAsync(sagaId, ct));
+
+        public Task<Result<Money>> CopagoAsync(Ref service, CancellationToken ct) => flow.CopagoAsync(service, ct);
+
+        public Result<CitaVista> Get(string id) => Vista(flow.Get(id));
+
+        public IReadOnlyList<ISaga> PendingCompensations() => flow.PendingCompensations();
+
+        private static Result<CitaVista> Vista(Result<AppointmentSaga> r) => r.Map(s => new CitaVista(s, s.ReservationId, s.Total));
+    }
+
+    private sealed class MotorImperativo(SagaEngine<AppointmentSaga> motor) : IMotorDeLaCita
+    {
+        public Task CompensateAsync(string sagaId, string reason, CancellationToken ct) => motor.CompensateAsync(sagaId, reason, ct);
     }
 }
