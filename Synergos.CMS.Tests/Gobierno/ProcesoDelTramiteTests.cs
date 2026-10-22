@@ -107,4 +107,109 @@ public sealed class ProcesoDelTramiteTests
                 $"«{t.Name}» desde «{t.From}» exige [{string.Join(",", t.RequiredRoles)}]: tiene que exigir «funcionario» o «ciudadano».");
         }
     }
+
+    // ── Los dos motores contra la v2 (T010, FR-007 y FR-010) ───────────────────────────
+
+    private static readonly string[] EstadosAbiertos = { "submitted", "in-review", "info-requested" };
+    private static readonly string[] Acciones = { "take", "approve", "reject", "request-info", "resubmit" };
+    private static readonly string[] Caras = { "funcionario", "ciudadano" };
+
+    /// <summary>
+    /// Lo que contesta el motor en proceso a una acción en un estado: <c>ok</c>, <c>no-op</c> (el destino ya es el
+    /// actual: idempotente) o <c>409</c>; <c>no-existe</c> si su tabla no la nombra.
+    /// </summary>
+    private static string EfectoDelMotorEnProceso(string estado, string accion)
+    {
+        if (!StubCaseWorkflowService.Tabla.TryGetValue(accion, out var regla))
+        {
+            return "no-existe";
+        }
+        if (GovStatusSlugs.ToSlug(regla.To) == estado)
+        {
+            return "no-op";
+        }
+        return regla.From.Any(o => GovStatusSlugs.ToSlug(o) == estado) ? "ok" : "409";
+    }
+
+    /// <summary>
+    /// Lo que contesta el cliente de la capacidad con esa definición: el destino por (acción, origen) o por la acción
+    /// (para reconocer la idempotencia), y la legalidad la juzga la capacidad con la transición desde el estado.
+    /// </summary>
+    private static string EfectoDeLaDefinicion(Definicion d, string estado, string accion)
+    {
+        var legal = d.Transitions.FirstOrDefault(t => t.Name == accion && t.From == estado);
+        var destino = (legal ?? d.Transitions.FirstOrDefault(t => t.Name == accion))?.To;
+        if (destino is null)
+        {
+            return "no-existe";
+        }
+        if (destino == estado)
+        {
+            return "no-op";
+        }
+        return legal is not null ? "ok" : "409";
+    }
+
+    /// <summary>
+    /// Los dos motores contestan lo mismo en los 15 pares estado abierto × acción (SC-001).
+    /// </summary>
+    /// <remarks>
+    /// Medido el 2026-10-16 con la v1: 3 de 9 pares divergían —con la capacidad conectada no se podía rechazar después
+    /// de pedir información— y ningún test lo veía, porque cada motor se probaba contra sí mismo.
+    /// </remarks>
+    [Fact]
+    public void El_motor_en_proceso_contesta_lo_mismo_que_la_v2_en_los_15_pares()
+    {
+        var v2 = Clave(V2);
+        var divergen = (
+            from estado in EstadosAbiertos
+            from accion in Acciones
+            let enProceso = EfectoDelMotorEnProceso(estado, accion)
+            let capacidad = EfectoDeLaDefinicion(v2, estado, accion)
+            where enProceso != capacidad
+            select $"({estado}, {accion}): en proceso «{enProceso}», con la capacidad «{capacidad}»").ToList();
+
+        Assert.True(divergen.Count == 0,
+            $"Divergen {divergen.Count} de {EstadosAbiertos.Length * Acciones.Length} pares:\n" + string.Join("\n", divergen));
+    }
+
+    /// <summary>
+    /// Las acciones que se sirven son exactamente las transiciones legales de la v2 desde cada estado para cada cara.
+    /// </summary>
+    /// <remarks>
+    /// <para>Se calculan con el proceso del motor en proceso —el que sirve un clon limpio— y se comparan con lo que
+    /// la v2 permite, leído aparte del calculador: así una cara cambiada en la tabla, una acción de más o una de menos
+    /// se ven aquí, y no como un botón que la capacidad rechaza (SC-002).</para>
+    /// </remarks>
+    [Fact]
+    public void Las_acciones_servidas_son_exactamente_las_legales_de_la_v2_por_estado_y_cara()
+    {
+        var v2 = Clave(V2);
+        var estados = EstadosAbiertos.Concat(v2.FinalStates).ToList();
+
+        foreach (var estado in estados)
+        {
+            foreach (var cara in Caras)
+            {
+                var legales = v2.FinalStates.Contains(estado)
+                    ? new List<string>()
+                    : v2.Transitions.Where(t => t.From == estado && t.RequiredRoles.Contains(cara))
+                        .Select(t => t.Name).Distinct().ToList();
+
+                var servidas = AccionesDelExpediente.Calcular(
+                    StubCaseWorkflowService.Proceso, StubCaseWorkflowService.EstadosFinales, estado, cara);
+
+                Assert.True(legales.SequenceEqual(servidas),
+                    $"En «{estado}» a la cara «{cara}» se sirve [{string.Join(", ", servidas)}] y la v2 permite [{string.Join(", ", legales)}].");
+            }
+        }
+    }
+
+    [Fact] // los finales del motor en proceso son los de la v2: lo que uno da por cerrado el otro también
+    public void Los_finales_del_motor_en_proceso_son_los_de_la_v2()
+    {
+        Assert.Equal(
+            Clave(V2).FinalStates.OrderBy(s => s, StringComparer.Ordinal),
+            StubCaseWorkflowService.EstadosFinales.OrderBy(s => s, StringComparer.Ordinal));
+    }
 }
