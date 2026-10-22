@@ -139,6 +139,25 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
             ? Result.Ok(s)
             : _reglas.NoExiste(sagaId);
 
+    /// <summary>
+    /// Las sagas de este flujo que son de <paramref name="dueno"/> —en <paramref name="estado"/>, si se pide—, de la
+    /// más nueva a la más vieja y por página (núcleo, NB-6 de 011 y NN-7 de 005): «mis reservas».
+    /// </summary>
+    /// <remarks>
+    /// Sólo del dueño, como consultar: no hay forma de pedir las de otro. Las de otro flujo del mismo orquestador
+    /// no salen, aunque compartan almacén.
+    /// </remarks>
+    public (IReadOnlyList<TSaga> Items, int Total) Listar(Ref dueno, SagaStatus? estado, int offset, int limit)
+    {
+        ArgumentNullException.ThrowIfNull(dueno);
+        var todas = _sagas.DeDueno(dueno).Where(_esDelFlujo).Where(s => estado is null || s.Status == estado).ToList();
+        return (todas.Skip(Math.Max(0, offset)).Take(Math.Max(0, limit)).ToList(), todas.Count);
+    }
+
+    /// <summary>Una lectura sin saga (núcleo, NB-3 de 011): sin dueño, sin escribir nada.</summary>
+    public Task<Result<FlowContext>> LeerAsync(string lectura, FlowContext entrada, CancellationToken ct)
+        => _flujo.LeerAsync(lectura, entrada, ct);
+
     /// <summary>La fase que abre, anticipada hasta antes de reservar, sin escribir nada (ADR 0140, el cupón).</summary>
     public Task<Result<FlowContext>> AnticiparAsync(FlowContext entrada, CancellationToken ct)
         => _flujo.AnticiparAsync(_abre, entrada, ct);

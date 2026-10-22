@@ -18,13 +18,27 @@ public sealed class AlquilerFeatureSettings : SeccionDeNegocio<AlquilerFeatureSi
     /// <summary>Dónde vive la API del alquiler: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/alquiler";
 
+    /// <summary>
+    /// Por dónde alquila el elemento, si el despliegue lo declara: <c>puerta</c> o <c>directa</c>
+    /// (<see cref="CaminoDeCompra"/>, línea 005 research R9). Sin valor no se declara nada y decide la regla: la
+    /// puerta cuando abre <c>alquiler.renta</c>, y la ruta directa en otro caso.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío vuelve a la regla aunque los valores base declaren uno.</remarks>
+    public string? RentalPath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeAlquiler Fusionar(AlquilerFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            RentalPath: CaminoDeCompra.Normalizar(propio?.RentalPath ?? RentalPath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeAlquiler negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            ReglasDeNegocio.Camino("RentalPath", negocio.RentalPath),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +48,7 @@ public sealed class AlquilerFeatureSitio
 {
     /// <inheritdoc cref="AlquilerFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="AlquilerFeatureSettings.RentalPath"/>
+    public string? RentalPath { get; init; }
 }

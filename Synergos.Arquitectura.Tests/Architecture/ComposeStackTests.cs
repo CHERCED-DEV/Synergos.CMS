@@ -249,6 +249,146 @@ public sealed class ComposeStackTests
         }
     }
 
+    /// <summary>
+    /// Un orquestador DECLARADO (núcleo N1, <c>AddOrquestadorDeclarado</c>) no nombra sus capacidades en su
+    /// <c>Program.cs</c>: las nombran los pasos de sus <c>flujos/*.json</c>. Leídas aparte del generador, que es
+    /// lo que distingue «el generador las reparte» de «el generador cree que las reparte» (#14).
+    /// </summary>
+    [Fact]
+    public void Todo_orquestador_declarado_llega_a_las_capacidades_de_sus_flujos()
+    {
+        var capacidades = Capacidades(Servicios());
+        var compose = ComposeSinComentarios();
+
+        foreach (var dir in Proyectos.Directorios().Where(EsOrquestadorDeclarado))
+        {
+            var prefijo = Path.GetFileName(dir)["Synergos.Bff.".Length..];
+            var faltan = CapacidadesDeLosFlujos(dir, capacidades).Except(CapacidadesEnElCompose(compose, prefijo)).ToList();
+
+            Assert.True(faltan.Count == 0,
+                $"{Path.GetFileName(dir)} tiene pasos de {string.Join(", ", faltan)} en sus flujos y el compose no le dice "
+                + "cómo llegar: caería a localhost, que es él mismo.");
+        }
+    }
+
+    [Fact]
+    public void Un_orquestador_declarado_saca_sus_capacidades_de_sus_flujos_y_el_tipado_sigue_igual()
+    {
+        var raiz = Path.Combine(Path.GetTempPath(), "compose-declarado-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            ArbolSintetico(raiz);
+
+            var (codigo, salida, error) = EjecutarNodeEn(raiz, Path.Combine(raiz, "tools", "compose-gen.mjs"));
+            Assert.True(codigo == 0, $"compose-gen salió con {codigo}:{Environment.NewLine}{error}{salida}");
+
+            var compose = string.Join('\n', File.ReadAllLines(Path.Combine(raiz, "compose.prod.yml"))
+                .Where(l => !l.TrimStart().StartsWith('#')));
+            var capacidades = new HashSet<string>(["booking", "inventory", "notifications", "payments", "pricing", "sessions"], StringComparer.Ordinal);
+            var declarado = Path.Combine(raiz, "backend", "orquestadores", "Synergos.Bff.Prueba");
+
+            // Lo que el generador repartió es lo que nombran los pasos y los deshacer, leído aparte, más el aviso.
+            Assert.True(EsOrquestadorDeclarado(declarado));
+            Assert.Equal(new[] { "booking", "payments", "pricing" }, CapacidadesDeLosFlujos(declarado, capacidades));
+            Assert.Equal(new[] { "booking", "notifications", "payments", "pricing" }, CapacidadesEnElCompose(compose, "Prueba"));
+
+            // El tipado sale como siempre, de su Program.cs: lo de los flujos no se le mezcla.
+            Assert.Equal(new[] { "inventory", "notifications" }, CapacidadesEnElCompose(compose, "Tipado"));
+
+            // Un declarado sin flujos no se genera con sólo el aviso: se dice.
+            File.Delete(Path.Combine(declarado, "flujos", "prueba.cita.json"));
+            var sinFlujos = EjecutarNodeEn(raiz, Path.Combine(raiz, "tools", "compose-gen.mjs"));
+            Assert.NotEqual(0, sinFlujos.Codigo);
+            Assert.Contains("no tiene flujos/*.json", sinFlujos.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true); }
+            catch (IOException) { /* un temporal */ }
+        }
+    }
+
+    /// <summary>
+    /// Un árbol mínimo con el generador de verdad: seis capacidades, un orquestador declarado con un flujo
+    /// (pasos de forma, del dominio, de tres capacidades y sus deshacer) y uno tipado que nombra su capacidad.
+    /// </summary>
+    private static void ArbolSintetico(string raiz)
+    {
+        Directory.CreateDirectory(Path.Combine(raiz, "tools"));
+        foreach (var script in new[] { "compose-gen.mjs", "service-matrix.mjs" })
+        {
+            File.Copy(Path.Combine(RepoRoot(), "tools", script), Path.Combine(raiz, "tools", script));
+        }
+
+        foreach (var cap in new[] { "Booking", "Inventory", "Notifications", "Payments", "Pricing", "Sessions" })
+        {
+            var dir = Directory.CreateDirectory(Path.Combine(raiz, "backend", "capacidades", $"Synergos.Api.{cap}")).FullName;
+            File.WriteAllText(Path.Combine(dir, "Program.cs"), "var app = WebApplication.CreateBuilder(args).Build();\n");
+        }
+
+        var declarado = Directory.CreateDirectory(Path.Combine(raiz, "backend", "orquestadores", "Synergos.Bff.Prueba", "flujos")).Parent!.FullName;
+        File.WriteAllText(Path.Combine(declarado, "Program.cs"),
+            "builder.AddOrquestadorDeclarado(new SagaVocabulary(\"prueba\", \"la prueba\"), typeof(Program).Assembly);\n");
+        File.WriteAllText(Path.Combine(declarado, "flujos", "prueba.cita.json"), """
+            {
+              "clave": "prueba.cita",
+              "pasos": {
+                "lineas": { "tipo": "forma.una-linea" },
+                "propio": { "tipo": "prueba.validar" },
+                "cotizar": { "tipo": "pricing.cotizar" },
+                "apartar": { "tipo": "booking.apartar", "reserva": { "consumado_por": "confirmar", "antes": "booking.liberar", "despues": "booking.cancelar" } },
+                "autorizar": { "tipo": "payments.autorizar", "reserva": { "consumado_por": "capturar", "antes": "payments.anular" } }
+              }
+            }
+            """);
+
+        var tipado = Directory.CreateDirectory(Path.Combine(raiz, "backend", "orquestadores", "Synergos.Bff.Tipado")).FullName;
+        File.WriteAllText(Path.Combine(tipado, "Program.cs"), "builder.AddSagaMachinery(vocabulario, [TipadoCapabilities.Inventory]);\n");
+    }
+
+    private static HashSet<string> Capacidades(IEnumerable<string> servicios)
+        => servicios.Where(s => s.StartsWith("api-", StringComparison.Ordinal)).Select(s => s["api-".Length..]).ToHashSet(StringComparer.Ordinal);
+
+    private static bool EsOrquestadorDeclarado(string dir)
+        => Path.GetFileName(dir).StartsWith("Synergos.Bff.", StringComparison.Ordinal)
+           && File.Exists(Path.Combine(dir, "Program.cs"))
+           && Regex.IsMatch(File.ReadAllText(Path.Combine(dir, "Program.cs")), @"\bAddOrquestadorDeclarado\s*\(");
+
+    /// <summary>
+    /// Lo que nombran los flujos de un orquestador declarado: el prefijo de cada paso y de cada deshacer que
+    /// sea una capacidad que existe. Un prefijo que no lo es (<c>forma</c>, el del dominio) no llama a nadie.
+    /// </summary>
+    private static IReadOnlyList<string> CapacidadesDeLosFlujos(string dir, ISet<string> capacidades)
+    {
+        var salida = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var fichero in Directory.EnumerateFiles(Path.Combine(dir, "flujos"), "*.json"))
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(fichero));
+            if (!doc.RootElement.TryGetProperty("pasos", out var pasos)) continue;
+
+            foreach (var paso in pasos.EnumerateObject().Select(p => p.Value))
+            {
+                var tipos = new List<System.Text.Json.JsonElement?> { Propiedad(paso, "tipo") };
+                if (Propiedad(paso, "reserva") is { } reserva) tipos.AddRange([Propiedad(reserva, "antes"), Propiedad(reserva, "despues")]);
+
+                foreach (var tipo in tipos.OfType<System.Text.Json.JsonElement>().Select(t => t.GetString()).OfType<string>())
+                {
+                    var prefijo = tipo.Split('.')[0].ToLowerInvariant();
+                    if (capacidades.Contains(prefijo)) salida.Add(prefijo);
+                }
+            }
+        }
+        return salida.ToList();
+
+        static System.Text.Json.JsonElement? Propiedad(System.Text.Json.JsonElement e, string nombre)
+            => e.TryGetProperty(nombre, out var v) ? v : null;
+    }
+
+    /// <summary>Las capacidades a las que el compose manda a un orquestador: sus líneas <c>{Prefijo}__Capabilities__{cap}__BaseUrl</c>.</summary>
+    private static IReadOnlyList<string> CapacidadesEnElCompose(string compose, string prefijo)
+        => Regex.Matches(compose, $@"\b{Regex.Escape(prefijo)}__Capabilities__(?<c>[a-z0-9]+)__BaseUrl:")
+            .Select(m => m.Groups["c"].Value).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+
     [Fact]
     public void El_compose_existe_y_lista_las_23_piezas()
     {
@@ -625,11 +765,14 @@ public sealed class ComposeStackTests
         => EjecutarNode(script, args).Codigo;
 
     private static (int Codigo, string Salida, string Error) EjecutarNode(string script, params string[] args)
+        => EjecutarNodeEn(RepoRoot(), script, args);
+
+    private static (int Codigo, string Salida, string Error) EjecutarNodeEn(string directorio, string script, params string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "node",
-            WorkingDirectory = RepoRoot(),
+            WorkingDirectory = directorio,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = System.Text.Encoding.UTF8,

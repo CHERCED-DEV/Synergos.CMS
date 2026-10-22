@@ -15,7 +15,7 @@
 //   node tools/compose-gen.mjs            → escribe compose.prod.yml
 //   node tools/compose-gen.mjs --check    → falla si el fichero no está al día
 // ─────────────────────────────────────────────────────────────────────────────
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { servicios, descubrir } from './service-matrix.mjs';
 
@@ -109,7 +109,7 @@ const imagen = (proyecto) => `\${SYNERGOS_REGISTRY}/${proyecto.toLowerCase()}:\$
  * `http://localhost/{cap}/`, que dentro del contenedor es EL PROPIO BFF. El
  * orquestador arranca sano, pasa su /health, y falla TODAS las sagas.
  */
-function capacidadesDe(proyecto) {
+function capacidadesDe(proyecto, disponibles) {
   const programa = readFileSync(join(RAIZ, rutaDe(proyecto), 'Program.cs'), 'utf8');
 
   // `SaludCapabilities.Consent` → `consent`. El identificador de la constante y
@@ -117,9 +117,54 @@ function capacidadesDe(proyecto) {
   // comprobacion contra el disco de mas abajo lo caza.
   const nombres = [...programa.matchAll(/\b\w*Capabilities\.(\w+)/g)].map((m) => m[1].toLowerCase());
 
+  // Un orquestador DECLARADO (nucleo N1) no nombra sus capacidades en C#: las
+  // nombran los pasos de sus flujos. Sin leerlos, el compose le daria solo
+  // `notifications` y el resto caeria al localhost de arriba.
+  const declaradas = /\bAddOrquestadorDeclarado\s*\(/.test(programa)
+    ? capacidadesDeLosFlujos(proyecto, disponibles)
+    : [];
+
   // El motor añade `notifications` por su cuenta: es donde avisa cuando una
   // compensacion se rinde (CompensationAlert.Capability).
-  return [...new Set([...nombres, 'notifications'])].sort();
+  return [...new Set([...nombres, ...declaradas, 'notifications'])].sort();
+}
+
+/**
+ * Las capacidades que nombran los flujos de un orquestador declarado: el prefijo
+ * de cada paso (`booking.apartar` → `booking`) y de cada deshacer de una reserva
+ * (`payments.anular` → `payments`), cuando es una capacidad que existe.
+ *
+ * Un prefijo que no es capacidad es un paso de forma (`forma.una-linea`) o del
+ * dominio (`reservas.servicio`), y no llama a nadie. Una errata en el tipo de un
+ * paso no se esconde aqui: el validador del flujo no deja arrancar un paso que
+ * nadie registro.
+ *
+ * Sin flujos se lanza, en vez de dar solo `notifications`: un declarado sin
+ * definiciones desplegaria sano y sin saber llegar a ninguna capacidad.
+ */
+function capacidadesDeLosFlujos(proyecto, disponibles) {
+  const carpeta = join(RAIZ, rutaDe(proyecto), 'flujos');
+  const ficheros = existsSync(carpeta) ? readdirSync(carpeta).filter((f) => f.endsWith('.json')).sort() : [];
+  if (ficheros.length === 0) {
+    throw new Error(`compose-gen: ${proyecto} es un orquestador declarado y no tiene flujos/*.json`);
+  }
+
+  const capacidades = new Set();
+  for (const fichero of ficheros) {
+    let flujo;
+    try {
+      flujo = JSON.parse(readFileSync(join(carpeta, fichero), 'utf8'));
+    } catch (e) {
+      throw new Error(`compose-gen: ${proyecto}/flujos/${fichero} no es JSON: ${e.message}`);
+    }
+    for (const paso of Object.values(flujo.pasos ?? {})) {
+      for (const tipo of [paso.tipo, paso.reserva?.antes, paso.reserva?.despues]) {
+        const prefijo = typeof tipo === 'string' ? tipo.split('.')[0].toLowerCase() : '';
+        if (disponibles.has(prefijo)) capacidades.add(prefijo);
+      }
+    }
+  }
+  return [...capacidades];
 }
 
 /**
@@ -195,7 +240,7 @@ function entornoExtra(proyecto, disponibles) {
   const seccion = seccionConfig(proyecto);
 
   if (proyecto.startsWith('Synergos.Bff.')) {
-    const caps = capacidadesDe(proyecto);
+    const caps = capacidadesDe(proyecto, disponibles);
     const desconocidas = caps.filter((c) => !disponibles.has(c));
     if (desconocidas.length > 0) {
       throw new Error(
@@ -642,6 +687,16 @@ services:
       # firmar», el host genera una llave y la guarda cifrada en cms-dpkeys, pero
       # entonces NO se puede rotar ni llevar a otra instalacion.
       Synergos__Alquiler__Agreement__SigningSecret: \${SYNERGOS_ALQUILER_AGREEMENT_SECRET:-}
+
+      # Quien custodia la llave del contrato (linea 005, research R11). Local por
+      # defecto: la de arriba. Api sella en Api.Signing con su PROPIO proposito y
+      # el local sigue comprobando los contratos de antes. Con Api.Signing caido el
+      # contrato sale con el sello pendiente y se sella al leerlo, nunca con la
+      # llave local. La seccion Signing va puesta en los dos modos: asi, de vuelta
+      # a Local, lo que sello Api.Signing se sigue comprobando — ver .env.example.
+      Synergos__Alquiler__Agreement__Mode: \${SYNERGOS_ALQUILER_AGREEMENT_MODE:-Local}
+      Synergos__Alquiler__Agreement__Signing__BaseUrl: "http://api-signing:8080"
+      Synergos__Alquiler__Agreement__Signing__ApiKey: \${SYNERGOS_API_KEY}
 
       # Contra que avanza un expediente (HU #44). Dice Api y no Bff, igual que la
       # visita al inmueble: decidir es UN paso, sin plata en medio y sin nada que

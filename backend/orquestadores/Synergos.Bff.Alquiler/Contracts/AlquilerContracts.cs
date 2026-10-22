@@ -6,7 +6,7 @@ namespace Synergos.Bff.Alquiler.Contracts;
 /// <summary>Dinero, como llega y como sale.</summary>
 /// <param name="Amount">El monto.</param>
 /// <param name="Currency">La moneda.</param>
-public sealed record MoneyPayload(decimal? Amount, string? Currency);
+public sealed record MoneyPayload(decimal? Amount = null, string? Currency = null);
 
 /// <summary>Lo que se pide para reservar un alquiler.</summary>
 /// <remarks>
@@ -22,18 +22,135 @@ public sealed record MoneyPayload(decimal? Amount, string? Currency);
 /// <param name="RentalTotal">Lo que se cobra.</param>
 /// <param name="Deposit">Lo que se retiene.</param>
 public sealed record ReserveRentalRequest(
-    string? EquipmentId,
-    int? Quantity,
-    DateTimeOffset? Start,
-    DateTimeOffset? End,
-    string? RenterKind,
-    string? RenterId,
-    MoneyPayload? RentalTotal,
-    MoneyPayload? Deposit);
+    string? EquipmentId = null,
+    int? Quantity = null,
+    DateTimeOffset? Start = null,
+    DateTimeOffset? End = null,
+    string? RenterKind = null,
+    string? RenterId = null,
+    MoneyPayload? RentalTotal = null,
+    MoneyPayload? Deposit = null);
+
+/// <summary>Un tramo de la tarifa, como llega del CMS.</summary>
+/// <param name="MinDays">Desde cuántos días aplica (dos o más).</param>
+/// <param name="PerDay">Cuánto vale el día en ese tramo.</param>
+public sealed record RateTierPayload(int? MinDays = null, decimal? PerDay = null);
+
+/// <summary>La oferta de un equipo que publica el CMS al publicar su ficha (línea 005, T008).</summary>
+/// <param name="EquipmentId">El slug del equipo.</param>
+/// <param name="Currency">ISO 4217 de todos los importes.</param>
+/// <param name="DailyRate">La tarifa base del día.</param>
+/// <param name="Rates">Los tramos por duración.</param>
+/// <param name="DepositPerUnit">La garantía de UNA unidad; cero es «sin garantía».</param>
+/// <param name="MinDays">El alquiler más corto.</param>
+/// <param name="MaxDays">El alquiler más largo.</param>
+/// <param name="Units">Cuántas unidades hay.</param>
+public sealed record PublishEquipmentOfferRequest(
+    string? EquipmentId = null,
+    string? Currency = null,
+    decimal? DailyRate = null,
+    IReadOnlyList<RateTierPayload>? Rates = null,
+    decimal? DepositPerUnit = null,
+    int? MinDays = null,
+    int? MaxDays = null,
+    int? Units = null);
+
+/// <summary>Un tramo publicado.</summary>
+/// <param name="MinDays">Desde cuántos días aplica.</param>
+/// <param name="PerDay">Cuánto vale el día.</param>
+public sealed record RateTierResponse(int MinDays, decimal PerDay);
+
+/// <summary>Lo que quedó publicado de un equipo.</summary>
+/// <param name="EquipmentId">El slug del equipo.</param>
+/// <param name="Currency">La moneda.</param>
+/// <param name="DailyRate">La tarifa base.</param>
+/// <param name="Rates">Los tramos.</param>
+/// <param name="DepositPerUnit">La garantía por unidad.</param>
+/// <param name="MinDays">El alquiler más corto.</param>
+/// <param name="MaxDays">El más largo.</param>
+/// <param name="Units">Las unidades.</param>
+/// <param name="Retired">Si la oferta se retiró: el equipo ya no se ofrece por la puerta.</param>
+public sealed record EquipmentOfferResponse(
+    string EquipmentId, string Currency, decimal DailyRate, IReadOnlyList<RateTierResponse> Rates,
+    decimal DepositPerUnit, int MinDays, int MaxDays, int Units, bool Retired)
+{
+    /// <summary>Proyecta lo registrado.</summary>
+    /// <param name="o">La oferta registrada.</param>
+    /// <returns>La respuesta.</returns>
+    public static EquipmentOfferResponse From(OfertaDeAlquilerRegistrada o)
+        => new(o.Equipo, o.Moneda, o.ValorDia, o.Tramos.Select(t => new RateTierResponse(t.DesdeDias, t.ValorDia)).ToList(),
+            o.GarantiaUnidad, o.MinDias, o.MaxDias, o.Unidades, o.Retirada);
+}
 
 /// <summary>Lo que se pide para cerrar un alquiler.</summary>
 /// <param name="Amount">El daño o la penalidad, ya calculado por quien recibió.</param>
-public sealed record SettleRentalRequest(MoneyPayload? Amount);
+public sealed record SettleRentalRequest(MoneyPayload? Amount = null);
+
+/// <summary>Lo que se pide para cancelar un alquiler confirmado (línea 005, T019).</summary>
+/// <param name="Amount">La penalidad que retiene el personal; la del inquilino se ignora.</param>
+/// <param name="Actor">Quién cancela: <c>renter</c> (por defecto) o <c>staff</c>.</param>
+public sealed record CancelRentalRequest(MoneyPayload? Amount = null, string? Actor = null);
+
+/// <summary>Confirmar la devolución de un alquiler de la puerta (línea 005, T017): el daño y quién confirma.</summary>
+/// <param name="Damage">Lo que se cobra de la garantía; cero la anula entera. Obligatorio: no se supone cero.</param>
+/// <param name="StaffId">El seudónimo del personal que recibió el equipo; su clase la pone el orquestador.</param>
+public sealed record ConfirmRentalReturnRequest(MoneyPayload? Damage = null, string? StaffId = null);
+
+/// <summary>Un alquiler de la puerta con lo que pasó después del cierre (la liquidación, data-model §2).</summary>
+/// <param name="RentalId">El alquiler: la saga de <c>alquiler.renta</c>.</param>
+/// <param name="State">En el vocabulario del CMS: <c>reserved</c>, <c>declared</c>, <c>returned</c> o <c>cancelled</c>.</param>
+/// <param name="Deposit">La garantía retenida al reservar.</param>
+/// <param name="DepositHeld">Cuánto sigue retenido: la garantía hasta que el personal confirme, cero después.</param>
+/// <param name="DamageCharged">Lo que se cobró de la garantía; nulo mientras no se confirma.</param>
+/// <param name="DepositReleased">Lo que se le soltó al inquilino; nulo es «no consta».</param>
+/// <param name="DeclaredAtUtc">Cuándo declaró el inquilino; nulo si no declaró.</param>
+/// <param name="ConfirmedAtUtc">Cuándo confirmó el personal.</param>
+/// <param name="CancelledAtUtc">Cuándo se canceló (T020).</param>
+/// <param name="RentalRefunded">Lo cobrado que se devolvió al cancelar: el total entero.</param>
+public sealed record RentalSettlementResponse(
+    string RentalId,
+    string State,
+    MoneyPayload Deposit,
+    decimal DepositHeld,
+    decimal? DamageCharged,
+    decimal? DepositReleased,
+    DateTimeOffset? DeclaredAtUtc,
+    DateTimeOffset? ConfirmedAtUtc,
+    DateTimeOffset? CancelledAtUtc,
+    decimal? RentalRefunded)
+{
+    /// <summary>Proyecta la vista de la liquidación a lo que el CMS lee.</summary>
+    /// <param name="v">La vista.</param>
+    /// <returns>La respuesta.</returns>
+    /// <remarks>Lo cobrado de la garantía es el daño al devolver o la penalidad al cancelar: nunca los dos.</remarks>
+    public static RentalSettlementResponse From(VistaDeLiquidacion v)
+        => new(
+            v.SagaId,
+            v.Estado,
+            new MoneyPayload(v.Garantia.Amount, v.Garantia.Currency),
+            v.GarantiaRetenida.Amount,
+            (v.Registro?.Danio ?? v.Registro?.Penalidad)?.Amount,
+            v.Registro?.GarantiaLiberada?.Amount,
+            v.Registro?.DeclaradaUtc,
+            v.Registro?.ConfirmadaUtc,
+            v.Registro?.CanceladaUtc,
+            v.Registro?.AlquilerDevuelto?.Amount);
+}
+
+/// <summary>Cancelar un alquiler confirmado de la puerta (línea 005, T020).</summary>
+/// <param name="Actor">Quién cancela: <c>renter</c> (el dueño, por <c>X-Synergos-Sujeto</c>) o <c>staff</c>.</param>
+/// <param name="Penalty">Lo que retiene el personal; la del inquilino se ignora.</param>
+/// <param name="StaffId">El seudónimo del personal, si cancela él; su clase la pone el orquestador.</param>
+public sealed record CancelDoorRentalRequest(string? Actor = null, MoneyPayload? Penalty = null, string? StaffId = null);
+
+/// <summary>Un alquiler de la puerta del dueño y en qué quedó (línea 005, T024).</summary>
+/// <param name="Id">La saga de <c>alquiler.renta</c>: su contrato se lee por la puerta.</param>
+/// <param name="Status">Running, Completed, Compensating, Compensated o CompensationFailed.</param>
+public sealed record DoorRentalItem(string Id, string Status);
+
+/// <summary>Los alquileres de la puerta del dueño, del más reciente al más viejo.</summary>
+/// <param name="Items">Los alquileres.</param>
+public sealed record DoorRentalsResponse(IReadOnlyList<DoorRentalItem> Items);
 
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>

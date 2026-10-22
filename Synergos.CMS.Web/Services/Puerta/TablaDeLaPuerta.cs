@@ -22,10 +22,12 @@ public sealed record ParametroDeLaPuerta(string Nombre, bool EnLaRuta, bool Requ
 /// <param name="LargoDeLaLlave">El largo de <c>Idempotency-Key</c> que acepta, o nulo si no la lee.</param>
 /// <param name="LlaveRequerida">Si sin llave rechaza.</param>
 /// <param name="CabecerasDeLaPuerta">Las cabeceras que pone la puerta (<c>x-synergos-puerta</c>), con si son requeridas.</param>
+/// <param name="Personal">Si la pide el personal y no el dueño (núcleo, P8 = A del lote 6): la marca trae
+/// <c>acceso: personal</c>, y la puerta exige un miembro con uno de los roles del flujo.</param>
 public sealed record OperacionDeLaPuerta(
     string Flujo, string Operacion, string Orquestador, string Metodo, string Ruta,
     IReadOnlyList<ParametroDeLaPuerta> Parametros, bool ConCuerpo, int? LargoDeLaLlave, bool LlaveRequerida,
-    IReadOnlyDictionary<string, bool> CabecerasDeLaPuerta)
+    IReadOnlyDictionary<string, bool> CabecerasDeLaPuerta, bool Personal = false)
 {
     /// <summary>Si la operación lee la cabecera <paramref name="nombre"/> que pone la puerta.</summary>
     public bool Declara(string nombre) => CabecerasDeLaPuerta.ContainsKey(nombre);
@@ -64,13 +66,19 @@ public sealed class TablaDeLaPuerta
     /// <summary>La marca de una cabecera que pone la puerta.</summary>
     public const string MarcaDeLaPuerta = "x-synergos-puerta";
 
+    /// <summary>El valor de <c>acceso</c> en la marca de una operación del personal (P8).</summary>
+    public const string AccesoDelPersonal = "personal";
+
     /// <summary>El vocabulario fijo de saga con que la puerta nombra las operaciones.</summary>
     /// <remarks>
     /// <c>cotizar</c> es la fase que abre anticipada, sin saga y sin reservar nada: el total con su
-    /// descuento antes de pagar (ADR 0140, el cupón). Lo cruza <c>PuertaGenericaTests</c> contra la lista
-    /// del orquestador.
+    /// descuento antes de pagar (ADR 0140, el cupón). <c>listar</c> son las sagas del dueño, «mis reservas»
+    /// (núcleo, NB-6 de 011). <c>disponibilidad</c> es una lectura sin saga ni dueño: la única clase de operación
+    /// que un flujo puede abrir a un invitado (NB-3). Lo cruza <c>PuertaGenericaTests</c> contra la lista del
+    /// orquestador. <c>devolver</c> es la fase que abre una operación posterior al cierre (lote 6, N-6 de 004).
     /// </remarks>
-    public static readonly IReadOnlyList<string> Operaciones = ["abrir", "cancelar", "cerrar", "consultar", "cotizar"];
+    public static readonly IReadOnlyList<string> Operaciones =
+        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "devolver", "disponibilidad", "listar"];
 
     private static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ParametroDeRuta = new(@"\{([^}]+)\}", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
@@ -176,11 +184,16 @@ public sealed class TablaDeLaPuerta
     private static OperacionDeLaPuerta? Operacion(
         string orquestador, string ruta, string metodo, JsonElement op, JsonElement marca, string quien, List<string> errores)
     {
-        if (marca.ValueKind != JsonValueKind.Object
-            || marca.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).SequenceEqual(["flujo", "operacion"]) is false)
+        var claves = marca.ValueKind == JsonValueKind.Object ? marca.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ToList() : [];
+        if (!claves.SequenceEqual(["flujo", "operacion"]) && !claves.SequenceEqual(["acceso", "flujo", "operacion"]))
         {
-            errores.Add($"{quien}: {MarcaDelFlujo} tiene que ser {{ flujo, operacion }} y nada más.");
+            errores.Add($"{quien}: {MarcaDelFlujo} tiene que ser {{ flujo, operacion }} o {{ flujo, operacion, acceso }} y nada más.");
             return null;
+        }
+        var personal = marca.TryGetProperty("acceso", out var acceso);
+        if (personal && !string.Equals(acceso.GetString(), AccesoDelPersonal, StringComparison.Ordinal))
+        {
+            errores.Add($"{quien}: el acceso «{acceso}» no es uno que la puerta sepa dar (sólo «{AccesoDelPersonal}»).");
         }
 
         var flujo = marca.GetProperty("flujo").GetString() ?? string.Empty;
@@ -246,6 +259,6 @@ public sealed class TablaDeLaPuerta
 
         return new OperacionDeLaPuerta(
             flujo, nombre, orquestador, verbo, ruta.TrimStart('/'), parametros, op.TryGetProperty("requestBody", out _),
-            largoDeLaLlave, llaveRequerida, cabeceras);
+            largoDeLaLlave, llaveRequerida, cabeceras, personal);
     }
 }

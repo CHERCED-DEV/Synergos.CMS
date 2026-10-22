@@ -26,6 +26,9 @@ public sealed record RespuestaDeFlujo(
 /// <summary>Lo que costaría abrir, sin reservar nada: la salida que el flujo ya tiene antes de reservar.</summary>
 public sealed record CotizacionDeFlujo(string Flujo, IReadOnlyDictionary<string, JsonElement?> Datos);
 
+/// <summary>Lo que devuelve una lectura sin saga (núcleo, NB-3 de 011): su salida, con sus tipos.</summary>
+public sealed record LecturaDeFlujo(string Flujo, IReadOnlyDictionary<string, JsonElement?> Datos);
+
 /// <summary>Una compensación pendiente de una saga genérica: la vista de operación.</summary>
 public sealed record CompensacionDeFlujo(
     string SagaId, string Flujo, string Kind, string Reason, int Attempts, DateTimeOffset? NextAttemptUtc,
@@ -41,7 +44,12 @@ public sealed record PaginaDeFlujo<T>(IReadOnlyList<T> Items, int Total, int Off
 /// <param name="Nombre">La base de los esquemas que publica: la clave del flujo en Pascal (<c>MuestraCita</c>).</param>
 /// <param name="Cuerpo">El esquema del cuerpo, si la operación lo lleva.</param>
 /// <param name="Datos">El esquema de <c>datos</c> en la respuesta.</param>
-public sealed record ContratoDeLaOperacion(string Nombre, JsonObject? Cuerpo, JsonObject Datos);
+/// <param name="NombreDelCuerpo">Cómo se publica el cuerpo si no es la entrada del flujo: el de una fase que
+/// continúa (<c>TiendaCompraCerrarEntrada</c>). Nulo: <c>{Nombre}Entrada</c>, el de abrir y cotizar.</param>
+/// <param name="NombreDeLaRespuesta">Cómo se publica la respuesta de una lectura sin saga
+/// (<c>ReservasServicioDisponibilidad</c>: <c>{ flujo, datos }</c>). Nulo: la de la saga, la cotización o la página.</param>
+public sealed record ContratoDeLaOperacion(
+    string Nombre, JsonObject? Cuerpo, JsonObject Datos, string? NombreDelCuerpo = null, string? NombreDeLaRespuesta = null);
 
 /// <summary>Un flujo genérico registrado en el host: lo que el mapeo por convención necesita de él.</summary>
 public sealed record FlujoGenerico(
@@ -107,6 +115,7 @@ public static class MapeoDeFlujos
         var nombre = Pascal(clave);
         var origen = f.Vocabulario.Origin;
         var abre = def.Fases[0].Nombre;
+        var personal = def.EsDePersonal;
         var datos = EsquemaDeDatos(f);
         var conNegocio = def.Entrada.Any(n => def.Tipos![n].Origen == OrigenDelValor.Negocio);
         var cuerpoDeAbrir = EsquemaDelCuerpo(f, def.Entrada);
@@ -124,7 +133,7 @@ public static class MapeoDeFlujos
           .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeAbrir, datos));
         if (conNegocio) abrir.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
-        Marcar(abrir, clave, abre);
+        Marcar(abrir, clave, abre, personal);
 
         if (SeAnticipa(f))
         {
@@ -140,7 +149,7 @@ public static class MapeoDeFlujos
               .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
               .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeAbrir, datos));
             if (conNegocio) cotizar.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
-            cotizar.EnLaPuerta(clave, "cotizar");
+            cotizar.EnLaPuerta(clave, "cotizar", personal);
         }
 
         app.MapGet($"/v1/flujos/{clave}/{{id}}", Results<Ok<RespuestaDeFlujo>, ProblemHttpResult> (string id, HttpRequest http) =>
@@ -149,7 +158,35 @@ public static class MapeoDeFlujos
             return f.Fachada.Consultar(id, dueno).Map(s => Respuesta(f, s)).ToHttp();
         }).WithName($"{nombre}Consultar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
-          .EnLaPuerta(clave, "consultar");
+          .EnLaPuerta(clave, "consultar", personal);
+
+        // «Mis …» (NB-6 de 011, NN-7 de 005): las sagas del dueño en este flujo, de la más nueva a la más vieja, y
+        // por estado si se pide. Sólo las suyas: el dueño es el sujeto que pone la puerta, no un parámetro.
+        app.MapGet($"/v1/flujos/{clave}", Results<Ok<PaginaDeFlujo<RespuestaDeFlujo>>, ProblemHttpResult> (
+            string? estado, int? offset, int? limit, HttpRequest http) =>
+        {
+            if (Sujeto(f, http, out var dueno) is { } sinSujeto) return sinSujeto;
+
+            SagaStatus? enEstado = null;
+            if (!string.IsNullOrWhiteSpace(estado))
+            {
+                if (!Enum.GetNames<SagaStatus>().Contains(estado, StringComparer.Ordinal))
+                {
+                    return Invalida(origen, $"«{estado}» no es un estado: {string.Join(", ", Enum.GetNames<SagaStatus>())}.");
+                }
+                enEstado = Enum.Parse<SagaStatus>(estado);
+            }
+
+            var off = Math.Max(0, offset ?? 0);
+            var lim = QueryWindow.Limit(limit);
+            var (items, total) = f.Fachada.Listar(dueno!, enEstado, off, lim);
+            return TypedResults.Ok(new PaginaDeFlujo<RespuestaDeFlujo>(
+                items.Select(s => Respuesta(f, s)).ToList(), total, off, off + lim < total));
+        }).WithName($"{nombre}Listar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
+          .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
+          .EnLaPuerta(clave, "listar", personal);
+
+        foreach (var lectura in def.LecturasDeclaradas.Values) MapLectura(app, f, nombre, lectura);
 
         foreach (var fase in def.Fases.Skip(1).Select(x => x.Nombre))
         {
@@ -163,11 +200,13 @@ public static class MapeoDeFlujos
                 : app.MapPost($"/v1/flujos/{clave}/{{id}}/{fase}", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
                     string id, JsonElement cuerpo, HttpRequest http, CancellationToken ct) => await ContinuarAsync(f, fase, id, http, cuerpo, ct));
 
+            // El cuerpo de una fase que continúa es SUYO (lo efímero de esa fase), no la entrada del flujo:
+            // con el mismo nombre, el último pisaba al de abrir en el contrato publicado (N-13 de Tienda).
             continuar.WithName($"{nombre}{Pascal(fase)}")
                 .ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
-                .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeFase, datos));
+                .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpoDeFase, datos, $"{nombre}{Pascal(fase)}Entrada"));
             if (conContacto) continuar.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Contacto);
-            Marcar(continuar, clave, fase);
+            Marcar(continuar, clave, fase, personal);
         }
 
         app.MapPost($"/v1/flujos/{clave}/{{id}}/cancelar", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
@@ -177,13 +216,46 @@ public static class MapeoDeFlujos
             return (await f.Fachada.CancelarAsync(id, dueno, ct)).Map(s => Respuesta(f, s)).ToHttp();
         }).WithName($"{nombre}Cancelar").ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Sujeto, requerida: true)
           .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos))
-          .EnLaPuerta(clave, "cancelar");
+          .EnLaPuerta(clave, "cancelar", personal);
 
         // Volver a intentar lo que se rindió: la puerta de la persona a la que se le avisó. Sin marca.
         app.MapPost($"/v1/flujos/{clave}/{{id}}/reintentar", async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> (
             string id, CancellationToken ct) => (await f.Fachada.ReintentarAsync(id, ct)).Map(s => Respuesta(f, s)).ToHttp())
             .WithName($"{nombre}Reintentar")
             .WithMetadata(new ContratoDeLaOperacion(nombre, null, datos));
+    }
+
+    /// <summary>
+    /// Una lectura sin saga (núcleo, NB-3 de 011): <c>POST /v1/flujos/{clave}/{lectura}</c> con su entrada en el
+    /// cuerpo, SIN sujeto —la pide quien todavía no inició sesión—, marcada en la puerta con su nombre.
+    /// </summary>
+    /// <remarks>
+    /// POST y no GET, como cotizar: la entrada tiene tipos (una referencia es un objeto) y viaja en el cuerpo, con
+    /// el mismo lector estricto que abrir. Sólo lleva la cabecera del negocio si su entrada la usa.
+    /// </remarks>
+    private static void MapLectura(IEndpointRouteBuilder app, FlujoGenerico f, string nombre, LecturaDef lectura)
+    {
+        var clave = f.Definicion.Clave;
+        var propio = $"{nombre}{Pascal(lectura.Nombre)}";
+        var cuerpo = EsquemaDelCuerpo(f, lectura.Entrada);
+        var conNegocio = lectura.Entrada.Any(n => f.Definicion.Tipos![n].Origen == OrigenDelValor.Negocio);
+
+        async Task<Results<Ok<LecturaDeFlujo>, ProblemHttpResult>> LeerLaLectura(HttpRequest http, JsonElement? json, CancellationToken ct)
+        {
+            var entrada = new FlowContext();
+            if (Leer(f, http, json, lectura.Entrada, entrada) is { } mala) return mala;
+
+            var r = await f.Fachada.LeerAsync(lectura.Nombre, entrada, ct);
+            return r.Map(ctx => new LecturaDeFlujo(clave, DatosDe(f, ctx, lectura.Salida))).ToHttp();
+        }
+
+        var ruta = cuerpo is null
+            ? app.MapPost($"/v1/flujos/{clave}/{lectura.Nombre}", (HttpRequest http, CancellationToken ct) => LeerLaLectura(http, null, ct))
+            : app.MapPost($"/v1/flujos/{clave}/{lectura.Nombre}", (JsonElement json, HttpRequest http, CancellationToken ct) => LeerLaLectura(http, json, ct));
+        ruta.WithName(propio)
+            .WithMetadata(new ContratoDeLaOperacion(nombre, cuerpo, EsquemaDeDatos(f, lectura.Salida), $"{propio}Entrada", propio))
+            .EnLaPuerta(clave, lectura.Nombre, f.Definicion.EsDePersonal);
+        if (conNegocio) ruta.ConCabeceraDeLaPuerta(CabecerasDeLaPuerta.Negocio, requerida: true);
     }
 
     private static async Task<Results<Ok<RespuestaDeFlujo>, ProblemHttpResult>> ContinuarAsync(
@@ -196,10 +268,13 @@ public static class MapeoDeFlujos
         return (await f.Fachada.ContinuarAsync(fase, id, dueno, efimera, ct)).Map(s => Respuesta(f, s)).ToHttp();
     }
 
-    /// <summary>La operación va a la puerta si su nombre es del vocabulario fijo; si no, es sólo del orquestador.</summary>
-    private static void Marcar(RouteHandlerBuilder builder, string clave, string operacion)
+    /// <summary>
+    /// La operación va a la puerta si su nombre es del vocabulario fijo; si no, es sólo del orquestador. En un flujo del
+    /// personal (P8), marcada como tal: la puerta pide el rol y no la abre a nadie más.
+    /// </summary>
+    private static void Marcar(RouteHandlerBuilder builder, string clave, string operacion, bool personal)
     {
-        if (EnLaPuertaExtensions.Operaciones.Contains(operacion, StringComparer.Ordinal)) builder.EnLaPuerta(clave, operacion);
+        if (EnLaPuertaExtensions.Operaciones.Contains(operacion, StringComparer.Ordinal)) builder.EnLaPuerta(clave, operacion, personal);
     }
 
     /// <summary>Si la fase que abre se puede anticipar: ningún paso antes de reservar pide llave ni cierra.</summary>
@@ -345,7 +420,11 @@ public static class MapeoDeFlujos
 
     /// <summary>La salida que el contexto ya tiene, escrita con su tipo.</summary>
     private static IReadOnlyDictionary<string, JsonElement?> DatosDe(FlujoGenerico f, FlowContext ctx)
-        => f.Definicion.LoQueSale.ToDictionary(
+        => DatosDe(f, ctx, f.Definicion.LoQueSale);
+
+    /// <summary><paramref name="nombres"/> como los tiene el contexto, escritos con su tipo (la salida de una lectura).</summary>
+    private static IReadOnlyDictionary<string, JsonElement?> DatosDe(FlujoGenerico f, FlowContext ctx, IReadOnlyList<string> nombres)
+        => nombres.ToDictionary(
             n => n,
             n => ctx.Has(n) && f.Binding.TipoDe(n)?.Escribir(ctx.Get<object?>(n)) is { } json
                 ? JsonSerializer.SerializeToElement(json)
@@ -379,10 +458,13 @@ public static class MapeoDeFlujos
     }
 
     /// <summary>El esquema de <c>datos</c>: la salida con sus tipos, todos anulables (puede no haberse escrito aún).</summary>
-    private static JsonObject EsquemaDeDatos(FlujoGenerico f)
+    private static JsonObject EsquemaDeDatos(FlujoGenerico f) => EsquemaDeDatos(f, f.Definicion.LoQueSale);
+
+    /// <summary>El esquema de <c>datos</c> con <paramref name="nombres"/> (la salida del flujo o la de una lectura).</summary>
+    private static JsonObject EsquemaDeDatos(FlujoGenerico f, IReadOnlyList<string> nombres)
     {
         var props = new JsonObject();
-        foreach (var nombre in f.Definicion.LoQueSale)
+        foreach (var nombre in nombres)
         {
             var tipo = f.Binding.TipoDe(nombre)!;
             props[nombre] = (tipo with { Anulable = true }).Esquema();
@@ -390,7 +472,7 @@ public static class MapeoDeFlujos
         return new JsonObject
         {
             ["type"] = "object",
-            ["required"] = new JsonArray(f.Definicion.LoQueSale.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
+            ["required"] = new JsonArray(nombres.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray()),
             ["properties"] = props,
         };
     }

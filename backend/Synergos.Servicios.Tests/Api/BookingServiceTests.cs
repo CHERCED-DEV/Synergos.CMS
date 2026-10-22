@@ -128,6 +128,247 @@ public sealed class BookingServiceTests
         Assert.Equal(ReservationStatus.Cancelled, cancelada.Value.Status);
     }
 
+    // ── La franja del recurso (núcleo, NB-1 de 011) ─────────────────────────
+
+    private static Resource RegistrarConFranja(BookingService svc, int minutos)
+        => svc.RegisterResource(
+            Ref.Create("test.recurso", "franja"), 1, "UTC",
+            new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 0), new TimeOnly(12, 0)) },
+            CancellationPolicy.Anytime, Llave(Guid.NewGuid().ToString("n")), minutos).Value;
+
+    [Fact]
+    public void El_recurso_guarda_su_franja_y_una_franja_sin_largo_no_se_registra()
+    {
+        var (svc, _) = Nuevo();
+
+        Assert.Equal(30, RegistrarConFranja(svc, 30).SlotMinutes);
+        foreach (var mala in new[] { 0, -30, BookingService.MaxSlotMinutes + 1 })
+        {
+            var r = svc.RegisterResource(Ref.Create("test.recurso", $"m{mala}"), 1, "UTC", Array.Empty<OpeningRule>(),
+                CancellationPolicy.Anytime, Llave($"mala-{mala}"), mala);
+            Assert.Equal("booking.bad_slot_minutes", r.Rejection?.Code);
+        }
+    }
+
+    [Fact]
+    public void Apartar_una_ventana_que_no_es_franja_se_rechaza_y_NO_toma_cupo()
+    {
+        // El orden importa: «arreglá lo que mandaste» antes que el cupo. Y nada queda apartado: la
+        // franja buena sigue libre para quien la pida bien.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var larga = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2), 180), Ref.Create("t.p", "1"), null, Llave("larga"));
+        var partida = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2).AddMinutes(15), 30), Ref.Create("t.p", "1"), null, Llave("partida"));
+        var buena = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2), 30), Ref.Create("t.p", "2"), null, Llave("buena"));
+
+        Assert.Equal("booking.bad_slot_length", larga.Rejection?.Code);
+        Assert.Equal("booking.off_slot_grid", partida.Rejection?.Code);
+        Assert.True(buena.IsOk);
+    }
+
+    [Fact]
+    public void La_disponibilidad_dice_por_que_una_ventana_no_es_franja()
+    {
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var r = svc.CheckAvailability(recurso.Id, Ventana(Lunes8.AddHours(2), 45)).Value;
+
+        Assert.False(r.Available);
+        Assert.Equal("booking.bad_slot_length", r.Reason?.Code);
+    }
+
+    // ── Las franjas libres (núcleo, NB-2 de 011) ────────────────────────────
+
+    private static readonly DateTimeOffset Lunes0 = new(2026, 3, 2, 0, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void Las_franjas_de_un_dia_son_las_de_su_grilla_dentro_del_horario()
+    {
+        // Abre de 08:00 a 12:00 con franjas de 30: ocho, de las 08:00 a las 11:30. Ninguna fuera.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var lista = svc.ListSlots(recurso.Id, Lunes0, Lunes0.AddDays(1)).Value;
+
+        Assert.Equal(30, lista.SlotMinutes);
+        Assert.Equal(Enumerable.Range(0, 8).Select(i => Lunes8.AddMinutes(30 * i)), lista.Items.Select(s => s.Window.Start));
+        Assert.All(lista.Items, s => Assert.Equal(TimeSpan.FromMinutes(30), s.Window.End - s.Window.Start));
+        Assert.All(lista.Items, s => Assert.Equal(1, s.Free));
+    }
+
+    [Fact]
+    public void Lo_libre_descuenta_lo_que_apartar_descuenta_y_nada_mas()
+    {
+        // La MISMA ocupación que apartar: un apartado vivo y una reserva vigente llenan su franja; un
+        // apartado vencido y una reserva cancelada, no. Si la lista contara otra cosa, prometería franjas
+        // que apartar después niega.
+        var (svc, reloj) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+        var nueve = Lunes8.AddHours(1);
+
+        svc.CreateHold(recurso.Id, Ventana(nueve, 30), Ref.Create("t.p", "vivo"), TimeSpan.FromMinutes(30), Llave("vivo"));
+        svc.CreateHold(recurso.Id, Ventana(nueve.AddMinutes(30), 30), Ref.Create("t.p", "vence"), TimeSpan.FromMinutes(10), Llave("vence"));
+        var aDiez = svc.CreateHold(recurso.Id, Ventana(nueve.AddHours(1), 30), Ref.Create("t.p", "r"), null, Llave("r")).Value;
+        svc.ConfirmHold(aDiez.Id, Llave("r-c"));
+        var aDiezYMedia = svc.CreateHold(recurso.Id, Ventana(nueve.AddMinutes(90), 30), Ref.Create("t.p", "x"), null, Llave("x")).Value;
+        svc.CancelReservation(svc.ConfirmHold(aDiezYMedia.Id, Llave("x-c")).Value.Id);
+        reloj.Avanzar(TimeSpan.FromMinutes(11));
+
+        var libre = svc.ListSlots(recurso.Id, Lunes0, Lunes0.AddDays(1)).Value.Items.ToDictionary(s => s.Window.Start, s => s.Free);
+
+        Assert.Equal(0, libre[nueve]);
+        Assert.Equal(1, libre[nueve.AddMinutes(30)]);
+        Assert.Equal(0, libre[nueve.AddHours(1)]);
+        Assert.Equal(1, libre[nueve.AddMinutes(90)]);
+    }
+
+    [Fact]
+    public void Lo_que_ya_empezo_no_sale_y_el_rango_recorta()
+    {
+        var (svc, reloj) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        var hastaLasDiez = svc.ListSlots(recurso.Id, Lunes8.AddHours(-1), Lunes8.AddHours(2)).Value.Items;
+        reloj.Avanzar(TimeSpan.FromMinutes(40));
+        var despues = svc.ListSlots(recurso.Id, Lunes8.AddHours(-1), Lunes8.AddHours(2)).Value.Items;
+
+        Assert.Equal(4, hastaLasDiez.Count);                       // 08:00, 08:30, 09:00, 09:30
+        Assert.Equal(new[] { Lunes8.AddHours(1), Lunes8.AddMinutes(90) }, despues.Select(s => s.Window.Start));
+    }
+
+    [Fact]
+    public void Cada_franja_listada_se_puede_apartar_tambien_en_el_huso_del_recurso()
+    {
+        // Abre a las 08:20 hora de Bogotá con franjas de 40 hasta las 10:00: 08:20 y 09:00 locales, o sea
+        // 13:20 y 14:00 UTC. La de las 09:40 no cabe entera y no sale. Y la lista no promete nada que
+        // apartar niegue.
+        var (svc, _) = Nuevo();
+        var recurso = svc.RegisterResource(Ref.Create("test.recurso", "bogota"), 1, "America/Bogota",
+            new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 20), new TimeOnly(10, 0)) },
+            CancellationPolicy.Anytime, Llave("bogota"), 40).Value;
+
+        var franjas = svc.ListSlots(recurso.Id, Lunes0, Lunes0.AddDays(1)).Value.Items;
+
+        Assert.Equal(new[] { Lunes0.AddHours(13).AddMinutes(20), Lunes0.AddHours(14) }, franjas.Select(s => s.Window.Start));
+        Assert.All(franjas, s => Assert.True(
+            svc.CreateHold(recurso.Id, s.Window, Ref.Create("t.p", s.Window.Start.ToString("HHmm")), null, Llave($"f{s.Window.Start:HHmm}")).IsOk));
+    }
+
+    [Fact]
+    public void Sin_franja_o_sin_horario_no_hay_grilla_y_el_rango_tiene_tope()
+    {
+        var (svc, _) = Nuevo();
+        var sinFranja = RegistrarRecurso(svc);
+        var conFranja = RegistrarConFranja(svc, 30);
+
+        Assert.Equal("booking.slots_undefined", svc.ListSlots(sinFranja.Id, Lunes0, Lunes0.AddDays(1)).Rejection?.Code);
+        Assert.Equal("booking.range_too_long", svc.ListSlots(conFranja.Id, Lunes0, Lunes0.AddDays(8)).Rejection?.Code);
+        Assert.Equal("booking.bad_range", svc.ListSlots(conFranja.Id, Lunes0, Lunes0).Rejection?.Code);
+        Assert.Equal("booking.resource_not_found", svc.ListSlots("no-existe", Lunes0, Lunes0.AddDays(1)).Rejection?.Code);
+    }
+
+    // ── Revisar un recurso (núcleo, NB-7 de 011 y NN-6 de 005) ──────────────
+
+    private static readonly OpeningRule[] DeOchoADoce = { new(DayOfWeek.Monday, new TimeOnly(8, 0), new TimeOnly(12, 0)) };
+
+    private static Reservation Reservar(BookingService svc, Resource recurso, DateTimeOffset inicio, int minutos, string quien)
+    {
+        var hold = svc.CreateHold(recurso.Id, Ventana(inicio, minutos), Ref.Create("t.p", quien), null, Llave($"h-{quien}")).Value;
+        return svc.ConfirmHold(hold.Id, Llave($"c-{quien}")).Value;
+    }
+
+    [Fact]
+    public void Revisar_cambia_lo_que_el_negocio_cambia_y_no_el_sujeto_ni_el_huso()
+    {
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+        var nuevoHorario = new[] { new OpeningRule(DayOfWeek.Tuesday, new TimeOnly(9, 0), new TimeOnly(13, 0)) };
+
+        var r = svc.ReviseResource(recurso.Id, 3, nuevoHorario, new CancellationPolicy(TimeSpan.FromHours(1)), null, Llave("rev")).Value;
+
+        var guardado = svc.GetResource(recurso.Id).Value;
+        Assert.Equal(r.Resource, guardado);
+        Assert.Equal((3, (int?)null, TimeSpan.FromHours(1)), (guardado.Capacity, guardado.SlotMinutes, guardado.Policy.MinNoticeBeforeStart));
+        Assert.Equal(nuevoHorario, guardado.Opening);
+        Assert.Equal((recurso.Subject, recurso.TimeZoneId), (guardado.Subject, guardado.TimeZoneId));
+        Assert.Empty(r.Outside);
+    }
+
+    [Fact]
+    public void Revisar_no_cancela_nada_y_dice_que_reservas_vigentes_quedan_fuera()
+    {
+        // Cupos de 2 a 1 y el horario de 08:00–12:00 a 08:30–11:00. Fuera: la segunda de las 09:00 (la
+        // PRIMERA conserva su lugar) y la de las 11:30. No salen la cancelada ni la de las 08:00, que también
+        // quedaría fuera pero ya terminó. Y ninguna se canceló.
+        var (svc, reloj) = Nuevo();
+        var recurso = svc.RegisterResource(Ref.Create("test.recurso", "rev"), 2, "UTC", DeOchoADoce,
+            CancellationPolicy.Anytime, Llave("rev"), 30).Value;
+        var yaPaso = Reservar(svc, recurso, Lunes8, 30, "paso");
+        reloj.Avanzar(TimeSpan.FromMinutes(1));
+        var primera = Reservar(svc, recurso, Lunes8.AddHours(1), 30, "primera");
+        reloj.Avanzar(TimeSpan.FromMinutes(1));
+        var segunda = Reservar(svc, recurso, Lunes8.AddHours(1), 30, "segunda");
+        var tarde = Reservar(svc, recurso, Lunes8.AddMinutes(210), 30, "tarde");
+        svc.CancelReservation(Reservar(svc, recurso, Lunes8.AddHours(2), 30, "cancelada").Id);
+        reloj.Avanzar(TimeSpan.FromMinutes(31));
+
+        var r = svc.ReviseResource(recurso.Id, 1,
+            new[] { new OpeningRule(DayOfWeek.Monday, new TimeOnly(8, 30), new TimeOnly(11, 0)) },
+            CancellationPolicy.Anytime, 30, Llave("menos")).Value;
+
+        Assert.Equal(
+            new[] { (segunda.Id, "booking.at_capacity"), (tarde.Id, "booking.outside_opening_hours") }.OrderBy(x => x.Item1),
+            r.Outside.Select(o => (o.Reservation.Id, o.Reason.Code)).OrderBy(x => x.Item1));
+        Assert.All(new[] { yaPaso, primera, segunda, tarde },
+            x => Assert.Equal(ReservationStatus.Confirmed, svc.GetReservation(x.Id).Value.Status));
+    }
+
+    [Fact]
+    public void Revisar_con_otra_franja_dice_cuales_ya_no_son_franja()
+    {
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+        var media = Reservar(svc, recurso, Lunes8.AddMinutes(90), 30, "media");
+
+        var r = svc.ReviseResource(recurso.Id, 1, DeOchoADoce, CancellationPolicy.Anytime, 60, Llave("hora")).Value;
+
+        Assert.Equal((media.Id, "booking.bad_slot_length"), r.Outside.Select(o => (o.Reservation.Id, o.Reason.Code)).Single());
+    }
+
+    [Fact]
+    public void Revisar_otra_vez_con_la_misma_llave_no_reescribe_y_con_la_de_otro_recurso_es_conflicto()
+    {
+        var (svc, _) = Nuevo();
+        var uno = RegistrarConFranja(svc, 30);
+        var otro = RegistrarRecurso(svc, subjectId: "otro");
+
+        svc.ReviseResource(uno.Id, 3, DeOchoADoce, CancellationPolicy.Anytime, 30, Llave("k"));
+        var repetida = svc.ReviseResource(uno.Id, 5, DeOchoADoce, CancellationPolicy.Anytime, 30, Llave("k"));
+        var ajena = svc.ReviseResource(otro.Id, 2, DeOchoADoce, CancellationPolicy.Anytime, 30, Llave("k"));
+
+        Assert.Equal(3, repetida.Value.Resource.Capacity);
+        Assert.Equal(3, svc.GetResource(uno.Id).Value.Capacity);
+        Assert.Equal("booking.idempotency_conflict", ajena.Rejection?.Code);
+        Assert.Equal(1, svc.GetResource(otro.Id).Value.Capacity);
+    }
+
+    [Fact]
+    public void Revisar_rechaza_lo_que_registrar_rechaza()
+    {
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarConFranja(svc, 30);
+
+        Assert.Equal("booking.bad_capacity",
+            svc.ReviseResource(recurso.Id, 0, DeOchoADoce, CancellationPolicy.Anytime, 30, Llave("a")).Rejection?.Code);
+        Assert.Equal("booking.bad_slot_minutes",
+            svc.ReviseResource(recurso.Id, 1, DeOchoADoce, CancellationPolicy.Anytime, 0, Llave("b")).Rejection?.Code);
+        Assert.Equal("booking.resource_not_found",
+            svc.ReviseResource("no-existe", 1, DeOchoADoce, CancellationPolicy.Anytime, 30, Llave("c")).Rejection?.Code);
+        Assert.Equal(30, svc.GetResource(recurso.Id).Value.SlotMinutes);
+    }
+
     [Fact]
     public void Un_hold_vigente_BLOQUEA_el_cupo_aunque_nadie_haya_confirmado()
     {

@@ -167,6 +167,32 @@ public sealed class DeployPipelineTests
         Assert.Contains("NO están en $SHA", remoto, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Volver_a_una_version_repone_sus_ficheros_antes_de_bajar_sus_imagenes()
+    {
+        // Una versión son sus imágenes Y el compose con que se puso en pie. Con las imágenes de
+        // antes y el compose de ahora, el `pull` pide la imagen de un servicio que la versión
+        // anterior no tenía y la vuelta atrás muere ahí: lo midió el ensayo de `ed634d55`, el
+        // primero tras sumar `bff-reservas`, con todo lo demás en verde.
+        var remoto = SinComentarios("tools", "deploy-remoto.sh");
+
+        var reponer = remoto.IndexOf("cp \"$GUARDADOS/compose.prod.yml\" \"$GUARDADOS/Caddyfile\" \"$DIR/\"", StringComparison.Ordinal);
+        var bajar = remoto.IndexOf("$COMPOSE pull", StringComparison.Ordinal);
+        var comprobar = remoto.IndexOf("NO están en $SHA", StringComparison.Ordinal);
+        var guardar = remoto.IndexOf("cp \"$DIR/compose.prod.yml\" \"$DIR/Caddyfile\" \"$GUARDADOS/\"", StringComparison.Ordinal);
+
+        Assert.True(reponer >= 0, "Poner una versión que ya estuvo no repone sus ficheros: la vuelta atrás usaría el compose de la versión nueva.");
+        Assert.True(reponer < bajar, "Los ficheros se reponen DESPUÉS del `pull`: la descarga ya pidió las imágenes del compose equivocado.");
+        Assert.True(comprobar >= 0 && guardar > comprobar,
+            "Una versión no guarda sus ficheros, o los guarda antes de comprobar que quedó en pie con la etiqueta pedida: "
+            + "o no habría a qué volver, o se volvería a los de un despliegue fallido.");
+
+        // Y el ensayo empieza como el servidor que tuvo en pie la versión anterior: con sus ficheros
+        // guardados. Sin eso, su vuelta atrás no ensaya la que haría el servidor.
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        Assert.Contains("git show \"$ANTERIOR:compose.prod.yml\"", ensayo, StringComparison.Ordinal);
+    }
+
     // ── El workflow ─────────────────────────────────────────────────────────
 
     [Fact]

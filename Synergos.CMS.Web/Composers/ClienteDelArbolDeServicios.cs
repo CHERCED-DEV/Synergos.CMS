@@ -226,7 +226,9 @@ public static class ClienteDelArbolDeServicios
     /// Un método seguro, o una llave de idempotencia: la capacidad la resuelve antes que
     /// cualquier regla, así que el segundo intento de una escritura que SÍ llegó devuelve lo que
     /// el primero creó en vez de crear otra cosa. <c>DELETE</c> no entra por su nombre: que el
-    /// protocolo lo llame idempotente no dice qué hace una capacidad con él.
+    /// protocolo lo llame idempotente no dice qué hace una capacidad con él. Y una escritura que el
+    /// cliente marca repetible por la saga del orquestador (<see cref="PeticionAlArbol.RepetiblePorLaSaga"/>,
+    /// NP-4 de 005), sin llave que nadie lee.
     /// </remarks>
     internal static bool EsRepetible(HttpRequestMessage? peticion)
         => peticion is not null
@@ -236,7 +238,8 @@ public static class ClienteDelArbolDeServicios
            && (peticion.Method == HttpMethod.Get
                || peticion.Method == HttpMethod.Head
                || peticion.Method == HttpMethod.Options
-               || peticion.Headers.Contains(CabeceraDeIdempotencia));
+               || peticion.Headers.Contains(CabeceraDeIdempotencia)
+               || PeticionAlArbol.EsRepetiblePorLaSaga(peticion));
 
     /// <summary>
     /// Pasajero en el árbol: sin respuesta, o la capacidad dijo <c>transient: true</c>.

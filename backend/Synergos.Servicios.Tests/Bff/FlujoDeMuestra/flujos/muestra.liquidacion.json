@@ -1,0 +1,26 @@
+{
+  "clave": "muestra.liquidacion",
+  "posterior_a": "muestra.garantia",
+  "acceso": "personal",
+  "entrada": ["quien", "alquiler", "devolver"],
+  "tipos": {
+    "quien": { "de": "sujeto" },
+    "alquiler": "texto",
+    "devolver": "dinero",
+    "garantiaId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["alquiler", "devolver"],
+  "fases": {
+    "abrir": ["original", "capturar", "devolver"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["alquiler"], "escribe": ["garantiaId"] },
+    "capturar": { "tipo": "payments.capturar", "lee": ["garantiaId"], "llave": "capture", "motivo": "no se pudo cobrar la garantía" },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["garantiaId", "devolver"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver el resto de la garantía"
+    }
+  }
+}

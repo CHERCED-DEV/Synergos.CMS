@@ -80,6 +80,8 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Fulfillment.Contracts.ShipmentResponse>("Fulfillment"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
         new PiezaPublicada<Synergos.Bff.Salud.Contracts.AppointmentResponse>("Salud"),
+        new PiezaPublicada<Synergos.Bff.Alquiler.Contracts.RentalResponse>("Alquiler"),
+        new PiezaPublicada<Synergos.Bff.Reservas.Contracts.OfertaDeServicioResponse>("Reservas"),
     ];
 
     /// <summary>La pieza por el nombre de su ensamblado, que es también el del fichero.</summary>
@@ -171,11 +173,34 @@ internal static class ContratoOpenApi
     /// <c>{Flujo}Respuesta</c>, <c>{Flujo}Cotizacion</c>), que el generador del UI traduce como cualquier
     /// otro. Los genéricos que reemplazan dejan de publicarse.</para>
     /// </remarks>
-    private sealed class EsquemasDeFlujos
+    internal sealed class EsquemasDeFlujos
     {
         public Dictionary<string, OpenApiSchema> Propios { get; } = new(StringComparer.Ordinal);
 
-        public static readonly string[] Reemplazados = ["RespuestaDeFlujo", "CotizacionDeFlujo", "JsonElement"];
+        /// <summary>El cuerpo que ya se publicó con cada nombre, como JSON: dos distintos no comparten nombre.</summary>
+        private readonly Dictionary<string, string> _cuerpos = new(StringComparer.Ordinal);
+
+        public static readonly string[] Reemplazados =
+            ["RespuestaDeFlujo", "CotizacionDeFlujo", "PaginaDeFlujoOfRespuestaDeFlujo", "LecturaDeFlujo", "JsonElement"];
+
+        /// <summary>
+        /// El nombre con que se publica un cuerpo (N-13 de Tienda): <c>{Flujo}Entrada</c> el de abrir y cotizar, y
+        /// el suyo el de una fase que continúa. Dos cuerpos DISTINTOS con el mismo nombre no se publican: el último
+        /// pisaría al primero y el tipo generado del primero saldría con los campos del otro, con el suelo y las
+        /// sondas en verde (la misma clase de defecto que el <c>CreateSchemaReferenceId</c> de la F2).
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Si <paramref name="nombre"/> ya tiene otro cuerpo.</exception>
+        internal void RegistrarCuerpo(string nombre, JsonObject cuerpo)
+        {
+            var json = cuerpo.ToJsonString();
+            if (_cuerpos.TryGetValue(nombre, out var previo) && !string.Equals(previo, json, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Dos cuerpos distintos se publicarían como «{nombre}»: {previo} y {json}. Cada uno necesita su nombre.");
+            }
+            _cuerpos[nombre] = json;
+            Propios[nombre] = Esquema(cuerpo);
+        }
 
         public Task Operacion(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
         {
@@ -186,8 +211,8 @@ internal static class ContratoOpenApi
 
             if (contrato.Cuerpo is { } cuerpo)
             {
-                var nombre = contrato.Nombre + "Entrada";
-                Propios[nombre] = Esquema(cuerpo);
+                var nombre = contrato.NombreDelCuerpo ?? contrato.Nombre + "Entrada";
+                RegistrarCuerpo(nombre, cuerpo);
                 op.RequestBody = new OpenApiRequestBody
                 {
                     Required = true,
@@ -201,6 +226,23 @@ internal static class ContratoOpenApi
             foreach (var (_, respuesta) in (op.Responses ?? new OpenApiResponses()).Where(r => r.Key.StartsWith('2')))
             {
                 if (respuesta.Content is null || !respuesta.Content.TryGetValue("application/json", out var json)) continue;
+
+                // Una lectura sin saga (NB-3): { flujo, datos } con su salida, bajo su propio nombre.
+                if (contrato.NombreDeLaRespuesta is { } propio)
+                {
+                    Propios[propio] = Cotizacion(contrato.Datos);
+                    json.Schema = new OpenApiSchemaReference(propio, ctx.Document);
+                    continue;
+                }
+
+                // «Mis …» (NB-6): una página de respuestas del flujo, cada una con sus datos tipados.
+                if (op.OperationId?.EndsWith("Listar", StringComparison.Ordinal) == true)
+                {
+                    Propios[contrato.Nombre + "Respuesta"] = Respuesta(contrato.Datos);
+                    Propios[contrato.Nombre + "Pagina"] = Pagina(new OpenApiSchemaReference(contrato.Nombre + "Respuesta", ctx.Document));
+                    json.Schema = new OpenApiSchemaReference(contrato.Nombre + "Pagina", ctx.Document);
+                    continue;
+                }
 
                 var cotiza = op.OperationId?.EndsWith("Cotizar", StringComparison.Ordinal) == true;
                 var nombre = contrato.Nombre + (cotiza ? "Cotizacion" : "Respuesta");
@@ -231,6 +273,14 @@ internal static class ContratoOpenApi
         });
 
         private static OpenApiSchema Cotizacion(JsonObject datos) => Objeto(new() { ["flujo"] = Texto(), ["datos"] = Esquema(datos) });
+
+        private static OpenApiSchema Pagina(IOpenApiSchema item) => Objeto(new()
+        {
+            ["items"] = new OpenApiSchema { Type = JsonSchemaType.Array, Items = item },
+            ["total"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["offset"] = new OpenApiSchema { Type = JsonSchemaType.Integer, Format = "int32" },
+            ["hasMore"] = new OpenApiSchema { Type = JsonSchemaType.Boolean },
+        });
 
         private static OpenApiSchema Texto() => new() { Type = JsonSchemaType.String };
 
@@ -458,18 +508,21 @@ internal static class ContratoOpenApi
     /// </summary>
     /// <remarks>
     /// Es lo que lee la puerta del CMS para armar su tabla, y el generador del UI para saber qué emitir.
-    /// Sin marca, la operación no existe para ninguno de los dos.
+    /// Sin marca, la operación no existe para ninguno de los dos. Una operación del personal (P8) lleva además
+    /// <c>acceso: personal</c>, y la del dueño no lo lleva: la marca de hoy no cambia.
     /// </remarks>
     private static Task Flujo(OpenApiOperation op, OpenApiOperationTransformerContext ctx, CancellationToken ct)
     {
         if (ctx.Description.ActionDescriptor.EndpointMetadata.OfType<OperacionEnLaPuerta>().FirstOrDefault() is { } marca)
         {
             op.Extensions ??= new Dictionary<string, IOpenApiExtension>(StringComparer.Ordinal);
-            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(new JsonObject
+            var json = new JsonObject
             {
                 ["flujo"] = marca.Flujo,
                 ["operacion"] = marca.Operacion,
-            });
+            };
+            if (marca.Personal) json["acceso"] = FlujoDef.AccesoDelPersonal;
+            op.Extensions[MarcaDelFlujo] = new JsonNodeExtension(json);
         }
 
         return Task.CompletedTask;

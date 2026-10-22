@@ -53,12 +53,16 @@ public sealed class FlujosControllerTests : IDisposable
 
     private bool _conDestino = true;
 
+    private AvisoEnVivoDeLaPuerta? _enVivo;
+
     public FlujosControllerTests() => Sesion(Ana);
 
     public void Dispose() => _orquestador.Dispose();
 
     /// <summary>El contrato comiteado de Bff.Eventos, con las cinco operaciones de la compra marcadas.</summary>
-    internal static TablaDeLaPuerta TablaDeLaCompra()
+    internal static TablaDeLaPuerta TablaDeLaCompra() => TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", ContratoDeLaCompra().ToJsonString())]);
+
+    private static JsonNode ContratoDeLaCompra()
     {
         var doc = JsonNode.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "docs", "contracts", "openapi",
             "Synergos.Bff.Eventos.json")))!;
@@ -67,9 +71,33 @@ public sealed class FlujosControllerTests : IDisposable
         Marcar("/v1/ticket-purchases", "post", "abrir");
         Marcar("/v1/ticket-purchases/{id}", "get", "consultar");
         Marcar("/v1/ticket-purchases/{id}/confirm", "post", "cerrar");
-        Marcar("/v1/ticket-purchases/{id}/cancel", "post", "cancelar");
         Marcar("/v1/ticket-quotes", "post", "cotizar");
-        return TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]);
+        Marcar("/v1/ticket-purchases/{id}/cancel", "post", "cancelar");
+        return doc;
+    }
+
+    /// <summary>
+    /// La compra con una lectura sin saga (NB-3): <c>disponibilidad</c>, con cuerpo y SIN ninguna cabecera de la puerta,
+    /// como la publica el host genérico.
+    /// </summary>
+    private static TablaDeLaPuerta TablaConLectura() => TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", ContratoConLectura().ToJsonString())]);
+
+    private static JsonNode ContratoConLectura()
+    {
+        var doc = ContratoDeLaCompra();
+        doc["paths"]!["/v1/flujos/eventos.compra/disponibilidad"] = new JsonObject
+        {
+            ["post"] = new JsonObject
+            {
+                ["operationId"] = "EventosCompraDisponibilidad",
+                ["requestBody"] = new JsonObject
+                {
+                    ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = new JsonObject { ["type"] = "object" } } },
+                },
+                [TablaDeLaPuerta.MarcaDelFlujo] = new JsonObject { ["flujo"] = Flujo, ["operacion"] = "disponibilidad" },
+            },
+        };
+        return doc;
     }
 
     private void Sesion(Guid? miembro)
@@ -116,9 +144,11 @@ public sealed class FlujosControllerTests : IDisposable
 
     private async Task<Respuesta> Pedir(
         string metodo, string operacion, string? consulta = null, string? cuerpo = null, string? tipo = "application/json",
-        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true, bool porTrozos = false)
+        Action<IHeaderDictionary>? cabeceras = null, string flujo = Flujo, bool mismoOrigen = true, bool porTrozos = false,
+        TablaDeLaPuerta? tabla = null, FrenoDeLaPuerta? freno = null, string? ip = null)
     {
         var http = new DefaultHttpContext();
+        if (ip is not null) http.Connection.RemoteIpAddress = IPAddress.Parse(ip);
         http.Request.Method = metodo;
         http.Request.Scheme = "https";
         http.Request.Host = new HostString("sitio.test");
@@ -143,8 +173,9 @@ public sealed class FlujosControllerTests : IDisposable
             new ServiceCollection().BuildServiceProvider());
 
         var sut = new FlujosController(
-            TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(_conDestino ? ["Eventos"] : []), _miembro,
-            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones)
+            tabla ?? TablaDeLaCompra(), monitor, new DestinosDeLaPuerta(_conDestino ? ["Eventos"] : []), _miembro,
+            new ReenvioDeLaPuerta(new Fabrica(_orquestador), NullLogger<ReenvioDeLaPuerta>.Instance), secciones, enVivo: _enVivo,
+            freno: freno)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
@@ -451,6 +482,113 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal(["Idempotency-Key", "X-Synergos-Negocio", "X-Synergos-Sujeto"], cabeceras.Keys.Order(StringComparer.Ordinal));
     }
 
+    // ── El sujeto por el correo de la sesión (núcleo N3, NE-4 de 007) ─────────────────────
+
+    private static FlujoDeLaPuertaSettings ConSujetoDe(FlujoDeLaPuertaSettings f, string sujetoDe) => new()
+    {
+        Acceso = f.Acceso, SujetoKind = f.SujetoKind, Negocio = f.Negocio, Aviso = f.Aviso, Camino = f.Camino, SujetoDe = sujetoDe,
+    };
+
+    [Fact]
+    public async Task Con_SujetoDe_correo_el_sujeto_es_el_seudonimo_del_correo_de_la_sesion()
+    {
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], " Correo ");
+
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+
+        var (_, _, cabeceras, _) = Assert.Single(_orquestador.Pedidos);
+        // El seudónimo, calculado aparte: SHA-256 del correo en minúsculas, sus primeros 16 hexadecimales.
+        var seudonimo = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("ana@ejemplo.co")))[..16]
+            .ToLowerInvariant();
+        Assert.Equal($"eventos.comprador:{seudonimo}", cabeceras["X-Synergos-Sujeto"]);
+        Assert.DoesNotContain(Ana.ToString("n"), cabeceras["X-Synergos-Sujeto"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Con_SujetoDe_correo_una_sesion_sin_correo_no_pasa_y_sin_declararlo_el_sujeto_es_el_miembro()
+    {
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], SujetoDeLaPuerta.Correo);
+        _miembro.CurrentMemberEmail.Returns((string?)null);
+
+        var r = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+
+        Assert.Equal(401, r.Estado);
+        Assert.Equal("puerta.sesion_requerida", r.Codigo);
+        Assert.Empty(_orquestador.Pedidos);
+
+        // El control: sin declararlo, la misma sesión sin correo pasa con su miembro.
+        _ajustes.Flujos[Flujo] = ConSujetoDe(_ajustes.Flujos[Flujo], "  ");
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"));
+        Assert.Equal($"eventos.comprador:{Ana:n}", Assert.Single(_orquestador.Pedidos).Cabeceras["X-Synergos-Sujeto"]);
+    }
+
+    // ── Los avisos en vivo que declara un flujo (núcleo N3, NE-6 de 007) ──────────────────
+
+    private sealed class CanalQueRecuerda : Synergos.CMS.Interfaces.IRealtimeNotifier
+    {
+        public List<(string Canal, string Evento, string Datos)> Publicados { get; } = [];
+        public bool Rompe { get; set; }
+
+        public Task PublishAsync(string channel, string eventName, string payloadJson, CancellationToken cancellationToken = default)
+        {
+            if (Rompe) throw new InvalidOperationException("el canal no contesta");
+            Publicados.Add((channel, eventName, payloadJson));
+            return Task.CompletedTask;
+        }
+    }
+
+    private CanalQueRecuerda ConAvisos(params AvisoEnVivoSettings[] avisos)
+    {
+        var f = _ajustes.Flujos[Flujo];
+        _ajustes.Flujos[Flujo] = new FlujoDeLaPuertaSettings
+        {
+            Acceso = f.Acceso, SujetoKind = f.SujetoKind, Negocio = f.Negocio, Aviso = f.Aviso, EnVivo = [.. avisos],
+        };
+        var canal = new CanalQueRecuerda();
+        _enVivo = new AvisoEnVivoDeLaPuerta(canal, NullLogger<AvisoEnVivoDeLaPuerta>.Instance);
+        return canal;
+    }
+
+    [Fact]
+    public async Task Tras_una_operacion_que_sale_bien_avisa_en_vivo_en_su_canal_con_lo_que_trae_la_respuesta()
+    {
+        var canal = ConAvisos(
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:cerrado:{id}", Nombre = "cerrado" },
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:evento:{eventoId}", Nombre = "entrada" },
+            new AvisoEnVivoSettings { Operacion = "cancelar", Canal = "flujo:cancelado:{id}", Nombre = "cancelado" });
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.OK, """{"id":"s-1","datos":{"eventoId":"ev-9"}}""");
+
+        var r = await Pedir("POST", "cerrar", "id=s-1");
+
+        Assert.Equal(200, r.Estado);
+        Assert.Equal(
+            [("flujo:cerrado:s-1", "cerrado", """{"eventoId":"ev-9"}"""), ("flujo:evento:ev-9", "entrada", """{"eventoId":"ev-9"}""")],
+            canal.Publicados);
+    }
+
+    [Fact]
+    public async Task Un_rechazo_un_canal_sin_su_dato_o_un_canal_roto_no_avisan_ni_cambian_la_respuesta()
+    {
+        var canal = ConAvisos(
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:cerrado:{id}", Nombre = "cerrado" },
+            new AvisoEnVivoSettings { Operacion = "cerrar", Canal = "flujo:nada:{nada}", Nombre = "nada" });
+
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.Conflict, """{"code":"eventos.already_completed","transient":false}""",
+            "application/problem+json");
+        Assert.Equal(409, (await Pedir("POST", "cerrar", "id=s-1")).Estado);
+        Assert.Empty(canal.Publicados);
+
+        // El que no se puede llenar no sale; el otro sí.
+        _orquestador.Responde = _ => Orquestador.Json(HttpStatusCode.OK, """{"id":"s-1"}""");
+        Assert.Equal(200, (await Pedir("POST", "cerrar", "id=s-1")).Estado);
+        Assert.Equal(["flujo:cerrado:s-1"], canal.Publicados.Select(p => p.Canal));
+
+        canal.Rompe = true;
+        var r = await Pedir("POST", "cerrar", "id=s-1");
+        Assert.Equal(200, r.Estado);
+        Assert.Equal("""{"id":"s-1"}""", r.Cuerpo);
+    }
+
     [Fact]
     public async Task La_llave_se_reemite_atada_al_sujeto_y_cabe_en_la_de_una_saga()
     {
@@ -555,6 +693,192 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal((504, "puerta.tiempo_agotado", true), (lento.Estado, lento.Codigo, lento.Json.GetProperty("transient").GetBoolean()));
     }
 
+    // ── Lo que se abre a invitados (núcleo, NB-3 de 011) ───────────────────────────
+
+    private FlujoDeLaPuertaSettings Abierto(int? freno = null, params string[] invitado)
+    {
+        var bien = _ajustes.Flujos[Flujo];
+        return new FlujoDeLaPuertaSettings
+        {
+            Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = bien.Aviso,
+            Invitado = invitado.Length == 0 ? ["disponibilidad"] : [.. invitado], FrenoPorMinuto = freno,
+        };
+    }
+
+    [Fact]
+    public async Task Una_lectura_abierta_a_invitados_pasa_sin_sesion_y_sin_sujeto()
+    {
+        // Ver las horas antes de iniciar sesión: la puerta pasa la lectura sin sujeto, porque no lo hay ni lo pide.
+        Sesion(null);
+        _ajustes.Flujos[Flujo] = Abierto();
+
+        var r = await Pedir("POST", "disponibilidad", cuerpo: """{"desde":"2026-10-20T14:00:00Z"}""", tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+
+        Assert.Equal(200, r.Estado);
+        var (metodo, ruta, cabeceras, cuerpo) = Assert.Single(_orquestador.Pedidos);
+        Assert.Equal(("POST", "/v1/flujos/eventos.compra/disponibilidad"), (metodo, ruta));
+        Assert.False(cabeceras.ContainsKey(LoQuePoneLaPuerta.CabeceraDelSujeto));
+        Assert.Equal("""{"desde":"2026-10-20T14:00:00Z"}""", Encoding.UTF8.GetString(cuerpo));
+    }
+
+    [Fact]
+    public async Task Sin_abrirla_o_sin_freno_una_lectura_sigue_pidiendo_sesion_y_abrir_siempre()
+    {
+        // Falla cerrada: lo que el flujo no abre, o un freno que no está, es «hace falta iniciar sesión». Y abrir una
+        // saga nunca se abre a invitados, aunque la lectura sí.
+        Sesion(null);
+        var cerrada = await Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+        _ajustes.Flujos[Flujo] = Abierto();
+        var sinFreno = await Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura());
+        var abrir = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave(), tabla: TablaConLectura(), freno: new FrenoDeLaPuerta());
+
+        Assert.Equal((401, "puerta.sesion_requerida"), (cerrada.Estado, cerrada.Codigo));
+        Assert.Equal((401, "puerta.sesion_requerida"), (sinFreno.Estado, sinFreno.Codigo));
+        Assert.Equal((401, "puerta.sesion_requerida"), (abrir.Estado, abrir.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task El_freno_corta_a_quien_pide_de_mas_y_no_a_los_demas()
+    {
+        Sesion(null);
+        _ajustes.Flujos[Flujo] = Abierto(freno: 2);
+        var freno = new FrenoDeLaPuerta();
+        Task<Respuesta> Leer(string ip) => Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: TablaConLectura(), freno: freno, ip: ip);
+
+        Assert.Equal(200, (await Leer("203.0.113.7")).Estado);
+        Assert.Equal(200, (await Leer("203.0.113.7")).Estado);
+        var demas = await Leer("203.0.113.7");
+        var otro = await Leer("198.51.100.9");
+
+        Assert.Equal((429, "puerta.demasiadas_peticiones", true), (demas.Estado, demas.Codigo, demas.Json.GetProperty("transient").GetBoolean()));
+        Assert.InRange(int.Parse(demas.Cabeceras.RetryAfter.ToString(), System.Globalization.CultureInfo.InvariantCulture), 1, 60);
+        Assert.Equal(200, otro.Estado);
+        Assert.Equal(3, _orquestador.Pedidos.Count);
+    }
+
+    [Fact]
+    public void A_un_invitado_solo_se_le_abre_una_lectura_sin_dueno()
+    {
+        // Lo dice el CONTRATO: abrir y consultar ponen sujeto; listarlas en Invitado no las vuelve de nadie.
+        ValidateOptionsResult Con(FlujoDeLaPuertaSettings f) => new ValidadorDeLaPuerta(TablaConLectura(), Secciones)
+            .Validate(null, new PuertaSettings { Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Flujo] = f } });
+
+        Assert.True(Con(Abierto()).Succeeded);
+        Assert.Contains("a quien no inició sesión sólo se le abre una lectura sin dueño", Con(Abierto(null, "abrir")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("a quien no inició sesión sólo se le abre una lectura sin dueño", Con(Abierto(null, "consultar")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("Invitado abre «vender», que no es una operación del flujo", Con(Abierto(null, "vender")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("FrenoPorMinuto es 0", Con(Abierto(freno: 0)).FailureMessage, StringComparison.Ordinal);
+    }
+
+    // ── El acceso del personal (núcleo, P8 = A del lote 6) ─────────────────────────
+
+    /// <summary>La misma tabla con todas sus operaciones marcadas <c>acceso: personal</c>, como un flujo del personal.</summary>
+    private static TablaDeLaPuerta DelPersonal(bool conLectura = false)
+    {
+        var doc = conLectura ? ContratoConLectura() : ContratoDeLaCompra();
+        foreach (var ruta in doc["paths"]!.AsObject())
+        {
+            foreach (var metodo in ruta.Value!.AsObject())
+            {
+                if (metodo.Value![TablaDeLaPuerta.MarcaDelFlujo] is JsonObject marca) marca["acceso"] = TablaDeLaPuerta.AccesoDelPersonal;
+            }
+        }
+        return TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]);
+    }
+
+    private FlujoDeLaPuertaSettings Personal(params string[] roles)
+    {
+        var bien = _ajustes.Flujos[Flujo];
+        return new FlujoDeLaPuertaSettings
+        {
+            Acceso = AccesoDeLaPuerta.Personal, Roles = [.. roles], SujetoKind = "eventos.personal",
+            Negocio = bien.Negocio, Aviso = bien.Aviso,
+        };
+    }
+
+    [Fact]
+    public async Task Una_operacion_del_personal_pasa_con_el_rol_y_el_sujeto_es_la_persona_del_personal()
+    {
+        _ajustes.Flujos[Flujo] = Personal("vendedor", "admin");
+        _miembro.HasAnyRole(Arg.Any<string?>()).Returns(true);
+
+        var r = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave(), tabla: DelPersonal());
+
+        Assert.Equal(200, r.Estado);
+        _miembro.Received().HasAnyRole("vendedor,admin");
+        var (_, _, cabeceras, _) = Assert.Single(_orquestador.Pedidos);
+        Assert.Equal(LoQuePoneLaPuerta.Sujeto("eventos.personal", Ana), cabeceras[LoQuePoneLaPuerta.CabeceraDelSujeto]);
+    }
+
+    [Fact]
+    public async Task Sin_el_rol_es_403_sin_sesion_401_y_no_sale_nada()
+    {
+        _ajustes.Flujos[Flujo] = Personal("vendedor");
+        _miembro.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        var sinRol = await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave(), tabla: DelPersonal());
+        Sesion(null);
+        var sinSesion = await Pedir("GET", "consultar", consulta: "id=s-1", tabla: DelPersonal());
+
+        Assert.Equal((403, "puerta.personal_requerido", false), (sinRol.Estado, sinRol.Codigo, sinRol.Json.GetProperty("transient").GetBoolean()));
+        Assert.Equal((401, "puerta.sesion_requerida"), (sinSesion.Estado, sinSesion.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task Una_operacion_del_personal_no_se_abre_a_invitados_aunque_la_listen()
+    {
+        // Ni al arrancar ni, si llegara, al pedirla: lo del personal pide el rol, y un invitado no tiene ninguno.
+        var tabla = DelPersonal(conLectura: true);
+        var ajustes = Personal("vendedor");
+        var abierta = new FlujoDeLaPuertaSettings
+        {
+            Acceso = ajustes.Acceso, Roles = ajustes.Roles, SujetoKind = ajustes.SujetoKind, Negocio = ajustes.Negocio,
+            Aviso = ajustes.Aviso, Invitado = ["disponibilidad"],
+        };
+        var arranque = new ValidadorDeLaPuerta(tabla, Secciones)
+            .Validate(null, new PuertaSettings { Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Flujo] = abierta } });
+        Sesion(null);
+        _ajustes.Flujos[Flujo] = abierta;
+        var r = await Pedir("POST", "disponibilidad", cuerpo: "{}", tabla: tabla, freno: new FrenoDeLaPuerta());
+
+        Assert.Contains("Invitado abre «disponibilidad», que pone un sujeto, una llave o un contacto, o es del personal", arranque.FailureMessage, StringComparison.Ordinal);
+        Assert.Equal((401, "puerta.sesion_requerida"), (r.Estado, r.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
+    [Fact]
+    public void El_acceso_del_personal_se_cruza_con_el_contrato_en_los_dos_sentidos()
+    {
+        ValidateOptionsResult Con(TablaDeLaPuerta tabla, FlujoDeLaPuertaSettings f) => new ValidadorDeLaPuerta(tabla, Secciones)
+            .Validate(null, new PuertaSettings { Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Flujo] = f } });
+
+        Assert.True(Con(DelPersonal(), Personal("vendedor")).Succeeded);
+        Assert.Contains("Acceso es «Miembro» y el contrato marca del personal abrir, cancelar, cerrar, consultar, cotizar",
+            Con(DelPersonal(), _ajustes.Flujos[Flujo]).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("Acceso es «Personal» y el contrato no marca del personal abrir, cancelar, cerrar, consultar, cotizar",
+            Con(TablaDeLaCompra(), Personal("vendedor")).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("Roles está vacío o tiene uno en blanco", Con(DelPersonal(), Personal()).FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("Roles está vacío o tiene uno en blanco", Con(DelPersonal(), Personal(" ")).FailureMessage, StringComparison.Ordinal);
+        var miembroConRoles = Personal("vendedor");
+        Assert.Contains("Roles sólo vale con Acceso «Personal»",
+            Con(TablaDeLaCompra(), new FlujoDeLaPuertaSettings
+            {
+                Acceso = AccesoDeLaPuerta.Miembro, Roles = miembroConRoles.Roles, SujetoKind = "eventos.comprador",
+                Negocio = miembroConRoles.Negocio, Aviso = miembroConRoles.Aviso,
+            }).FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Una_marca_con_otro_acceso_no_arma_la_tabla()
+    {
+        var doc = ContratoDeLaCompra();
+        doc["paths"]!["/v1/ticket-quotes"]!["post"]![TablaDeLaPuerta.MarcaDelFlujo]!["acceso"] = "duenos";
+
+        var ex = Assert.Throws<InvalidOperationException>(() => TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]));
+        Assert.Contains("el acceso «duenos» no es uno que la puerta sepa dar", ex.Message, StringComparison.Ordinal);
+    }
+
     // ── La configuración, validada al arrancar ─────────────────────────────────────
 
     private static readonly SeccionesDelSitio Secciones = new(
@@ -584,6 +908,8 @@ public sealed class FlujosControllerTests : IDisposable
         { "campo", "no es un campo de NegocioDeEventos" },
         { "ruta", "tiene que ser una ruta del sitio" },
         { "marcador", "la operación que avisa no lo trae" },
+        { "sujeto-de", "SujetoDe «documento» tiene que ser «miembro» o «correo»" },
+        { "en-vivo", "EnVivo avisa tras «pagar», que no es una operación del flujo" },
     };
 
     [Theory]
@@ -600,6 +926,12 @@ public sealed class FlujosControllerTests : IDisposable
             "seccion" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Aviso = bien.Aviso, Negocio = new NegocioDelFlujoSettings { Seccion = "Evento", Campos = ["FeePercent"] } }),
             "campo" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Aviso = bien.Aviso, Negocio = new NegocioDelFlujoSettings { Seccion = "Eventos", Campos = ["Comision"] } }),
             "ruta" => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "https://evil.test/x" } }),
+            "sujeto-de" => (Flujo, ConSujetoDe(bien, "documento")),
+            "en-vivo" => (Flujo, new FlujoDeLaPuertaSettings
+            {
+                Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = bien.Aviso,
+                EnVivo = [new AvisoEnVivoSettings { Operacion = "pagar", Canal = "flujo:x:{id}", Nombre = "x" }],
+            }),
             _ => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "/compra?c={orden}" } }),
         };
 

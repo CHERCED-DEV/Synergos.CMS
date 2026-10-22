@@ -1,0 +1,24 @@
+{
+  "clave": "muestra.devolucion",
+  "posterior_a": "muestra.cita",
+  "entrada": ["paciente", "cita", "monto"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "cita": "texto",
+    "monto": "dinero",
+    "cobroId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["cita", "monto"],
+  "fases": {
+    "devolver": ["original", "devolver"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["cobroId"] },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "monto"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver"
+    }
+  }
+}

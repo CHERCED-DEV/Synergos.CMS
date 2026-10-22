@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -64,10 +66,35 @@ public sealed partial class SeamComposer
         services.AddSingleton<AgreementSigningKeyProvider>();
         services.AddSingleton<IAgreementSigner, LazyAgreementSigner>();
         services.AddSingleton(sp => new EquipmentAgreementLedger(sp.GetRequiredService<IJsonEntityStore>()));
-        services.AddSingleton(sp => new EquipmentAgreementIssuer(
-            sp.GetRequiredService<EquipmentAgreementLedger>(),
-            sp.GetRequiredService<IAgreementSigner>(),
-            sp.GetRequiredService<TimeProvider>()));
+
+        // El sello conmuta sin invalidar nada (research R11 de la línea 005): sella el del interruptor y comprueba el
+        // que registra cada contrato. El LOCAL se registra en los dos modos —comprueba todo lo anterior al
+        // interruptor—, y el de Api.Signing también con Mode=Local si su sección sigue puesta, para comprobar lo que
+        // selló. Con Api.Signing caído el contrato sale con el sello pendiente: nunca se cae a la llave local.
+        services.AddSingleton(sp => new SelladorLocal(sp.GetRequiredService<IAgreementSigner>()));
+        var seccionDelSello = builder.Config.GetSection("Synergos:Alquiler:Agreement:Signing");
+        if (Interruptor.Encendido(builder.Config, "Synergos:Alquiler:Agreement:Mode", "Api", new AgreementSettings().Mode))
+        {
+            RegistrarSelladorDeApiSigning(services, seccionDelSello);
+            services.AddSingleton(sp => new EquipmentAgreementIssuer(
+                sp.GetRequiredService<EquipmentAgreementLedger>(),
+                sp.GetRequiredService<HttpAgreementSealer>(),
+                sp.GetRequiredService<TimeProvider>(),
+                [sp.GetRequiredService<SelladorLocal>()]));
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(seccionDelSello["BaseUrl"]))
+            {
+                RegistrarSelladorDeApiSigning(services, seccionDelSello);
+            }
+
+            services.AddSingleton(sp => new EquipmentAgreementIssuer(
+                sp.GetRequiredService<EquipmentAgreementLedger>(),
+                sp.GetRequiredService<SelladorLocal>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetService<HttpAgreementSealer>() is { } api ? [api] : []));
+        }
 
         // ── EJE 2 · la transacción ──────────────────────────────────────────────────
         //
@@ -90,11 +117,85 @@ public sealed partial class SeamComposer
         }
         else
         {
-            services.AddSingleton<IEquipmentRentalService>(sp => new StubEquipmentRentalService(
-                sp.GetRequiredService<IEquipmentCatalogProvider>(),
-                sp.GetRequiredService<IJsonEntityStore>(),
-                sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>().CurrentValue.MaxRentalDays));
+            services.AddSingleton<IEquipmentRentalService>(sp =>
+            {
+                var alquiler = sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>().CurrentValue;
+                return new StubEquipmentRentalService(
+                    sp.GetRequiredService<IEquipmentCatalogProvider>(),
+                    sp.GetRequiredService<IJsonEntityStore>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    alquiler.MaxRentalDays,
+                    TimeZoneInfo.FindSystemTimeZoneById(alquiler.TimeZone));
+            });
         }
+
+        // ── Lo que pasa después del cierre con un alquiler de la PUERTA (línea 005, T018) ─────
+        //
+        // Declarar y confirmar van al orquestador por el que salió el alquiler, no al motor del Mode. No
+        // depende del modo de la ruta directa: la puerta habla con el orquestador también con el motor en
+        // proceso de default. Hay destino si el despliegue dice dónde vive (BaseUrl) o si la directa ya va
+        // por él (Mode=Bff); sin destino no sale a la red, como el artefacto de Eventos.
+        var seccionDeAlquiler = builder.Config.GetSection("Synergos:Alquiler");
+        var hayOrquestadorDeAlquiler = !string.IsNullOrWhiteSpace(seccionDeAlquiler["BaseUrl"])
+            || Interruptor.Encendido(builder.Config, "Synergos:Alquiler:Mode", "Bff", new AlquilerSettings().Mode);
+        if (hayOrquestadorDeAlquiler)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpAlquilerDeLaPuerta.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 30));
+        }
+        services.AddSingleton<IAlquilerDeLaPuerta>(sp => new HttpAlquilerDeLaPuerta(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptionsMonitor<AlquilerSettings>>(),
+            sp.GetRequiredService<ILogger<HttpAlquilerDeLaPuerta>>(),
+            hayOrquestadorDeAlquiler));
+
+        // El contrato de un alquiler de la PUERTA (línea 005, T024): se emite al leerlo, con lo que contesta el
+        // orquestador, y «mis alquileres» reconcilia los completados que el registro no tiene. Mismo destino.
+        if (hayOrquestadorDeAlquiler)
+        {
+            services.AddClienteDelArbolDeServicios(
+                ArtefactoDeAlquiler.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 10));
+        }
+        services.AddSingleton(sp => new ArtefactoDeAlquiler(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<EquipmentAgreementLedger>(),
+            sp.GetRequiredService<EquipmentAgreementIssuer>(),
+            sp.GetRequiredService<IEquipmentCatalogProvider>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<ILogger<ArtefactoDeAlquiler>>(),
+            hayOrquestadorDeAlquiler));
+
+        // La OFERTA de cada equipo (línea 005, T029): lo que la renta por la puerta cotiza. Se publica al publicar un
+        // equipmentPage y se retira al despublicarlo o borrarlo, NUNCA al arrancar (ADR 0013). Sólo tiene sentido
+        // donde la puerta tiene destino —Synergos:Alquiler:BaseUrl, la misma condición con que abre alquiler.renta—;
+        // sin él no sale a la red y no falla.
+        var hayDestinoParaLaOferta = !string.IsNullOrWhiteSpace(seccionDeAlquiler["BaseUrl"]);
+        if (hayDestinoParaLaOferta)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpEquipmentOfferPublisher.ClientName, DestinoDelArbol.De(seccionDeAlquiler, "http://127.0.0.1:5305/", 10));
+        }
+        services.AddSingleton<IEquipmentOfferPublisher>(sp => new HttpEquipmentOfferPublisher(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HttpEquipmentOfferPublisher>>(),
+            hayDestinoParaLaOferta));
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeEquipoAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeEquipoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeEquipoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeEquipoAlRetirar>();
+    }
+
+    /// <summary>
+    /// El sellador de <c>Api.Signing</c> para los contratos, con su cliente por la pieza del árbol: sella con
+    /// <c>Mode=Api</c>, y con <c>Mode=Local</c> comprueba lo que selló mientras estuvo encendido.
+    /// </summary>
+    private static void RegistrarSelladorDeApiSigning(IServiceCollection services, IConfiguration seccionDelSello)
+    {
+        services.AddClienteDelArbolDeServicios(
+            HttpAgreementSealer.ClientName, DestinoDelArbol.De(seccionDelSello, "http://127.0.0.1:5218/", 10));
+        services.AddSingleton(sp => new HttpAgreementSealer(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IOptions<AgreementSettings>>(),
+            sp.GetRequiredService<ILogger<HttpAgreementSealer>>()));
     }
 }

@@ -27,7 +27,10 @@ namespace Synergos.CMS.Web.Controllers;
 ///   <item>405 <c>puerta.metodo_no_permitido</c>.</item>
 ///   <item>503 <c>puerta.flujo_no_disponible</c>: marcada, pero el despliegue no la abrió o no dice
 ///   dónde vive su orquestador.</item>
-///   <item>401 <c>puerta.sesion_requerida</c>.</item>
+///   <item>401 <c>puerta.sesion_requerida</c>, salvo en lo que el flujo abre a invitados (<c>Invitado</c>, NB-3: sólo
+///   lecturas sin sujeto); eso pasa por su freno, y si se pide de más, 429 <c>puerta.demasiadas_peticiones</c>.</item>
+///   <item>403 <c>puerta.personal_requerido</c>: una operación del personal (P8) pedida por un miembro sin ninguno de los
+///   <c>Roles</c> del flujo.</item>
 ///   <item>403 <c>puerta.origen_no_permitido</c>, 415 <c>puerta.tipo_no_soportado</c> y 413
 ///   <c>puerta.cuerpo_demasiado_grande</c> (<see cref="FiltroMismoOrigenJson"/>).</item>
 ///   <item>400 <c>puerta.llave_requerida</c>, 400 <c>puerta.parametro_requerido</c> y 400
@@ -54,7 +57,12 @@ public sealed class FlujosController : ControllerBase
     private readonly ReenvioDeLaPuerta _reenvio;
     private readonly Func<string?> _sitio;
 
+    private readonly AvisoEnVivoDeLaPuerta? _enVivo;
+    private readonly FrenoDeLaPuerta? _freno;
+
     /// <param name="sitio">El nombre del sitio de la petición, para el aviso. Nulo: el host.</param>
+    /// <param name="enVivo">Los avisos en vivo que declaran los flujos (núcleo N3). Nulo: no se avisa.</param>
+    /// <param name="freno">El freno de lo abierto a invitados (NB-3), un singleton. Nulo: no se abre nada a invitados.</param>
     public FlujosController(
         TablaDeLaPuerta tabla,
         IOptionsMonitor<PuertaSettings> ajustes,
@@ -62,7 +70,9 @@ public sealed class FlujosController : ControllerBase
         IMemberAccessGate miembro,
         ReenvioDeLaPuerta reenvio,
         SeccionesDelSitio? secciones = null,
-        SitioDeLaPeticion? sitio = null)
+        SitioDeLaPeticion? sitio = null,
+        AvisoEnVivoDeLaPuerta? enVivo = null,
+        FrenoDeLaPuerta? freno = null)
     {
         _tabla = tabla;
         _ajustes = ajustes;
@@ -71,6 +81,8 @@ public sealed class FlujosController : ControllerBase
         _reenvio = reenvio;
         _secciones = secciones;
         _sitio = () => sitio?.Resolver().SiteRoot?.Name;
+        _enVivo = enVivo;
+        _freno = freno;
     }
 
     [Route("{flujo}/{operacion}")]
@@ -96,10 +108,32 @@ public sealed class FlujosController : ControllerBase
             return Fallo(new FalloDeLaPuerta(StatusCodes.Status503ServiceUnavailable, "puerta.flujo_no_disponible",
                 "Este flujo no está abierto en este sitio."));
         }
-        if (!_miembro.IsAuthenticated || _miembro.CurrentMemberKey is not { } miembro || miembro == Guid.Empty)
+        // Sin sesión sólo pasa lo que el flujo abre a invitados (NB-3), y sólo con freno: sin él, falla cerrada.
+        Guid? miembro = _miembro.IsAuthenticated && _miembro.CurrentMemberKey is { } clave && clave != Guid.Empty ? clave : null;
+        var abierta = _freno is not null && !op.Personal && ajustes.Invitado.Contains(op.Operacion, StringComparer.Ordinal);
+        if (miembro is null && !abierta)
         {
             return Fallo(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida",
                 "Hace falta iniciar sesión."));
+        }
+        // Una operación del personal (P8): el rol del miembro, que es lo que reemplaza a la regla de dueño de la original.
+        // Sin roles declarados no pasa nadie: el arranque ya no lo deja, y si llegara, falla cerrada. Uno en blanco no cuenta:
+        // HasAnyRole con la lista vacía deja pasar a cualquier miembro.
+        var roles = ajustes.Roles.Where(r => !string.IsNullOrWhiteSpace(r)).ToList();
+        if (op.Personal && (roles.Count == 0 || !_miembro.HasAnyRole(string.Join(',', roles))))
+        {
+            return Fallo(new FalloDeLaPuerta(StatusCodes.Status403Forbidden, "puerta.personal_requerido",
+                "Esta operación es del personal del negocio."));
+        }
+        if (abierta)
+        {
+            var quien = miembro is { } m ? $"miembro:{m:N}" : $"ip:{HttpContext.Connection.RemoteIpAddress}";
+            if (!_freno!.Permitir(op.Flujo, op.Operacion, quien, ajustes.FrenoPorMinuto ?? AccesoDeLaPuerta.FrenoPorDefecto, out var espera))
+            {
+                Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(espera.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return Fallo(new FalloDeLaPuerta(StatusCodes.Status429TooManyRequests, "puerta.demasiadas_peticiones",
+                    "Demasiadas peticiones seguidas: vuelve a intentarlo en un momento.", Transitorio: true));
+            }
         }
         if (FiltroMismoOrigenJson.Origen(Request) is { } ajeno) return Fallo(ajeno);
 
@@ -111,7 +145,21 @@ public sealed class FlujosController : ControllerBase
             if (grande is not null) return Fallo(grande);
         }
 
-        var sujeto = LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, miembro);
+        // El sujeto es el miembro, o —si el flujo lo declara— el seudónimo del correo de la sesión (NE-4). Sólo lo
+        // necesita la operación que lo pone o que reemite la llave con él; una lectura abierta a invitados, no (NB-3).
+        string sujeto = string.Empty;
+        if (op.Declara(LoQuePoneLaPuerta.CabeceraDelSujeto) || op.LargoDeLaLlave is not null)
+        {
+            var porCorreo = SujetoDeLaPuerta.Normalizar(ajustes.SujetoDe) == SujetoDeLaPuerta.Correo;
+            if (miembro is not { } dueno || (porCorreo && _miembro.CurrentMemberEmail is not { Length: > 0 }))
+            {
+                return Fallo(new FalloDeLaPuerta(StatusCodes.Status401Unauthorized, "puerta.sesion_requerida",
+                    porCorreo ? "Hace falta una sesión con correo." : "Hace falta iniciar sesión."));
+            }
+            sujeto = porCorreo
+                ? LoQuePoneLaPuerta.SujetoPorCorreo(ajustes.SujetoKind ?? string.Empty, _miembro.CurrentMemberEmail!)
+                : LoQuePoneLaPuerta.Sujeto(ajustes.SujetoKind ?? string.Empty, dueno);
+        }
         var cabeceras = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (op.LargoDeLaLlave is not null)
         {
@@ -178,6 +226,12 @@ public sealed class FlujosController : ControllerBase
         Response.StatusCode = salida.Estado;
         if (salida.TipoDeContenido is not null) Response.ContentType = salida.TipoDeContenido;
         await Response.Body.WriteAsync(salida.Cuerpo, ct);
+
+        // Lo que el flujo declara avisar en vivo, sólo si salió bien y DESPUÉS de contestar (NE-6). No lanza.
+        if (_enVivo is not null && salida.Estado is >= 200 and < 300)
+        {
+            await _enVivo.PublicarAsync(op.Flujo, ajustes, op.Operacion, parametros, salida.Cuerpo, ct);
+        }
         return new EmptyResult();
     }
 
