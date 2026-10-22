@@ -5,6 +5,7 @@ using NSubstitute.ExceptionExtensions;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
+using Synergos.CMS.Web.Services.Catalog;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Notifications;
@@ -19,6 +20,9 @@ public sealed class OfertaDeTiendaAlPublicarTests
 {
     private readonly IProductCatalogProvider _catalogo = Substitute.For<IProductCatalogProvider>();
     private readonly ITiendaOfferPublisher _ofertas = Substitute.For<ITiendaOfferPublisher>();
+    private readonly ITiendaEnElContenido _tienda = Substitute.For<ITiendaEnElContenido>();
+
+    public OfertaDeTiendaAlPublicarTests() => _tienda.Ve(Arg.Any<Guid>()).Returns(true);
 
     private OfertaDeTiendaAlPublicar Montar(string fuente)
     {
@@ -27,7 +31,7 @@ public sealed class OfertaDeTiendaAlPublicarTests
         {
             Sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Shop"] = fuente },
         });
-        return new OfertaDeTiendaAlPublicar(_catalogo, _ofertas, fuentes, NullLogger<OfertaDeTiendaAlPublicar>.Instance);
+        return new OfertaDeTiendaAlPublicar(_catalogo, _ofertas, fuentes, _tienda, NullLogger<OfertaDeTiendaAlPublicar>.Instance);
     }
 
     internal static IContent Nodo(string alias, string? sku, int id = 0)
@@ -36,6 +40,7 @@ public sealed class OfertaDeTiendaAlPublicarTests
         tipo.Alias.Returns(alias);
         var nodo = Substitute.For<IContent>();
         nodo.Id.Returns(id);
+        nodo.Key.Returns(Guid.NewGuid());
         nodo.ContentType.Returns(tipo);
         nodo.GetValue<string>("productSku", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<bool>()).Returns(sku);
         return nodo;
@@ -75,6 +80,25 @@ public sealed class OfertaDeTiendaAlPublicarTests
         await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
         await _ofertas.Received(1).RetireAsync("SIN-PRECIO", Arg.Any<CancellationToken>());
         await _ofertas.Received(1).RetireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// El rojo del CI (2026-10-22): al importar el árbol entero desde una base vacía, cada ficha se publicaba antes de
+    /// que el catálogo alcanzara el <c>siteRoot</c> de la tienda; el catálogo dejaba un ERR por ficha y el manejador
+    /// RETIRABA su oferta. Si el catálogo todavía no ve la ficha en la tienda, no se le pregunta y no se toca nada.
+    /// </summary>
+    [Fact]
+    public async Task Si_el_catalogo_todavia_no_ve_la_tienda_no_retira_ni_le_pregunta_al_catalogo()
+    {
+        var ficha = Nodo("productPage", "TAZA-001");
+        _tienda.Ve(ficha.Key).Returns(false);
+        _catalogo.GetProductAsync("TAZA-001", Arg.Any<CancellationToken>()).Returns((ProductDetail?)null);
+
+        await Montar("cms").HandleAsync(Publicados(ficha), default);
+
+        await _catalogo.DidNotReceiveWithAnyArgs().GetProductAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().RetireAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
     }
 
     [Fact]
