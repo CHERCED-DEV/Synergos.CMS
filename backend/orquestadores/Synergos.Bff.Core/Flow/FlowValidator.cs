@@ -58,6 +58,7 @@ public static class FlowValidator
         RevisarAlFallar(flujo, donde, errores);
         RevisarConservadas(flujo, registro, errores);
         RevisarPosterior(flujo, registro, donde, errores);
+        RevisarParaLoPosterior(flujo, contrato, errores);
         RevisarOmitirSiCero(flujo, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
@@ -260,7 +261,13 @@ public static class FlowValidator
             errores.Add($"la salida nombra «{nombre}», que ningún paso escribe y no entra: saldría siempre vacía.");
         }
 
-        foreach (var nombre in contrato.Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal))
+        var escalaresParaLoPosterior = flujo.LoQueDejaParaLoPosterior.Where(n => !n.StartsWith(Reservas, StringComparison.Ordinal)).ToList();
+        foreach (var nombre in escalaresParaLoPosterior.Where(n => !escritos.Contains(n) && !flujo.Entrada.Contains(n, StringComparer.Ordinal)))
+        {
+            errores.Add($"deja para lo posterior «{nombre}», que ningún paso escribe y no entra: lo posterior lo leería siempre vacío.");
+        }
+
+        foreach (var nombre in contrato.Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal).Union(escalaresParaLoPosterior, StringComparer.Ordinal))
         {
             if (HuelenACredencial.FirstOrDefault(o => nombre.Contains(o, StringComparison.OrdinalIgnoreCase)) is { } olor)
             {
@@ -272,7 +279,7 @@ public static class FlowValidator
             var tipo = BindingDeFlujo.TipoDe(flujo, tipos, registro, nombre);
             if (tipo is null)
             {
-                errores.Add($"«{nombre}» se guarda en la saga (lo lee una fase que continúa o sale) y no se sabe su tipo: "
+                errores.Add($"«{nombre}» se guarda en la saga (lo lee una fase que continúa, sale o queda para lo posterior) y no se sabe su tipo: "
                     + "ni entra con tipo ni lo escribe un paso que declare el suyo, o lo escriben dos con tipos distintos.");
             }
             else if (!tipo.Tipo.Guardable)
@@ -439,9 +446,9 @@ public static class FlowValidator
     /// <para><b>Sin <c>despues</c></b>: lo conservado no se consumió. Un <c>despues</c> diría que, una vez cerrado, se
     /// deshace distinto, y es justo lo que un cierre que conserva no hace.</para>
     ///
-    /// <para><b>Con su id en la salida</b>: una garantía retenida que nadie sabe cuál es no la liquida nadie. El id es
-    /// lo primero que escribe el paso que reserva, y fuera de un bloque: dentro, cada ítem escribe el suyo y la salida
-    /// no puede nombrarlos.</para>
+    /// <para><b>Con su id a la vista</b>: una garantía retenida que nadie sabe cuál es no la liquida nadie. El id es
+    /// lo primero que escribe el paso que reserva, y sale en la salida o la original lo deja para lo posterior
+    /// (<c>para_lo_posterior</c>, D-011-NB10), por su nombre o con <c>reservas:&lt;paso&gt;</c>.</para>
     /// </remarks>
     private static void RevisarConservadas(FlujoDef flujo, IRegistroDePasos registro, List<string> errores)
     {
@@ -459,10 +466,13 @@ public static class FlowValidator
                 errores.Add($"{aqui}, que declara «despues: {despues}»: lo conservado no se consume, y después de "
                     + "completar lo resuelve la operación posterior.");
             }
-            if (reservante.Escribe.Count == 0 || !flujo.LoQueSale.Contains(reservante.Escribe[0], StringComparer.Ordinal))
+            if (reservante.Escribe.Count == 0
+                || !(flujo.LoQueSale.Contains(reservante.Escribe[0], StringComparer.Ordinal)
+                     || flujo.LoQueDejaParaLoPosterior.Contains(reservante.Escribe[0], StringComparer.Ordinal)
+                     || flujo.LoQueDejaParaLoPosterior.Contains(Reservas + reservante.Id, StringComparer.Ordinal)))
             {
-                errores.Add($"{aqui} y su id no sale en la salida: lo reservado queda vivo fuera de la saga, y nadie "
-                    + "sabría cuál liquidar.");
+                errores.Add($"{aqui} y su id no sale en la salida ni lo deja para lo posterior: lo reservado queda vivo "
+                    + "fuera de la saga, y nadie sabría cuál liquidar.");
             }
         }
     }
@@ -537,8 +547,51 @@ public static class FlowValidator
     }
 
     /// <summary>
+    /// Lo que la saga deja para una operación posterior (<c>para_lo_posterior</c>, D-011-NB10 y NN-18 de 005): se guarda
+    /// con ella y el contrato no lo publica.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sólo una saga genérica lo guarda</b>: con tipos, que es lo que deja leerlo después con el suyo.</para>
+    ///
+    /// <para><b>Un dato por su nombre</b> lo escribe un paso o entra, con un tipo que se guarda (lo revisa
+    /// <see cref="RevisarModoGenerico"/>, como la salida). Nunca algo efímero: el contacto del aviso no acaba en la
+    /// saga por esta puerta.</para>
+    ///
+    /// <para><b>Lo reservado, con <c>reservas:&lt;paso&gt;</c></b>, de un paso que reserva: cada reserva guarda sobre qué
+    /// quedó al cerrarse (<see cref="ReservaDeFlujo.Cerrada"/>), y lo posterior lo recorre por ítem.</para>
+    /// </remarks>
+    private static void RevisarParaLoPosterior(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
+    {
+        if (flujo.LoQueDejaParaLoPosterior.Count == 0) return;
+        if (contrato.Tipos is null)
+        {
+            errores.Add("deja algo para lo posterior y su saga no es genérica: no lo guarda con tipos, y nadie podría leerlo.");
+            return;
+        }
+
+        var efimeros = (flujo.Efimera ?? new Dictionary<string, IReadOnlyList<string>>())
+            .SelectMany(e => e.Value).ToHashSet(StringComparer.Ordinal);
+        foreach (var nombre in flujo.LoQueDejaParaLoPosterior)
+        {
+            if (nombre.StartsWith(Reservas, StringComparison.Ordinal))
+            {
+                var paso = nombre[Reservas.Length..];
+                if (!flujo.Pasos.TryGetValue(paso, out var reservante) || reservante.Reserva is null)
+                {
+                    errores.Add($"deja para lo posterior «{nombre}», y «{paso}» no es un paso que reserve.");
+                }
+            }
+            else if (efimeros.Contains(nombre))
+            {
+                errores.Add($"deja para lo posterior «{nombre}», que es efímero: no se guarda, y menos para después.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Lo que cada flujo posterior (P6) le pide a su original, entre los flujos de un orquestador: que exista, que sea
-    /// genérica y que tenga en su salida, con el mismo tipo, cada dato que lee.
+    /// genérica y que DEJE para lo posterior (<c>para_lo_posterior</c>, D-011-NB10), con el mismo tipo, cada dato que lee,
+    /// y lo que reservó con el paso que recorre (<c>reservas:&lt;paso&gt;</c>, NN-18 de 005).
     /// </summary>
     /// <remarks>
     /// Va aparte de <see cref="Validar"/> porque mira dos definiciones a la vez; lo llama el validador del catálogo al
@@ -567,12 +620,23 @@ public static class FlowValidator
                 continue;
             }
 
+            var deja = original.Flujo.LoQueDejaParaLoPosterior;
             foreach (var (nombre, declarado) in (posterior.Flujo.Tipos ?? new Dictionary<string, TipoDeclarado>(StringComparer.Ordinal))
                          .Where(t => t.Value.Origen == OrigenDelValor.Original).OrderBy(t => t.Key, StringComparer.Ordinal))
             {
-                if (!original.Flujo.LoQueSale.Contains(nombre, StringComparer.Ordinal))
+                if (declarado.ReservasDe is { } paso)
                 {
-                    errores.Add($"{aqui}: lee «{nombre}» de «{deCual}», que no lo tiene en su salida.");
+                    if (!deja.Contains(Reservas + paso, StringComparer.Ordinal))
+                    {
+                        errores.Add($"{aqui}: lee en «{nombre}» lo que «{deCual}» reservó con «{paso}», y «{deCual}» no lo deja "
+                            + $"para lo posterior (\"para_lo_posterior\": [\"{Reservas}{paso}\"]).");
+                    }
+                    continue;
+                }
+                if (!deja.Contains(nombre, StringComparer.Ordinal))
+                {
+                    errores.Add($"{aqui}: lee «{nombre}» de «{deCual}», que no lo deja para lo posterior (\"para_lo_posterior\"): "
+                        + "lo que la original publica en su salida no basta.");
                     continue;
                 }
                 var alla = BindingDeFlujo.TipoDe(original.Flujo, tipos, registro, nombre);
@@ -786,6 +850,13 @@ public static class FlowValidator
             }
             deOrigen.Add(HoldLeg.CampoHold);
             deOrigen.Add(HoldLeg.CampoCierre);
+        }
+        else if (flujo.Tipos?.GetValueOrDefault(bloque.Fuente) is { ReservasDe: not null }
+                 && escritos.Contains(bloque.Fuente) && !alEmpezar.Contains(bloque.Fuente, StringComparer.Ordinal))
+        {
+            // Lo que la original reservó, por ítem (NN-18 de 005): lo escribe flow.leer-original en esta fase, y cada
+            // ítem trae lo reservado, sobre qué actuar ahora y cuánto.
+            deOrigen.UnionWith(TipoDeclarado.CamposDeLoReservado.Keys);
         }
         else if (!alEmpezar.Contains(bloque.Fuente, StringComparer.Ordinal))
         {

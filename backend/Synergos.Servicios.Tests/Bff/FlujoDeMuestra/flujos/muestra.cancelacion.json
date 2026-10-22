@@ -1,0 +1,30 @@
+{
+  "clave": "muestra.cancelacion",
+  "posterior_a": "muestra.cita",
+  "entrada": ["paciente", "cita", "devolver"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "cita": "texto",
+    "devolver": "dinero",
+    "cobroId": { "tipo": "texto", "de": "original" },
+    "apartados": { "de": "original", "reservas": "apartar" }
+  },
+  "salida": ["cita", "devolver"],
+  "fases": {
+    "abrir": [
+      "original",
+      { "para_cada": "apartados", "como": "apartado", "pasos": ["cancelar"] },
+      "devolver"
+    ]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["cobroId", "apartados"] },
+    "cancelar": { "tipo": "booking.cancelar", "lee": ["apartado.objetivo"], "motivo": "no se pudo cancelar la hora" },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "devolver"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver el cobro"
+    }
+  }
+}

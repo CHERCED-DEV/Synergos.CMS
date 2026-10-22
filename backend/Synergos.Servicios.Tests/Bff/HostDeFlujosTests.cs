@@ -32,6 +32,7 @@ public sealed class HostDeFlujosTests
             "contacto": { "de": "contacto" }
           },
           "salida": ["cobroId", "reservaId"],
+          "para_lo_posterior": ["cobroId", "reservas:apartar"],
           "efimera": { "cerrar": ["contacto"] },
           "fases": {
             "abrir": ["apartar", "autorizar"],
@@ -868,13 +869,14 @@ public sealed class HostDeFlujosTests
 
     /// <summary>Una cita como la deja completada el flujo de la cita: su cobro guardado con el tipo con que se guarda.</summary>
     private static SagaDeFlujo Original(string id, Ref dueno, SagaStatus estado = SagaStatus.Completed, string flujo = "prueba.cita",
-        string? cobro = "pg-1")
+        string? cobro = "pg-1", IReadOnlyList<ReservaDeFlujo>? apartados = null)
         => new(id, flujo, dueno, estado,
             new Dictionary<string, ValorDeFlujo>(StringComparer.Ordinal)
             {
                 ["cobroId"] = new("texto?", cobro is null ? null : JsonSerializer.SerializeToElement(cobro)),
             },
-            new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(StringComparer.Ordinal), [], null, DateTimeOffset.UtcNow);
+            new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(StringComparer.Ordinal) { ["apartar"] = apartados ?? [] },
+            [], null, DateTimeOffset.UtcNow);
 
     private static FlowContext EntradaDeDevolucion(string cita, decimal monto = 20_000m) => new FlowContext()
         .Set("paciente", Paciente).Set("cita", cita).Set("monto", Money.Of(monto, "COP"));
@@ -969,15 +971,17 @@ public sealed class HostDeFlujosTests
     }
 
     [Fact]
-    public void Lo_que_lee_de_la_original_tiene_que_salir_en_su_salida_y_con_el_mismo_tipo()
+    public void Lo_que_lee_de_la_original_tiene_que_dejarlo_ella_para_lo_posterior_y_con_el_mismo_tipo()
     {
         using var cita = new Banco();
         using var devolucion = new Banco(Devolucion);
         Assert.Empty(FlowValidator.ValidarPosteriores([cita.Registrado(), devolucion.Registrado()], devolucion.Registro));
 
-        using var sinCobro = new Banco(Mutar("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"reservaId\"]"));
+        // D-011-NB10: tenerlo en la salida no basta; lo que lee lo posterior es lo que la original DEJA para él.
+        using var sinCobro = new Banco(Mutar("\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"reservas:apartar\"]"));
+        Assert.Contains("cobroId", sinCobro.Flujo.LoQueSale);
         Assert.Contains(FlowValidator.ValidarPosteriores([sinCobro.Registrado(), devolucion.Registrado()], devolucion.Registro),
-            e => e.Contains("lee «cobroId» de «prueba.cita», que no lo tiene en su salida", StringComparison.Ordinal));
+            e => e.Contains("lee «cobroId» de «prueba.cita», que no lo deja para lo posterior", StringComparison.Ordinal));
 
         using var otroTipo = new Banco(MutarDevolucion("\"cobroId\": { \"tipo\": \"texto\", \"de\": \"original\" }", "\"cobroId\": { \"tipo\": \"dinero\", \"de\": \"original\" }"));
         Assert.Contains(FlowValidator.ValidarPosteriores([cita.Registrado(), otroTipo.Registrado()], otroTipo.Registro),
@@ -985,6 +989,164 @@ public sealed class HostDeFlujosTests
 
         Assert.Contains(FlowValidator.ValidarPosteriores([devolucion.Registrado()], devolucion.Registro),
             e => e.Contains("es posterior a «prueba.cita», y este orquestador no tiene ese flujo", StringComparison.Ordinal));
+    }
+
+    // ── Lo que la original deja para lo posterior (D-011-NB10, NN-18 de 005) ─────────────────────
+
+    /// <summary>
+    /// Cancelar lo que una cita confirmó, por ítem: un flujo posterior que recorre lo que la original reservó con
+    /// <c>apartar</c> y cancela, de cada reserva, lo que produjo su cierre.
+    /// </summary>
+    private const string Cancelacion = """
+        {
+          "clave": "prueba.cancelacion",
+          "posterior_a": "prueba.cita",
+          "entrada": ["paciente", "cita"],
+          "tipos": {
+            "paciente": { "de": "sujeto" },
+            "cita": "texto",
+            "apartados": { "de": "original", "reservas": "apartar" }
+          },
+          "salida": ["cita"],
+          "fases": { "abrir": ["original", { "para_cada": "apartados", "como": "apartado", "pasos": ["cancelar"] }] },
+          "pasos": {
+            "original": { "tipo": "flow.leer-original", "lee": ["cita"], "escribe": ["apartados"] },
+            "cancelar": { "tipo": "booking.cancelar", "lee": ["apartado.objetivo"] }
+          }
+        }
+        """;
+
+    private static string MutarCancelacion(string antes, string despues)
+    {
+        Assert.True(Cancelacion.Contains(antes, StringComparison.Ordinal),
+            $"La mutación no entra: la cancelación ya no dice «{antes}». Revisar este test antes que el host.");
+        return Cancelacion.Replace(antes, despues, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cerrar_anota_en_cada_reserva_sobre_que_quedo()
+    {
+        // NN-18: lo que produjo el cierre —la reserva confirmada— queda en la reserva, no sólo en la compensación de
+        // después. Un cierre que no produce nada (capturar) deja el objetivo de siempre: el cobro.
+        using var banco = new Banco();
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        var abierta = banco.Motor.Find("cita-1")!;
+        Assert.Null(Assert.Single(abierta.Reservas["apartar"]).Cerrada);
+
+        var cerrada = await fachada.ContinuarAsync("cerrar", "cita-1", Paciente, new FlowContext().Set("contacto", null), CancellationToken.None);
+
+        Assert.True(cerrada.IsOk, cerrada.Rejection?.ToString());
+        var saga = banco.Motor.Find("cita-1")!;
+        Assert.Equal(new ReservaDeFlujo("bh-1", "bh-1", null, "rv-1"), Assert.Single(saga.Reservas["apartar"]));
+        Assert.Equal("pg-1", Assert.Single(saga.Reservas["autorizar"]).Cerrada);
+    }
+
+    [Fact]
+    public async Task Lo_que_se_deja_para_lo_posterior_se_guarda_aunque_no_salga_ni_lo_lea_otra_fase()
+    {
+        // La reserva de la agenda: la escribe la última fase, nadie la lee después y no sale. Sólo la guarda que la
+        // original la deje para lo posterior.
+        using var banco = new Banco(Mutar("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"cobroId\"]")
+            .Replace("\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\", \"reservaId\"]", StringComparison.Ordinal));
+        Assert.Empty(banco.Errores());
+        Assert.DoesNotContain("reservaId", banco.Binding.Reconstruye);
+        var fachada = banco.Fachada();
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+
+        Assert.True((await fachada.ContinuarAsync("cerrar", "cita-1", Paciente, new FlowContext().Set("contacto", null), CancellationToken.None)).IsOk);
+
+        Assert.Equal("rv-1", banco.Motor.Find("cita-1")!.Datos["reservaId"].Valor!.Value.GetString());
+    }
+
+    [Fact]
+    public async Task Lo_posterior_recorre_lo_que_la_original_reservo_y_actua_sobre_lo_que_produjo_cada_cierre()
+    {
+        using var banco = new Banco(Cancelacion);
+        Assert.Empty(banco.Errores());
+        using var cita = new Banco();
+        Assert.Empty(FlowValidator.ValidarPosteriores([cita.Registrado(), banco.Registrado()], banco.Registro));
+        // Dos unidades confirmadas y una soltada en una confirmación parcial: ésa no se cerró, y no hay nada que cancelar.
+        banco.Motor.Put(Original("cita-1", Paciente, apartados:
+        [
+            new ReservaDeFlujo("bh-1", "bh-1", null, "rv-1"),
+            new ReservaDeFlujo("bh-2", "bh-2"),
+            new ReservaDeFlujo("bh-3", "bh-3", 2, "rv-3"),
+        ]));
+
+        var r = await banco.Fachada().AbrirAsync("can-1", Paciente, new FlowContext().Set("paciente", Paciente).Set("cita", "cita-1"), CancellationToken.None);
+
+        Assert.True(r.IsOk, r.Rejection?.ToString());
+        Assert.Equal(["cancelar rv-1", "cancelar rv-3"], banco.Puertos.Llamadas);
+        Assert.Equal(SagaStatus.Completed, banco.Motor.Find("cita-1")!.Status);
+    }
+
+    public static TheoryData<string, string, string> ParaLoPosteriorMalDeclarado() => new()
+    {
+        // lo reservado de un paso que no reserva
+        { "\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\", \"reservas:avisar\"]", "deja para lo posterior «reservas:avisar», y «avisar» no es un paso que reserve" },
+        // el contacto del aviso: efímero, nunca en la saga
+        { "\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\", \"contacto\"]", "deja para lo posterior «contacto», que es efímero" },
+        // algo que nadie escribe
+        { "\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\", \"fantasma\"]", "deja para lo posterior «fantasma», que ningún paso escribe y no entra" },
+    };
+
+    [Theory]
+    [MemberData(nameof(ParaLoPosteriorMalDeclarado))]
+    public void Lo_que_se_deja_para_lo_posterior_mal_declarado_no_arranca(string antes, string despues, string mensaje)
+    {
+        using var banco = new Banco(Mutar(antes, despues));
+
+        Assert.Contains(banco.Errores(), e => e.Contains(mensaje, StringComparison.Ordinal) && e.Contains("«prueba.cita»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Lo_que_se_deja_para_lo_posterior_tampoco_se_llama_como_una_credencial()
+    {
+        // Sólo para lo posterior, fuera de la salida: el olor lo tiene que ver esta regla y no la de la salida.
+        var conToken = Mutar("\"escribe\": [\"reservaId\"], \"llave\": \"confirm\"", "\"escribe\": [\"tokenDeReserva\"], \"llave\": \"confirm\"")
+            .Replace("\"salida\": [\"cobroId\", \"reservaId\"]", "\"salida\": [\"cobroId\"]", StringComparison.Ordinal)
+            .Replace("\"para_lo_posterior\": [\"cobroId\",", "\"para_lo_posterior\": [\"tokenDeReserva\", \"cobroId\",", StringComparison.Ordinal);
+        using (var control = new Banco(conToken.Replace("tokenDeReserva", "referenciaDeReserva", StringComparison.Ordinal)))
+        {
+            Assert.Empty(control.Errores());
+        }
+
+        using var banco = new Banco(conToken);
+        Assert.Contains(banco.Errores(), e => e.Contains("«tokenDeReserva» se guarda en la saga y se llama como una credencial", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Para_lo_posterior_no_repite_un_nombre()
+    {
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(
+            Mutar("\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\", \"cobroId\"]")));
+        Assert.Contains("«para_lo_posterior» nombra «cobroId» dos veces", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Recorrer_lo_reservado_de_la_original_exige_que_ella_lo_deje_y_un_bloque_que_lo_lea_despues_de_leerla()
+    {
+        using var cita = new Banco();
+        using var cancelacion = new Banco(Cancelacion);
+        using var sinDejarlo = new Banco(Mutar("\"para_lo_posterior\": [\"cobroId\", \"reservas:apartar\"]", "\"para_lo_posterior\": [\"cobroId\"]"));
+        Assert.Contains(FlowValidator.ValidarPosteriores([sinDejarlo.Registrado(), cancelacion.Registrado()], cancelacion.Registro),
+            e => e.Contains("lee en «apartados» lo que «prueba.cita» reservó con «apartar», y «prueba.cita» no lo deja para lo posterior", StringComparison.Ordinal));
+
+        // El bloque, antes de leer la original: no hay qué recorrer.
+        using var alReves = new Banco(MutarCancelacion(
+            "[\"original\", { \"para_cada\": \"apartados\", \"como\": \"apartado\", \"pasos\": [\"cancelar\"] }]",
+            "[{ \"para_cada\": \"apartados\", \"como\": \"apartado\", \"pasos\": [\"cancelar\"] }, \"original\"]"));
+        Assert.Contains(alReves.Errores(), e => e.Contains("un bloque repite sobre «apartados», que no es una entrada", StringComparison.Ordinal));
+
+        // Un campo que el ítem no trae.
+        using var otroCampo = new Banco(MutarCancelacion("\"lee\": [\"apartado.objetivo\"]", "\"lee\": [\"apartado.reservaId\"]"));
+        Assert.Contains(otroCampo.Errores(), e => e.Contains("«cancelar» lee «apartado.reservaId» y en ese punto del bloque nadie lo escribió", StringComparison.Ordinal));
+
+        // Lo reservado sólo se lee de la original: lo que la declara es «de» y «reservas», nada más.
+        var ex = Assert.Throws<FormatException>(() => FlujoDef.Leer(MutarCancelacion(
+            "{ \"de\": \"original\", \"reservas\": \"apartar\" }", "{ \"de\": \"original\", \"reservas\": \"apartar\", \"tipo\": \"texto\" }")));
+        Assert.Contains("tipo", ex.Message, StringComparison.Ordinal);
     }
 
     // ── Un flujo de una fase sin reservas (NE-10 de 007, núcleo N3) ─────────────────────────────
