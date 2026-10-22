@@ -58,8 +58,12 @@ public sealed record OfertaDeAlquilerRegistrada(
 /// paga. Publicada la oferta, la renta cotiza con <c>Api.Pricing</c> y el navegador sólo nombra equipo, unidades
 /// y fechas. De paso deja de ser un paso manual de despliegue crear el recurso del equipo en la agenda.</para>
 ///
-/// <para><b>Repetir no duplica.</b> Cada escritura lleva una llave derivada de lo que escribe, así que republicar
-/// la misma oferta devuelve lo que ya estaba; cambiar un precio lo vuelve a fijar.</para>
+/// <para><b>Repetir no duplica, y volver a un valor de antes lo fija.</b> Cada escritura lleva una llave derivada de la
+/// llave de la PUBLICACIÓN (una por publicar, la que manda el CMS) y de lo que escribe, como en Eventos: el reintento de
+/// una publicación devuelve lo que ya estaba, y una publicación nueva lo fija otra vez. Derivarla sólo de lo escrito
+/// perdía el cambio A→B→A: volver a A repetía la llave de la primera vez, la capacidad contestaba aquella respuesta y el
+/// precio vigente seguía siendo B (medido en vivo el 2026-10-22: la garantía vuelta a 300 000 seguía en 0 en Pricing, y
+/// la renta apartaba sin retenerla).</para>
 ///
 /// <para><b>Cambiar las unidades revisa el recurso</b> (NN-6, <c>revise</c> de la agenda del núcleo): la agenda toma la
 /// capacidad nueva sin tocar ninguna reserva. Si bajaron y hay reservas vigentes por encima de los cupos, siguen
@@ -98,11 +102,12 @@ public sealed class OfertaDeAlquiler : IDisposable
     /// <summary>Lo publicado de un equipo, o null si nunca se publicó.</summary>
     public OfertaDeAlquilerRegistrada? Registrada(string equipo) => _ofertas.Find(equipo);
 
-    /// <summary>Publica la oferta. Repetirla no duplica nada.</summary>
+    /// <summary>Publica la oferta. Repetirla con la misma llave no duplica nada; con otra, la vuelve a fijar.</summary>
     /// <param name="oferta">Lo que llegó.</param>
+    /// <param name="publicacion">La llave de la publicación: de ella salen las del precio y la de la revisión.</param>
     /// <param name="ct">Cancelación.</param>
     /// <returns>Lo publicado, o el rechazo (de forma, de las unidades, o de la capacidad).</returns>
-    public async Task<Result<OfertaDeAlquilerRegistrada>> PublicarAsync(OfertaDeEquipo oferta, CancellationToken ct)
+    public async Task<Result<OfertaDeAlquilerRegistrada>> PublicarAsync(OfertaDeEquipo oferta, IdempotencyKey publicacion, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(oferta);
         if (Revisar(oferta) is { } malo) return Result.Rejected<OfertaDeAlquilerRegistrada>(malo);
@@ -115,7 +120,7 @@ public sealed class OfertaDeAlquiler : IDisposable
         var tramos = (oferta.Tramos ?? []).OrderBy(t => t.DesdeDias).ToList();
 
         // Primero las unidades: sin recurso no hay qué apartar, y un precio publicado sin él vendería aire.
-        var recurso = await AsegurarRecursoAsync(equipo, oferta.Unidades!.Value, ct);
+        var recurso = await AsegurarRecursoAsync(equipo, oferta.Unidades!.Value, publicacion, ct);
         if (!recurso.IsOk) return Result.Rejected<OfertaDeAlquilerRegistrada>(recurso.Rejection!);
         var fuera = recurso.Value ?? [];
 
@@ -133,8 +138,8 @@ public sealed class OfertaDeAlquiler : IDisposable
 
         foreach (var (sujeto, monto) in precios)
         {
-            var fijado = await _capacidades.SetPriceAsync(
-                sujeto, monto, Derivada("precio", sujeto.ToString(), monto.Amount.ToString(CultureInfo.InvariantCulture), monto.Currency), ct);
+            var fijado = await _capacidades.SetPriceAsync(sujeto, monto,
+                Derivada(publicacion.Value, "precio", sujeto.ToString(), monto.Amount.ToString(CultureInfo.InvariantCulture), monto.Currency), ct);
             if (!fijado.IsOk) return Result.Rejected<OfertaDeAlquilerRegistrada>(fijado.Rejection!);
         }
 
@@ -176,11 +181,16 @@ public sealed class OfertaDeAlquiler : IDisposable
     /// <summary>
     /// Halla el recurso del equipo o lo crea con sus unidades; con otras unidades, lo revisa (NN-6).
     /// </summary>
+    /// <remarks>
+    /// La llave de la revisión sale de la publicación, como la del precio: 4→3→4→3 son cuatro revisiones. La de crear
+    /// sale del equipo y las unidades: un equipo se crea una sola vez.
+    /// </remarks>
     /// <returns>
     /// Las reservas vigentes que la revisión dejó fuera, nulo si no hubo revisión (el recurso ya tenía esas unidades o
     /// se acaba de crear), o el rechazo.
     /// </returns>
-    private async Task<Result<IReadOnlyList<OutsideReservationDto>?>> AsegurarRecursoAsync(string equipo, int unidades, CancellationToken ct)
+    private async Task<Result<IReadOnlyList<OutsideReservationDto>?>> AsegurarRecursoAsync(
+        string equipo, int unidades, IdempotencyKey publicacion, CancellationToken ct)
     {
         var sujeto = RentalSubject.For(equipo);
         var hallado = await _capacidades.FindResourceBySubjectAsync(sujeto, ct);
@@ -189,7 +199,7 @@ public sealed class OfertaDeAlquiler : IDisposable
             if (hallado.Value.Capacity == unidades) return Result.Ok<IReadOnlyList<OutsideReservationDto>?>(null);
 
             var revisado = await _capacidades.ReviseResourceAsync(hallado.Value.Id, unidades,
-                Derivada("revision", hallado.Value.Id, unidades.ToString(CultureInfo.InvariantCulture)), ct);
+                Derivada(publicacion.Value, "revision", hallado.Value.Id, unidades.ToString(CultureInfo.InvariantCulture)), ct);
             return revisado.IsOk
                 ? Result.Ok<IReadOnlyList<OutsideReservationDto>?>(revisado.Value.Outside)
                 : Result.Rejected<IReadOnlyList<OutsideReservationDto>?>(revisado.Rejection!);
