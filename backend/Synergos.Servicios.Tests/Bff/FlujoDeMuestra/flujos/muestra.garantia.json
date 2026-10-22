@@ -5,7 +5,8 @@
     "inquilino": { "de": "sujeto" },
     "garantia": "dinero"
   },
-  "salida": ["garantia", "garantiaId"],
+  "salida": ["garantia"],
+  "para_lo_posterior": ["garantiaId"],
   "fases": {
     "abrir": ["retener"],
     "cerrar": ["conservar"]

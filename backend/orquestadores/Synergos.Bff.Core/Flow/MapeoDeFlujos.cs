@@ -277,19 +277,11 @@ public static class MapeoDeFlujos
         if (EnLaPuertaExtensions.Operaciones.Contains(operacion, StringComparer.Ordinal)) builder.EnLaPuerta(clave, operacion, personal);
     }
 
-    /// <summary>Si la fase que abre se puede anticipar: ningún paso antes de reservar pide llave ni cierra.</summary>
-    private static bool SeAnticipa(FlujoGenerico f)
-    {
-        var fase = f.Definicion.Fases[0];
-        foreach (var elemento in fase.Pasos)
-        {
-            var ids = elemento.ParaCada?.Pasos ?? [elemento.Paso!];
-            var pasos = ids.Select(id => f.Definicion.Pasos[id]).ToList();
-            if (pasos.Any(p => p.Reserva is not null)) return true;
-            if (pasos.Any(p => p.CierraReserva is not null || p.Llave is not null || p.LlaveBase is not null)) return false;
-        }
-        return true;
-    }
+    /// <summary>
+    /// Si la fase que abre se puede anticipar: lo decide el intérprete, con la misma regla con que anticipar se niega
+    /// (NR-8 de 008: aquí se repetía con los datos de la definición, que no saben qué paso actúa sin llave).
+    /// </summary>
+    private static bool SeAnticipa(FlujoGenerico f) => f.Fachada.SeAnticipa;
 
     private static ProblemHttpResult? Sujeto(FlujoGenerico f, HttpRequest http, out Ref? sujeto)
     {

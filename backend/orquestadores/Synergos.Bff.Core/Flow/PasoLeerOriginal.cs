@@ -17,6 +17,10 @@ namespace Synergos.Bff.Core.Flow;
 /// mismo, para no enseñar qué hay detrás. Y sólo una COMPLETADA: sobre una en curso, lo posterior todavía no existe
 /// (cancelarla es la operación cancelar de su propio flujo), y una deshecha no tiene nada que devolver.</para>
 ///
+/// <para><b>Sólo lee lo que la original DEJA para lo posterior</b> (<c>para_lo_posterior</c>, D-011-NB10), que el validador
+/// cruza al arrancar: datos que la original guarda sin publicarlos, y lo que reservó por ítem (NN-18 de 005), que llega
+/// como una lista que un <c>para_cada</c> recorre.</para>
+///
 /// <para><b>Lee con el tipo que la original guardó</b> y comprueba que es el que declara este flujo: si una versión nueva
 /// cambió el tipo, lo dice en vez de leer otra cosa. Un dato que la original no tiene —el cobro de una cita gratis— sólo
 /// pasa si este flujo lo declara anulable; si no, es un rechazo con su nombre.</para>
@@ -73,7 +77,13 @@ public sealed class PasoLeerOriginal(ISagaStore<SagaDeFlujo> almacen, TiposDeVal
         for (var i = 0; i < valores.Length; i++)
         {
             var nombre = entrada.Paso.Escribe[i];
-            var declarado = tipos.Resolver(flujo.Tipos![nombre].Tipo!)
+            if (flujo.Tipos![nombre].ReservasDe is { } paso)
+            {
+                valores[i] = LoReservado(original, paso);
+                continue;
+            }
+
+            var declarado = tipos.Resolver(flujo.Tipos[nombre].Tipo!)
                 ?? throw new InvalidOperationException($"«{flujo.Clave}» declara «{nombre}» con un tipo que nadie registró.");
 
             if (original.Datos.GetValueOrDefault(nombre) is not { Valor: { ValueKind: not JsonValueKind.Null } } guardado)
@@ -97,6 +107,24 @@ public sealed class PasoLeerOriginal(ISagaStore<SagaDeFlujo> almacen, TiposDeVal
 
         return Task.FromResult(SalidaDePaso.Sigue(valores));
     }
+
+    /// <summary>
+    /// Lo que la original reservó con <paramref name="paso"/> y quedó CERRADO, un ítem por reserva: lo reservado, sobre
+    /// qué actuar ahora (lo que produjo el cierre) y cuánto.
+    /// </summary>
+    /// <remarks>
+    /// Lo que no se cerró —un ítem soltado en una confirmación parcial— no se deja: se deshizo, y no queda nada sobre lo
+    /// que actuar. Que la original declare <c>reservas:&lt;paso&gt;</c> para lo posterior lo exige el validador al arrancar.
+    /// </remarks>
+    private static IReadOnlyList<FlowContext> LoReservado(SagaDeFlujo original, string paso)
+        => (original.Reservas.GetValueOrDefault(paso)
+                ?? throw new InvalidOperationException($"La saga {original.Id} de «{original.Flujo}» no guarda reservas de «{paso}»."))
+            .Where(r => r.Cerrada is not null)
+            .Select(r => new FlowContext()
+                .Set(HoldLeg.CampoHold, r.HoldId)
+                .Set(TipoDeclarado.CampoObjetivo, r.Cerrada)
+                .Set(TipoDeclarado.CampoCantidad, r.Cantidad))
+            .ToList();
 
     private static Task<SalidaDePaso> Rechaza(Rejection rechazo) => Task.FromResult(SalidaDePaso.Rechaza(rechazo));
 }

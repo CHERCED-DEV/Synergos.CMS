@@ -41,6 +41,9 @@ namespace Synergos.Bff.Core.Flow;
 /// <param name="Acceso">Quién pide sus operaciones (núcleo, P8 = A del lote 6): sin valor, el dueño; <c>personal</c>, el
 /// personal del negocio, y entonces la puerta comprueba su rol y <c>flow.leer-original</c> no aplica la regla de dueño
 /// de la original. El sujeto es la persona del personal: el rastro de quién lo hizo. Opcional.</param>
+/// <param name="ParaLoPosterior">Lo que la saga deja para una operación posterior al cierre (núcleo, D-011-NB10 y NN-18 de
+/// 005): datos por su nombre y, con <c>reservas:&lt;paso&gt;</c>, lo que ese paso reservó. Se guarda con la saga y el
+/// contrato no lo publica; <c>flow.leer-original</c> sólo puede leer esto. Opcional.</param>
 public sealed record FlujoDef(
     string Clave,
     IReadOnlyList<string> Entrada,
@@ -51,8 +54,12 @@ public sealed record FlujoDef(
     IReadOnlyList<string>? Salida = null,
     IReadOnlyDictionary<string, LecturaDef>? Lecturas = null,
     string? PosteriorA = null,
-    string? Acceso = null)
+    string? Acceso = null,
+    IReadOnlyList<string>? ParaLoPosterior = null)
 {
+    /// <summary>Lo que deja para lo posterior: vacío si no declara nada.</summary>
+    public IReadOnlyList<string> LoQueDejaParaLoPosterior => ParaLoPosterior ?? Array.Empty<string>();
+
     /// <summary>El único valor de <see cref="Acceso"/> que no es el del dueño.</summary>
     public const string AccesoDelPersonal = "personal";
 
@@ -145,6 +152,9 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// escribe el dominio y vive en <c>Api.Notifications</c>, el flujo sólo dice cuál.</param>
 /// <param name="Proposito">Para qué propósito comprueba el permiso un paso de consentimiento. Es un dato
 /// de la definición, como la plantilla del aviso, y no del C# (núcleo N2, NN-3 de Salud).</param>
+/// <param name="OmitirSiFalta">Un dato anulable que el paso lee: si falta, el paso no corre y lo que escribiría queda
+/// nulo (núcleo, NN-19 de 005 y 011). Es lo que no existe: devolver el cobro de una reserva gratis, anular la garantía
+/// de un equipo que no la pidió. Sólo en un paso que no reserva: el que reserva se salta con <c>omitir_si_cero</c>.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -158,7 +168,8 @@ public sealed record PasoDef(
     string? AlFallar = null,
     string? OmitirSiCero = null,
     string? Plantilla = null,
-    string? Proposito = null)
+    string? Proposito = null,
+    string? OmitirSiFalta = null)
 {
     /// <summary><c>al_fallar: seguir</c>: el fallo se anota y la fase sigue.</summary>
     public const string Seguir = "seguir";
@@ -226,6 +237,8 @@ public sealed record TipoDeCampo(string Tipo, string? Clase = null);
 /// <param name="Campos">Si es una lista de ítems, el tipo de cada campo del ítem; si no, nulo.</param>
 /// <param name="Campo">En <see cref="OrigenDelValor.Negocio"/>, el campo de la configuración que se lee.</param>
 /// <param name="Clase">Si es una referencia del cuerpo, la clase que admite (<c>{ "tipo": "ref", "kind": … }</c>).</param>
+/// <param name="ReservasDe">En <see cref="OrigenDelValor.Original"/>, el paso de la original cuyas reservas se leen
+/// (<c>{ "de": "original", "reservas": "apartar" }</c>): una lista de ítems con <see cref="CamposDeLoReservado"/>.</param>
 /// <remarks>
 /// El lector sólo comprueba la FORMA; que el nombre del tipo exista, y que una referencia del cuerpo
 /// declare su clase, lo comprueba el validador contra el registro de tipos del orquestador, que es
@@ -233,8 +246,25 @@ public sealed record TipoDeCampo(string Tipo, string? Clase = null);
 /// </remarks>
 public sealed record TipoDeclarado(
     OrigenDelValor Origen, string? Tipo, IReadOnlyDictionary<string, TipoDeCampo>? Campos = null, string? Campo = null,
-    string? Clase = null)
+    string? Clase = null, string? ReservasDe = null)
 {
+    /// <summary>El campo de un ítem reservado de la original: sobre qué se actúa ahora (lo que produjo su cierre).</summary>
+    public const string CampoObjetivo = "objetivo";
+
+    /// <summary>El campo de un ítem reservado de la original: cuántas unidades, si el paso lo dijo.</summary>
+    public const string CampoCantidad = "cantidad";
+
+    /// <summary>
+    /// Los campos de cada ítem de lo que una original reservó (<see cref="ReservasDe"/>): lo reservado, sobre qué actuar
+    /// ahora y cuánto.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, TipoDeCampo> CamposDeLoReservado = new Dictionary<string, TipoDeCampo>(StringComparer.Ordinal)
+    {
+        [HoldLeg.CampoHold] = new("texto"),
+        [CampoObjetivo] = new("texto"),
+        [CampoCantidad] = new("entero?"),
+    };
+
     /// <summary>El tipo con que el lector declara un sujeto.</summary>
     public const string TipoDelSujeto = "ref";
 
@@ -276,7 +306,7 @@ internal static class LectorDeFlujo
             var raiz = doc.RootElement;
             SinRepetidos(raiz, "el flujo");
             Objeto(raiz, "el flujo");
-            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas", "posterior_a", "acceso");
+            SoloEstos(raiz, "el flujo", "clave", "entrada", "fases", "pasos", "efimera", "tipos", "salida", "lecturas", "posterior_a", "acceso", "para_lo_posterior");
 
             var clave = Texto(raiz, "clave", "el flujo");
             var donde = $"el flujo «{clave}»";
@@ -354,7 +384,17 @@ internal static class LectorDeFlujo
                 throw new FormatException($"{donde}: «acceso» sólo admite «{FlujoDef.AccesoDelPersonal}» (sin él, lo pide el dueño), y trae «{acceso}».");
             }
 
-            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas, posteriorA, acceso);
+            IReadOnlyList<string>? paraLoPosterior = null;
+            if (raiz.TryGetProperty("para_lo_posterior", out _))
+            {
+                paraLoPosterior = Textos(raiz, "para_lo_posterior", donde);
+                if (paraLoPosterior.GroupBy(n => n, StringComparer.Ordinal).FirstOrDefault(g => g.Count() > 1) is { } repetido)
+                {
+                    throw new FormatException($"{donde}: «para_lo_posterior» nombra «{repetido.Key}» dos veces.");
+                }
+            }
+
+            return new FlujoDef(clave, entrada, fases, pasos, efimera, tipos, salida, lecturas, posteriorA, acceso, paraLoPosterior);
         }
     }
 
@@ -409,6 +449,10 @@ internal static class LectorDeFlujo
                 SoloEstos(nodo, donde, "de", "campo", "tipo");
                 return new TipoDeclarado(OrigenDelValor.Negocio,
                     NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"), null, Texto(nodo, "campo", donde));
+            case "original" when nodo.TryGetProperty("reservas", out _):
+                SoloEstos(nodo, donde, "de", "reservas");
+                return new TipoDeclarado(OrigenDelValor.Original, null, TipoDeclarado.CamposDeLoReservado,
+                    ReservasDe: Texto(nodo, "reservas", donde));
             case "original":
                 SoloEstos(nodo, donde, "de", "tipo");
                 return new TipoDeclarado(OrigenDelValor.Original, NombreDeTipo(Requerido(nodo, "tipo", donde), $"{donde}, «tipo»"));
@@ -470,7 +514,7 @@ internal static class LectorDeFlujo
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
-            "omitir_si_cero", "plantilla", "proposito");
+            "omitir_si_cero", "plantilla", "proposito", "omitir_si_falta");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && alFallar is not (PasoDef.Seguir or PasoDef.Soltar))
@@ -502,7 +546,8 @@ internal static class LectorDeFlujo
             alFallar,
             Opcional(nodo, "omitir_si_cero", aqui),
             Opcional(nodo, "plantilla", aqui),
-            Opcional(nodo, "proposito", aqui));
+            Opcional(nodo, "proposito", aqui),
+            Opcional(nodo, "omitir_si_falta", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

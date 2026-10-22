@@ -257,7 +257,8 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// promoción que vence entre la vista previa y la compra la rechaza abrir, no esto.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Si <paramref name="fase"/> no es la que abre, o si el
-    /// tramo a anticipar tiene un paso con llave o que cierra una reserva.</exception>
+    /// tramo a anticipar tiene un paso con llave, que actúa sin ella (<see cref="IPaso.ActuaSinLlave"/>) o que cierra
+    /// una reserva.</exception>
     public async Task<Result<FlowContext>> AnticiparAsync(string fase, FlowContext entrada, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entrada);
@@ -270,17 +271,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
 
         var hasta = PrimerTramoQueReserva(definicion);
-        var escriben = definicion.Pasos.Take(hasta)
-            .SelectMany(e => e.ParaCada?.Pasos ?? new[] { e.Paso! })
-            .Select(id => _flujo.Pasos[id])
-            .Where(p => _pasos.Para(p.Tipo)!.Llave != LlaveRequerida.Ninguna || p.CierraReserva is not null)
-            .Select(p => p.Id)
-            .ToList();
+        var escriben = LoQueEscribeAntesDeReservar(definicion);
         if (escriben.Count > 0)
         {
             throw new InvalidOperationException(
                 $"«{_flujo.Clave}» no se puede anticipar: antes de reservar corre {string.Join(", ", escriben)}, "
-                + "que pide llave o cierra una reserva, y anticipar no escribe nada.");
+                + "que pide llave, actúa sin ella o cierra una reserva, y anticipar no escribe nada.");
         }
 
         var corrida = new Corrida(string.Empty, Ref.Create(_flujo.Clave, "anticipo"), Abrir(entrada), saga: null);
@@ -363,6 +359,23 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
         return ctx;
     }
+
+    /// <summary>
+    /// Si la fase que abre se puede anticipar —cotizar—: si nada de lo que corre antes de reservar escribe en una
+    /// capacidad. La misma regla con que <see cref="AnticiparAsync"/> se niega, para que quien mapea «cotizar» no la
+    /// repita con otros datos.
+    /// </summary>
+    public bool SeAnticipa => LoQueEscribeAntesDeReservar(_flujo.Fases[0]).Count == 0;
+
+    /// <summary>Los pasos que corren antes del primer tramo que reserva y escriben en una capacidad.</summary>
+    private List<string> LoQueEscribeAntesDeReservar(FaseDef fase)
+        => fase.Pasos.Take(PrimerTramoQueReserva(fase))
+            .SelectMany(e => e.ParaCada?.Pasos ?? new[] { e.Paso! })
+            .Select(id => _flujo.Pasos[id])
+            .Where(p => _pasos.Para(p.Tipo) is var tipo
+                        && (tipo!.Llave != LlaveRequerida.Ninguna || tipo.ActuaSinLlave || p.CierraReserva is not null))
+            .Select(p => p.Id)
+            .ToList();
 
     /// <summary>El índice del primer elemento que reserva, o el final de la fase si ninguno.</summary>
     private int PrimerTramoQueReserva(FaseDef fase)
@@ -454,6 +467,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // nulo —como al saltar la fase— para que nadie lea un valor que no se produjo.
         if (definicion.OmitirSiCero is { } monto
             && Ambito.Leer<Money?>(monto, corrida.Ctx, alias, item) is { IsZero: true })
+        {
+            foreach (var nombre in definicion.Escribe) Ambito.Escribir(nombre, null, corrida.Ctx, alias, item);
+            return Desenlace.Sigue;
+        }
+
+        // Lo que no existe no se deshace ni se devuelve (NN-19): el cobro de una reserva gratis, la garantía que no se
+        // pidió. El paso no corre, y lo que escribiría queda nulo, como al omitir un cobro de cero.
+        if (definicion.OmitirSiFalta is { } dato && Ambito.Leer<object?>(dato, corrida.Ctx, alias, item) is null)
         {
             foreach (var nombre in definicion.Escribe) Ambito.Escribir(nombre, null, corrida.Ctx, alias, item);
             return Desenlace.Sigue;
