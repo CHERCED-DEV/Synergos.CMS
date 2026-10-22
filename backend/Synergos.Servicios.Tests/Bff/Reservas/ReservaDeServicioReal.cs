@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Reservas.Contracts;
@@ -30,13 +31,18 @@ internal sealed class ReservaDeServicioReal : IDisposable
     public const string Llave = "llave-de-reservas";
     public const string Servicio = "masaje-60";
 
+    /// <summary>La categoría con que el arnés registra cada llamada a una capacidad.</summary>
+    public const string LlamadasAlArnes = "Synergos.Arnes.Llamadas";
+
     private readonly string _raiz = Path.Combine(Path.GetTempPath(), "reservas-" + Guid.NewGuid().ToString("N"));
     private readonly WebApplicationFactory<OfertaDeServicioResponse> _fabrica;
 
     /// <summary>Un día hábil a diez días, a las 10:00 UTC: dentro del horario de la oferta de prueba.</summary>
     public static readonly DateTimeOffset Inicio = new(DateTimeOffset.UtcNow.Date.AddDays(10).AddHours(10), TimeSpan.Zero);
 
-    public ReservaDeServicioReal(Func<HttpRequestMessage, string?>? falla = null, IReadOnlyDictionary<string, string>? ajustes = null)
+    public ReservaDeServicioReal(
+        Func<HttpRequestMessage, string?>? falla = null, IReadOnlyDictionary<string, string>? ajustes = null,
+        ILoggerProvider? registro = null)
     {
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking")
@@ -46,12 +52,19 @@ internal sealed class ReservaDeServicioReal : IDisposable
         PublicarPlantilla().GetAwaiter().GetResult();
 
         IHttpClientFactory fabrica = falla is null ? Capacidades : new ConFallo(Capacidades, falla);
+        // Con registro, cada llamada a una capacidad deja su línea, como el manejador de registro del cliente en un
+        // despliegue: el arnés sustituye la fábrica y sin esto ninguna llamada se vería en el registro.
+        if (registro is not null) fabrica = new ConRegistro(fabrica, registro.CreateLogger(LlamadasAlArnes));
         _fabrica = new WebApplicationFactory<OfertaDeServicioResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("reservas:Storage:Root", Almacen);
             b.UseSetting("Reservas:ApiKey", Llave);
             foreach (var (clave, valor) in ajustes ?? new Dictionary<string, string>()) b.UseSetting(clave, valor);
-            b.ConfigureTestServices(s => s.AddSingleton(fabrica));
+            b.ConfigureTestServices(s =>
+            {
+                s.AddSingleton(fabrica);
+                if (registro is not null) s.AddLogging(l => l.AddProvider(registro).SetMinimumLevel(LogLevel.Trace));
+            });
         });
         Orquestador = _fabrica.CreateClient();
         Orquestador.DefaultRequestHeaders.Add("X-Synergos-Key", Llave);
@@ -166,6 +179,22 @@ internal sealed class ReservaDeServicioReal : IDisposable
         return Enviar(peticion);
     }
 
+    /// <summary>La lectura de disponibilidad, SIN sujeto: la pide quien todavía no inició sesión (NB-3).</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Disponibilidad(
+        DateTimeOffset desde, DateTimeOffset hasta, string servicio = Servicio, string clase = "reservas.servicio")
+        => Enviar(new HttpRequestMessage(HttpMethod.Post, "v1/flujos/reservas.servicio/disponibilidad")
+        {
+            Content = JsonContent.Create(new { servicio = new { kind = clase, id = servicio }, desde, hasta }),
+        });
+
+    /// <summary>«Mis reservas» (NB-6): las del sujeto que pone la puerta, con la consulta tal cual (<c>?estado=…</c>).</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Listar(string consulta = "", string cliente = "u-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Get, "v1/flujos/reservas.servicio" + consulta);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(cliente));
+        return Enviar(peticion);
+    }
+
     // ── Lo que quedó en las capacidades ─────────────────────────────────────
 
     public async Task<JsonElement> Leer(string capacidad, string ruta)
@@ -218,6 +247,27 @@ internal sealed class ReservaDeServicioReal : IDisposable
 
     public static bool Es(HttpRequestMessage r, string metodo, string patron)
         => r.Method.Method == metodo && Regex.IsMatch(r.RequestUri!.AbsolutePath, patron);
+
+    /// <summary>Escribe una línea por llamada (<c>Llamada {capacidad} {método} {ruta}</c>) y la deja pasar.</summary>
+    private sealed class ConRegistro(IHttpClientFactory real, ILogger log) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name)
+        {
+            var interno = real.CreateClient(name);
+            return new HttpClient(new Cable(interno, name, log)) { BaseAddress = interno.BaseAddress };
+        }
+
+        private sealed class Cable(HttpClient interno, string capacidad, ILogger log) : HttpMessageHandler
+        {
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+            {
+                log.LogInformation("Llamada {Capacidad} {Metodo} {Ruta}", capacidad, r.Method.Method, r.RequestUri!.AbsolutePath);
+                using var copia = new HttpRequestMessage(r.Method, r.RequestUri) { Content = r.Content };
+                foreach (var h in r.Headers) copia.Headers.TryAddWithoutValidation(h.Key, h.Value);
+                return await interno.SendAsync(copia, ct);
+            }
+        }
+    }
 
     /// <summary>Contesta un rechazo en el cable cuando <c>falla</c> devuelve un código; si no, deja pasar.</summary>
     private sealed class ConFallo(IHttpClientFactory real, Func<HttpRequestMessage, string?> falla) : IHttpClientFactory

@@ -5,16 +5,20 @@
     "cliente": { "de": "sujeto" },
     "servicio": { "tipo": "ref", "kind": "reservas.servicio" },
     "ventana": "ventana",
-    "contacto": { "de": "contacto" }
+    "contacto": { "de": "contacto" },
+    "desde": "instante",
+    "hasta": "instante"
   },
-  "salida": ["servicio", "ventana", "total"],
+  "salida": ["servicio", "ventana", "total", "vence"],
+  "lecturas": {
+    "disponibilidad": { "entrada": ["servicio", "desde", "hasta"], "pasos": ["hallar", "franjas"], "salida": ["franjas"] }
+  },
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
-    "abrir": ["duracion", "lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
+    "abrir": ["lineas", "cotizar", "desglose", "hallar", "apartar", "autorizar"],
     "cerrar": ["capturar", "confirmar", "avisar"]
   },
   "pasos": {
-    "duracion": { "tipo": "reservas.duracion", "lee": ["servicio", "ventana"] },
     "lineas": { "tipo": "forma.una-linea", "lee": ["servicio"], "escribe": ["aCotizar"] },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
@@ -24,10 +28,11 @@
       "escribe": ["recursoId"],
       "motivo": "el servicio no se puede reservar en línea"
     },
+    "franjas": { "tipo": "booking.franjas", "lee": ["recursoId", "desde", "hasta"], "escribe": ["franjas"] },
     "apartar": {
       "tipo": "booking.apartar",
       "lee": ["recursoId", "ventana", "cliente"],
-      "escribe": ["apartadoId"],
+      "escribe": ["apartadoId", "vence"],
       "llave": "hold",
       "motivo": "no se pudo apartar la franja",
       "reserva": {
