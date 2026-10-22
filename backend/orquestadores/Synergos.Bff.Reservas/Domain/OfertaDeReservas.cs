@@ -14,15 +14,17 @@ namespace Synergos.Bff.Reservas.Domain;
 /// <param name="Servicio">La clave estable de la ficha.</param>
 /// <param name="RecursoId">El recurso de la agenda que quedó registrado para él.</param>
 /// <param name="Retirada">Si la oferta se retiró: su precio dejó de valer.</param>
+/// <param name="ReservasFuera">Cuántas reservas vigentes dejó fuera la última revisión del recurso (la agenda no las
+/// canceló: decidir qué hacer con ellas es del negocio).</param>
 public sealed record ServicioOfertado(
     string Servicio, string Nombre, int DuracionMinutos, IReadOnlyList<BloqueDeHorarioDto> Horario, int Cupos,
-    int PlazoCancelacionHoras, decimal Precio, string Moneda, string Zona, string RecursoId, bool Retirada);
+    int PlazoCancelacionHoras, decimal Precio, string Moneda, string Zona, string RecursoId, bool Retirada,
+    int ReservasFuera = 0);
 
 /// <summary>El rastro de las ofertas publicadas, en el almacén del orquestador (ADR 0105).</summary>
 /// <remarks>
 /// No es una copia del cupo ni del precio —esos siguen siendo de la agenda y de precios—: es lo que el propio
-/// orquestador publicó, como <c>AforoPublicado</c> de Eventos. Lo lee también el paso interino de la duración
-/// (<see cref="PasoDuracion"/>), mientras la agenda no conozca la duración de franja (NB-1).
+/// orquestador publicó, como <c>AforoPublicado</c> de Eventos.
 /// </remarks>
 public sealed class RastroDeOfertas(string raiz)
 {
@@ -51,9 +53,14 @@ public sealed class RastroDeOfertas(string raiz)
 /// <para><b>Es código del vertical</b> y no del caso común: el molde de <c>OfertaDeEventos</c>, que la pieza
 /// genérica de la oferta (P12, NB-8) retirará. Se mide aparte del flujo.</para>
 ///
-/// <para><b>La agenda no sabe cambiar un recurso registrado</b> (NB-7): republicar con otro horario, cupos o
-/// plazo se RECHAZA (<see cref="NoActualizable"/>) sin tocar nada, en vez de registrar un segundo recurso
-/// para el mismo servicio —la agenda devolvería el primero— o publicar el precio a medias.</para>
+/// <para><b>La franja la fija la agenda</b> (NB-1): el recurso se registra con la duración del servicio como
+/// <c>slotMinutes</c>, y es la agenda la que rechaza al apartar una ventana de otro largo o fuera de la grilla.</para>
+///
+/// <para><b>Republicar con otro horario, cupos, plazo o duración REVISA el recurso</b> (NB-7): la agenda no cancela
+/// ninguna reserva y dice cuántas vigentes ya no cabrían (<see cref="ServicioOfertado.ReservasFuera"/>), que el CMS le
+/// enseña al editor. Lo único que la agenda no cambia es la zona del recurso: otra zona se RECHAZA
+/// (<see cref="NoActualizable"/>) sin tocar nada, en vez de registrar un segundo recurso para el mismo servicio —la
+/// agenda devolvería el primero— o publicar el precio a medias.</para>
 ///
 /// <para><b>Retirar no borra</b>: el precio deja de valer desde ahora, así que cotizar —que va primero en el
 /// flujo— lo rechaza sin apartar nada; el recurso y sus reservas siguen ahí.</para>
@@ -86,20 +93,34 @@ public sealed partial class OfertaDeReservas(CapacidadesDeLaOferta capacidades, 
         var horario = o.Horario!.Select(Normalizar).ToList();
         var aviso = o.PlazoCancelacionHoras!.Value * 60;
 
+        var cupos = o.Cupos!.Value;
+        var franja = o.DuracionMinutos!.Value;
+        var valores = string.Join('|', cupos.ToString(CultureInfo.InvariantCulture), o.Zona, aviso.ToString(CultureInfo.InvariantCulture),
+            string.Join(';', horario.Select(b => $"{b.Dia}{b.Desde}{b.Hasta}")), franja.ToString(CultureInfo.InvariantCulture));
+
         var recurso = await capacidades.BuscarRecursoAsync(sujeto, ct);
         if (!recurso.IsOk && recurso.Rejection!.Code != SinRecurso) return Result.Rejected<ServicioOfertado>(recurso.Rejection);
-        if (recurso.IsOk && !Igual(recurso.Value, o.Cupos!.Value, o.Zona!, horario, aviso))
+        if (recurso.IsOk && recurso.Value.TimeZoneId != o.Zona)
         {
             return Result.Rejected<ServicioOfertado>(Rejection.Conflict(NoActualizable,
-                $"El servicio {sujeto.Id} ya está en la agenda con otro horario, cupos o plazo, y la agenda todavía no sabe "
-                + "cambiar un recurso registrado. No se publicó nada."));
+                $"El servicio {sujeto.Id} ya está en la agenda en la zona {recurso.Value.TimeZoneId}, y la agenda no cambia la "
+                + "zona de un recurso registrado. No se publicó nada."));
         }
+
+        var fuera = 0;
         if (!recurso.IsOk)
         {
-            recurso = await capacidades.RegistrarRecursoAsync(sujeto, o.Cupos!.Value, o.Zona!, horario, aviso,
-                Derivada("recurso", sujeto.Id, o.Cupos!.Value.ToString(CultureInfo.InvariantCulture), o.Zona, aviso.ToString(CultureInfo.InvariantCulture),
-                    string.Join(';', horario.Select(b => $"{b.Dia}{b.Desde}{b.Hasta}"))), ct);
+            recurso = await capacidades.RegistrarRecursoAsync(sujeto, cupos, o.Zona!, horario, aviso, franja,
+                Derivada("recurso", sujeto.Id, valores), ct);
             if (!recurso.IsOk) return Result.Rejected<ServicioOfertado>(recurso.Rejection!);
+        }
+        else if (!Igual(recurso.Value, cupos, horario, aviso, franja))
+        {
+            // La llave es la de ESTA publicación: volver a unos valores que ya tuvo es otra revisión, no la de antes.
+            var revision = await capacidades.RevisarRecursoAsync(recurso.Value.Id, cupos, horario, aviso, franja,
+                Derivada(llave.Value, "revisar", sujeto.Id, valores), ct);
+            if (!revision.IsOk) return Result.Rejected<ServicioOfertado>(revision.Rejection!);
+            fuera = revision.Value.Outside.Count;
         }
 
         var precio = Money.Of(o.Precio!.Value, o.Moneda!.Trim().ToUpperInvariant());
@@ -107,8 +128,8 @@ public sealed partial class OfertaDeReservas(CapacidadesDeLaOferta capacidades, 
             Derivada(llave.Value, "precio", sujeto.Id, precio.ToString()), ct);
         if (!fijado.IsOk) return Result.Rejected<ServicioOfertado>(fijado.Rejection!);
 
-        var oferta = new ServicioOfertado(sujeto.Id, o.Nombre?.Trim() ?? sujeto.Id, o.DuracionMinutos!.Value, horario,
-            o.Cupos!.Value, o.PlazoCancelacionHoras!.Value, precio.Amount, precio.Currency, o.Zona!, recurso.Value.Id, Retirada: false);
+        var oferta = new ServicioOfertado(sujeto.Id, o.Nombre?.Trim() ?? sujeto.Id, franja, horario,
+            cupos, o.PlazoCancelacionHoras!.Value, precio.Amount, precio.Currency, o.Zona!, recurso.Value.Id, Retirada: false, fuera);
         rastro.Guardar(oferta);
         return Result.Ok(oferta);
     }
@@ -175,8 +196,8 @@ public sealed partial class OfertaDeReservas(CapacidadesDeLaOferta capacidades, 
     private static BloqueDeHorarioDto Normalizar(BloqueDeHorarioDto b)
         => new(Enum.Parse<DayOfWeek>(b.Dia!, ignoreCase: true).ToString(), b.Desde!.Trim(), b.Hasta!.Trim());
 
-    private static bool Igual(RecursoDto r, int cupos, string zona, IReadOnlyList<BloqueDeHorarioDto> horario, int aviso)
-        => r.Capacity == cupos && r.TimeZoneId == zona && r.CancellationNoticeMinutes == aviso
+    private static bool Igual(RecursoDto r, int cupos, IReadOnlyList<BloqueDeHorarioDto> horario, int aviso, int franja)
+        => r.Capacity == cupos && r.CancellationNoticeMinutes == aviso && r.SlotMinutes == franja
            && r.Opening.Select(f => $"{f.Day}|{f.From}|{f.To}").Order(StringComparer.Ordinal).SequenceEqual(
                horario.Select(b => $"{b.Dia}|{b.Desde}|{b.Hasta}").Order(StringComparer.Ordinal), StringComparer.Ordinal);
 

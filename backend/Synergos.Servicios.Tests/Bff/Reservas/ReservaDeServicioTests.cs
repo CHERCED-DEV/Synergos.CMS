@@ -51,17 +51,33 @@ public sealed class ReservaDeServicioTests
     }
 
     [Fact]
-    public async Task La_respuesta_dice_servicio_franja_y_total_y_ningun_identificador_de_las_capacidades()
+    public async Task La_respuesta_dice_servicio_franja_total_y_vencimiento_y_ningun_identificador_de_las_capacidades()
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
         var (_, abierta) = await r.Abrir();
         var (_, cerrada) = await r.Cerrar(abierta.GetProperty("id").GetString()!);
 
         var datos = cerrada.GetProperty("datos").EnumerateObject().Select(p => p.Name).Order().ToList();
-        Assert.Equal(["servicio", "total", "ventana"], datos);
+        Assert.Equal(["servicio", "total", "vence", "ventana"], datos);
         var servicio = cerrada.GetProperty("datos").GetProperty("servicio");
         Assert.Equal(OfertaDeReservas.Clase, servicio.GetProperty("kind").GetString());
         Assert.Equal(ReservaDeServicioReal.Servicio, servicio.GetProperty("id").GetString());
+    }
+
+    /// <summary>
+    /// T018 (NB-5): cuándo vence el apartado lo dice la AGENDA, y la respuesta de abrir lo trae tal cual; la pantalla no
+    /// lo calcula.
+    /// </summary>
+    [Fact]
+    public async Task El_vencimiento_del_apartado_es_el_de_la_agenda()
+    {
+        using var r = await new ReservaDeServicioReal().ConOferta();
+
+        var (_, abierta) = await r.Abrir();
+
+        var apartado = r.Dato(abierta.GetProperty("id").GetString()!, "apartadoId");
+        var hold = await r.Leer("booking", $"v1/holds/{apartado}");
+        Assert.Equal(hold.GetProperty("expiresAt").GetDateTimeOffset(), abierta.GetProperty("datos").GetProperty("vence").GetDateTimeOffset());
     }
 
     [Fact]
@@ -96,11 +112,12 @@ public sealed class ReservaDeServicioTests
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
 
-        // Con la clase de la definición, una clave que la oferta nunca publicó no tiene duración ni recurso.
-        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
+        // Con la clase de la definición, una clave que la oferta nunca publicó no tiene precio ni recurso.
+        var (estado, cuerpo) = await r.Abrir(llave: "r-ruta", cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "../salud.profesional:doc"));
         Assert.Equal(HttpStatusCode.NotFound, estado);
-        Assert.Equal("reservas.servicio_no_reservable", cuerpo.GetProperty("code").GetString());
+        Assert.Equal("pricing.price_not_found", cuerpo.GetProperty("code").GetString());
         Assert.Equal(0, await Ocupadas(r));
+        Assert.False(r.Tiene("r-ruta", "cobroId"));
     }
 
     [Fact]
@@ -114,16 +131,35 @@ public sealed class ReservaDeServicioTests
         Assert.Equal(OfertaDeReservas.Clase, servicio.GetProperty("kind").GetString());
     }
 
+    /// <summary>
+    /// El largo de la franja lo fija el servidor (FR-007): la oferta registra el recurso con la duración del servicio
+    /// como franja (NB-1), y la agenda rechaza al apartar otro largo, o el mismo fuera de la grilla del horario.
+    /// </summary>
     [Fact]
     public async Task Una_franja_de_otro_largo_se_rechaza_sin_apartar_ni_autorizar()
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
 
-        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(minutos: 180));
+        var (estado, cuerpo) = await r.Abrir(llave: "r-larga", cuerpo: ReservaDeServicioReal.Cuerpo(minutos: 180));
 
         Assert.Equal(HttpStatusCode.BadRequest, estado);
-        Assert.Equal("reservas.franja_invalida", cuerpo.GetProperty("code").GetString());
+        Assert.Equal("booking.bad_slot_length", cuerpo.GetProperty("code").GetString());
         Assert.Equal(0, await Ocupadas(r, minutos: 180));
+        Assert.False(r.Tiene("r-larga", "cobroId"));
+    }
+
+    [Fact]
+    public async Task Una_franja_del_largo_justo_fuera_de_la_grilla_se_rechaza_sin_autorizar()
+    {
+        using var r = await new ReservaDeServicioReal().ConOferta();
+        var corrida = ReservaDeServicioReal.Inicio.AddMinutes(15);
+
+        var (estado, cuerpo) = await r.Abrir(llave: "r-corrida", cuerpo: ReservaDeServicioReal.Cuerpo(inicio: corrida));
+
+        Assert.Equal(HttpStatusCode.BadRequest, estado);
+        Assert.Equal("booking.off_slot_grid", cuerpo.GetProperty("code").GetString());
+        Assert.Equal(0, await Ocupadas(r, inicio: corrida));
+        Assert.False(r.Tiene("r-corrida", "cobroId"));
     }
 
     [Fact]
@@ -131,10 +167,11 @@ public sealed class ReservaDeServicioTests
     {
         using var r = await new ReservaDeServicioReal().ConOferta();
 
-        var (estado, cuerpo) = await r.Abrir(cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "otro-servicio"));
+        var (estado, cuerpo) = await r.Abrir(llave: "r-otro", cuerpo: ReservaDeServicioReal.Cuerpo(servicio: "otro-servicio"));
 
         Assert.Equal(HttpStatusCode.NotFound, estado);
-        Assert.Equal("reservas.servicio_no_reservable", cuerpo.GetProperty("code").GetString());
+        Assert.Equal("pricing.price_not_found", cuerpo.GetProperty("code").GetString());
+        Assert.False(r.Tiene("r-otro", "cobroId"));
     }
 
     [Fact]

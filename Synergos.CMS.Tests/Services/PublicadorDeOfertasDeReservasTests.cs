@@ -180,7 +180,7 @@ public sealed class PublicadorDeOfertasDeReservasTests
     }
 
     [Fact]
-    public async Task Otro_horario_que_la_agenda_no_sabe_cambiar_llega_al_editor_como_error_sin_publicar_a_medias()
+    public async Task Otra_zona_que_la_agenda_no_cambia_llega_al_editor_como_error_sin_publicar_a_medias()
     {
         var orquestador = new OrquestadorFalso { Responde = _ => Rechazo(HttpStatusCode.Conflict, OfertaDeReservaAlPublicar.NoActualizable) };
 
@@ -189,7 +189,34 @@ public sealed class PublicadorDeOfertasDeReservasTests
         Assert.Single(orquestador.Llamadas);
         var mensaje = Assert.Single(mensajes.GetAll());
         Assert.Equal(EventMessageType.Error, mensaje.MessageType);
+        Assert.Contains("zona horaria", mensaje.Message, StringComparison.Ordinal);
         Assert.Contains("no se publicó nada", mensaje.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// T028 con NB-7: el horario nuevo se publica (la agenda revisa el recurso) y, si deja reservas confirmadas
+    /// fuera, el editor lo lee: la agenda no las cancela y nadie más se va a enterar.
+    /// </summary>
+    [Fact]
+    public async Task Un_horario_nuevo_que_deja_reservas_fuera_se_publica_y_el_editor_lo_lee()
+    {
+        var orquestador = new OrquestadorFalso
+        {
+            Responde = _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"servicio":"x","duracionMinutos":60,"cupos":1,"precio":1,"moneda":"COP","retirada":false,"reservasFuera":2}""",
+                    Encoding.UTF8, "application/json"),
+            },
+        };
+
+        var mensajes = await PublicarAsync(Publicador(orquestador), Ficha(true, ("cierra", "12:00")));
+
+        var mensaje = Assert.Single(mensajes.GetAll());
+        Assert.Equal(EventMessageType.Warning, mensaje.MessageType);
+        Assert.Contains("2 reserva(s)", mensaje.Message, StringComparison.Ordinal);
+        Assert.Contains("No se cancelaron", mensaje.Message, StringComparison.Ordinal);
+        Assert.Equal(0, (await PublicarAsync(Publicador(new OrquestadorFalso()), Ficha())).Count);
     }
 
     [Fact]
