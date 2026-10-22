@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -119,6 +121,53 @@ public sealed partial class SeamComposer
         // sigue sirviendo catálogo y fichas.
         services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
 
+        // El registro de las compras de la PUERTA (004-tienda-compra, US 6): las anota en el mismo almacén
+        // de órdenes para que «Mis compras», el seguimiento, la devolución y las reseñas las vean, con el
+        // motor que sea. Lee al orquestador si el despliegue dice dónde vive (BaseUrl) o si la compra ya va
+        // por él (Mode=Bff, con el puerto local por defecto); sin destino, contesta 503 y no sale a la red.
+        var seccionDeTienda = builder.Config.GetSection("Synergos:Tienda");
+        var hayOrquestadorDeTienda = !string.IsNullOrWhiteSpace(seccionDeTienda["BaseUrl"])
+            || Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode);
+        if (hayOrquestadorDeTienda)
+        {
+            services.AddClienteDelArbolDeServicios(
+                RegistroDeComprasDeLaTienda.ClientName,
+                DestinoDelArbol.De(seccionDeTienda, "http://127.0.0.1:5300/", 10));
+        }
+        services.AddSingleton(sp => new LibroDeComprasDeLaPuerta(
+            sp.GetRequiredService<IJsonEntityStore>(),
+            sp.GetRequiredService<IOrderTrackingService>(),
+            sp.GetRequiredService<ICheckoutRecorder>()));
+        services.AddSingleton(sp => new RegistroDeComprasDeLaTienda(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<IProductCatalogProvider>(),
+            sp.GetRequiredService<ILogger<RegistroDeComprasDeLaTienda>>(),
+            hayOrquestadorDeTienda));
+
+        // La OFERTA del catálogo (004-tienda-compra, R-9): lo que el catálogo muestra es lo que el orquestador
+        // cobra y aparta. Diez segundos y no los treinta de comprar: quien espera es el editor que publica, y una
+        // oferta que no salió se repara republicando. Sin destino no intenta nada (degradar por ausencia).
+        if (hayOrquestadorDeTienda)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpTiendaOfferPublisher.ClientName,
+                DestinoDelArbol.De(seccionDeTienda, "http://127.0.0.1:5300/", 10));
+        }
+        services.AddSingleton<ITiendaOfferPublisher>(sp => new HttpTiendaOfferPublisher(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HttpTiendaOfferPublisher>>(),
+            hayOrquestadorDeTienda));
+
+        // Se publica al publicar un productPage y a mano (POST /api/shop/oferta/republicar), NUNCA al arrancar
+        // (ADR 0013); y se RETIRA al despublicar, mandar a la papelera o borrar uno (o el nodo que lo contiene).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTiendaAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeTiendaAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeTiendaAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeTiendaAlRetirar>();
+
+        Func<IServiceProvider, IShopOrderService> motor;
         if (Interruptor.Encendido(builder.Config, "Synergos:Tienda:Mode", "Bff", new TiendaSettings().Mode))
         {
             // Dos clientes —el orquestador y la canasta— bajo la MISMA llave y el mismo techo, y
@@ -133,11 +182,12 @@ public sealed partial class SeamComposer
                 HttpShopOrderService.CartClientName,
                 DestinoDelArbol.De(tienda, "http://127.0.0.1:5210/", 30, claveDeLaUrl: "CartBaseUrl"));
 
-            services.AddSingleton<IShopOrderService, HttpShopOrderService>();
+            services.AddSingleton<HttpShopOrderService>();
+            motor = sp => sp.GetRequiredService<HttpShopOrderService>();
         }
         else
         {
-            services.AddSingleton<IShopOrderService>(sp =>
+            motor = sp =>
             new StubShopOrderService(
                 sp.GetRequiredService<IProductCatalogProvider>(),
                 sp.GetRequiredService<IReservationService>(),
@@ -149,8 +199,20 @@ public sealed partial class SeamComposer
                 // El read-model del dashboard se alimenta acá: es el único punto
                 // por el que una orden llega a Paid. Sin esto el panel de ventas
                 // quedaba en $0 con órdenes reales en disco.
-                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>()));
+                checkoutRecorder: sp.GetRequiredService<ICheckoutRecorder>());
         }
+
+        // El motor de arriba MÁS las órdenes de la puerta, una vez cada una (004-tienda-compra, US 6). Lo
+        // leen el catálogo (Mis compras, reseñas, seguimiento, devolución) y el RMA de abajo.
+        // Y la plata de una orden de la puerta vuelve por el orquestador (US 7): la devolución posterior del personal,
+        // pedida por el reenvío de la puerta (núcleo P6 y P8 del lote 6).
+        services.AddSingleton<DevolucionesDeLaPuerta>();
+        services.AddSingleton<IShopOrderService>(sp => new OrdenesConLasDeLaPuerta(
+            motor(sp),
+            sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
+            sp.GetRequiredService<RegistroDeComprasDeLaTienda>(),
+            sp.GetRequiredService<ILogger<OrdenesConLasDeLaPuerta>>(),
+            sp.GetRequiredService<DevolucionesDeLaPuerta>()));
         services.AddSingleton<IReturnService>(sp =>
             new StubReturnService(
                 // Sin IPaymentProvider (#57): la devolución se la pide al seam de ÓRDENES, que

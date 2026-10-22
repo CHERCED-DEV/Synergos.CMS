@@ -16,12 +16,13 @@ namespace Synergos.CMS.Tests.Bff;
 /// suite lo notara; aquí se nota.</para>
 ///
 /// <para><b>Cada valor lleva su tipo</b>: leerlo no depende de que la definición siga diciendo lo mismo.
-/// Y lo que se reservó lleva su cantidad, que es lo que necesita reponer existencias ya consumidas.</para>
+/// Y lo que se reservó lleva su cantidad, que es lo que necesita reponer existencias ya consumidas, y sobre qué quedó al
+/// cerrarse (<c>cerrada</c>, NN-18 de 005), que es lo que recorre una operación posterior.</para>
 /// </remarks>
 public sealed class SagaDeFlujoPersistidaTests
 {
     private const string Fijado =
-        """{"id":"cita-1","flujo":"muestra.cita","dueno":{"kind":"muestra.paciente","id":"u-1"},"status":0,"datos":{"total":{"tipo":"dinero","valor":{"amount":50000,"currency":"COP"}},"cobroId":{"tipo":"texto","valor":"pg1"},"promocion":{"tipo":"texto?","valor":null}},"reservas":{"apartar":[{"holdId":"bh1","closeTargetId":"bh1","cantidad":null}],"autorizar":[{"holdId":"pg1","closeTargetId":"pg1","cantidad":null}],"existencias":[{"holdId":"ih1","closeTargetId":"po1","cantidad":3}]},"compensations":[{"id":"c1","kind":"booking.liberar","targetId":"bh1","reason":"cita no confirmada","attempts":0,"nextAttemptUtc":null,"lastError":null,"doneAtUtc":null,"isPending":true,"isStuck":false}],"lastError":null,"startedAtUtc":"2026-10-15T10:00:00+00:00","alertedAtUtc":null,"alertsSent":0}""";
+        """{"id":"cita-1","flujo":"muestra.cita","dueno":{"kind":"muestra.paciente","id":"u-1"},"status":0,"datos":{"total":{"tipo":"dinero","valor":{"amount":50000,"currency":"COP"}},"cobroId":{"tipo":"texto","valor":"pg1"},"promocion":{"tipo":"texto?","valor":null}},"reservas":{"apartar":[{"holdId":"bh1","closeTargetId":"bh1","cantidad":null,"cerrada":"rv1"}],"autorizar":[{"holdId":"pg1","closeTargetId":"pg1","cantidad":null,"cerrada":null}],"existencias":[{"holdId":"ih1","closeTargetId":"po1","cantidad":3,"cerrada":null}]},"compensations":[{"id":"c1","kind":"booking.liberar","targetId":"bh1","reason":"cita no confirmada","attempts":0,"nextAttemptUtc":null,"lastError":null,"doneAtUtc":null,"isPending":true,"isStuck":false}],"lastError":null,"startedAtUtc":"2026-10-15T10:00:00+00:00","alertedAtUtc":null,"alertsSent":0}""";
 
     private static JsonElement J(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
@@ -38,7 +39,7 @@ public sealed class SagaDeFlujoPersistidaTests
         },
         new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(StringComparer.Ordinal)
         {
-            ["apartar"] = new[] { new ReservaDeFlujo("bh1", "bh1") },
+            ["apartar"] = new[] { new ReservaDeFlujo("bh1", "bh1", Cerrada: "rv1") },
             ["autorizar"] = new[] { new ReservaDeFlujo("pg1", "pg1") },
             ["existencias"] = new[] { new ReservaDeFlujo("ih1", "po1", 3) },
         },
@@ -67,6 +68,31 @@ public sealed class SagaDeFlujoPersistidaTests
     }
 
     [Fact]
+    public void Una_saga_guardada_antes_de_anotar_el_cierre_se_lee_con_sus_reservas_sin_cerrar()
+    {
+        // Las sagas en vuelo y las completadas antes de NN-18 no traen «cerrada»: se leen igual, sin nada que recorrer.
+        var raiz = Raiz();
+        try
+        {
+            var opciones = Options.Create(new SagaStorageOptions { Root = raiz });
+            new FileSystemSagaStore<SagaDeFlujo>(opciones).Put(Poblada());
+            var fichero = Directory.EnumerateFiles(Path.Combine(raiz, "sagas"), "*.json").Single();
+            File.WriteAllText(fichero, File.ReadAllText(fichero).Replace(",\"cerrada\":\"rv1\"", "", StringComparison.Ordinal)
+                .Replace(",\"cerrada\":null", "", StringComparison.Ordinal));
+            Assert.DoesNotContain("cerrada", File.ReadAllText(fichero), StringComparison.Ordinal);
+
+            var leida = new FileSystemSagaStore<SagaDeFlujo>(opciones).Find("cita-1")!;
+
+            Assert.Equal(new ReservaDeFlujo("bh1", "bh1"), Assert.Single(leida.Reservas["apartar"]));
+            Assert.Null(Assert.Single(leida.Reservas["existencias"]).Cerrada);
+        }
+        finally
+        {
+            if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Una_saga_generica_guardada_se_lee_de_vuelta_con_sus_valores_y_sus_reservas()
     {
         var raiz = Raiz();
@@ -82,6 +108,7 @@ public sealed class SagaDeFlujoPersistidaTests
             Assert.Null(leida.Datos["promocion"].Valor);
             var existencias = ((IHoldLedger)leida).Legs("existencias");
             Assert.Equal(new HoldLeg("ih1", "po1", 3), Assert.Single(existencias));
+            Assert.Equal("rv1", Assert.Single(leida.Reservas["apartar"]).Cerrada);
             var sinNada = leida with { Reservas = new Dictionary<string, IReadOnlyList<ReservaDeFlujo>> { ["x"] = [] } };
             Assert.Empty(((IHoldLedger)sinNada).Legs("x"));
             Assert.Throws<InvalidOperationException>(() => ((IHoldLedger)leida).Legs("cobrar"));

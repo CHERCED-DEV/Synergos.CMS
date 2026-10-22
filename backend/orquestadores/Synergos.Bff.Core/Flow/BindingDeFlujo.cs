@@ -45,7 +45,9 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
 
         _sujeto = flujo.Entrada.FirstOrDefault(n => flujo.Tipos?.GetValueOrDefault(n)?.Origen == OrigenDelValor.Sujeto);
         Reconstruye = LoQueSeReconstruye(flujo);
-        Guarda = Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal).ToList();
+        Guarda = Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal)
+            .Union(flujo.LoQueDejaParaLoPosterior.Where(n => !n.StartsWith(FlowValidator.Reservas, StringComparison.Ordinal)), StringComparer.Ordinal)
+            .ToList();
         CamposDeItem = flujo.Entrada
             .Where(n => flujo.Tipos?.GetValueOrDefault(n) is { EsLista: true })
             .ToDictionary(n => n, n => (IReadOnlyCollection<string>)flujo.Tipos![n].Campos!.Keys.ToList(), StringComparer.Ordinal);
@@ -58,7 +60,7 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
 
     public IReadOnlyCollection<string> Reconstruye { get; }
 
-    /// <summary>Lo que se guarda en la saga: lo que se reconstruye y la salida.</summary>
+    /// <summary>Lo que se guarda en la saga: lo que se reconstruye, la salida y lo que deja para lo posterior.</summary>
     public IReadOnlyList<string> Guarda { get; }
 
     public IReadOnlyDictionary<string, IReadOnlyCollection<string>> CamposDeItem { get; }
@@ -140,6 +142,32 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
         ArgumentNullException.ThrowIfNull(saga);
         ArgumentNullException.ThrowIfNull(reservado);
         return saga.ConReserva(paso, new ReservaDeFlujo(reservado.HoldId, reservado.CloseTargetId, reservado.Cantidad));
+    }
+
+    /// <summary>
+    /// Anota en la reserva cerrada sobre qué quedó (<see cref="ReservaDeFlujo.Cerrada"/>): lo que produjo el cierre o, si
+    /// no produjo nada, su objetivo de siempre. Va en la MISMA escritura que el cambio de su compensación (NV-3).
+    /// </summary>
+    public SagaDeFlujo ConCierre(SagaDeFlujo saga, string reservante, HoldLeg cerrada, string? objetivo)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        ArgumentNullException.ThrowIfNull(cerrada);
+        if (!saga.Reservas.TryGetValue(reservante, out var reservas)) return saga;
+
+        var anotada = false;
+        var nuevas = reservas.Select(r =>
+        {
+            if (anotada || r.Cerrada is not null || !string.Equals(r.HoldId, cerrada.HoldId, StringComparison.Ordinal)) return r;
+            anotada = true;
+            return r with { Cerrada = objetivo ?? r.CloseTargetId };
+        }).ToList();
+
+        return anotada
+            ? saga with
+            {
+                Reservas = new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(saga.Reservas, StringComparer.Ordinal) { [reservante] = nuevas },
+            }
+            : saga;
     }
 
     public SagaDeFlujo ConError(SagaDeFlujo saga, string? falla)

@@ -38,11 +38,38 @@ public sealed class TiendaCapabilities : CapabilityClients
             lines = lines.Select(l => new { subjectKind = l.SubjectKind, subjectId = l.SubjectId, quantity = l.Quantity }),
         }, null, ct);
 
+    /// <summary>Publica el precio de una variante (la oferta, R-9). <paramref name="validTo"/> en ahora lo retira.</summary>
+    public Task<Result<PriceDto>> SetPriceAsync(
+        Ref subject, Money amount, int taxRateBasisPoints, DateTimeOffset? validFrom, DateTimeOffset? validTo,
+        IdempotencyKey key, CancellationToken ct)
+        => Post<PriceDto>(Pricing, "v1/prices", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            amount = new { amount = amount.Amount, currency = amount.Currency },
+            taxRateBasisPoints,
+            validFrom,
+            validTo,
+        }, key, ct);
+
     // ── Inventory ───────────────────────────────────────────────────────────
 
     /// <summary>Del <see cref="Ref"/> del producto a su ítem de existencias.</summary>
     public Task<Result<StockItemDto>> FindStockAsync(Ref subject, CancellationToken ct)
         => Get<StockItemDto>(Inventory, $"v1/items?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}", ct);
+
+    /// <summary>Declara el pozo de existencias de una variante (la oferta, R-9).</summary>
+    /// <remarks>
+    /// Sólo para uno que no existe: la capacidad rechaza declarar dos veces el mismo sujeto, y cambiar las
+    /// existencias de uno que ya existe es <see cref="RestockAsync"/> con la diferencia.
+    /// </remarks>
+    public Task<Result<StockItemDto>> DeclareStockAsync(Ref subject, int onHand, IdempotencyKey key, CancellationToken ct)
+        => Post<StockItemDto>(Inventory, "v1/items", new
+        {
+            subjectKind = subject.Kind,
+            subjectId = subject.Id,
+            onHand,
+        }, key, ct);
 
     public Task<Result<StockItemDto>> GetStockAsync(string itemId, CancellationToken ct)
         => Get<StockItemDto>(Inventory, $"v1/items/{itemId}", ct);

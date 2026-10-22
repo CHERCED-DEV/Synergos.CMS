@@ -1,2 +1,11 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Storefront", Model.Content)
+@*
+    <synergos-flujo> envuelve la tienda (ADR 0140, como elementSynEventos.cshtml): el coordinador sin render
+    de la compra, que la lleva a la puerta cuando el CMS declara ese camino (StorefrontProps.PurchasePath);
+    con «directa» es inocuo. La CLAVE del flujo la pone el servidor y no el bundle —nada en el DOM es frontera
+    de confianza—, y CoordinadorDelFlujoEnLasVistasTests la cruza con la tabla de la puerta y con
+    Synergos:Puerta:Flujos. El style en línea es para antes de que el bundle defina la etiqueta.
+*@
+<synergos-flujo flujo="tienda.compra" style="display:contents">
+    @await Html.PartialAsync("SynHost/Storefront", Model.Content)
+</synergos-flujo>
