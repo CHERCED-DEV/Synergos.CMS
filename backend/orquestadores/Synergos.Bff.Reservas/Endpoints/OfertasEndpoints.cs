@@ -16,7 +16,7 @@ public static class OfertasEndpoints
     /// <summary>Prefijo de los códigos de rechazo de este orquestador.</summary>
     public const string CodePrefix = "reservas";
 
-    /// <summary>Registra la oferta y su rastro, compartido con el paso interino de la duración.</summary>
+    /// <summary>Registra la oferta y su rastro.</summary>
     public static WebApplicationBuilder AddOfertaDeReservas(this WebApplicationBuilder builder, RastroDeOfertas rastro)
     {
         builder.Services.AddSingleton(rastro);
@@ -45,5 +45,5 @@ public static class OfertasEndpoints
     }
 
     private static OfertaDeServicioResponse Respuesta(ServicioOfertado o)
-        => new(o.Servicio, o.DuracionMinutos, o.Cupos, o.Precio, o.Moneda, o.Retirada);
+        => new(o.Servicio, o.DuracionMinutos, o.Cupos, o.Precio, o.Moneda, o.Retirada, o.ReservasFuera);
 }

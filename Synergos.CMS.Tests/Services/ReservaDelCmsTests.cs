@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -120,6 +121,27 @@ public sealed class ReservaDelCmsTests
         var ruta = flujo.GetProperty("Aviso").GetProperty("Ruta").GetString()!;
         Assert.Contains("reserva={id}", ruta.Split('?').Last().Split('&'));
         Assert.NotEmpty(TablaDeLaPuerta.Incrustada().DelFlujo(CaminoDeReserva.Flujo));
+    }
+
+    /// <summary>
+    /// T030 (NB-3): sin sesión sólo se abre la lectura de las franjas, con su freno; el arranque lo cruza con el
+    /// contrato incrustado y rechaza abrir a invitados lo que pone sujeto, llave o contacto.
+    /// </summary>
+    [Fact]
+    public void Sin_sesion_solo_se_abren_las_franjas_y_el_arranque_lo_acepta_contra_el_contrato()
+    {
+        var flujo = AppSettings().GetProperty("Synergos").GetProperty("Puerta").GetProperty("Flujos").GetProperty(CaminoDeReserva.Flujo);
+        var ajustes = JsonSerializer.Deserialize<FlujoDeLaPuertaSettings>(flujo.GetRawText())!;
+
+        Assert.Equal(["disponibilidad"], ajustes.Invitado);
+        Assert.Equal(AccesoDeLaPuerta.FrenoPorDefecto, ajustes.FrenoPorMinuto);
+        Assert.Contains(TablaDeLaPuerta.Incrustada().DelFlujo(CaminoDeReserva.Flujo), o => o.Operacion == "disponibilidad");
+        var arranque = new ValidadorDeLaPuerta(TablaDeLaPuerta.Incrustada(), new Synergos.CMS.Web.Services.SeccionesDelSitio([], new ServiceCollection().BuildServiceProvider()))
+            .Validate(null, new PuertaSettings
+            {
+                Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [CaminoDeReserva.Flujo] = ajustes },
+            });
+        Assert.True(arranque.Succeeded, arranque.FailureMessage);
     }
 
     // ── Montaje ──────────────────────────────────────────────────────────────────────────────

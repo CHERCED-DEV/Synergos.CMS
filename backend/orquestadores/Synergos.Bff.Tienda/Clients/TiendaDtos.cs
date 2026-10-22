@@ -36,6 +36,9 @@ public sealed record QuoteLineDto(string SubjectKind, string SubjectId, int Quan
 public sealed record QuoteDto(
     IReadOnlyList<QuoteLineDto>? Lines, MoneyDto Subtotal, MoneyDto Tax, MoneyDto Total);
 
+/// <summary>Un precio publicado (la oferta, R-9): lo que quedó y desde y hasta cuándo vale.</summary>
+public sealed record PriceDto(string Id, MoneyDto Amount, DateTimeOffset? ValidFrom, DateTimeOffset? ValidTo);
+
 public sealed record StockItemDto(string Id, string SubjectKind, string SubjectId, int OnHand, int Available);
 public sealed record StockHoldDto(string Id, int Quantity, DateTimeOffset ExpiresAtUtc, bool Released);
 

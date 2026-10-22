@@ -28,10 +28,13 @@ public sealed record PublicarOfertaRequest(
     string? Zona = null);
 
 /// <summary>Cómo quedó publicada la oferta de un servicio.</summary>
+/// <param name="ReservasFuera">Cuántas reservas vigentes ya no caben con el horario o los cupos revisados: la agenda no
+/// las canceló, y el CMS se lo dice al editor.</param>
 public sealed record OfertaDeServicioResponse(
     string Servicio,
     int DuracionMinutos,
     int Cupos,
     decimal Precio,
     string Moneda,
-    bool Retirada);
+    bool Retirada,
+    int ReservasFuera);

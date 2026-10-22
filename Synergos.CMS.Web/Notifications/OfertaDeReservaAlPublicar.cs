@@ -18,15 +18,15 @@ namespace Synergos.CMS.Web.Notifications;
 /// editor ve en el backoffice qué le falta, y la oferta que tuviera se retira para no seguir reservando con
 /// datos viejos. Sin marcar, se retira (si nunca se ofreció, no hay nada que hacer).</para>
 ///
-/// <para><b>Lo que el orquestador rechaza llega al editor</b>: con un horario, cupos o plazo distintos de los
-/// registrados, la agenda todavía no sabe cambiar el recurso (NB-7) y no se publica nada; el editor lo lee en
-/// el backoffice en vez de creer que cambió.</para>
+/// <para><b>Lo que el orquestador dice llega al editor</b>: un horario, cupos, plazo o duración distintos REVISAN
+/// el recurso en la agenda (NB-7), que no cancela ninguna reserva; si alguna confirmada ya no cabe, el editor lo
+/// lee en el backoffice. Otra zona horaria, que la agenda no cambia, se rechaza sin publicar nada.</para>
 ///
 /// <para><b>Nunca tumba el publicar</b>: el contenido ya se guardó cuando esto corre.</para>
 /// </remarks>
 public sealed class OfertaDeReservaAlPublicar : INotificationAsyncHandler<ContentPublishedNotification>
 {
-    /// <summary>El rechazo del orquestador cuando la agenda no puede cambiar el recurso ya registrado.</summary>
+    /// <summary>El rechazo del orquestador cuando la agenda no puede cambiar el recurso ya registrado (su zona).</summary>
     internal const string NoActualizable = "reservas.oferta_no_actualizable";
 
     private const string Categoria = "Reserva";
@@ -84,11 +84,18 @@ public sealed class OfertaDeReservaAlPublicar : INotificationAsyncHandler<Conten
         }
 
         var resultado = await _ofertas.PublicarAsync(lectura, _carrito.Value.Currency, _listados.Value.ZonaHoraria, ct).ConfigureAwait(false);
+        if (resultado.Estado == EstadoDeLaOferta.Hecha && resultado.ReservasFuera > 0)
+        {
+            mensajes.Add(new EventMessage(Categoria,
+                $"«{lectura.Nombre}» quedó publicada con los datos nuevos, y {resultado.ReservasFuera} reserva(s) ya confirmada(s) no caben en el horario o los cupos nuevos. No se cancelaron: revísalas con quien reservó.",
+                EventMessageType.Warning));
+            return;
+        }
         if (resultado.Estado != EstadoDeLaOferta.Fallida) return;
 
         mensajes.Add(string.Equals(resultado.Codigo, NoActualizable, StringComparison.Ordinal)
             ? new EventMessage(Categoria,
-                $"«{lectura.Nombre}» ya está en la agenda con otro horario, cupos o plazo, y la agenda todavía no sabe cambiarlos: no se publicó nada. Las reservas siguen con los datos anteriores.",
+                $"«{lectura.Nombre}» ya está en la agenda en otra zona horaria, y la agenda no cambia la zona de un servicio registrado: no se publicó nada. Las reservas siguen con los datos anteriores.",
                 EventMessageType.Error)
             : new EventMessage(Categoria,
                 $"No se pudo publicar la oferta de «{lectura.Nombre}»{(resultado.Codigo is null ? string.Empty : $" ({resultado.Codigo})")}. Se repara volviendo a publicar.",

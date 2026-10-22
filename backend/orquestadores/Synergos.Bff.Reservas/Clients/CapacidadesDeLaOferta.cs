@@ -5,7 +5,7 @@ using Synergos.Core;
 namespace Synergos.Bff.Reservas.Clients;
 
 /// <summary>
-/// Lo que la OFERTA necesita de la agenda y de precios: registrar el recurso de un servicio y fijar su precio.
+/// Lo que la OFERTA necesita de la agenda y de precios: registrar o revisar el recurso de un servicio y fijar su precio.
 /// </summary>
 /// <remarks>
 /// <para><b>Sólo la oferta</b>: la reserva usa los adaptadores comunes del núcleo (<c>PuertosHttp</c>) y no
@@ -26,9 +26,12 @@ public sealed class CapacidadesDeLaOferta(IHttpClientFactory clientes) : Capabil
         => Get<RecursoDto>(Booking,
             $"v1/resources/por-sujeto?subjectKind={Uri.EscapeDataString(sujeto.Kind)}&subjectId={Uri.EscapeDataString(sujeto.Id)}", ct);
 
-    /// <summary>Registra el recurso de un servicio con su horario, sus cupos y su plazo de aviso.</summary>
+    /// <summary>
+    /// Registra el recurso de un servicio con su horario, sus cupos, su plazo de aviso y su franja (<c>slotMinutes</c>,
+    /// NB-1): con ella la agenda rechaza una ventana de otro largo o fuera de la grilla del horario.
+    /// </summary>
     public Task<Result<RecursoDto>> RegistrarRecursoAsync(
-        Ref sujeto, int cupos, string zona, IReadOnlyList<BloqueDeHorarioDto> horario, int avisoMinutos,
+        Ref sujeto, int cupos, string zona, IReadOnlyList<BloqueDeHorarioDto> horario, int avisoMinutos, int franjaMinutos,
         IdempotencyKey llave, CancellationToken ct)
         => Post<RecursoDto>(Booking, "v1/resources", new
         {
@@ -36,8 +39,24 @@ public sealed class CapacidadesDeLaOferta(IHttpClientFactory clientes) : Capabil
             subjectId = sujeto.Id,
             capacity = cupos,
             timeZoneId = zona,
-            opening = horario.Select(b => new { day = b.Dia, from = b.Desde, to = b.Hasta }).ToList(),
+            opening = Apertura(horario),
             cancellationNoticeMinutes = avisoMinutos,
+            slotMinutes = franjaMinutos,
+        }, llave, ct);
+
+    /// <summary>
+    /// Revisa el recurso ya registrado (NB-7): cupos, horario, plazo y franja, ENTEROS. La agenda no cancela nada y
+    /// devuelve las reservas vigentes que ya no cabrían.
+    /// </summary>
+    public Task<Result<RevisionDto>> RevisarRecursoAsync(
+        string recursoId, int cupos, IReadOnlyList<BloqueDeHorarioDto> horario, int avisoMinutos, int franjaMinutos,
+        IdempotencyKey llave, CancellationToken ct)
+        => Post<RevisionDto>(Booking, $"v1/resources/{Uri.EscapeDataString(recursoId)}/revise", new
+        {
+            capacity = cupos,
+            opening = Apertura(horario),
+            cancellationNoticeMinutes = avisoMinutos,
+            slotMinutes = franjaMinutos,
         }, llave, ct);
 
     /// <summary>Fija el precio de un servicio; con <paramref name="hasta"/> lo deja de valer desde ese instante.</summary>
@@ -50,11 +69,21 @@ public sealed class CapacidadesDeLaOferta(IHttpClientFactory clientes) : Capabil
             taxRateBasisPoints = 0,
             validTo = hasta,
         }, llave, ct);
+
+    private static List<object> Apertura(IReadOnlyList<BloqueDeHorarioDto> horario)
+        => horario.Select(b => (object)new { day = b.Dia, from = b.Desde, to = b.Hasta }).ToList();
 }
 
-/// <summary>Un recurso de la agenda, en lo que la oferta lee.</summary>
+/// <summary>Un recurso de la agenda, en lo que la oferta lee. <c>SlotMinutes</c> nulo: registrado sin franja.</summary>
 public sealed record RecursoDto(
-    string Id, int Capacity, string TimeZoneId, IReadOnlyList<FranjaDeAperturaDto> Opening, int CancellationNoticeMinutes);
+    string Id, int Capacity, string TimeZoneId, IReadOnlyList<FranjaDeAperturaDto> Opening, int CancellationNoticeMinutes,
+    int? SlotMinutes = null);
+
+/// <summary>El recurso revisado y las reservas vigentes que ya no cabrían (ninguna se canceló).</summary>
+public sealed record RevisionDto(RecursoDto Resource, IReadOnlyList<ReservaFueraDto> Outside);
+
+/// <summary>Una reserva vigente que con el recurso revisado ya no cabría, en lo que la oferta lee.</summary>
+public sealed record ReservaFueraDto(string ReservationId, string ReasonCode);
 
 /// <summary>Un bloque de apertura de la agenda: el contrato no promete ninguna de sus tres partes.</summary>
 public sealed record FranjaDeAperturaDto(string? Day, string? From, string? To);

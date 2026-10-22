@@ -16,8 +16,11 @@ public enum EstadoDeLaOferta
     Fallida,
 }
 
-/// <summary>Lo que pasó con una oferta: el estado y, si falló, el código y el detalle del orquestador.</summary>
-public sealed record ResultadoDeLaOferta(EstadoDeLaOferta Estado, string? Codigo = null, string? Detalle = null)
+/// <summary>
+/// Lo que pasó con una oferta: el estado y, si falló, el código y el detalle del orquestador. Publicada, cuántas
+/// reservas vigentes dejó fuera el horario o los cupos nuevos (la agenda no las cancela: el editor tiene que saberlo).
+/// </summary>
+public sealed record ResultadoDeLaOferta(EstadoDeLaOferta Estado, string? Codigo = null, string? Detalle = null, int ReservasFuera = 0)
 {
     public static readonly ResultadoDeLaOferta Hecha = new(EstadoDeLaOferta.Hecha);
     public static readonly ResultadoDeLaOferta SinDestino = new(EstadoDeLaOferta.SinDestino);
@@ -66,8 +69,11 @@ public sealed class PublicadorDeOfertasDeReservas
         return EnviarAsync(ficha.Servicio, "publicar", () => new HttpRequestMessage(HttpMethod.Post, "v1/ofertas")
         {
             Content = JsonContent.Create(Oferta(ficha, moneda, zona)),
-        }, cancellationToken);
+        }, cancellationToken, leerFuera: true);
     }
+
+    /// <summary>El campo de la respuesta de <c>PublishServiceOffer</c> con las reservas que quedaron fuera.</summary>
+    public const string CampoReservasFuera = "reservasFuera";
 
     /// <summary>
     /// Retira la oferta del servicio: su precio deja de valer. Repetirlo no hace daño, y retirar la de un servicio
@@ -85,7 +91,7 @@ public sealed class PublicadorDeOfertasDeReservas
 
     private async Task<ResultadoDeLaOferta> EnviarAsync(
         string servicio, string que, Func<HttpRequestMessage> peticion, CancellationToken cancellationToken,
-        string? nadaQueHacer = null)
+        string? nadaQueHacer = null, bool leerFuera = false)
     {
         if (!_hayDestino)
         {
@@ -102,8 +108,9 @@ public sealed class PublicadorDeOfertasDeReservas
             using var res = await _clients.CreateClient(ClientName).SendAsync(req, cancellationToken).ConfigureAwait(false);
             if (res.IsSuccessStatusCode)
             {
-                _log.LogInformation("Oferta del servicio {Servicio}: {Que} en el orquestador, hecho.", servicio, que);
-                return ResultadoDeLaOferta.Hecha;
+                var fuera = leerFuera ? await FueraAsync(res, cancellationToken).ConfigureAwait(false) : 0;
+                _log.LogInformation("Oferta del servicio {Servicio}: {Que} en el orquestador, hecho ({Fuera} reservas fuera).", servicio, que, fuera);
+                return fuera > 0 ? ResultadoDeLaOferta.Hecha with { ReservasFuera = fuera } : ResultadoDeLaOferta.Hecha;
             }
 
             var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, cancellationToken).ConfigureAwait(false);
@@ -121,6 +128,25 @@ public sealed class PublicadorDeOfertasDeReservas
         {
             _log.LogWarning(ex, "El orquestador de Reservas no respondió al {Que} la oferta del servicio {Servicio}.", que, servicio);
             return new ResultadoDeLaOferta(EstadoDeLaOferta.Fallida);
+        }
+    }
+
+    /// <summary>
+    /// Cuántas reservas dejó fuera la publicación, de su respuesta. Una respuesta que no lo dice cuenta como ninguna:
+    /// la oferta YA se publicó, y lo que falta es sólo el aviso.
+    /// </summary>
+    private static async Task<int> FueraAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty(CampoReservasFuera, out var fuera) && fuera.TryGetInt32(out var n) && n > 0 ? n : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
         }
     }
 
