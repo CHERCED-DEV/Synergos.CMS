@@ -557,10 +557,23 @@ public sealed class BookingService
         return Result.Ok(new Page<Reservation>(todas.Skip(offset).Take(limit).ToList(), todas.Count, offset));
     }
 
-    public Result<Reservation> CancelReservation(string id)
+    /// <param name="id">La reserva.</param>
+    /// <param name="key">La llave de esta cancelación, si el llamador la manda (núcleo T052).</param>
+    /// <remarks>
+    /// La llave se consulta ANTES que cualquier regla que dependa del estado (el molde): repetir la MISMA cancelación
+    /// —el reintento de una operación posterior cuya devolución cayó— devuelve la reserva ya cancelada en vez de
+    /// <c>booking.already_cancelled</c>. Sin llave, o con otra, una ya cancelada sigue siéndolo: es lo que impide que una
+    /// operación NUEVA haga dos veces lo que ya se hizo (devolver dos veces).
+    /// </remarks>
+    public Result<Reservation> CancelReservation(string id, IdempotencyKey? key = null)
     {
         lock (_gate)
         {
+            if (key is { } repetida && _idempotency.Find("cancellation", repetida) == id && _reservations.Find(id) is { } yaCancelada)
+            {
+                return Result.Ok(yaCancelada);
+            }
+
             var reserva = _reservations.Find(id);
             if (reserva is null)
             {
@@ -579,6 +592,7 @@ public sealed class BookingService
 
             var cancelada = reserva with { Status = ReservationStatus.Cancelled, CancelledAt = Now };
             _reservations.Put(cancelada);
+            if (key is { } llave) _idempotency.Remember("cancellation", llave, id);
             return Result.Ok(cancelada);
         }
     }

@@ -53,6 +53,7 @@ public sealed class ContratoConsumidorPasosTests
         ["FranjasDelRecursoAsync"] = p => p.FranjasDelRecursoAsync("rs-1", Ventana.Start, Ventana.End.AddDays(1), Ct),
         ["LiberarApartadoAsync"] = p => p.LiberarApartadoAsync("bh-1", Ct),
         ["CancelarReservaAsync"] = p => p.CancelarReservaAsync("rv-1", Ct),
+        ["CancelarReservaConLlaveAsync"] = p => p.CancelarReservaConLlaveAsync("rv-1", Llave, Ct),
         ["PedirAvisoAsync"] = p => p.PedirAvisoAsync(
             Alguien, "ana@ejemplo.co", "muestra.cita.confirmada", new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave, Ct),
         ["VerificarPermisoAsync"] = p => p.VerificarPermisoAsync(Alguien, "muestra.agenda", Ct),

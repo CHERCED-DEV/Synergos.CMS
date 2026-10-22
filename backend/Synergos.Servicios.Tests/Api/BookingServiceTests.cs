@@ -508,6 +508,34 @@ public sealed class BookingServiceTests
     }
 
     [Fact]
+    public void El_reintento_de_una_CANCELACION_con_la_misma_llave_devuelve_la_cancelada_y_otra_llave_choca()
+    {
+        // Núcleo T052: la operación posterior cancela y su devolución cae; el reintento repite la MISMA llave y tiene que
+        // seguir, no topar con already_cancelled. Otra llave —o ninguna— es otra intención, y una cancelada ya lo está:
+        // es lo que impide que una operación nueva devuelva dos veces.
+        var (svc, _) = Nuevo();
+        var recurso = RegistrarRecurso(svc);
+        var hold = svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(2), 30), Ref.Create("t.p", "1"), null, Llave("h"));
+        var reserva = svc.ConfirmHold(hold.Value.Id, Llave("c")).Value;
+
+        var a = svc.CancelReservation(reserva.Id, Llave("cancel-1"));
+        var b = svc.CancelReservation(reserva.Id, Llave("cancel-1"));
+
+        Assert.True(a.IsOk);
+        Assert.True(b.IsOk, $"el reintento tenía que devolver la cancelada, y devolvió {b.Rejection}");
+        Assert.Equal((ReservationStatus.Cancelled, a.Value.CancelledAt), (b.Value.Status, b.Value.CancelledAt));
+        Assert.Equal("booking.already_cancelled", svc.CancelReservation(reserva.Id, Llave("cancel-2")).Rejection?.Code);
+        Assert.Equal("booking.already_cancelled", svc.CancelReservation(reserva.Id).Rejection?.Code);
+
+        // La llave es de ESA reserva: la misma en otra no la da por cancelada.
+        var otra = svc.ConfirmHold(svc.CreateHold(recurso.Id, Ventana(Lunes8.AddHours(4), 30), Ref.Create("t.p", "1"), null, Llave("h2")).Value.Id, Llave("c2")).Value;
+        Assert.Equal(ReservationStatus.Confirmed, svc.GetReservation(otra.Id).Value.Status);
+        var deLaOtra = svc.CancelReservation(otra.Id, Llave("cancel-1"));
+        Assert.True(deLaOtra.IsOk);
+        Assert.Equal(ReservationStatus.Cancelled, deLaOtra.Value.Status);
+    }
+
+    [Fact]
     public void El_reintento_de_un_REGISTRO_devuelve_el_mismo_recurso()
     {
         var (svc, _) = Nuevo();

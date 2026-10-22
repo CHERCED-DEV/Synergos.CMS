@@ -434,6 +434,44 @@ public sealed class FlujoDeMuestraTests
     }
 
     [Fact]
+    public async Task Reintentar_la_cancelacion_tras_una_devolucion_caida_la_termina_una_sola_vez()
+    {
+        // T052 (lo midieron 005 y 011): la devolución cae DESPUÉS de cancelar en la agenda. La posterior no reserva nada,
+        // así que no queda saga escrita y el reintento con la MISMA llave repite la misma saga y las mismas llaves de paso:
+        // la cancelación ya hecha no puede chocar con booking.already_cancelled, y la devolución tiene que terminar, una vez.
+        var caida = true;
+        await using var m = await Muestra.Arrancar(falla: r => caida && Es(r, "POST", "^/v1/payments/[^/]+/refund$") ? "payments.provider_unavailable" : null);
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Cerrar(cita);
+        var reserva = cerrada.GetProperty("datos").GetProperty("reservaId").GetString()!;
+        var cobro = m.Sagas.Find(cita)!.Datos["cobroId"].Valor!.Value.GetString()!;
+        async Task<string> EstadoDeLaReserva() => (await m.Leer("booking", $"v1/reservations/{reserva}")).GetProperty("status").GetString()!;
+        async Task<decimal> Devuelto() => (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal();
+        var cuerpo = new { cita, devolver = new { amount = 50_000m, currency = "COP" } };
+
+        var (primera, fallo) = await m.Pedir("v1/flujos/muestra.cancelacion", cuerpo, "muestra.paciente:u-1", "can-1");
+        Assert.Equal((HttpStatusCode.Conflict, "payments.provider_unavailable"), (primera, fallo.GetProperty("code").GetString()));
+        Assert.Equal(("Cancelled", 0m), (await EstadoDeLaReserva(), await Devuelto()));
+
+        caida = false;
+        var (segunda, cancelacion) = await m.Pedir("v1/flujos/muestra.cancelacion", cuerpo, "muestra.paciente:u-1", "can-1");
+        Assert.True(segunda == HttpStatusCode.Created, cancelacion.ToString());
+        Assert.Equal("Completed", cancelacion.GetProperty("estado").GetString());
+        Assert.Equal(50_000m, await Devuelto());
+
+        // La misma otra vez: la misma saga, y nada más se mueve.
+        var (tercera, repetida) = await m.Pedir("v1/flujos/muestra.cancelacion", cuerpo, "muestra.paciente:u-1", "can-1");
+        Assert.Equal((HttpStatusCode.Created, cancelacion.GetProperty("id").GetString()), (tercera, repetida.GetProperty("id").GetString()));
+        Assert.Equal(50_000m, await Devuelto());
+
+        // Una cancelación NUEVA (otra llave) sí choca con la que ya se hizo: es lo que impide devolver dos veces.
+        var (nueva, rechazo) = await m.Pedir("v1/flujos/muestra.cancelacion", cuerpo, "muestra.paciente:u-1", "can-2");
+        Assert.Equal((HttpStatusCode.Conflict, "booking.already_cancelled"), (nueva, rechazo.GetProperty("code").GetString()));
+        Assert.Equal(50_000m, await Devuelto());
+    }
+
+    [Fact]
     public async Task Cancelar_una_cita_gratis_cancela_la_hora_y_no_devuelve_nada()
     {
         // NN-19: la cita gratis no tiene cobro (omitir_si_cero lo saltó), así que devolverlo no existe: el paso se omite

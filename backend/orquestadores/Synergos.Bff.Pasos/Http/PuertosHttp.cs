@@ -189,6 +189,10 @@ public sealed class PuertosHttp : CapabilityClients,
     public Task<Result<ReservaDto>> CancelarReservaAsync(string reserva, CancellationToken ct)
         => Post<ReservaDto>(Booking, $"v1/reservations/{reserva}/cancel", null, null, ct);
 
+    /// <summary>Cancela con llave: repetir la misma cancelación devuelve lo que hizo la primera (núcleo T052).</summary>
+    public Task<Result<ReservaDto>> CancelarReservaConLlaveAsync(string reserva, IdempotencyKey llave, CancellationToken ct)
+        => Post<ReservaDto>(Booking, $"v1/reservations/{reserva}/cancel", null, llave, ct);
+
     async Task<Result<string>> IBookingPort.HallarAsync(Ref sujeto, CancellationToken ct)
         => (await HallarRecursoAsync(sujeto, ct)).Map(r => r.Id);
 
@@ -208,6 +212,9 @@ public sealed class PuertosHttp : CapabilityClients,
 
     async Task<Result<string>> IDeshacerAgenda.CancelarAsync(string reserva, CancellationToken ct)
         => (await CancelarReservaAsync(reserva, ct)).Map(r => r.Id);
+
+    async Task<Result<string>> IDeshacerAgenda.CancelarAsync(string reserva, IdempotencyKey llave, CancellationToken ct)
+        => (await CancelarReservaConLlaveAsync(reserva, llave, ct)).Map(r => r.Id);
 
     // ── Notifications ───────────────────────────────────────────────────────
 

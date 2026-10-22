@@ -201,6 +201,9 @@ public sealed class PasoAgendaLiberar(IDeshacerAgenda agenda) : IPaso
 /// </remarks>
 public sealed class PasoAgendaCancelar(IDeshacerAgenda agenda) : IPaso
 {
+    /// <summary>La palabra de su llave propia: <c>{saga}|cancel:{reserva}</c>.</summary>
+    public const string PalabraDeLaLlave = "cancel";
+
     public string Tipo => "booking.cancelar";
     public int Lecturas => 1;
     public int Escrituras => 0;
@@ -211,7 +214,10 @@ public sealed class PasoAgendaCancelar(IDeshacerAgenda agenda) : IPaso
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entrada);
-        var cancelada = await agenda.CancelarAsync(entrada.Lee<string>(0), ct);
+        // Con su propia llave (núcleo T052): el reintento de la misma operación posterior —cuya devolución cayó después de
+        // cancelar— no choca con booking.already_cancelled; una operación nueva sí.
+        var reserva = entrada.Lee<string>(0);
+        var cancelada = await agenda.CancelarAsync(reserva, entrada.LlavePropia(PalabraDeLaLlave, reserva), ct);
         return cancelada.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(cancelada.Rejection!);
     }
 }
