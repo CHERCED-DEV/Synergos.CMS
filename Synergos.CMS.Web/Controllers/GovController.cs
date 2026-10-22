@@ -665,6 +665,20 @@ public sealed class GovController : ControllerBase
             });
         }
 
+        // La notificación electrónica exige que el ciudadano la haya ACEPTADO al radicar (009, S-7):
+        // el término de un recurso empezaría a correr sobre un medio que nadie autorizó. Rechazada o
+        // «no consta» da lo mismo —no consta no es una aceptación—: no se notifica por aquí, y el
+        // acto queda para otro medio, que esto no hace.
+        if (detail.NotificationConsent is not { Accepted: true })
+        {
+            return Conflict(new
+            {
+                error = "El ciudadano no aceptó la notificación electrónica, o no consta que la aceptara: "
+                    + "el acto se notifica por otro medio.",
+                code = "gov.sin_aceptacion",
+            });
+        }
+
         GovActNotification notification;
         try
         {
