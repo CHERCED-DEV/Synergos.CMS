@@ -257,7 +257,11 @@ public sealed class GovController : ControllerBase
     }
 
     // ── 4. Radicar solicitud (crea el expediente; tasa = pago opcional) ─
-    // POST /api/gov/application { serviceId, answers } → { application:{...} }
+    // POST /api/gov/application { serviceId, answers, notificationConsent? } → { application:{...} }
+    //
+    // notificationConsent: { accepted, textVersion } — lo que contestó sobre la notificación
+    // electrónica de los actos (009, S-7), guardado con las respuestas. Sin ella es «no consta»
+    // y radica igual; con ella, la versión del texto es obligatoria: es lo que prueba qué aceptó.
     [HttpPost("application")]
     public async Task<IActionResult> CreateApplication(
         [FromBody] CreateApplicationRequest? request,
@@ -268,13 +272,24 @@ public sealed class GovController : ControllerBase
             return BadRequest(new { error = "serviceId es requerido." });
         }
 
+        NotificationConsent? consent = null;
+        if (request.NotificationConsent is { } respuesta)
+        {
+            if (string.IsNullOrWhiteSpace(respuesta.TextVersion))
+            {
+                return BadRequest(new { error = "notificationConsent.textVersion es requerido: es lo que prueba qué texto se aceptó." });
+            }
+            consent = new NotificationConsent(respuesta.Accepted, respuesta.TextVersion.Trim(), DateTimeOffset.UtcNow);
+        }
+
         var answers = request.Answers ?? new Dictionary<string, string>();
         var citizen = ResolveCitizen(answers);
 
         RadicarResult result;
         try
         {
-            result = await _applications.RadicarAsync(request.ServiceId.Trim(), answers, citizen, cancellationToken);
+            result = await _applications.RadicarAsync(
+                request.ServiceId.Trim(), answers, citizen, consent, cancellationToken);
         }
         catch (ArgumentException ex)
         {
@@ -922,7 +937,8 @@ public sealed class GovController : ControllerBase
                 ? null
                 : new DecisionDto(c.Decision.Outcome, c.Decision.Note, c.Decision.DecidedAt, c.Decision.DecidedBy),
             Actions: actions,
-            Stale: stale);
+            Stale: stale,
+            NotificationConsent: NotificationConsentSlugs.ToSlug(c.NotificationConsent));
     }
 
     /// <summary>
@@ -1073,7 +1089,13 @@ public sealed class GovController : ControllerBase
 
     // ══════════════════════ Request DTOs ══════════════════════
 
-    public sealed record CreateApplicationRequest(string ServiceId, Dictionary<string, string>? Answers);
+    public sealed record CreateApplicationRequest(
+        string ServiceId,
+        Dictionary<string, string>? Answers,
+        NotificationConsentRequest? NotificationConsent = null);
+
+    /// <summary>Lo que contestó sobre la notificación electrónica, con la versión del texto que leyó (009, S-7).</summary>
+    public sealed record NotificationConsentRequest(bool Accepted, string? TextVersion);
 
     // (El antiguo `DocumentRequest(ApplicationId, Name)` murió con T6: adjuntar ya no es
     //  un JSON con un nombre, es un multipart con el fichero.)
@@ -1257,6 +1279,9 @@ public sealed class GovController : ControllerBase
     /// <para><b><c>actions</c> es lo que el proceso permite al funcionario desde el estado</b> (D-3 de
     /// 009): la consola pinta sólo eso. <c>stale</c> dice que el proceso no contestó y por eso no
     /// hay acciones ahora.</para>
+    /// <para><b><c>notificationConsent</c></b> (<c>accepted | declined | unknown</c>, S-7): si el
+    /// ciudadano aceptó la notificación electrónica al radicar. Sin aceptación no se le notifica
+    /// por aquí, y la consola no lo ofrece.</para>
     /// </remarks>
     public sealed record CaseDto(
         CaseApplicationDto Application,
@@ -1266,7 +1291,8 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<ActNotificationDto> Notifications,
         DecisionDto? Decision,
         IReadOnlyList<string> Actions,
-        bool Stale = false);
+        bool Stale = false,
+        string NotificationConsent = NotificationConsentSlugs.Unknown);
 
     public sealed record CaseResponse(CaseDto Case);
 

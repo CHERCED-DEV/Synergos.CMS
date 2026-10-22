@@ -518,6 +518,93 @@ public sealed class GovControllerTests
         Assert.IsType<OkObjectResult>(otraVez);
     }
 
+    // ══════════ 009 — LA ACEPTACIÓN DE LA NOTIFICACIÓN ELECTRÓNICA (T015, S-7) ══════════
+
+    private void RadicarDevuelveUnExpediente()
+        => _applications.RadicarAsync(
+                Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+                Arg.Any<NotificationConsent?>(), Arg.Any<CancellationToken>())
+            .Returns(new RadicarResult(CaseWithDocument("file-1")));
+
+    private static Dictionary<string, string> Respuestas() => new()
+    {
+        ["nombreCompleto"] = "Ana Torres",
+        ["correo"] = "ana.torres@correo.co",
+    };
+
+    [Fact] // happy: la respuesta viaja con la versión del texto que leyó
+    public async Task CreateApplication_SendsTheConsentWithItsTextVersion()
+    {
+        RadicarDevuelveUnExpediente();
+
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest(
+                "trm-cedula", Respuestas(), new GovController.NotificationConsentRequest(true, " 2026-10-v1 ")),
+            default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _applications.Received(1).RadicarAsync(
+            "trm-cedula", Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Is<NotificationConsent?>(c => c != null && c.Accepted && c.TextVersion == "2026-10-v1"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // sin la casilla es «no consta», y radica igual
+    public async Task CreateApplication_WithoutConsent_FilesWithUnknown()
+    {
+        RadicarDevuelveUnExpediente();
+
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest("trm-cedula", Respuestas()), default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _applications.Received(1).RadicarAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Is<NotificationConsent?>(c => c == null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // una aceptación sin la versión del texto no prueba qué se aceptó: 400 y no radica
+    public async Task CreateApplication_ConsentWithoutTextVersion_Returns400_AndSkipsSeam()
+    {
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest(
+                "trm-cedula", Respuestas(), new GovController.NotificationConsentRequest(true, " ")),
+            default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _applications.DidNotReceive().RadicarAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Any<NotificationConsent?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory] // el expediente del funcionario dice si consta la aceptación, y cuál fue
+    [InlineData(true, "accepted")]
+    [InlineData(false, "declined")]
+    public async Task Case_ShowsWhetherTheCitizenAccepted(bool aceptada, string slug)
+    {
+        Officer();
+        _tracking.GetCaseAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1") with
+            {
+                NotificationConsent = new NotificationConsent(aceptada, "2026-10-v1", System.DateTimeOffset.UtcNow),
+            });
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Equal(slug, dto.NotificationConsent);
+    }
+
+    [Fact] // empty: sin respuesta dice «no consta», no «aceptada»
+    public async Task Case_WithoutAnAnswer_SaysUnknown()
+    {
+        Officer();
+        CaseExists();
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Equal("unknown", dto.NotificationConsent);
+    }
+
     // ══════════ T6 — DESCARGA DE DOCUMENTOS (el binario ya existe de verdad) ══════════
     //
     // El id del fichero es opaco, pero eso NO autoriza: cada descarga comprueba permiso.

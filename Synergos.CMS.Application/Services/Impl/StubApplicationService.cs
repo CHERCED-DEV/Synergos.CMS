@@ -137,6 +137,7 @@ public sealed class StubApplicationService : IApplicationService
         string tramiteId,
         IReadOnlyDictionary<string, string> answers,
         GovCitizen citizen,
+        NotificationConsent? consent = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(tramiteId))
@@ -278,7 +279,10 @@ public sealed class StubApplicationService : IApplicationService
             },
             Decision: null,
             PaymentSessionId: paymentSessionId,
-            PaymentStatus: paymentStatus);
+            PaymentStatus: paymentStatus,
+            // La respuesta sobre la notificación electrónica va con las respuestas (009, FR-017):
+            // null es «no consta», nunca una aceptación.
+            Consent: consent is null ? null : consent with { TextVersion = consent.TextVersion.Trim() });
         await WriteAsync(state, cancellationToken);
 
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
@@ -511,7 +515,8 @@ public sealed class StubApplicationService : IApplicationService
         Decision: s.Decision,
         // El estado del cobro de la tasa, que el agregado guardaba desde la ADR 0116
         // fase 5 y la proyección no declaraba: se escribía y no lo leía nadie (#116).
-        FeeStatus: s.PaymentStatus);
+        FeeStatus: s.PaymentStatus,
+        NotificationConsent: s.Consent);
 
     /// <summary>
     /// Días HÁBILES restantes del término. Terminal ⇒ 0.
@@ -926,4 +931,7 @@ internal sealed record CaseState(
     string? PaymentSessionId = null,
     // Estado del cobro la última vez que se consultó. Un trámite con tasa que
     // nunca capturó NO debería avanzar, y sin este campo nadie podía saberlo.
-    string? PaymentStatus = null);
+    string? PaymentStatus = null,
+    // Lo que contestó sobre la notificación electrónica de los actos (009, S-7). Null es «no
+    // consta»: así se leen los expedientes guardados antes de que existiera el campo.
+    NotificationConsent? Consent = null);
