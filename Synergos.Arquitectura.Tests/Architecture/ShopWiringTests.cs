@@ -185,6 +185,32 @@ public sealed class ShopWiringTests
         Assert.Contains("compra.Refunded", trozo, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La devolución de una compra de la PUERTA (004-tienda-compra, US 7) va por la puerta: el decorador de órdenes
+    /// recibe la pieza, y la pieza manda el flujo posterior por el reenvío genérico —sin cliente propio del
+    /// vertical—, con la llave de la devolución y leyendo lo devuelto de la respuesta.
+    /// </summary>
+    /// <remarks>
+    /// El decorador acepta la pieza como opcional (sin ella, una compra de la puerta no se reembolsa y lo dice): un
+    /// composer que se olvidara de pasarla dejaría todas las devoluciones de la puerta en «recibida» sin que nada
+    /// fallara al arrancar. Por eso se mira el cableado.
+    /// </remarks>
+    [Fact]
+    public void La_devolucion_de_una_compra_de_la_puerta_va_por_la_puerta_con_la_llave_de_la_devolucion()
+    {
+        var composer = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.Shop.cs"));
+        Assert.Contains("services.AddSingleton<DevolucionesDeLaPuerta>()", composer, StringComparison.Ordinal);
+        var decorador = composer.IndexOf("new OrdenesConLasDeLaPuerta(", StringComparison.Ordinal);
+        Assert.True(decorador > 0, "El composer ya no arma el decorador de órdenes: revisar este gate.");
+        Assert.Contains("sp.GetRequiredService<DevolucionesDeLaPuerta>()", composer[decorador..Math.Min(composer.Length, decorador + 500)], StringComparison.Ordinal);
+
+        var pieza = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Services", "DevolucionesDeLaPuerta.cs"));
+        Assert.Contains("_reenvio.EnviarAsync(", pieza, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateClient(", pieza, StringComparison.Ordinal);
+        Assert.Contains("[LoQuePoneLaPuerta.CabeceraDeLaLlave] = Llave(compra, motivo)", pieza, StringComparison.Ordinal);
+        Assert.Contains("TryGetProperty(\"monto\"", pieza, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void El_stub_sigue_siendo_el_default()
     {
@@ -203,6 +229,54 @@ public sealed class ShopWiringTests
         var settings = File.ReadAllText(
             Path.Combine(RepoRoot(), "Synergos.CMS.Application", "Configuration", "TiendaSettings.cs"));
         Assert.Contains("Mode { get; init; } = \"Stub\"", settings, StringComparison.Ordinal);
+    }
+
+    // ── La oferta del catálogo (004-tienda-compra, R-9) ─────────────────────
+
+    /// <summary>Las notificaciones del editor que mueven la oferta, y ninguna otra: ni el arranque ni nada.</summary>
+    private static readonly string[] NotificacionesDeLaOferta =
+    {
+        "ContentPublishedNotification", "ContentUnpublishedNotification",
+        "ContentMovedToRecycleBinNotification", "ContentDeletedNotification",
+    };
+
+    /// <summary>
+    /// La oferta del catálogo va por el ORQUESTADOR, se publica y se retira con el editor, y nunca al arrancar.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por el orquestador</b>: escribir el precio en <c>Api.Pricing</c> y las existencias en
+    /// <c>Api.Inventory</c> desde el CMS es el atajo de un martes, y le copiaría al CMS el vocabulario de
+    /// sujetos de la compra y el rastro de lo declarado, que es lo que hace que un cambio de existencias no
+    /// devuelva lo vendido.</para>
+    ///
+    /// <para><b>Con el editor, en los dos sentidos</b>: publicar sin retirar deja vendiéndose lo que la ficha ya
+    /// no muestra, y es el defecto que nadie ve, porque comprar sigue funcionando. <b>Nunca al arrancar</b>
+    /// (ADR 0013): se mira qué notificaciones atienden los dos manejadores, no sólo que estén registrados.</para>
+    /// </remarks>
+    [Fact]
+    public void La_oferta_de_la_tienda_va_por_el_orquestador_sigue_al_editor_y_nunca_corre_al_arrancar()
+    {
+        var publicador = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Services", "HttpTiendaOfferPublisher.cs"));
+        Assert.Contains("\"v1/ofertas\"", publicador, StringComparison.Ordinal);
+        Assert.Contains("v1/ofertas/{Uri.EscapeDataString(productId)}/retirar", publicador, StringComparison.Ordinal);
+        Assert.DoesNotContain("v1/prices", publicador, StringComparison.Ordinal);
+
+        var composer = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Composers", "SeamComposer.Shop.cs"));
+        Assert.Contains("AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTiendaAlPublicar>()", composer, StringComparison.Ordinal);
+        foreach (var retiro in NotificacionesDeLaOferta.Skip(1))
+        {
+            Assert.Contains($"AddNotificationAsyncHandler<{retiro}, OfertaDeTiendaAlRetirar>()", composer, StringComparison.Ordinal);
+        }
+
+        foreach (var manejador in new[] { "OfertaDeTiendaAlPublicar.cs", "OfertaDeTiendaAlRetirar.cs" })
+        {
+            var codigo = SinComentarios(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "Notifications", manejador));
+            var atiende = System.Text.RegularExpressions.Regex.Matches(codigo, @"INotification(?:Async)?Handler<(\w+)>")
+                .Select(m => m.Groups[1].Value)
+                .ToList();
+            Assert.NotEmpty(atiende);
+            Assert.All(atiende, n => Assert.Contains(n, NotificacionesDeLaOferta));
+        }
     }
 
     // ── La identidad de quien compra (HU #14) ───────────────────────────────
