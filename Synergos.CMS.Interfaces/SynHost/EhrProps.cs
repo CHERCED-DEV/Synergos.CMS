@@ -22,8 +22,13 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <see cref="CaminoDeCompra"/> —el override de <c>Synergos:Features:Ehr:AppointmentPath</c>, o la puerta
 /// cuando abre <c>salud.cita</c>, o la directa—, como el camino de compra de Eventos; el elemento no lo
 /// adivina.</para>
+///
+/// <para><b>Y en qué zona se lee la hora</b> (<c>Zona</c>, la de <c>Synergos:Listados:ZonaHoraria</c>): por la
+/// puerta la franja viaja como instante, y el «10:00» que elige el paciente es la hora del sitio, no la del
+/// navegador. Sus textos de la cita son la sección <c>Health.Appointment</c> del diccionario (ADR 0136).</para>
 /// </remarks>
-[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad)]
+[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment"])]
 public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string Zona);

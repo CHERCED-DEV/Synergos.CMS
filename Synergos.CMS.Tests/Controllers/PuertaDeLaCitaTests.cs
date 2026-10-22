@@ -125,14 +125,27 @@ public sealed class PuertaDeLaCitaTests
 
     // ── El camino de la cita (T021) y la vista que coloca el coordinador (T022) ─────────────────────
 
-    private static string Camino(EhrFeatureSettings ajustes, bool laPuertaAbre, Guid? sitio = null)
+    private static Synergos.CMS.Interfaces.SynHost.EhrProps Resolver(
+        EhrFeatureSettings ajustes, bool laPuertaAbre, Guid? sitio = null, ListadosSettings? listados = null)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeEhr>>();
         negocio.Actual().Returns(ajustes.Para(sitio));
         var puerta = Substitute.For<IPuertaDeLosFlujos>();
         puerta.Abre(EhrResolutor.FlujoDeLaCita).Returns(laPuertaAbre);
 
-        return new EhrResolutor(negocio, puerta).Resolver(Substitute.For<IPublishedElement>()).Props.AppointmentPath;
+        return new EhrResolutor(negocio, puerta, Microsoft.Extensions.Options.Options.Create(listados ?? new ListadosSettings()))
+            .Resolver(Substitute.For<IPublishedElement>()).Props;
+    }
+
+    private static string Camino(EhrFeatureSettings ajustes, bool laPuertaAbre, Guid? sitio = null)
+        => Resolver(ajustes, laPuertaAbre, sitio).AppointmentPath;
+
+    [Fact]
+    public void La_zona_de_la_cita_es_la_de_los_listados_la_misma_con_que_la_ruta_directa_lee_la_hora()
+    {
+        Assert.Equal("America/Bogota", Resolver(new EhrFeatureSettings(), laPuertaAbre: true).Zona);
+        Assert.Equal("Europe/Madrid", Resolver(new EhrFeatureSettings(), laPuertaAbre: true,
+            listados: new ListadosSettings { ZonaHoraria = "Europe/Madrid" }).Zona);
     }
 
     [Fact]
