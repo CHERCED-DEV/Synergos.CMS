@@ -49,6 +49,22 @@ public interface ICaseWorkflowService
         CaseActor actor,
         string? note,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lo que el proceso del expediente permite desde su estado a la cara <paramref name="role"/>
+    /// (<see cref="CaseRoles.Funcionario"/> o <see cref="CaseRoles.Ciudadano"/>), con los nombres de
+    /// cable del proceso (<c>take | approve | reject | request-info | resubmit</c>). Cerrado = ninguna.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que la consola y el portal pintan, en vez de una lista fija (D-3 de 009): lo que se ofrece
+    /// es exactamente lo que este mismo motor aceptaría. Lanza <see cref="ArgumentException"/> si el
+    /// expediente no existe, e <see cref="InvalidOperationException"/> si no se puede consultar el
+    /// proceso (la capacidad caída): ahí no se ofrece nada y no se cae a una tabla local.
+    /// </remarks>
+    Task<IReadOnlyList<string>> ActionsAsync(
+        string caseId,
+        string role,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Quien actúa sobre un expediente: la persona de la sesión, nunca un actor de demo (D-5 de 009).</summary>

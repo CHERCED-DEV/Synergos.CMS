@@ -38,6 +38,25 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
             ["resubmit"] = (CaseStatus.EnRevision, new[] { CaseStatus.Subsanacion }),
         };
 
+    // acción → la cara que puede darla. Va aparte de la tabla —que la medición lee con su forma— y el
+    // gate la cruza con los requiredRoles de la v2.
+    private static readonly IReadOnlyDictionary<string, string> Caras =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["take"] = CaseRoles.Funcionario,
+            ["approve"] = CaseRoles.Funcionario,
+            ["reject"] = CaseRoles.Funcionario,
+            ["request-info"] = CaseRoles.Funcionario,
+            ["resubmit"] = CaseRoles.Ciudadano,
+        };
+
+    /// <summary>Los estados finales: lo cerrado no admite ni ofrece nada.</summary>
+    private static readonly string[] Finales =
+    {
+        GovStatusSlugs.ToSlug(CaseStatus.Resuelto),
+        GovStatusSlugs.ToSlug(CaseStatus.Rechazado),
+    };
+
     /// <summary>Las acciones que <see cref="DecideAsync"/> admite: las decisiones del funcionario.</summary>
     private static readonly string[] Desenlaces = { "approve", "reject", "request-info" };
 
@@ -72,6 +91,42 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
             t => t.Key,
             t => (t.Value.To, (IReadOnlyList<CaseStatus>)t.Value.From),
             StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// La tabla como proceso: cada transición con sus estados en slug y la cara que puede darla.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que <see cref="AccionesDelExpediente"/> recorre para ofrecer, y lo que el gate cruza con
+    /// la v2 publicada: la misma forma que tiene la definición de la capacidad.
+    /// </remarks>
+    public static IReadOnlyList<AccionesDelExpediente.Paso> Proceso
+        => Transiciones
+            .SelectMany(t => t.Value.From.Select(desde => new AccionesDelExpediente.Paso(
+                t.Key,
+                GovStatusSlugs.ToSlug(desde),
+                GovStatusSlugs.ToSlug(t.Value.To),
+                new[] { Caras[t.Key] })))
+            .ToList();
+
+    /// <summary>Los estados finales del proceso, en slug.</summary>
+    public static IReadOnlyList<string> EstadosFinales => Finales;
+
+    public Task<IReadOnlyList<string>> ActionsAsync(
+        string caseId,
+        string role,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId))
+        {
+            throw new ArgumentException("El expediente es obligatorio.", nameof(caseId));
+        }
+
+        var current = _recorder.Find(caseId)
+            ?? throw new ArgumentException($"Expediente '{caseId.Trim()}' no encontrado.", nameof(caseId));
+
+        return Task.FromResult(AccionesDelExpediente.Calcular(
+            Proceso, Finales, GovStatusSlugs.ToSlug(current.Status), role));
+    }
 
     public Task<CaseDetail> DecideAsync(
         string caseId,

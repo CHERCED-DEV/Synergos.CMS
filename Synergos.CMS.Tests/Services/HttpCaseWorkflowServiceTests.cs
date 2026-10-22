@@ -76,10 +76,10 @@ public sealed class HttpCaseWorkflowServiceTests
         {"key":"gov.tramite","initialState":"submitted",
          "finalStates":["approved","rejected"],
          "transitions":[
-           {"name":"approve","from":"submitted","to":"approved"},
-           {"name":"approve","from":"in-review","to":"approved"},
-           {"name":"reject","from":"submitted","to":"rejected"},
-           {"name":"request-info","from":"submitted","to":"info-requested"}]}
+           {"name":"approve","from":"submitted","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"approve","from":"in-review","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"reject","from":"submitted","to":"rejected","requiredRoles":["funcionario"]},
+           {"name":"request-info","from":"submitted","to":"info-requested","requiredRoles":["funcionario"]}]}
         """;
 
     // La v2 (tools/provisionar.procesos.json): se toma antes de decidir y la subsanación vuelve.
@@ -87,11 +87,11 @@ public sealed class HttpCaseWorkflowServiceTests
         {"key":"gov.tramite.v2","initialState":"submitted",
          "finalStates":["approved","rejected"],
          "transitions":[
-           {"name":"take","from":"submitted","to":"in-review"},
-           {"name":"approve","from":"in-review","to":"approved"},
-           {"name":"reject","from":"in-review","to":"rejected"},
-           {"name":"request-info","from":"in-review","to":"info-requested"},
-           {"name":"resubmit","from":"info-requested","to":"in-review"}]}
+           {"name":"take","from":"submitted","to":"in-review","requiredRoles":["funcionario"]},
+           {"name":"approve","from":"in-review","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"reject","from":"in-review","to":"rejected","requiredRoles":["funcionario"]},
+           {"name":"request-info","from":"in-review","to":"info-requested","requiredRoles":["funcionario"]},
+           {"name":"resubmit","from":"info-requested","to":"in-review","requiredRoles":["ciudadano"]}]}
         """;
 
     private static readonly CaseActor Ana = new(
@@ -504,6 +504,78 @@ public sealed class HttpCaseWorkflowServiceTests
         Assert.DoesNotContain(GovCaseDecisionRecorder.OfficerActor, disparo.Body, StringComparison.Ordinal);
 
         Assert.Equal("ana@entidad.gov.co", resultado.Decision!.DecidedBy);
+    }
+
+    // ── Las acciones servidas (T008): lo que se ofrece es lo que la capacidad aceptaría ──
+
+    /// <summary>
+    /// Las acciones salen de la definición de la instancia y del estado DE LA INSTANCIA.
+    /// </summary>
+    /// <remarks>
+    /// Acá la proyección dice «radicado» y la instancia «en revisión»: la próxima transición la juzga
+    /// la capacidad contra la suya, así que ofrecer «tomar» pondría un botón que ella rechazaría.
+    /// </remarks>
+    [Fact]
+    public async Task Las_acciones_salen_de_la_definicion_y_del_estado_de_la_instancia()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("in-review", "gov.tramite.v2")));
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        Assert.Empty(await svc.ActionsAsync(caseId, CaseRoles.Ciudadano));
+        Assert.Equal(0, capacidad.Veces("/fire"));
+    }
+
+    [Fact] // uno de la v1 ofrece lo de la v1: decidir directo, sin «tomar»
+    public async Task Uno_de_la_v1_ofrece_lo_de_la_v1()
+    {
+        var capacidad = Feliz();
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        Assert.Equal(0, capacidad.Veces("/v1/definitions/gov.tramite.v2"));
+    }
+
+    [Fact] // sin proceso y en el inicial: lo de la definición con que arrancaría, la v2
+    public async Task Un_expediente_sin_proceso_en_el_inicial_ofrece_lo_de_la_v2()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina());
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "take" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        // Ofrecer no arranca nada: la instancia nace al actuar.
+        Assert.Equal(0, capacidad.Llamadas.Count(l => l.Method == "POST"));
+    }
+
+    [Fact] // sin proceso y ya movido: nada hasta migrarlo, que es lo que contestaría al intentarlo
+    public async Task Un_expediente_movido_y_sin_proceso_no_ofrece_nada()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina());
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enMarcha = casos.ListCases().First(c => c.Status == CaseStatus.EnRevision);
+
+        Assert.Empty(await svc.ActionsAsync(enMarcha.CaseId, CaseRoles.Funcionario));
+    }
+
+    [Fact] // con la capacidad caída no se ofrece nada de una tabla local: se dice
+    public async Task Con_la_capacidad_caida_no_se_ofrecen_acciones_de_la_tabla_local()
+    {
+        var capacidad = Feliz();
+        capacidad.Falla("GET /v1/instances", HttpStatusCode.ServiceUnavailable, "workflow.unavailable", "no hay quien atienda");
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+    }
+
+    [Fact] // empty: el expediente que no existe es error de quien pregunta
+    public async Task Las_acciones_de_un_expediente_que_no_existe_son_un_error_de_quien_pregunta()
+    {
+        var (svc, _, _) = await ArmarAsync(Feliz());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.ActionsAsync("case-que-no-existe", CaseRoles.Funcionario));
     }
 
     [Fact] // el expediente viaja como Ref opaco, con el Kind configurado.

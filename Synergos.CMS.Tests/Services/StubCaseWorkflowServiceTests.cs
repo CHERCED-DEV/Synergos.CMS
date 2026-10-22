@@ -269,6 +269,71 @@ public class StubCaseWorkflowServiceTests
         Assert.Equal("beto@entidad.gov.co", Assert.Single(audit.Events).ActorEmail);
     }
 
+    // ── Las acciones servidas (T008): lo que se ofrece es lo que este motor aceptaría ──
+
+    [Fact] // cada expediente sembrado ofrece a cada cara lo de su estado
+    public async Task Actions_FollowTheStateAndTheFace()
+    {
+        var (workflow, _, _) = Make();
+
+        Assert.Equal(new[] { "take" }, await workflow.ActionsAsync("case-1001", CaseRoles.Funcionario));
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, await workflow.ActionsAsync("case-1002", CaseRoles.Funcionario));
+        Assert.Empty(await workflow.ActionsAsync("case-1003", CaseRoles.Funcionario));
+        Assert.Equal(new[] { "resubmit" }, await workflow.ActionsAsync("case-1003", CaseRoles.Ciudadano));
+        Assert.Empty(await workflow.ActionsAsync("case-1001", CaseRoles.Ciudadano));
+        Assert.Empty(await workflow.ActionsAsync("case-1004", CaseRoles.Funcionario));
+        Assert.Empty(await workflow.ActionsAsync("case-1005", CaseRoles.Ciudadano));
+    }
+
+    [Fact] // las acciones se mueven con el expediente (y se piden también por radicado)
+    public async Task Actions_MoveWithTheCase()
+    {
+        var (workflow, _, _) = Make();
+
+        await workflow.TakeAsync("case-1001", Ana, null);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" },
+            await workflow.ActionsAsync("SG-2026-001001", CaseRoles.Funcionario));
+    }
+
+    [Fact] // empty: el expediente que no existe es error de quien pregunta
+    public async Task Actions_UnknownCase_Throws()
+    {
+        var (workflow, _, _) = Make();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => workflow.ActionsAsync("case-que-no-existe", CaseRoles.Funcionario));
+        await Assert.ThrowsAsync<ArgumentException>(() => workflow.ActionsAsync(" ", CaseRoles.Funcionario));
+    }
+
+    /// <summary>
+    /// Lo ofrecido sale bien: cada acción servida al funcionario se acepta y mueve el expediente (SC-002).
+    /// </summary>
+    /// <remarks>
+    /// Es la propiedad que la lista fija del elemento no tenía: con ella, tres ofertas acababan en un
+    /// rechazo y una en nada. Cada acción se prueba sobre un motor recién sembrado.
+    /// </remarks>
+    [Theory]
+    [InlineData("case-1001")]
+    [InlineData("case-1002")]
+    public async Task Every_offered_officer_action_succeeds_and_moves_the_case(string caso)
+    {
+        var (sembrado, _, _) = Make();
+        var ofrecidas = await sembrado.ActionsAsync(caso, CaseRoles.Funcionario);
+        Assert.NotEmpty(ofrecidas);
+
+        foreach (var accion in ofrecidas)
+        {
+            var (workflow, cases, _) = Make();
+            var antes = cases.FindCase(caso)!.Status;
+
+            var despues = accion == "take"
+                ? await workflow.TakeAsync(caso, Ana, null)
+                : await workflow.DecideAsync(caso, accion, "nota", Ana);
+
+            Assert.NotEqual(antes, despues.Status);
+        }
+    }
+
     [Fact] // la firma cae al nombre, luego a la identidad y sólo sin ninguna al respaldo declarado
     public void Firma_FallsBackToNameThenIdentityThenTheDeclaredFallback()
     {

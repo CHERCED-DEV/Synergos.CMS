@@ -134,6 +134,52 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
         CancellationToken cancellationToken = default)
         => TransitarAsync(caseId, "take", note ?? string.Empty, actor, OfficerRoles, cancellationToken);
 
+    /// <summary>
+    /// Lo que la definición DE LA INSTANCIA permite desde el estado de la instancia a esa cara.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>El estado es el de la instancia, no el de la proyección.</b> Es contra ella que la
+    /// capacidad juzgará la próxima transición: si las dos difirieran, ofrecer desde la proyección
+    /// pondría un botón que la capacidad rechazaría.</para>
+    /// <para><b>Sin instancia</b>, sólo el expediente que sigue en el estado inicial tiene acciones: las
+    /// de la definición de los nuevos, con la que se arrancaría al actuar. Uno ya movido no tiene
+    /// ninguna hasta migrarlo, que es lo mismo que contestaría al intentarlo.</para>
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> ActionsAsync(
+        string caseId,
+        string role,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId))
+        {
+            throw new ArgumentException("El expediente es obligatorio.", nameof(caseId));
+        }
+
+        var current = _recorder.Find(caseId)
+            ?? throw new ArgumentException($"Expediente '{caseId.Trim()}' no encontrado.", nameof(caseId));
+
+        var instancia = await EnRed(() => BuscarInstanciaAsync(current, cancellationToken), cancellationToken);
+        var definicion = await EnRed(
+            () => DefinitionAsync(instancia?.DefinitionKey ?? _settings.DefinitionKey, cancellationToken), cancellationToken);
+
+        var estado = instancia?.State;
+        if (estado is null)
+        {
+            if (!GovStatusSlugs.TryParse(definicion.InitialState, out var inicial) || current.Status != inicial)
+            {
+                return Array.Empty<string>();
+            }
+            estado = definicion.InitialState;
+        }
+
+        return AccionesDelExpediente.Calcular(
+            definicion.Transitions.Select(t => new AccionesDelExpediente.Paso(
+                t.Name, t.From, t.To, t.RequiredRoles ?? Array.Empty<string>())),
+            definicion.FinalStates ?? Array.Empty<string>(),
+            estado,
+            role);
+    }
+
     private async Task<CaseDetail> TransitarAsync(
         string caseId,
         string accion,
@@ -414,7 +460,7 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
 
     // ── Lo que viaja ────────────────────────────────────────────────────────
 
-    private sealed record TransitionDto(string Name, string From, string To);
+    private sealed record TransitionDto(string Name, string From, string To, IReadOnlyList<string>? RequiredRoles = null);
 
     private sealed record DefinitionDto(
         string Key, string InitialState, IReadOnlyList<string> FinalStates, IReadOnlyList<TransitionDto> Transitions);
