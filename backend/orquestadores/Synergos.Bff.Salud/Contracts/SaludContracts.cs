@@ -11,12 +11,16 @@ namespace Synergos.Bff.Salud.Contracts;
 public sealed record MoneyDto(decimal Amount, string Currency);
 
 /// <summary>Agendar una cita.</summary>
+/// <remarks>
+/// Todo opcional en el cable (<c>= null</c>, el molde F2): lo que falta lo rechaza el borde con su código
+/// (<c>salud.bad_patient</c>, <c>salud.bad_window</c>…), no un 400 genérico del binder.
+/// </remarks>
 public sealed record ScheduleRequest(
-    string? PatientKind, string? PatientId,
-    string? ProfessionalKind, string? ProfessionalId,
-    string? ResourceId,
-    string? ServiceKind, string? ServiceId,
-    DateTimeOffset? Start, DateTimeOffset? End);
+    string? PatientKind = null, string? PatientId = null,
+    string? ProfessionalKind = null, string? ProfessionalId = null,
+    string? ResourceId = null,
+    string? ServiceKind = null, string? ServiceId = null,
+    DateTimeOffset? Start = null, DateTimeOffset? End = null);
 
 /// <summary>Cómo sale una cita.</summary>
 public sealed record AppointmentResponse(
