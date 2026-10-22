@@ -1836,10 +1836,10 @@ JSON, el patrón escala. La cita imperativa sigue en `/v1/appointments` (la ruta
   (≤ 60 y ≤ 4), sin pegamento del núcleo. Eventos costó 13 ficheros y 316 líneas sólo por declarar.
   - El CMS: 6 ficheros y 42 líneas (el camino, el servicio y la zona en el negocio de Ehr; la vista con su
     coordinador), frente a 14 y 815 de Eventos.
-  - El UI: 6 ficheros y 485 líneas propias (la estrategia por camino, el copago cotizado, la cita pendiente y su
-    cancelación, los avisos por `code`, el enlace del aviso), más 135 de una copia interina de la hora del sitio
-    (NN-19). Eventos, en la F4: 8 ficheros y 1155 líneas, con el cupón. El UI no es «casi sólo JSON»: es la
-    experiencia de la cita.
+  - El UI: 6 ficheros y 620 líneas. 563 son propias (la estrategia por camino, el transporte sobre las funciones
+    generadas, el copago cotizado, la cita pendiente y su cancelación, los avisos por `code`, el enlace del aviso)
+    y 57 una copia interina de la hora del sitio (NN-19), retirable cuando el núcleo la exporte. Eventos, en la
+    F4: 8 ficheros y 1155 líneas, con el cupón. El UI no es «casi sólo JSON»: es la experiencia de la cita.
 - **Lo que el núcleo absorbió durante la línea**, y por eso el pegamento del orquestador bajó de 61 a 7 líneas:
   - `consent.verificar`, con el propósito como dato (N2, NN-3);
   - dos motores en un orquestador: cada saga en su carpeta y la llave una sola vez (NN-15);
