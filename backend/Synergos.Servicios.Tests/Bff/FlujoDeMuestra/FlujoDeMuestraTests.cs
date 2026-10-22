@@ -12,6 +12,7 @@ using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Core;
 using Synergos.CMS.Tests.Architecture;
+using Synergos.CMS.Tests.Contratos;
 
 namespace Synergos.CMS.Tests.Bff.FlujoDeMuestra;
 
@@ -379,7 +380,8 @@ public sealed class FlujoDeMuestraTests
         var (cerro, cerrada) = await m.Pedir($"v1/flujos/muestra.garantia/{alquiler}/cerrar", null, Inquilino);
         Assert.True(cerro == HttpStatusCode.OK, cerrada.ToString());
         Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
-        var garantia = cerrada.GetProperty("datos").GetProperty("garantiaId").GetString()!;
+        Assert.False(cerrada.GetProperty("datos").TryGetProperty("garantiaId", out _), "La garantía se deja para lo posterior, no se publica.");
+        var garantia = m.Sagas.Find(alquiler)!.Datos["garantiaId"].Valor!.Value.GetString()!;
         Assert.DoesNotContain(m.Sagas.Find(alquiler)!.Compensations, c => c.IsPending);
 
         var retenida = await m.Leer("payments", $"v1/payments/{garantia}");
@@ -396,6 +398,87 @@ public sealed class FlujoDeMuestraTests
         Assert.Equal(HttpStatusCode.Created, (await m.Pedir(
             "v1/flujos/muestra.liquidacion", new { alquiler, devolver = new { amount = 200_000m, currency = "COP" } }, "muestra.personal:s-1", "liq-1")).Estado);
         Assert.Equal(200_000m, (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
+    }
+
+    [Fact]
+    public async Task Cancelar_la_cita_confirmada_recorre_lo_que_reservo_y_devuelve_sin_que_se_publique()
+    {
+        // D-011-NB10 + NN-18 de 005: muestra.cita deja para lo posterior su cobro y lo que reservó, sin publicarlos. La
+        // cancelación lo lee con flow.leer-original, cancela en la agenda real la reserva que produjo cada cierre (no el
+        // apartado, que ya no existe) y devuelve el cobro.
+        await using var m = await Muestra.Arrancar();
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Cerrar(cita);
+        Assert.False(cerrada.GetProperty("datos").TryGetProperty("cobroId", out _), "El cobro se deja para lo posterior, no se publica.");
+        var reserva = cerrada.GetProperty("datos").GetProperty("reservaId").GetString()!;
+        var original = m.Sagas.Find(cita)!;
+        var apartado = Assert.Single(original.Reservas["apartar"]);
+        Assert.Equal(reserva, apartado.Cerrada);
+        Assert.NotEqual(reserva, apartado.HoldId);
+        var cobro = original.Datos["cobroId"].Valor!.Value.GetString()!;
+
+        var (cancelo, cancelacion) = await m.Pedir(
+            "v1/flujos/muestra.cancelacion", new { cita, devolver = new { amount = 50_000m, currency = "COP" } }, "muestra.paciente:u-1", "can-1");
+
+        Assert.True(cancelo == HttpStatusCode.Created, cancelacion.ToString());
+        Assert.Equal("Completed", cancelacion.GetProperty("estado").GetString());
+        Assert.Equal("Cancelled", (await m.Leer("booking", $"v1/reservations/{reserva}")).GetProperty("status").GetString());
+        Assert.Equal(50_000m, (await m.Leer("payments", $"v1/payments/{cobro}")).GetProperty("refunded").GetProperty("amount").GetDecimal());
+        Assert.Equal(SagaStatus.Completed, m.Sagas.Find(cita)!.Status);
+
+        // Otro dueño no la encuentra, y nada se mueve.
+        var (ajena, nada) = await m.Pedir(
+            "v1/flujos/muestra.cancelacion", new { cita, devolver = new { amount = 1_000m, currency = "COP" } }, "muestra.paciente:u-2", "can-2");
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (ajena, nada.GetProperty("code").GetString()));
+    }
+
+    [Fact]
+    public async Task Cancelar_una_cita_gratis_cancela_la_hora_y_no_devuelve_nada()
+    {
+        // NN-19: la cita gratis no tiene cobro (omitir_si_cero lo saltó), así que devolverlo no existe: el paso se omite
+        // porque falta un dato anulable, y la cancelación completa con la hora cancelada en la agenda real.
+        await using var m = await Muestra.Arrancar(precio: 0m);
+        var (_, abierta) = await m.Abrir("cita-1");
+        var cita = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Cerrar(cita);
+        var reserva = cerrada.GetProperty("datos").GetProperty("reservaId").GetString()!;
+        Assert.Equal(JsonValueKind.Null, m.Sagas.Find(cita)!.Datos["cobroId"].Valor?.ValueKind ?? JsonValueKind.Null);
+
+        var (cancelo, cancelacion) = await m.Pedir(
+            "v1/flujos/muestra.cancelacion", new { cita, devolver = new { amount = 0m, currency = "COP" } }, "muestra.paciente:u-1", "can-1");
+
+        Assert.True(cancelo == HttpStatusCode.Created, cancelacion.ToString());
+        Assert.Equal("Completed", cancelacion.GetProperty("estado").GetString());
+        Assert.Equal("Cancelled", (await m.Leer("booking", $"v1/reservations/{reserva}")).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Soltar_la_garantia_no_publica_cotizar_y_abrirla_la_anula()
+    {
+        // NR-8 de 008: muestra.liberacion anula la garantía en la fase que abre, con un paso que no pide llave. Si se
+        // anticipara, «cotizar» la anularía sin saga, sin llave y sin rastro: no se publica, y la garantía sigue viva.
+        var doc = await ContratoDeFlujosGenericosTests.Documento();
+        Assert.NotNull(doc["paths"]!["/v1/flujos/muestra.cita/cotizar"]);
+        Assert.NotNull(doc["paths"]!["/v1/flujos/muestra.liberacion"]);
+        Assert.Null(doc["paths"]!["/v1/flujos/muestra.liberacion/cotizar"]);
+
+        await using var m = await Muestra.Arrancar();
+        const string Inquilino = "muestra.paciente:u-1";
+        var (_, abierta) = await m.Pedir("v1/flujos/muestra.garantia", new { garantia = new { amount = 300_000m, currency = "COP" } }, Inquilino, "gar-1");
+        var alquiler = abierta.GetProperty("id").GetString()!;
+        var (_, cerrada) = await m.Pedir($"v1/flujos/muestra.garantia/{alquiler}/cerrar", null, Inquilino);
+        Assert.False(cerrada.GetProperty("datos").TryGetProperty("garantiaId", out _), "La garantía se deja para lo posterior, no se publica.");
+        var garantia = m.Sagas.Find(alquiler)!.Datos["garantiaId"].Valor!.Value.GetString()!;
+
+        var (cotizo, _) = await m.Pedir("v1/flujos/muestra.liberacion/cotizar", new { alquiler }, Inquilino);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, cotizo);
+        Assert.Equal("Authorized", (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("status").GetString());
+
+        var (solto, liberacion) = await m.Pedir("v1/flujos/muestra.liberacion", new { alquiler }, Inquilino, "lib-1");
+        Assert.True(solto == HttpStatusCode.Created, liberacion.ToString());
+        Assert.Equal("Completed", liberacion.GetProperty("estado").GetString());
+        Assert.Equal("Voided", (await m.Leer("payments", $"v1/payments/{garantia}")).GetProperty("status").GetString());
     }
 
     [Fact]

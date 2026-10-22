@@ -10,16 +10,19 @@ namespace Synergos.Bff.Tienda.Contracts;
 /// <summary>Un monto tal como sale.</summary>
 public sealed record MoneyDto(decimal Amount, string Currency);
 
+// En una petición, todo anulable lleva `= null` (ADR 0140 F2, decisión 6): el contrato publica la forma
+// del cable; lo que el negocio exige lo publican los rechazos con código.
+
 /// <summary>Comprar una canasta.</summary>
-public sealed record BuyRequest(string? CartId);
+public sealed record BuyRequest(string? CartId = null);
 
 /// <summary>Una dirección de entrega, tal como la pide <c>Api.Fulfillment</c>.</summary>
 public sealed record AddressRequest(
-    string? Line1, string? Line2, string? City, string? Region,
-    string? PostalCode, string? Country, string? Contact);
+    string? Line1 = null, string? Line2 = null, string? City = null, string? Region = null,
+    string? PostalCode = null, string? Country = null, string? Contact = null);
 
 /// <summary>Confirmar la compra: capturar y despachar.</summary>
-public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
+public sealed record ConfirmRequest(AddressRequest? To = null, string? Carrier = null);
 
 /// <summary>
 /// Lo que quien vendió manda para devolver una parte de lo cobrado (#57).
@@ -28,7 +31,7 @@ public sealed record ConfirmRequest(AddressRequest? To, string? Carrier);
 /// <b>El monto llega calculado.</b> El orquestador cotiza la compra entera y no sabe cuánto vale
 /// una línea; quien vende sí, y lo saca de la orden — no del cliente.
 /// </remarks>
-public sealed record RefundPurchaseRequest(MoneyDto? Amount, string? Reason);
+public sealed record RefundPurchaseRequest(MoneyDto? Amount = null, string? Reason = null);
 
 /// <summary>Cómo sale una compra.</summary>
 /// <param name="Id">Identificador.</param>
@@ -72,3 +75,31 @@ public sealed record PendingCompensationResponse(
 
 /// <summary>Una porción de una lista, con su total.</summary>
 public sealed record PageResponse<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);
+
+/// <summary>Una variante de la oferta de un producto, tal como la publica el CMS.</summary>
+/// <param name="VariantId">Cuál; sin él, el producto que no tiene variantes. Sin «:».</param>
+/// <param name="Price">Cuánto vale una unidad, en la moneda de la oferta.</param>
+/// <param name="Stock">Cuántas declara el editor que hay.</param>
+public sealed record OfferVariantRequest(string? VariantId = null, decimal? Price = null, int? Stock = null);
+
+/// <summary>Publicar la oferta de un producto: el precio y las existencias de cada variante (004-tienda-compra, R-9).</summary>
+/// <param name="ProductId">De qué producto. Sin «:».</param>
+/// <param name="Currency">La moneda de los precios.</param>
+/// <param name="Variants">Lo que se vende de él. Lo que no viene deja de venderse.</param>
+/// <remarks>La manda el CMS al publicar un producto, no el navegador: por eso no lleva marca de la puerta.</remarks>
+public sealed record PublishProductOfferRequest(
+    string? ProductId = null, string? Currency = null, IReadOnlyList<OfferVariantRequest>? Variants = null);
+
+/// <summary>Cómo quedó publicada una variante.</summary>
+/// <param name="VariantId">La variante; nulo para el producto sin variantes.</param>
+/// <param name="Price">Su precio, sin impuesto.</param>
+/// <param name="Stock">Las existencias declaradas: las de la oferta, o lo comprometido si era más.</param>
+public sealed record OfferVariantResponse(string? VariantId, MoneyDto Price, int Stock);
+
+/// <summary>Cómo quedó publicada la oferta de un producto.</summary>
+public sealed record ProductOfferResponse(string ProductId, IReadOnlyList<OfferVariantResponse> Variants)
+{
+    public static ProductOfferResponse From(OfertaPublicada o) => new(
+        o.ProductId,
+        o.Variants.Select(v => new OfferVariantResponse(v.VariantId, new MoneyDto(v.Price.Amount, v.Price.Currency), v.Stock)).ToList());
+}

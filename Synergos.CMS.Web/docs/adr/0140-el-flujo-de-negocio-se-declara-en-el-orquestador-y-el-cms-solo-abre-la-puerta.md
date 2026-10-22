@@ -1803,6 +1803,27 @@ dejó los pasos sin parámetros (lo piden cuatro verticales).
 Propiedades (008-P2) y la renovación de una receta de Salud se reabren con esta regla cuando sus líneas lleguen
 ahí. Queda en pie el otro disparador de la fila de terceros: los eventos asíncronos entre capacidades.
 
+## Tienda en el patrón (2026-10-22, 004)
+
+`tienda.compra` es el primer flujo declarado en un orquestador que YA tenía motor imperativo, y los dos caminos conviven
+en rutas propias: `/v1/purchases` sigue siendo el del CMS y la puerta sirve `/v1/flujos/tienda.compra`.
+
+- **Medido.** Declararla costó 18 líneas de C# en 3 ficheros (9 sin los registros de dos interinos: N-12, el tipo de las
+  líneas; N-11, el freno de códigos de cupón), contado con dos métodos. La paridad de diez efectos con el motor en
+  proceso está medida en los dos caminos (FR-021), y lo que no está en la puerta queda declarado con su razón. El
+  turno, el abandono y la guardia del host genérico están verificados sobre la compra contra capacidades reales, y en
+  vivo, con sesión, la compra completa por la puerta sin una sola llamada a la ruta directa.
+- **La devolución** (`tienda.devolucion`) es el primer flujo posterior de PRODUCTO sobre lo posterior del núcleo
+  (001-P6 y 001-P8): cero líneas de C#, un fichero. La compra publica su `cobroId`, y el CMS abre la devolución por el
+  reenvío genérico de la puerta al reembolsar una RMA, con la llave de la devolución y no la de quien la pide; la
+  compradora no puede pedirla (403 `puerta.personal_requerido`). En vivo, un solo reembolso y la compra original
+  intacta. Cuando el núcleo tenga lo que una saga deja para lo posterior sin publicarlo (D-011-NB10), el `cobroId`
+  puede salir de la respuesta de la compra.
+- **Corregido.** Una compra de la puerta ya no se puede confirmar ni reembolsar por la ruta directa; la oferta del
+  catálogo deja precio y existencias para los dos sujetos al publicar y los retira al despublicar; el cupón se recorta
+  y se frena por comprador; el país del envío es configuración del negocio; y la devolución de una compra de la puerta
+  ya vuelve por el orquestador (antes la RMA se quedaba «recibida» con un mensaje honesto).
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la

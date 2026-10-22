@@ -263,6 +263,13 @@ public sealed class StubShopOrderService : IShopOrderService
             throw new ArgumentException("Orden no encontrada.", nameof(orderRef));
         }
 
+        // Una compra de la puerta la cobró el orquestador y la confirma su flujo: el motor en proceso no
+        // la captura —su sesión de pago es el id de la saga, que este proveedor no conoce— ni avisa.
+        if (order.ViaGate)
+        {
+            throw new InvalidOperationException("Esta compra salió por la puerta: se confirma por ella, no por la ruta directa.");
+        }
+
         // Idempotente: si ya está pagada, devolver el resumen sin volver a capturar.
         if (order.Status == OrderStatus.Paid)
         {
@@ -440,7 +447,7 @@ public sealed class StubShopOrderService : IShopOrderService
         Total: order.Total,
         Currency: order.Currency);
 
-    private static ShopOrder ToOrder(PersistedOrder order) => new(
+    internal static ShopOrder ToOrder(PersistedOrder order) => new(
         OrderRef: order.OrderRef,
         OrderNumber: order.OrderNumber,
         Status: order.Status,
@@ -452,7 +459,8 @@ public sealed class StubShopOrderService : IShopOrderService
         PaymentSessionId: order.PaymentSessionId,
         CreatedAt: order.CreatedAt,
         OwnerMemberKey: order.OwnerMemberKey,
-        ShipTo: order.ShipTo);
+        ShipTo: order.ShipTo,
+        ViaGate: order.ViaGate);
 
     private static ShopOrderLine ToLine(PersistedOrderLine l) => new(
         ProductId: l.ProductId,
@@ -484,6 +492,13 @@ public sealed class StubShopOrderService : IShopOrderService
     {
         var order = await GetOrderAsync(orderRef, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"La orden {orderRef} no existe.");
+
+        // La plata de una compra de la puerta la tiene el orquestador: devolverla por el proveedor local
+        // sería pedirle a quien no cobró. La lleva por su camino quien decora este motor (004-tienda-compra).
+        if (order.ViaGate)
+        {
+            throw new InvalidOperationException($"La orden {orderRef} salió por la puerta: se reembolsa por el orquestador.");
+        }
 
         if (string.IsNullOrWhiteSpace(order.PaymentSessionId))
         {

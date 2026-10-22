@@ -26,7 +26,10 @@ internal sealed record PersistedOrder(
     Guid? OwnerMemberKey = null,
     // La dirección que se capturó al hacer checkout. Se guarda porque quien la necesita es
     // el confirm, y entre los dos pasos el cliente no la vuelve a mandar.
-    ShopShippingAddress? ShipTo = null);
+    ShopShippingAddress? ShipTo = null,
+    // La anotó el libro de las compras de la puerta (004-tienda-compra): la cobró el orquestador, así
+    // que el motor en proceso no la confirma ni la reembolsa por su proveedor. Aditivo: las de antes, false.
+    bool ViaGate = false);
 
 internal sealed record PersistedOrderLine(
     string ProductId,

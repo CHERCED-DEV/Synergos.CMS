@@ -33,7 +33,8 @@ public sealed class ContratoDeFlujosGenericosTests
         }
     }
 
-    private static async Task<JsonObject> Documento()
+    /// <summary>El contrato que publica el host de la muestra con sus flujos (también lo usa el gate de la puerta).</summary>
+    internal static async Task<JsonObject> Documento()
     {
         var raiz = Path.Combine(Path.GetTempPath(), "contrato-muestra-" + Guid.NewGuid().ToString("N"));
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
@@ -134,7 +135,8 @@ public sealed class ContratoDeFlujosGenericosTests
         Assert.Equal("""{"flujo":"muestra.cita","operacion":"consultar"}""", consultar["x-synergos-flujo"]!.ToJsonString());
         var respuesta = Esquema(doc, consultar["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
         var datos = respuesta["properties"]!["datos"]!["properties"]!.AsObject();
-        Assert.Equal(new[] { "total", "reservaId", "cobroId" }, datos.Select(p => p.Key));
+        // Lo que deja para lo posterior (cobroId, lo que reservó) se guarda y NO se publica (D-011-NB10, FR-014 de 011).
+        Assert.Equal(new[] { "total", "reservaId" }, datos.Select(p => p.Key));
         Assert.Equal(new[] { "null", "string" }, datos["reservaId"]!["type"]!.AsArray().Select(t => (string)t!).Order(StringComparer.Ordinal));
         Assert.Equal("object", (string?)datos["total"]!["oneOf"]![0]!["type"]);
 
@@ -159,7 +161,7 @@ public sealed class ContratoDeFlujosGenericosTests
         var pagina = Esquema(doc, listar["responses"]!["200"]!["content"]!["application/json"]!["schema"]);
         Assert.Equal(["hasMore", "items", "offset", "total"], pagina["properties"]!.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
         var item = Esquema(doc, pagina["properties"]!["items"]!["items"]);
-        Assert.Equal(new[] { "total", "reservaId", "cobroId" }, item["properties"]!["datos"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(new[] { "total", "reservaId" }, item["properties"]!["datos"]!["properties"]!.AsObject().Select(p => p.Key));
         Assert.DoesNotContain("PaginaDeFlujoOfRespuestaDeFlujo", doc["components"]!["schemas"]!.AsObject().Select(e => e.Key));
     }
 

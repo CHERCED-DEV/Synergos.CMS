@@ -13,6 +13,14 @@
     <ProjectReference Include="..\..\nucleo\Synergos.Core\Synergos.Core.csproj" />
     <ProjectReference Include="..\..\nucleo\Synergos.Shared\Synergos.Shared.csproj" />
     <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <!-- Los pasos sobre capacidades que interpreta su flujo declarado (ADR 0140). -->
+    <ProjectReference Include="..\Synergos.Bff.Pasos\Synergos.Bff.Pasos.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Los flujos declarados viajan DENTRO del ensamblado (ADR 0140), fuera de Content. -->
+    <Content Remove="flujos\**" />
+    <EmbeddedResource Include="flujos\*.json" LogicalName="flujos/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

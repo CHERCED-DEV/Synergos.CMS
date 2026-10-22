@@ -1,0 +1,18 @@
+{
+  "clave": "muestra.liberacion",
+  "posterior_a": "muestra.garantia",
+  "entrada": ["inquilino", "alquiler"],
+  "tipos": {
+    "inquilino": { "de": "sujeto" },
+    "alquiler": "texto",
+    "garantiaId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["alquiler"],
+  "fases": {
+    "abrir": ["original", "anular"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["alquiler"], "escribe": ["garantiaId"] },
+    "anular": { "tipo": "payments.anular", "lee": ["garantiaId"] }
+  }
+}
