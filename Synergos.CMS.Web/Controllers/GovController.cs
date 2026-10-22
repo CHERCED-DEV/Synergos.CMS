@@ -22,8 +22,9 @@ namespace Synergos.CMS.Web.Controllers;
 ///   elegibilidad + requisitos + formulario dinámico seccionado (patrón GOV.UK).</item>
 /// <item><see cref="IApplicationService"/> — radicar = crear el expediente; la tasa es
 ///   un pago OPCIONAL (<see cref="IPaymentProvider"/> solo si Fee &gt; 0).</item>
-/// <item><see cref="ICaseWorkflowService"/> — decisión del funcionario (approve/reject/
-///   request-info) → máquina de estados auditada (<see cref="IAuditTrailWriter"/>).</item>
+/// <item><see cref="ICaseWorkflowService"/> — el funcionario toma y decide (take/approve/reject/
+///   request-info) → máquina de estados auditada (<see cref="IAuditTrailWriter"/>), y las
+///   acciones que el proceso permite a cada cara (<c>actions</c>, 009).</item>
 /// <item><see cref="ICaseTrackingProvider"/> — carpeta del ciudadano + cola del
 ///   funcionario (prioridad + SLA).</item>
 /// <item><see cref="IDocumentUploadService"/> — adjuntar documentos (metadata).</item>
@@ -314,6 +315,7 @@ public sealed class GovController : ControllerBase
         if (foreign is not null) { return foreign; }
 
         var messages = await LoadMessagesAsync(detail, cancellationToken);
+        var (actions, stale) = await AccionesAsync(detail.CaseId, CaseRoles.Ciudadano, cancellationToken);
         return Ok(new ApplicationDetailResponse(new ApplicationDetailDto(
             Id: detail.CaseId,
             Reference: detail.Radicado,
@@ -325,8 +327,10 @@ public sealed class GovController : ControllerBase
             Timeline: detail.Timeline.Select(ToTimelineDto).ToList(),
             Documents: detail.Documents.Select(ToDocumentDto).ToList(),
             Messages: messages,
+            Actions: actions,
             FeeMinor: ToFeeMinor(detail.FeeMinor, detail.Currency),
-            FeeStatus: ToFeeStatusSlug(detail.FeeStatus))));
+            FeeStatus: ToFeeStatusSlug(detail.FeeStatus),
+            Stale: stale)));
     }
 
     // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
@@ -477,6 +481,46 @@ public sealed class GovController : ControllerBase
         }
 
         return Ok(new CaseResponse(await ToCaseDtoAsync(detail, cancellationToken)));
+    }
+
+    // ── 9 bis. Tomar el expediente (funcionario) ────────────────────────
+    // POST /api/gov/case/{id}/take { note? } → { case:{...} }   🔒 rol funcionario
+    //
+    // De «radicado» a «en revisión», a nombre de quien lo toma (D-1 de 009): decidir exige
+    // tomar antes (P4). Tomar uno que YA está en revisión no hace nada —el doble clic y el
+    // reintento tras un corte dan el expediente como quedó—; desde cualquier otro estado, 409
+    // con el motivo. Un expediente de la v1 no se toma (su proceso no tiene ese paso): también 409.
+    [HttpPost("case/{id}/take")]
+    public async Task<IActionResult> Take(
+        string id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] TakeRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (RequireOfficer() is { } denied) { return denied; }
+
+        var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
+        if (detail is null)
+        {
+            return NotFound(new { error = $"Expediente '{id}' no encontrado." });
+        }
+
+        CaseDetail updated;
+        try
+        {
+            updated = await _workflow.TakeAsync(
+                detail.CaseId, ActorDeLaSesion(CaseRoles.KindFuncionario), request?.Note, cancellationToken);
+        }
+        catch (ArgumentException ex)
+        {
+            // El expediente existe: lo que no existe es «tomar» en el proceso que lo lleva.
+            return Conflict(new { error = ex.Motivo() });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Motivo() });
+        }
+
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
     }
 
     // ── 10. Decisión del funcionario (máquina de estados auditada) ──────
@@ -806,6 +850,7 @@ public sealed class GovController : ControllerBase
         // ciudadano ABRIÓ — y con qué se afirmó que era él. Es lo único que la entidad puede
         // sostener el día que alguien recurre tarde.
         var notificaciones = await _notifications.GetForCaseAsync(c.CaseId, cancellationToken);
+        var (actions, stale) = await AccionesAsync(c.CaseId, CaseRoles.Funcionario, cancellationToken);
         return new CaseDto(
             Application: new CaseApplicationDto(
                 Id: c.CaseId,
@@ -825,7 +870,32 @@ public sealed class GovController : ControllerBase
             Notifications: notificaciones.Select(n => ToActNotificationDto(n, revealBody: true)).ToList(),
             Decision: c.Decision is null
                 ? null
-                : new DecisionDto(c.Decision.Outcome, c.Decision.Note, c.Decision.DecidedAt, c.Decision.DecidedBy));
+                : new DecisionDto(c.Decision.Outcome, c.Decision.Note, c.Decision.DecidedAt, c.Decision.DecidedBy),
+            Actions: actions,
+            Stale: stale);
+    }
+
+    /// <summary>
+    /// Lo que el proceso del expediente permite a la cara que mira (D-3 de 009), o nada y
+    /// <c>stale</c> si no se pudo consultar.
+    /// </summary>
+    /// <remarks>
+    /// La consola y el portal pintan sólo esto, en vez de la lista fija que ofrecía tres acciones
+    /// que la capacidad rechazaba. Con la capacidad de procesos caída no se ofrece nada de una
+    /// tabla local (FR-012), y <c>stale</c> lo DICE: lo que se ve es lo último que el CMS sabe y
+    /// no hay acciones ahora. Sin esa marca, «sin botones» se leería como «no hay nada que hacer».
+    /// </remarks>
+    private async Task<(IReadOnlyList<string> Actions, bool Stale)> AccionesAsync(
+        string caseId, string role, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return ((await _workflow.ActionsAsync(caseId, role, cancellationToken)).ToList(), false);
+        }
+        catch (InvalidOperationException)
+        {
+            return (Array.Empty<string>(), true);
+        }
     }
 
     private async Task<IReadOnlyDictionary<string, string>> ResolveFieldLabelsAsync(string tramiteId, CancellationToken cancellationToken)
@@ -960,6 +1030,9 @@ public sealed class GovController : ControllerBase
 
     public sealed record DecisionRequest(string CaseId, string Outcome, string? Note);
 
+    /// <summary>Tomar el expediente: la nota es opcional y el cuerpo también.</summary>
+    public sealed record TakeRequest(string? Note);
+
     /// <summary>
     /// Lo que el funcionario manda para poner un acto en conocimiento.
     /// </summary>
@@ -1062,6 +1135,11 @@ public sealed class GovController : ControllerBase
 
     public sealed record MessageDto(string Id, string Author, string Body, DateTimeOffset CreatedAtUtc, bool Outgoing);
 
+    /// <summary>El expediente hacia su dueño.</summary>
+    /// <param name="Actions">Lo que el proceso le permite al ciudadano desde el estado (hoy, subsanar en
+    /// «información solicitada»), con los nombres de cable del proceso (D-3 de 009).</param>
+    /// <param name="Stale"><c>true</c> si el proceso no contestó: no hay acciones ahora, y no porque no
+    /// haya nada que hacer.</param>
     public sealed record ApplicationDetailDto(
         string Id,
         string Reference,
@@ -1073,8 +1151,10 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<TimelineDto> Timeline,
         IReadOnlyList<DocumentDto> Documents,
         IReadOnlyList<MessageDto> Messages,
+        IReadOnlyList<string> Actions,
         long FeeMinor = 0,
-        string? FeeStatus = null);
+        string? FeeStatus = null,
+        bool Stale = false);
 
     public sealed record ApplicationDetailResponse(ApplicationDetailDto Application);
 
@@ -1121,6 +1201,9 @@ public sealed class GovController : ControllerBase
     /// <para><b><c>null</c> es «no consta» y no «cobrada»</b>, y se lee junto a <c>feeMinor</c>:
     /// sin tasa no hay cobro que tener estado; con tasa y sin estado, el expediente es anterior
     /// al campo. Los dos casos son verdad y ninguno se rellena.</para>
+    /// <para><b><c>actions</c> es lo que el proceso permite al funcionario desde el estado</b> (D-3 de
+    /// 009): la consola pinta sólo eso. <c>stale</c> dice que el proceso no contestó y por eso no
+    /// hay acciones ahora.</para>
     /// </remarks>
     public sealed record CaseDto(
         CaseApplicationDto Application,
@@ -1128,7 +1211,9 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<DocumentDto> Documents,
         IReadOnlyList<TimelineDto> Timeline,
         IReadOnlyList<ActNotificationDto> Notifications,
-        DecisionDto? Decision);
+        DecisionDto? Decision,
+        IReadOnlyList<string> Actions,
+        bool Stale = false);
 
     public sealed record CaseResponse(CaseDto Case);
 
