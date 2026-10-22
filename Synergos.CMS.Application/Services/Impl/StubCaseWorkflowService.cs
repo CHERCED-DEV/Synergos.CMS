@@ -152,6 +152,13 @@ public sealed class StubCaseWorkflowService : ICaseWorkflowService
         CancellationToken cancellationToken = default)
         => TransitarAsync(caseId, "take", note ?? string.Empty, actor, cancellationToken);
 
+    public Task<CaseDetail> ResubmitAsync(
+        string caseId,
+        CaseActor actor,
+        string? note,
+        CancellationToken cancellationToken = default)
+        => TransitarAsync(caseId, "resubmit", note ?? string.Empty, actor, cancellationToken);
+
     private async Task<CaseDetail> TransitarAsync(
         string caseId,
         string accion,

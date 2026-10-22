@@ -138,6 +138,12 @@ public sealed class GovCaseDecisionRecorder
     /// (revisión → subsanación → aprobado) y CADA una merece su aviso. Con el default
     /// (<c>{Type}:{SubjectId}</c>) el ciudadano sólo se enteraría de la primera.</para>
     ///
+    /// <para><b>Y con la vuelta, cuando no es la primera</b> (<c>…:{statusSlug}:{n}</c>, 009): desde que la
+    /// subsanación vuelve a revisión, un expediente puede pedir información dos veces, y la segunda
+    /// petición tenía la misma clave que la primera — el ledger la daba por vista y el ciudadano no se
+    /// enteraba. La primera entrada a un estado conserva la clave de siempre, así que lo ya avisado no
+    /// se vuelve a avisar; repetir la misma acción no cambia la cuenta, así que sigue sin duplicar.</para>
+    ///
     /// <para><b>Destinatario ausente:</b> el ciudadano sale de las respuestas del formulario y su
     /// correo puede venir vacío. En ese caso NO se emite, ni se inventa un placeholder: un evento
     /// sin destinatario real sólo ensuciaría el ledger del dispatcher con una clave de hecho ya
@@ -167,9 +173,19 @@ public sealed class GovCaseDecisionRecorder
                 ["Estado"] = @case.CurrentStage,
             },
             ActionPath: $"/gobierno/tramites/{@case.Radicado}",
-            DedupeKey: $"{NotificationTypes.GovCaseDecided}:{@case.Radicado}:{GovStatusSlugs.ToSlug(to)}");
+            DedupeKey: ClaveDelAviso(@case.Radicado, to, _cases.VecesEn(@case.CaseId, to)));
 
         return NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
+    }
+
+    /// <summary>
+    /// La clave del aviso de la <paramref name="vez"/>-ésima entrada del expediente en <paramref name="to"/>:
+    /// la de siempre la primera vez, con la vuelta a partir de la segunda.
+    /// </summary>
+    public static string ClaveDelAviso(string radicado, CaseStatus to, int vez)
+    {
+        var clave = $"{NotificationTypes.GovCaseDecided}:{radicado}:{GovStatusSlugs.ToSlug(to)}";
+        return vez > 1 ? $"{clave}:{vez}" : clave;
     }
 
     /// <summary>La nota de por defecto de una acción cuando quien actúa no escribió ninguna.</summary>

@@ -135,6 +135,17 @@ public sealed class HttpCaseWorkflowService : ICaseWorkflowService, IDisposable
         => TransitarAsync(caseId, "take", note ?? string.Empty, actor, OfficerRoles, cancellationToken);
 
     /// <summary>
+    /// El ciudadano subsana: dispara <c>resubmit</c> con SU identidad y el rol de su cara, y la guarda
+    /// de la capacidad rechaza a cualquier otra (FR-006).
+    /// </summary>
+    public Task<CaseDetail> ResubmitAsync(
+        string caseId,
+        CaseActor actor,
+        string? note,
+        CancellationToken cancellationToken = default)
+        => TransitarAsync(caseId, "resubmit", note ?? string.Empty, actor, CitizenRoles, cancellationToken);
+
+    /// <summary>
     /// Lo que la definición DE LA INSTANCIA permite desde el estado de la instancia a esa cara.
     /// </summary>
     /// <remarks>

@@ -393,6 +393,17 @@ public sealed class StubApplicationService : IApplicationService
     }
 
     /// <summary>
+    /// Cuántas veces entró el expediente en <paramref name="status"/>, según su historia. 0 si no existe.
+    /// </summary>
+    /// <remarks>
+    /// Desde que la subsanación vuelve a revisión (009, D-2) un expediente puede pasar dos veces por el
+    /// mismo estado, y cada paso es un hecho distinto: quien avisa al ciudadano lo necesita para no
+    /// tratar el segundo como repetición del primero.
+    /// </remarks>
+    public int VecesEn(string caseIdOrRadicado, CaseStatus status)
+        => Resolve(caseIdOrRadicado)?.History.Count(h => h.Status == status) ?? 0;
+
+    /// <summary>
     /// Adjunta un documento (ya aceptado) al expediente. Lanza
     /// <see cref="ArgumentException"/> si el expediente no existe.
     /// </summary>

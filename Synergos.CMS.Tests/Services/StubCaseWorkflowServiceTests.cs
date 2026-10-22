@@ -334,6 +334,121 @@ public class StubCaseWorkflowServiceTests
         }
     }
 
+    // ── Subsanar (T012): el ciudadano devuelve el expediente a revisión (D-2) ──
+
+    private static readonly CaseActor Juliana = new(
+        CaseRoles.KindCiudadano, "c-juliana", "Juliana Ríos", "juliana.rios@correo.co");
+
+    [Fact] // happy: de subsanación a revisión, a nombre del ciudadano, asentado como paso y no como decisión
+    public async Task Resubmit_MovesInfoRequestedBackToReview_SignedByTheCitizen()
+    {
+        var (workflow, cases, audit) = Make();
+
+        var updated = await workflow.ResubmitAsync("case-1003", Juliana, "Adjunté el certificado.");
+
+        Assert.Equal(CaseStatus.EnRevision, updated.Status);
+        Assert.Null(updated.Decision);
+        Assert.Equal(CaseStatus.EnRevision, cases.FindCase("case-1003")!.Status);
+        var evt = Assert.Single(audit.Events);
+        Assert.Equal("gov.case-transition", evt.Action);
+        Assert.Equal("juliana.rios@correo.co", evt.ActorEmail);
+        Assert.Contains("info-requested → in-review (resubmit): Adjunté el certificado.", evt.Detail);
+    }
+
+    [Theory] // filter: sólo se subsana lo que está en subsanación
+    [InlineData("case-1001")] // radicado
+    [InlineData("case-1004")] // aprobado
+    [InlineData("case-1005")] // rechazado
+    public async Task Resubmit_FromAnyOtherState_Throws(string caso)
+    {
+        var (workflow, cases, audit) = Make();
+        var antes = cases.FindCase(caso)!.Status;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.ResubmitAsync(caso, Juliana, null));
+
+        Assert.Equal(antes, cases.FindCase(caso)!.Status);
+        Assert.Empty(audit.Events);
+    }
+
+    [Fact] // idempotent: subsanar dos veces da el expediente como quedó (el doble clic del ciudadano)
+    public async Task Resubmit_Twice_IsIdempotent()
+    {
+        var (workflow, _, audit) = Make();
+
+        await workflow.ResubmitAsync("case-1003", Juliana, null);
+        var segunda = await workflow.ResubmitAsync("case-1003", Juliana, null);
+
+        Assert.Equal(CaseStatus.EnRevision, segunda.Status);
+        Assert.Single(audit.Events);
+    }
+
+    [Fact] // vuelto a revisión, el funcionario vuelve a decidir y al ciudadano no le queda nada que hacer
+    public async Task Resubmit_GivesTheDecisionsBackToTheOfficer()
+    {
+        var (workflow, _, _) = Make();
+
+        await workflow.ResubmitAsync("case-1003", Juliana, null);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" },
+            await workflow.ActionsAsync("case-1003", CaseRoles.Funcionario));
+        Assert.Empty(await workflow.ActionsAsync("case-1003", CaseRoles.Ciudadano));
+    }
+
+    [Fact] // lo ofrecido sale bien también para el ciudadano: subsanar lo que se le pidió
+    public async Task The_offered_citizen_action_succeeds_and_moves_the_case()
+    {
+        var (workflow, cases, _) = Make();
+
+        Assert.Equal(new[] { "resubmit" }, await workflow.ActionsAsync("case-1003", CaseRoles.Ciudadano));
+        var despues = await workflow.ResubmitAsync("case-1003", Juliana, null);
+
+        Assert.NotEqual(CaseStatus.Subsanacion, despues.Status);
+    }
+
+    private sealed class AvisosRecibidos : ITransactionalNotifier
+    {
+        public List<string?> Claves { get; } = new();
+
+        public Task DispatchAsync(NotificationEvent notification, CancellationToken cancellationToken = default)
+        {
+            Claves.Add(notification.DedupeKey);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// Pedir información dos veces avisa dos veces: la clave del aviso lleva la vuelta.
+    /// </summary>
+    /// <remarks>
+    /// Con la subsanación que vuelve a revisión, la segunda petición tenía la misma clave que la primera
+    /// y el ledger la daba por vista: el ciudadano no se enteraba de que le volvían a pedir algo. La
+    /// primera entrada conserva la clave de siempre (lo ya avisado no se repite) y el doble clic no
+    /// cambia la cuenta (el ledger lo sigue descartando).
+    /// </remarks>
+    [Fact]
+    public async Task A_second_request_info_cycle_notifies_the_citizen_again()
+    {
+        var avisos = new AvisosRecibidos();
+        var cases = new StubApplicationService(
+            new StubTramiteCatalogProvider(), new StubGovFeeCalculator(), new StubPaymentProvider(), null, () => Clock);
+        var workflow = new StubCaseWorkflowService(cases, null, () => Clock, avisos);
+        var carlos = new CaseActor(CaseRoles.KindCiudadano, "c-carlos", "Carlos Andrés Pérez", "carlos.perez@correo.co");
+        var raiz = $"{NotificationTypes.GovCaseDecided}:SG-2026-001002";
+
+        await workflow.DecideAsync("case-1002", "request-info", "Falta la foto.", Ana);
+        await workflow.ResubmitAsync("case-1002", carlos, null);
+        await workflow.DecideAsync("case-1002", "request-info", "La foto no se ve.", Ana);
+        await workflow.DecideAsync("case-1002", "request-info", "La foto no se ve.", Ana);
+
+        Assert.Equal(new[]
+        {
+            $"{raiz}:info-requested",
+            $"{raiz}:in-review:2",
+            $"{raiz}:info-requested:2",
+            $"{raiz}:info-requested:2",
+        }, avisos.Claves);
+    }
+
     [Fact] // la firma cae al nombre, luego a la identidad y sólo sin ninguna al respaldo declarado
     public void Firma_FallsBackToNameThenIdentityThenTheDeclaredFallback()
     {

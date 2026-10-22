@@ -51,6 +51,17 @@ public interface ICaseWorkflowService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// El ciudadano envía lo que se le pidió: el expediente vuelve de «información solicitada» a «en
+    /// revisión» (D-2 de 009). Idempotente sobre el destino; ilegal desde cualquier otro estado.
+    /// </summary>
+    /// <param name="actor">El ciudadano de la sesión. Que el expediente sea suyo lo comprueba quien llama.</param>
+    Task<CaseDetail> ResubmitAsync(
+        string caseId,
+        CaseActor actor,
+        string? note,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lo que el proceso del expediente permite desde su estado a la cara <paramref name="role"/>
     /// (<see cref="CaseRoles.Funcionario"/> o <see cref="CaseRoles.Ciudadano"/>), con los nombres de
     /// cable del proceso (<c>take | approve | reject | request-info | resubmit</c>). Cerrado = ninguna.

@@ -506,6 +506,53 @@ public sealed class HttpCaseWorkflowServiceTests
         Assert.Equal("ana@entidad.gov.co", resultado.Decision!.DecidedBy);
     }
 
+    // ── Subsanar (T012): el ciudadano, con su identidad y su rol ────────────
+
+    private static readonly CaseActor Juliana = new(
+        CaseRoles.KindCiudadano, "c-juliana", "Juliana Ríos", "juliana.rios@correo.co");
+
+    /// <summary>
+    /// El ciudadano subsana con SU identidad y el rol de su cara: la guarda de la capacidad rechaza a otra.
+    /// </summary>
+    /// <remarks>
+    /// Con un rol de funcionario en el disparo, cualquier funcionario podría «subsanar» por el ciudadano;
+    /// con el del ciudadano, la capacidad deja la transición sólo a esa cara (FR-006).
+    /// </remarks>
+    [Fact]
+    public async Task El_ciudadano_subsana_con_su_identidad_y_su_rol()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("info-requested", "gov.tramite.v2")));
+        capacidad.Ok("POST /v1/instances/wf-1/fire", Instancia("in-review", "gov.tramite.v2"));
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enSubsanacion = casos.ListCases().First(c => c.Status == CaseStatus.Subsanacion);
+
+        var resultado = await svc.ResubmitAsync(enSubsanacion.CaseId, Juliana, "Adjunté el certificado.");
+
+        Assert.Equal(CaseStatus.EnRevision, resultado.Status);
+        Assert.Equal(CaseStatus.EnRevision, casos.FindCase(enSubsanacion.CaseId)!.Status);
+        var disparo = capacidad.Llamadas.Single(l => l.Path.EndsWith("/fire", StringComparison.Ordinal));
+        Assert.Contains("\"transition\":\"resubmit\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorKind\":\"gov.ciudadano\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorId\":\"c-juliana\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorRoles\":[\"ciudadano\"]", disparo.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("funcionario", disparo.Body, StringComparison.Ordinal);
+    }
+
+    [Fact] // uno de la v1 no se subsana por aquí: su proceso no tiene ese paso, y no sale a disparar
+    public async Task Uno_de_la_v1_no_se_subsana_porque_su_proceso_no_tiene_ese_paso()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("info-requested")));
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enSubsanacion = casos.ListCases().First(c => c.Status == CaseStatus.Subsanacion);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.ResubmitAsync(enSubsanacion.CaseId, Juliana, null));
+
+        Assert.Equal(0, capacidad.Veces("/fire"));
+        Assert.Equal(CaseStatus.Subsanacion, casos.FindCase(enSubsanacion.CaseId)!.Status);
+    }
+
     // ── Las acciones servidas (T008): lo que se ofrece es lo que la capacidad aceptaría ──
 
     /// <summary>
