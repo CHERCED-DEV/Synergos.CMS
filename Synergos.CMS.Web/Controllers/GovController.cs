@@ -273,7 +273,7 @@ public sealed class GovController : ControllerBase
         }
 
         NotificationConsent? consent = null;
-        if (request.NotificationConsent is { } respuesta)
+        if (request.NotificationConsent is NotificationConsentRequest respuesta)
         {
             if (string.IsNullOrWhiteSpace(respuesta.TextVersion))
             {
