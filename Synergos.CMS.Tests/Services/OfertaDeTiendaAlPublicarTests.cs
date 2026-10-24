@@ -48,6 +48,43 @@ public sealed class OfertaDeTiendaAlPublicarTests
 
     private static ContentPublishedNotification Publicados(params IContent[] nodos) => new(nodos, new EventMessages());
 
+    /// <summary>La ficha lleva la composición reservable de 011 (<c>compReservable</c>) con la marca en <paramref name="marca"/>.</summary>
+    private static IContent ConLaComposicionReservable(IContent nodo, object marca)
+    {
+        nodo.HasProperty("reservable").Returns(true);
+        nodo.GetValue("reservable", Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<bool>()).Returns(marca);
+        return nodo;
+    }
+
+    /// <summary>
+    /// FR-026 (la nota de 011): un servicio por cita se ofrece en Bff.Reservas y no se vende además como producto del
+    /// carrito. Si ya tenía una oferta de tienda, NO se retira aquí: eso cambia la base y lo decide el director.
+    /// </summary>
+    [Fact]
+    public async Task Una_ficha_reservable_no_publica_oferta_de_tienda_ni_retira_la_que_tuviera()
+    {
+        var cita = ConLaComposicionReservable(Nodo("productPage", "SVC-CITA-30"), true);
+        _catalogo.GetProductAsync("SVC-CITA-30", Arg.Any<CancellationToken>()).Returns(HttpTiendaOfferPublisherTests.Taza());
+
+        await Montar("cms").HandleAsync(Publicados(cita), default);
+
+        await _catalogo.DidNotReceiveWithAnyArgs().GetProductAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().RetireAsync(default!, default);
+    }
+
+    /// <summary>La composición sola no la hace reservable: sin la marca, el producto se vende como siempre.</summary>
+    [Fact]
+    public async Task Con_la_composicion_y_sin_marcar_reservable_se_vende_como_siempre()
+    {
+        var taza = HttpTiendaOfferPublisherTests.Taza();
+        _catalogo.GetProductAsync("TAZA-001", Arg.Any<CancellationToken>()).Returns(taza);
+
+        await Montar("cms").HandleAsync(Publicados(ConLaComposicionReservable(Nodo("productPage", "TAZA-001"), false)), default);
+
+        await _ofertas.Received(1).PublishAsync(taza, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Con_el_catalogo_en_el_contenido_publica_la_oferta_del_producto_tal_como_lo_sirve_el_catalogo()
     {
