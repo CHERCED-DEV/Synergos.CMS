@@ -545,7 +545,30 @@
       "nombre": "booking-wizard",
       "tipo": "funcionalidad",
       "record": "BookingWizardProps",
-      "diccionario": [],
+      "diccionario": [
+        "Travel.Booking"
+      ],
+      "claves": [
+        "Travel.Booking.BadRequest",
+        "Travel.Booking.CancelPending",
+        "Travel.Booking.CancelledNoCharge",
+        "Travel.Booking.Generic",
+        "Travel.Booking.HoldExpired",
+        "Travel.Booking.ItemTaken",
+        "Travel.Booking.NoDates",
+        "Travel.Booking.NotBookable",
+        "Travel.Booking.NotConfirmable",
+        "Travel.Booking.NotFound",
+        "Travel.Booking.PaymentFailed",
+        "Travel.Booking.PriceUnavailable",
+        "Travel.Booking.RefundIssued",
+        "Travel.Booking.RoomBadRequest",
+        "Travel.Booking.RoomNotBookable",
+        "Travel.Booking.RoomTaken",
+        "Travel.Booking.SignInRequired",
+        "Travel.Booking.StillPending",
+        "Travel.Booking.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "destinationLabel",
@@ -3454,6 +3477,9 @@
         "Travel.Booking.PaymentFailed",
         "Travel.Booking.PriceUnavailable",
         "Travel.Booking.RefundIssued",
+        "Travel.Booking.RoomBadRequest",
+        "Travel.Booking.RoomNotBookable",
+        "Travel.Booking.RoomTaken",
         "Travel.Booking.SignInRequired",
         "Travel.Booking.StillPending",
         "Travel.Booking.Unavailable"

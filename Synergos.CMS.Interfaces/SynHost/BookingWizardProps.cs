@@ -14,7 +14,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// viaje de un ítem) o la ruta directa (<c>/api/booking/…</c>). Lo DECLARA el CMS con la regla de
 /// <see cref="CaminoDeCompra"/>, «directa» por defecto; el elemento no lo adivina.</para>
 /// </remarks>
-[ElementoSynHost("booking-wizard", TipoDeColocable.Funcionalidad)]
+[ElementoSynHost("booking-wizard", TipoDeColocable.Funcionalidad, Diccionario = ["Travel.Booking"])]
 public sealed record BookingWizardProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? DestinationLabel,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
