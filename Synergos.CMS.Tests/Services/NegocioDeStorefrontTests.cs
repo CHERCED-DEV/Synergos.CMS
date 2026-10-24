@@ -132,7 +132,19 @@ public sealed class NegocioDeStorefrontTests
     {
         var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true));
 
-        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO"), props);
+        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO", "America/Bogota"), props);
+    }
+
+    /// <summary>
+    /// «Mis compras» dice el pedido y su seguimiento en la hora del SITIO (004-tienda-compra etapa 3): la zona es la de
+    /// los listados, la misma con que la tienda escribe el día de hoy, y no una que el elemento suponga.
+    /// </summary>
+    [Fact]
+    public void El_resolver_lleva_la_zona_horaria_de_los_listados()
+    {
+        var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true), new ListadosSettings { ZonaHoraria = "America/Lima" });
+
+        Assert.Equal("America/Lima", props.ZonaHoraria);
     }
 
     private static StorefrontFeatureSettings Seccion(Dictionary<string, string?> claves)
@@ -186,7 +198,15 @@ public sealed class NegocioDeStorefrontTests
         return new CaminoDeLosFlujos(puerta, monitor, NullLogger<CaminoDeLosFlujos>.Instance);
     }
 
-    private static StorefrontProps Resuelto(INegocioDelSitio<NegocioDeStorefront> negocio, ICaminoDeLosFlujos caminos)
-        => new StorefrontResolutor(ElementoFalso.Fallback, negocio, caminos, NullLogger<StorefrontResolutor>.Instance)
+    private static StorefrontProps Resuelto(
+        INegocioDelSitio<NegocioDeStorefront> negocio,
+        ICaminoDeLosFlujos caminos,
+        ListadosSettings? listados = null)
+        => new StorefrontResolutor(
+                ElementoFalso.Fallback,
+                negocio,
+                caminos,
+                Options.Create(listados ?? new ListadosSettings()),
+                NullLogger<StorefrontResolutor>.Instance)
             .Resolver(ElementoFalso.Con(("heading", "Tienda"))).Props;
 }
