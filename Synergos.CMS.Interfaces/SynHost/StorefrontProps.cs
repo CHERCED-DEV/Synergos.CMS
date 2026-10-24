@@ -14,6 +14,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// o la puerta si abre—, y el elemento nunca cae de un camino al otro. Por la puerta, la dirección lleva el
 /// país del despliegue (<c>ShippingCountry</c>), y los textos de la compra salen de la sección
 /// <c>Storefront.Purchase</c> del diccionario (ADR 0136).</para>
+///
+/// <para><b>Y en qué hora dice sus fechas</b> (<c>ZonaHoraria</c>, la de <c>Synergos:Listados:ZonaHoraria</c>,
+/// 004-tienda-compra etapa 3): el pedido y cada etapa del seguimiento llegan como instantes, y «Mis compras» los dice
+/// en la hora del sitio y en es-CO, no en la de quien mira ni en ISO crudo. Es del despliegue.</para>
 /// </remarks>
 [ElementoSynHost("storefront", TipoDeColocable.Funcionalidad, Diccionario = ["Storefront.Purchase"])]
 public sealed record StorefrontProps(
@@ -21,4 +25,5 @@ public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ShippingCountry);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ShippingCountry,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria);
