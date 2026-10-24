@@ -53,6 +53,33 @@ public sealed class PuertaDeViajesTests
         Assert.Equal(new[] { "abrir", "cancelar", "cerrar", "consultar", "cotizar", "listar" }, operaciones);
     }
 
+    /// <summary>
+    /// Lo de quien vende sobre un viaje confirmado (línea 006, T026 y T027): devolver una parte y cancelar con penalidad
+    /// son flujos POSTERIORES del personal. La puerta los abre sólo a quien opera con su rol, con un sujeto que no es el de
+    /// quien viaja; el contrato incrustado los marca del personal.
+    /// </summary>
+    [Theory]
+    [InlineData("viajes.devolucion", "devolver")]
+    [InlineData("viajes.cancelacion", "abrir")]
+    public void Lo_de_quien_vende_es_del_personal_con_su_rol_y_la_puerta_lo_valida(string flujo, string operacion)
+    {
+        var entrada = Ajustes().Flujos[flujo];
+        Assert.Equal(AccesoDeLaPuerta.Personal, entrada.Acceso);
+        Assert.Equal(new[] { "admin" }, entrada.Roles);
+        Assert.Equal("viajes.personal", entrada.SujetoKind);
+
+        var tabla = TablaDeLaPuerta.Incrustada();
+        Assert.Contains(tabla.DelFlujo(flujo), op => op.Operacion == operacion && op.Personal);
+        Assert.All(tabla.DelFlujo(flujo), op => Assert.True(op.Personal, $"{flujo} {op.Operacion} no está marcada del personal."));
+
+        var sola = new PuertaSettings
+        {
+            Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [flujo] = entrada },
+        };
+        var resultado = new ValidadorDeLaPuerta(tabla).Validate(null, sola);
+        Assert.True(resultado.Succeeded, resultado.FailureMessage);
+    }
+
     [Fact]
     public void Abre_solo_con_destino_para_el_orquestador_de_viajes()
     {

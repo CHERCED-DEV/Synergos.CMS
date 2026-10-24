@@ -111,3 +111,47 @@ public sealed class PasosDeViajesTests
         Assert.Throws<FormatException>(() => tipo.Leer(JsonDocument.Parse("""[{"producto":"x","etiqueta":"x","inicio":"2026-09-01T08:00:00+00:00","fin":"2026-09-01T09:00:00+00:00","precio":1}]""").RootElement, "itinerario"));
     }
 }
+
+/// <summary>
+/// <c>viajes.menos-retencion</c> (línea 006, T025): lo que se devuelve al cancelar lo confirmado es el total menos la
+/// penalidad que calculó quien vende; nulo si no queda nada, y <c>viajes.bad_penalty</c> si no cabe.
+/// </summary>
+public sealed class RetencionDeLaCancelacionTests
+{
+    private static Money Pesos(decimal monto, string moneda = "COP") => Money.Of(monto, moneda);
+
+    private static Task<SalidaDePaso> Retener(Money total, Money retener)
+    {
+        var def = FlujosDeclarados.Incrustado(typeof(TripResponse).Assembly, "flujos/viajes.cancelacion.json").Pasos["retencion"];
+        var ctx = new FlowContext().Set("total", total).Set("retener", retener);
+        return new PasoMenosRetencion().EjecutarAsync(
+            new EntradaDePaso("cancelacion-1", Ref.Create("viajes.cancelacion", "cancelacion-1"), def, ctx, null, null), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Devuelve_el_total_menos_la_penalidad_y_sin_penalidad_el_total()
+    {
+        Assert.Equal(Pesos(1_000_000m), (await Retener(Pesos(1_200_000m), Pesos(200_000m))).Valores.Single());
+        Assert.Equal(Pesos(1_200_000m), (await Retener(Pesos(1_200_000m), Pesos(0m))).Valores.Single());
+    }
+
+    /// <summary>Sin resto no hay devolución que pedir: Payments rechaza una de cero, y el paso que devuelve se salta.</summary>
+    [Fact]
+    public async Task La_penalidad_entera_o_un_viaje_gratis_no_dejan_nada_que_devolver()
+    {
+        Assert.Null((await Retener(Pesos(1_200_000m), Pesos(1_200_000m))).Valores.Single());
+        Assert.Null((await Retener(Pesos(0m), Pesos(0m))).Valores.Single());
+    }
+
+    [Theory]
+    [InlineData(1_300_000, "COP")]
+    [InlineData(-1, "COP")]
+    [InlineData(100_000, "USD")]
+    public async Task Una_penalidad_que_no_cabe_es_bad_penalty(int retener, string moneda)
+    {
+        var salida = await Retener(Pesos(1_200_000m), Pesos(retener, moneda));
+
+        Assert.Equal(PasoResultado.Abortar, salida.Control);
+        Assert.Equal(PasoMenosRetencion.PenalidadMala, salida.Rechazo!.Code);
+    }
+}

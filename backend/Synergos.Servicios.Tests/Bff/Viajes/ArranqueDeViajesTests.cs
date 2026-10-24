@@ -90,8 +90,14 @@ public sealed class ArranqueDeViajesTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, salud.StatusCode);
         Assert.True(testigo.Visto is { Succeeded: true }, $"El catálogo no pasó: {testigo.Visto?.FailureMessage}");
 
-        var reserva = Assert.Single(fabrica.Services.GetServices<FlujoGenerico>());
-        Assert.Equal("viajes.reserva", reserva.Definicion.Clave);
+        // La reserva y sus dos posteriores del personal (T026, T027), cada una sobre la original.
+        var flujos = fabrica.Services.GetServices<FlujoGenerico>().ToDictionary(f => f.Definicion.Clave, StringComparer.Ordinal);
+        Assert.Equal(new[] { "viajes.cancelacion", "viajes.devolucion", "viajes.reserva" }, flujos.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.All(new[] { "viajes.cancelacion", "viajes.devolucion" }, clave =>
+        {
+            Assert.Equal("viajes.reserva", flujos[clave].Definicion.PosteriorA);
+            Assert.True(flujos[clave].Definicion.EsDePersonal, $"{clave} es de quien vende: acceso del personal.");
+        });
 
         // Cada máquina en su carpeta: la genérica en flujos/, TripSaga en la raíz con sus datos de siempre.
         Assert.Equal(OrquestadorDeclaradoCarpeta, fabrica.Services.GetRequiredService<CarpetaDeSagas<SagaDeFlujo>>().Nombre);

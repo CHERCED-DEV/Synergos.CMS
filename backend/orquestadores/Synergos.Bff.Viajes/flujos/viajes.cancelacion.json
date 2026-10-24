@@ -1,0 +1,39 @@
+{
+  "clave": "viajes.cancelacion",
+  "posterior_a": "viajes.reserva",
+  "acceso": "personal",
+  "entrada": ["personal", "viaje", "retener"],
+  "tipos": {
+    "personal": { "de": "sujeto" },
+    "viaje": "texto",
+    "retener": "dinero",
+    "cobroId": { "tipo": "texto?", "de": "original" },
+    "total": { "tipo": "dinero", "de": "original" },
+    "reservas": { "de": "original", "reservas": "apartar" }
+  },
+  "salida": ["viaje", "retener", "aDevolver"],
+  "fases": {
+    "abrir": [
+      "original",
+      "retencion",
+      { "para_cada": "reservas", "como": "r", "pasos": ["cancelar"] },
+      "devolver"
+    ]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["viaje"], "escribe": ["cobroId", "total", "reservas"] },
+    "retencion": { "tipo": "viajes.menos-retencion", "lee": ["total", "retener"], "escribe": ["aDevolver"] },
+    "cancelar": {
+      "tipo": "booking.cancelar",
+      "lee": ["r.objetivo"],
+      "motivo": "la agenda no dejó cancelar una reserva del viaje"
+    },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "aDevolver"],
+      "llave": "refund",
+      "omitir_si_falta": "aDevolver",
+      "motivo": "no se pudo devolver lo cobrado del viaje"
+    }
+  }
+}

@@ -17,7 +17,7 @@ public sealed record ParadaDelViaje(string Producto, string Etiqueta, DateTimeOf
 public static class PasosDeViajes
 {
     /// <summary>Los pasos propios, para sumarlos a los comunes en el registro del orquestador.</summary>
-    public static IPaso[] Propios() => [new PasoRevisarItinerario(), new PasoSujetoDelProducto(), new PasoVence()];
+    public static IPaso[] Propios() => [new PasoRevisarItinerario(), new PasoSujetoDelProducto(), new PasoVence(), new PasoMenosRetencion()];
 }
 
 /// <summary>
@@ -131,4 +131,56 @@ public sealed class PasoVence : IPaso
 
         return Task.FromResult(SalidaDePaso.Sigue(vencimientos.Count == 0 ? null : (object)vencimientos.Min()));
     }
+}
+
+/// <summary>
+/// <c>viajes.menos-retencion</c>: lee el total del viaje y la penalidad que retiene quien vende; escribe lo que se
+/// devuelve (total − penalidad), o nulo si no queda nada por devolver.
+/// </summary>
+/// <remarks>
+/// <para><b>La penalidad llega calculada</b> (006-P3, como en <c>/v1/trips</c>): depende de la tarifa y de cuántos días
+/// falten, y eso lo sabe quien vendió. Aquí sólo se comprueba que quepa: negativa, de otra moneda o mayor que el total
+/// es <c>viajes.bad_penalty</c>, ANTES de cancelar nada.</para>
+///
+/// <para><b>Nulo y no cero</b> cuando no queda nada (un viaje gratis, o la penalidad entera): <c>Api.Payments</c>
+/// rechaza una devolución de cero, y el paso que devuelve se salta con <c>omitir_si_falta</c>. Resta sobre el total
+/// cotizado, no sobre lo devolvible del cobro: con una devolución parcial anterior, se pasaría y Payments lo rechazaría
+/// con su código (NV-14).</para>
+/// </remarks>
+public sealed class PasoMenosRetencion : IPaso
+{
+    /// <summary>El código de una penalidad que no cabe en el total.</summary>
+    public const string PenalidadMala = "viajes.bad_penalty";
+
+    public string Tipo => "viajes.menos-retencion";
+    public int Lecturas => 2;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(Money)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var total = entrada.Lee<Money>(0);
+        var retener = entrada.Lee<Money>(1);
+
+        if (retener.Amount < 0m)
+        {
+            return Rechaza($"La penalidad no puede ser negativa: {retener.Amount}.");
+        }
+        if (!string.Equals(retener.Currency, total.Currency, StringComparison.Ordinal))
+        {
+            return Rechaza($"La penalidad va en {retener.Currency} y el viaje se cobró en {total.Currency}.");
+        }
+        if (retener.Amount > total.Amount)
+        {
+            return Rechaza($"La penalidad ({retener.Amount}) es mayor que el total del viaje ({total.Amount}).");
+        }
+
+        var resto = total.Amount - retener.Amount;
+        return Task.FromResult(SalidaDePaso.Sigue(resto == 0m ? null : (object)Money.Of(resto, total.Currency)));
+    }
+
+    private static Task<SalidaDePaso> Rechaza(string detalle)
+        => Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(PenalidadMala, detalle)));
 }

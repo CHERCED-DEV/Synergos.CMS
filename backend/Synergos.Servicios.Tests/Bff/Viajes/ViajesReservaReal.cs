@@ -130,7 +130,12 @@ internal sealed class ViajesReservaReal : IDisposable
 
     // ── Lo que hace quien viaja, por la puerta ─────────────────────────────
 
-    public static string Sujeto(string id) => $"viajes.viajero:{id}";
+    /// <summary>
+    /// El sujeto que pone la puerta: quien viaja (<c>viajes.viajero</c>) o, con <c>personal:</c> delante, quien opera
+    /// por quien vende (<c>viajes.personal</c>).
+    /// </summary>
+    public static string Sujeto(string id)
+        => id.StartsWith("personal:", StringComparison.Ordinal) ? $"viajes.personal:{id["personal:".Length..]}" : $"viajes.viajero:{id}";
 
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "viaje-1", string viajero = "u-1", object[]? items = null)
     {
@@ -146,6 +151,27 @@ internal sealed class ViajesReservaReal : IDisposable
         peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Contacto, Base64Url.EncodeToString(Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new { correo = "ana@ejemplo.co", nombre = "Ana", enlace = $"https://sitio.ejemplo/viajes/?viaje={id}", sitio = "Viajes de prueba" }))));
         return Enviar(peticion, viajero);
+    }
+
+    // ── Lo que hace quien vende, por la puerta (operaciones posteriores, acceso del personal) ─────────────
+
+    /// <summary>Un monto en el cuerpo, como lo lee el tipo <c>dinero</c>.</summary>
+    public static object Pesos(decimal monto, string moneda = "COP") => new { amount = monto, currency = moneda };
+
+    /// <summary>Devolver una PARTE de un viaje completado (<c>viajes.devolucion</c>): el sujeto es quien devuelve.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(string viaje, object monto, string llave, string personal = "staff-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/viajes.devolucion") { Content = JsonContent.Create(new { viaje, monto }) };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion, $"personal:{personal}");
+    }
+
+    /// <summary>Cancelar un viaje CONFIRMADO con la penalidad de quien vende (<c>viajes.cancelacion</c>).</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmado(string viaje, object retener, string llave, string personal = "staff-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/viajes.cancelacion") { Content = JsonContent.Create(new { viaje, retener }) };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion, $"personal:{personal}");
     }
 
     /// <summary>Los avisos que salieron para quien viaja.</summary>
