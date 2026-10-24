@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services.Academy;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -53,6 +54,12 @@ public sealed class AcademyController : ControllerBase
     /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>). Sin ella, UTC.</summary>
     private readonly TimeZoneInfo _zona;
 
+    /// <summary>
+    /// El registro de lo que cierra la puerta (010-educacion-matricula): «mi aprendizaje» reconcilia con él antes de leer,
+    /// para que una matrícula cobrada cuya anotación se perdió (la pestaña se cerró) aparezca sin volver a cobrar.
+    /// </summary>
+    private readonly RegistroDeMatriculasDeLaPuerta? _registro;
+
     public AcademyController(
         ICourseCatalogProvider catalog,
         IEnrollmentService enrollments,
@@ -60,8 +67,10 @@ public sealed class AcademyController : ControllerBase
         IPriceFormatter priceFormatter,
         IMemberAccessGate gate,
         IEnrollmentMetrics metrics,
-        IOptions<ListadosSettings>? listados = null)
+        IOptions<ListadosSettings>? listados = null,
+        RegistroDeMatriculasDeLaPuerta? registro = null)
     {
+        _registro = registro;
         _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
         _catalog = catalog;
         _enrollments = enrollments;
@@ -353,6 +362,12 @@ public sealed class AcademyController : ControllerBase
     {
         var (denied, student) = RequireStudent();
         if (denied is not null) { return denied; }
+
+        // Las matrículas de la puerta que se cerraron y el libro no tiene se anotan antes de leer, con techo.
+        if (_registro is not null && _gate.CurrentMemberKey is { } miembro)
+        {
+            await _registro.ReconciliarAsync(miembro, _gate.CurrentMemberDisplayName, student, cancellationToken);
+        }
 
         var enrollments = await _enrollments.GetEnrollmentsAsync(student, cancellationToken);
 

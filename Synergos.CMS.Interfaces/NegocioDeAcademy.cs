@@ -2,4 +2,6 @@ namespace Synergos.CMS.Interfaces;
 
 /// <summary>Los valores de negocio de la academia ya fusionados para un sitio (ADR 0137, escala #196).</summary>
 /// <param name="ApiBase">Dónde vive la API de la funcionalidad (relativa al sitio o absoluta).</param>
-public sealed record NegocioDeAcademy(string ApiBase);
+/// <param name="EnrollmentPath">Por dónde se matricula el sitio (010-educacion-matricula): <see cref="CaminoDelFlujo.Puerta"/>
+/// o <see cref="CaminoDelFlujo.Directa"/>, ya normalizado. Nunca nulo: sin declaración, la directa.</param>
+public sealed record NegocioDeAcademy(string ApiBase, string EnrollmentPath = CaminoDelFlujo.Directa);

@@ -184,6 +184,42 @@ public interface IEnrollmentService
     Task<Certificate?> GetCertificateAsync(string courseId, string student, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Una matrícula que cerró la PUERTA (010-educacion-matricula): la que el orquestador de Educación cobró y el CMS anota
+/// para que el aula la vea. Todo sale de la respuesta del orquestador, leída con el sujeto del miembro de la sesión.
+/// </summary>
+/// <param name="MatriculaId">El id de la matrícula en el orquestador (su saga): la anotación es idempotente por él.</param>
+/// <param name="Numero">El número que ve la persona, el del aviso.</param>
+/// <param name="Student">El alumno: el miembro de la sesión, con el correo con el que el aula lo reconoce.</param>
+public sealed record MatriculaDeLaPuerta(string MatriculaId, string Numero, string CourseId, Student Student, decimal Total, string Currency);
+
+/// <summary>Cómo quedó anotada una matrícula de la puerta en el libro.</summary>
+/// <param name="YaEstaba">El alumno ya tenía ese curso activo (por esta matrícula o por otra): no se creó otra fila.</param>
+/// <param name="CobradaDeMas">El curso ya estaba activo por OTRA matrícula y ésta se cobró: quien anota lo deja dicho.</param>
+public sealed record AnotacionDeLaMatricula(string EnrollmentId, string CourseId, bool YaEstaba, bool CobradaDeMas);
+
+/// <summary>
+/// La cara de ESCRITURA del libro de matrículas para lo que cierra la puerta (010-educacion-matricula, molde 004-P2):
+/// el aula, «mi aprendizaje», el progreso, el certificado y la consola del instructor leen el MISMO libro, así que
+/// una matrícula de la puerta se ve igual que una de la ruta directa.
+/// </summary>
+/// <remarks>
+/// <b>No avisa</b>: el aviso de una matrícula de la puerta lo manda el paso del flujo, y dos correos por una matrícula
+/// serían un defecto. Va aparte de <see cref="IEnrollmentService"/> (ISP): sólo la usa el registro de la puerta.
+/// </remarks>
+public interface IMatriculasDeLaPuerta
+{
+    /// <summary>
+    /// Anota activa la matrícula. Repetirla no crea otra fila; si el alumno ya tenía el curso activo por otra matrícula,
+    /// tampoco, y lo dice (<see cref="AnotacionDeLaMatricula.CobradaDeMas"/>).
+    /// </summary>
+    /// <exception cref="ArgumentException">Si falta el id, el curso o el correo del alumno.</exception>
+    Task<AnotacionDeLaMatricula> AnotarAsync(MatriculaDeLaPuerta matricula, CancellationToken cancellationToken = default);
+
+    /// <summary>Los ids de las matrículas de la puerta ya anotadas del alumno (para reconciliar sin repetir).</summary>
+    Task<IReadOnlyCollection<string>> AnotadasAsync(string student, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Métricas de matrícula agregadas de un curso: cuántos alumnos y cuánto ingreso acumulado.</summary>
 public sealed record CourseEnrollmentStats(int Students, decimal Revenue);
 
