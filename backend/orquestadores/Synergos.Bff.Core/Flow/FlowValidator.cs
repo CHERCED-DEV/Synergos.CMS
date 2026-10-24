@@ -56,6 +56,7 @@ public static class FlowValidator
 
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
+        RevisarSinVuelta(flujo, registro, donde, errores);
         RevisarConservadas(flujo, registro, errores);
         RevisarPosterior(flujo, registro, donde, errores);
         RevisarParaLoPosterior(flujo, contrato, errores);
@@ -706,9 +707,13 @@ public static class FlowValidator
             }
             else
             {
-                if (tipo.Lecturas != paso.Lee.Count)
+                // Las últimas opcionales también al leer (lote 7): la nota de un acto sobre un proceso.
+                if (paso.Lee.Count > tipo.Lecturas || paso.Lee.Count < tipo.Lecturas - tipo.LecturasOpcionales)
                 {
-                    errores.Add($"el paso «{paso.Id}» declara {paso.Lee.Count} lectura(s) y «{paso.Tipo}» lee {tipo.Lecturas}.");
+                    errores.Add(tipo.LecturasOpcionales == 0
+                        ? $"el paso «{paso.Id}» declara {paso.Lee.Count} lectura(s) y «{paso.Tipo}» lee {tipo.Lecturas}."
+                        : $"el paso «{paso.Id}» declara {paso.Lee.Count} lectura(s) y «{paso.Tipo}» lee {tipo.Lecturas}, "
+                          + $"de las que las últimas {tipo.LecturasOpcionales} se pueden no nombrar.");
                 }
                 // Las últimas opcionales se pueden no nombrar (NB-5): un paso que ahora dice algo más no deja sin
                 // arrancar a las definiciones que ya lo usaban. Más nombres de los que produce, nunca.
@@ -754,6 +759,8 @@ public static class FlowValidator
                     : $"el paso «{paso.Id}» declara un propósito y «{paso.Tipo}» no comprueba permisos: quien lo lea creerá "
                       + "que ese paso pide permiso.");
             }
+
+            RevisarDatosDeProceso(paso, registro.Para(paso.Tipo), errores);
         }
 
         // Dos pasos con la misma llave son, para la capacidad, UNA llamada: la segunda devuelve lo que hizo la
@@ -768,6 +775,106 @@ public static class FlowValidator
             var pasos = string.Join(" y ", repetida.Select(p => $"«{p.Id}»").Order(StringComparer.Ordinal));
             errores.Add($"los pasos {pasos} declaran la misma llave «{repetida.Key}»: para la capacidad son una sola "
                 + "llamada, y la segunda devolvería lo que hizo la primera.");
+        }
+    }
+
+    /// <summary>
+    /// El proceso, la transición, la lista cerrada y el rol de un paso de procesos (núcleo, lote 7; 009-P3 = A), cruzados
+    /// con lo que el paso usa, dato a dato y en los dos sentidos, como la plantilla.
+    /// </summary>
+    /// <remarks>
+    /// Un paso que dispara sin transición fallaría con la primera persona que actúa; una transición declarada en un paso
+    /// que no la usa haría creer que el flujo mueve un expediente. Una lista vacía no deja elegir nada, y un nombre
+    /// repetido es una errata.
+    /// </remarks>
+    private static void RevisarDatosDeProceso(PasoDef paso, IPaso? tipo, List<string> errores)
+    {
+        if (tipo is not null)
+        {
+            foreach (var (dato, usa, declarado) in new[]
+                     {
+                         ("proceso", tipo.UsaProceso, paso.Proceso is not null),
+                         ("transicion", tipo.UsaTransicion, paso.Transicion is not null),
+                         ("transiciones", tipo.UsaTransiciones, paso.Transiciones is not null),
+                         ("rol", tipo.UsaRol, paso.Rol is not null),
+                     })
+            {
+                if (usa && !declarado)
+                {
+                    errores.Add($"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que necesita «{dato}», y no lo declara.");
+                }
+                else if (!usa && declarado)
+                {
+                    errores.Add($"el paso «{paso.Id}» declara «{dato}» y «{paso.Tipo}» no lo usa: quien lo lea creerá que "
+                        + "ese paso actúa sobre un proceso.");
+                }
+            }
+        }
+
+        if (paso.Transiciones is not { } lista) return;
+        if (lista.Count == 0)
+        {
+            errores.Add($"el paso «{paso.Id}» declara «transiciones» vacía: quien actúa no podría elegir ninguna.");
+        }
+        foreach (var repetida in lista.GroupBy(t => t, StringComparer.Ordinal).Where(g => g.Count() > 1).Select(g => g.Key))
+        {
+            errores.Add($"el paso «{paso.Id}» nombra «{repetida}» dos veces en «transiciones».");
+        }
+    }
+
+    /// <summary>
+    /// Lo que no tiene vuelta (núcleo, lote 7): arrancar una instancia o disparar una transición. Es la regla de forma de la
+    /// ADR 0140: lo reversible va antes y se deshace si este paso falla; lo que sólo avisa va después.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Suelto y en la última fase</b>: en un bloque, el segundo ítem que fallara desharía lo demás con el primero
+    /// ya disparado; en otra fase, lo que viniera después podría fallar y deshacerse sin él.</para>
+    ///
+    /// <para><b>Detrás del último cierre</b>: con un cobro sin capturar, una captura que fallara anularía el cobro de un
+    /// expediente que ya avanzó.</para>
+    ///
+    /// <para><b>Y detrás de él, sólo lo que sigue si falla</b> (<c>al_fallar</c>): un paso que abortara devolvería la plata
+    /// de un acto que sí se hizo.</para>
+    /// </remarks>
+    private static void RevisarSinVuelta(
+        FlujoDef flujo, IRegistroDePasos registro, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => registro.Para(p.Tipo) is { SinVuelta: true }).OrderBy(p => p.Id, StringComparer.Ordinal))
+        {
+            if (!donde.TryGetValue(paso.Id, out var lugar)) continue;
+
+            var aqui = $"«{paso.Id}» ({paso.Tipo}) no tiene vuelta";
+            var ultima = flujo.Fases.Count - 1;
+            if (lugar.Fase != ultima)
+            {
+                errores.Add($"{aqui} y no está en la última fase: lo que viniera después podría fallar y deshacerse sin él.");
+                continue;
+            }
+            if (lugar.Bloque is not null)
+            {
+                errores.Add($"{aqui} y va dentro de un bloque: un ítem que fallara después desharía lo demás con éste ya hecho.");
+                continue;
+            }
+
+            var elementos = flujo.Fases[ultima].Pasos.ToList();
+            var posicion = elementos.FindIndex(e => string.Equals(e.Paso, paso.Id, StringComparison.Ordinal));
+            var ultimo = elementos.FindLastIndex(e =>
+                (e.ParaCada?.Pasos ?? new[] { e.Paso! }).Any(id => flujo.Pasos.TryGetValue(id, out var p) && p.CierraReserva is not null));
+            if (posicion < ultimo)
+            {
+                errores.Add($"{aqui} y va antes del último cierre de «{flujo.Fases[ultima].Nombre}»: si ese cierre fallara, se "
+                    + "desharía lo reservado con éste ya hecho.");
+            }
+
+            var sinSeguir = elementos.Skip(posicion + 1)
+                .SelectMany(e => e.ParaCada?.Pasos ?? new[] { e.Paso! })
+                .Where(id => !flujo.Pasos.TryGetValue(id, out var p) || p.AlFallar is null)
+                .ToList();
+            if (sinSeguir.Count > 0)
+            {
+                errores.Add($"{aqui}, y detrás van pasos que no siguen si fallan ({string.Join(", ", sinSeguir.Select(d => $"«{d}»"))}): "
+                    + "uno que abortara desharía lo demás con éste ya hecho.");
+            }
         }
     }
 

@@ -48,6 +48,15 @@ public interface IPaso
     /// </remarks>
     int EscriturasOpcionales => 0;
 
+    /// <summary>
+    /// Cuántas de sus ÚLTIMAS lecturas puede no nombrar una definición (núcleo, lote 7). Por defecto, ninguna.
+    /// </summary>
+    /// <remarks>
+    /// Es <see cref="EscriturasOpcionales"/> del otro lado: la nota de un acto sobre un proceso se lee si la definición la
+    /// nombra, y un flujo que no la tiene no inventa una entrada para pasarla vacía. El paso mira cuántas nombró.
+    /// </remarks>
+    int LecturasOpcionales => 0;
+
     /// <summary>Qué llave de idempotencia pide: ninguna, la de <c>llave</c> o la de <c>llave_base</c>.</summary>
     LlaveRequerida Llave { get; }
 
@@ -65,6 +74,40 @@ public interface IPaso
     /// en un paso que no lo usa haría creer que ese paso pide permiso.
     /// </remarks>
     bool UsaProposito => false;
+
+    /// <summary>Si actúa sobre el <c>proceso</c> que declara su definición (núcleo, lote 7; 009-P3 = A). Por defecto, no.</summary>
+    /// <remarks>
+    /// <para><b>El proceso, la transición, la lista cerrada y el rol son datos del paso</b>, como la plantilla del aviso:
+    /// constantes, sin expresiones. Se cruzan como ella, en los dos sentidos y dato a dato: un paso que los usa sin ellos
+    /// fallaría con la primera persona que actúa, y uno que los declara sin usarlos es una regla que nadie cumple.</para>
+    /// </remarks>
+    bool UsaProceso => false;
+
+    /// <summary>Si dispara la <c>transicion</c> fija que declara su definición (núcleo, lote 7). Por defecto, no.</summary>
+    bool UsaTransicion => false;
+
+    /// <summary>
+    /// Si dispara la que elige quien actúa entre las <c>transiciones</c> que declara su definición, una lista cerrada (núcleo,
+    /// lote 7). Por defecto, no.
+    /// </summary>
+    bool UsaTransiciones => false;
+
+    /// <summary>
+    /// Si actúa con el <c>rol</c> que declara su definición (núcleo, lote 7; 009-P6 = A): el que comprobó la puerta. Por
+    /// defecto, no.
+    /// </summary>
+    bool UsaRol => false;
+
+    /// <summary>
+    /// Si lo que hace no se deshace (núcleo, lote 7): arrancar una instancia de un proceso o disparar una transición. Por
+    /// defecto, no.
+    /// </summary>
+    /// <remarks>
+    /// La regla de forma de la ADR 0140: lo reversible va antes y se deshace si este paso falla; lo que sólo avisa va
+    /// después. El validador lo exige: suelto, en la última fase, detrás de su último cierre, y detrás de él sólo pasos que
+    /// siguen si fallan.
+    /// </remarks>
+    bool SinVuelta => false;
 
     /// <summary>
     /// Si cierra la reserva que nombra SIN consumirla (núcleo, P7 = A del lote 6, NN-4 de 005): lo reservado sobrevive

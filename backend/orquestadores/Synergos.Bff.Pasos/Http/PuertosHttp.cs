@@ -22,7 +22,7 @@ namespace Synergos.Bff.Pasos.Http;
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
-    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort,
+    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort,
     IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos
 {
     public const string Pricing = "pricing";
@@ -34,10 +34,11 @@ public sealed class PuertosHttp : CapabilityClients,
     public const string Cart = "cart";
     public const string Orders = "orders";
     public const string Fulfillment = "fulfillment";
+    public const string Workflow = "workflow";
 
     /// <summary>Las capacidades con las que habla: las que registra el arranque.</summary>
     public static IReadOnlyList<string> Capacidades { get; } =
-        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment];
+        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment, Workflow];
 
     public PuertosHttp(IHttpClientFactory clients) : base(clients) { }
 
@@ -338,6 +339,41 @@ public sealed class PuertosHttp : CapabilityClients,
     async Task<Result<string>> IFulfillmentPort.DespacharAsync(
         Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct)
         => (await DespacharEnvioAsync(paraQue, direccion, transportadora, llave, ct)).Map(s => s.Id);
+
+    // ── Workflow ────────────────────────────────────────────────────────────
+
+    public Task<Result<InstanciaDto>> ArrancarInstanciaAsync(string proceso, Ref sujeto, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Post<InstanciaDto>(Workflow, "v1/instances",
+            new { definitionKey = proceso, subjectKind = sujeto.Kind, subjectId = sujeto.Id }, llave, ct);
+    }
+
+    /// <summary>Dispara con los roles DECLARADOS en el cuerpo y sin token (009-P6 = A: la guarda es la puerta).</summary>
+    public Task<Result<InstanciaDto>> DispararTransicionAsync(
+        string instancia, string transicion, Ref actor, IReadOnlyList<string> roles, string? nota, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        return Post<InstanciaDto>(Workflow, $"v1/instances/{Uri.EscapeDataString(instancia)}/fire",
+            new { transition = transicion, actorKind = actor.Kind, actorId = actor.Id, actorRoles = roles, note = nota }, llave, ct);
+    }
+
+    public Task<Result<InstanciaDto>> LeerInstanciaAsync(string instancia, CancellationToken ct)
+        => Get<InstanciaDto>(Workflow, $"v1/instances/{Uri.EscapeDataString(instancia)}", ct);
+
+    async Task<Result<InstanciaDeProceso>> IWorkflowPort.ArrancarAsync(string proceso, Ref sujeto, IdempotencyKey llave, CancellationToken ct)
+        => (await ArrancarInstanciaAsync(proceso, sujeto, llave, ct)).Map(Instancia);
+
+    async Task<Result<InstanciaDeProceso>> IWorkflowPort.DispararAsync(
+        string instancia, string transicion, Ref actor, IReadOnlyList<string> roles, string? nota, IdempotencyKey llave, CancellationToken ct)
+        => (await DispararTransicionAsync(instancia, transicion, actor, roles, nota, llave, ct)).Map(Instancia);
+
+    async Task<Result<InstanciaDeProceso>> IWorkflowPort.LeerAsync(string instancia, CancellationToken ct)
+        => (await LeerInstanciaAsync(instancia, ct)).Map(Instancia);
+
+    private static InstanciaDeProceso Instancia(InstanciaDto i)
+        => new(i.Id, i.DefinitionKey, i.State,
+            i.History.Select(h => new PasoDeLaHistoria(h.Transition, h.From, h.To, Ref.Create(h.ByKind, h.ById), h.Note, h.AtUtc)).ToList());
 }
 
 // ── Las formas mínimas que se leen de cada capacidad ────────────────────────
@@ -362,4 +398,6 @@ public sealed record PermisoDto(string Id);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);
 public sealed record CanastaDto(string Id, string OwnerKind, string OwnerId, IReadOnlyList<LineaDeCanastaDto> Lines, bool CheckedOut, bool Open);
 public sealed record PedidoDto(string Id);
+public sealed record PasoDeHistoriaDto(string Transition, string From, string To, string ByKind, string ById, string? Note, DateTimeOffset AtUtc);
+public sealed record InstanciaDto(string Id, string DefinitionKey, string State, IReadOnlyList<PasoDeHistoriaDto> History);
 public sealed record EnvioDto(string Id);

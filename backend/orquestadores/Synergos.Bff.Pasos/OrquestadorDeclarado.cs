@@ -58,6 +58,7 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IOrdersPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IWorkflowPort>(sp => sp.GetRequiredService<PuertosHttp>());
 
         builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
         // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
@@ -86,6 +87,8 @@ public static class PasosComunes
             new PasoAvisar(puertos), new PasoUnaLinea(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
+            new PasoProcesoArrancar(puertos), new PasoProcesoDisparar(puertos), new PasoProcesoDispararElegida(puertos),
+            new PasoProcesoLeer(puertos),
         ];
 
     /// <summary>El registro con los comunes y los del dominio. Un tipo repetido no arranca.</summary>

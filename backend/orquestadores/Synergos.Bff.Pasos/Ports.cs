@@ -181,6 +181,38 @@ public interface IFulfillmentPort
         Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct);
 }
 
+/// <summary>Un paso de la historia de una instancia: qué transición, de dónde a dónde, quién actuó y cuándo.</summary>
+public sealed record PasoDeLaHistoria(string Transicion, string Desde, string Hacia, Ref Por, string? Nota, DateTimeOffset En);
+
+/// <summary>Una instancia de un proceso de <c>Api.Workflow</c> (núcleo, lote 7): cuál es, de qué proceso, en qué estado
+/// está y cómo llegó ahí.</summary>
+/// <param name="Id">La instancia.</param>
+/// <param name="Proceso">La clave de la definición que sigue: la de cuando nació, aunque después se publique otra.</param>
+/// <param name="Estado">Dónde está ahora.</param>
+/// <param name="Historia">Cada transición disparada, en orden.</param>
+public sealed record InstanciaDeProceso(string Id, string Proceso, string Estado, IReadOnlyList<PasoDeLaHistoria> Historia);
+
+/// <summary>
+/// Arrancar, disparar y leer una instancia de un proceso en <c>Api.Workflow</c> (núcleo, lote 7; la regla de forma de la
+/// ADR 0140).
+/// </summary>
+public interface IWorkflowPort
+{
+    /// <summary>Arranca una instancia de <paramref name="proceso"/> para <paramref name="sujeto"/>. La misma llave devuelve la misma.</summary>
+    Task<Result<InstanciaDeProceso>> ArrancarAsync(string proceso, Ref sujeto, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>
+    /// Dispara <paramref name="transicion"/> sobre la instancia, actuando <paramref name="actor"/> con los
+    /// <paramref name="roles"/> DECLARADOS (009-P6 = A: la guarda es la puerta). La misma llave devuelve la instancia sin
+    /// volver a dispararla.
+    /// </summary>
+    Task<Result<InstanciaDeProceso>> DispararAsync(
+        string instancia, string transicion, Ref actor, IReadOnlyList<string> roles, string? nota, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>La instancia tal como está.</summary>
+    Task<Result<InstanciaDeProceso>> LeerAsync(string instancia, CancellationToken ct);
+}
+
 // ── Los puertos de deshacer ─────────────────────────────────────────────────
 // Separados de los de avance a propósito: los de avance los cumple también `EventosPorts`, cuyo
 // oráculo los construye a mano, y su deshacer sigue yendo por `EventosCompensationExecutor`
