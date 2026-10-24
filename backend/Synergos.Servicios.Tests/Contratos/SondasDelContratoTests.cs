@@ -49,6 +49,21 @@ public sealed class SondasDelContratoTests
     };
 
     /// <summary>
+    /// Las operaciones cuya llave es opcional DE VERDAD, sin caso que la exija (núcleo T052): sin ella hacen lo de
+    /// siempre; con ella, repetir la misma operación devuelve lo que hizo la primera.
+    /// </summary>
+    /// <remarks>
+    /// Que el endpoint la lee lo prueba la sonda del largo, que también las manda: una llave de un carácter de más sale
+    /// <c>400 *.idempotency_key_required</c>, y eso sólo pasa si la lee. Que repetir devuelva lo mismo lo prueba su
+    /// capacidad. Una fila aquí sin la llave opcional en el documento es rojo.
+    /// </remarks>
+    private static readonly HashSet<string> LlaveQueSoloRepite = new(StringComparer.Ordinal)
+    {
+        // Cancelar una reserva: el reintento de una operación posterior cuya devolución cayó después de cancelar.
+        "CancelReservation",
+    };
+
+    /// <summary>
     /// El cuerpo mínimo VÁLIDO con que una operación llega a leer el token de identidad, porque lo
     /// lee después de validar el cuerpo. Sólo las que lo necesitan.
     /// </summary>
@@ -175,10 +190,19 @@ public sealed class SondasDelContratoTests
                               "(falta .ConLlaveDeIdempotencia(siempre: false)).");
                 }
             }
+            else if ((string?)op.Op["operationId"] is { } soloRepite && LlaveQueSoloRepite.Contains(soloRepite))
+            {
+                if (llave is null || requerida)
+                {
+                    malas.Add($"  {op}: está en {nameof(LlaveQueSoloRepite)} y el documento no la declara opcional " +
+                              "(.ConLlaveDeIdempotencia(siempre: false)).");
+                }
+            }
             else if (llave is not null && !requerida)
             {
                 malas.Add($"  {op}: el documento la declara opcional y no hay cuerpo que la active en " +
-                          $"{nameof(CuerpoQueLeeLaLlave)}: o el endpoint no la lee (y sobra la declaración), o falta su fila.");
+                          $"{nameof(CuerpoQueLeeLaLlave)}, ni está en {nameof(LlaveQueSoloRepite)}: o el endpoint no la lee " +
+                          "(y sobra la declaración), o falta su fila.");
             }
         }
 
@@ -219,8 +243,10 @@ public sealed class SondasDelContratoTests
             if (LlaveDeclarada(op) is not { } llave) continue;
 
             string? cuerpo = null;
+            var operacion = (string?)op.Op["operationId"];
             if ((bool?)llave["required"] != true
-                && ((string?)op.Op["operationId"] is not { } nombre || !CuerpoQueLeeLaLlave.TryGetValue(nombre, out cuerpo)))
+                && (operacion is null || !CuerpoQueLeeLaLlave.TryGetValue(operacion, out cuerpo))
+                && (operacion is null || !LlaveQueSoloRepite.Contains(operacion)))
             {
                 continue;   // sin el caso que la activa no se llega a leer; el rojo lo da la sonda de arriba
             }

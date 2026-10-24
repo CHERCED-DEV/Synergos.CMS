@@ -240,7 +240,8 @@ public sealed class CatalogPropertyCatalogProvider : IPropertyCatalogProvider
             Gallery: gallery,
             Location: new PropertyLocation(draft.Geo.Lat, draft.Geo.Lng, address, neighborhood, city),
             AgentName: string.IsNullOrWhiteSpace(draft.AgentName) ? string.Empty : draft.AgentName.Trim(),
-            AgentPhone: string.IsNullOrWhiteSpace(draft.AgentPhone) ? string.Empty : draft.AgentPhone.Trim());
+            AgentPhone: string.IsNullOrWhiteSpace(draft.AgentPhone) ? string.Empty : draft.AgentPhone.Trim(),
+            AgentEmail: string.IsNullOrWhiteSpace(draft.AgentEmail) ? null : draft.AgentEmail.Trim());
     }
 
     /// <summary>

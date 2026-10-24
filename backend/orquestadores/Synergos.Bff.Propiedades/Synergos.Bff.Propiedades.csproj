@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Orquestador del caso común (008-propiedades-visita): la visita a un inmueble en una franja de la
+         agenda. Habla con las capacidades por HTTP y NO referencia ninguna Synergos.Api.*. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\nucleo\Synergos.Core\Synergos.Core.csproj" />
+    <ProjectReference Include="..\..\nucleo\Synergos.Shared\Synergos.Shared.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <ProjectReference Include="..\Synergos.Bff.Pasos\Synergos.Bff.Pasos.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El flujo declarado viaja DENTRO del ensamblado (ADR 0140), como el de Eventos y el de Reservas. -->
+    <Content Remove="flujos\**" />
+    <EmbeddedResource Include="flujos\*.json" LogicalName="flujos/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

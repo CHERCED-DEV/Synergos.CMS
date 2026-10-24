@@ -96,6 +96,9 @@ public sealed record PropertyLocation(
 /// estrato/parqueaderos/antigüedad), descripción, amenities, galería de fotos y
 /// la ubicación exacta para el mapa. Es lo que la PDP inmobiliaria renderiza.
 /// </summary>
+/// <param name="AgentEmail">El correo con el que el agente del inmueble inicia sesión (008-P6): con él la consola le
+/// muestra los leads de este inmueble. <c>null</c> = sin agente asignado; el lead lo ve el rol administrador. No sale a
+/// la ficha pública.</param>
 public sealed record PropertyDetail(
     PropertyListing Summary,
     string Description,
@@ -104,7 +107,8 @@ public sealed record PropertyDetail(
     IReadOnlyList<string> Gallery,
     PropertyLocation Location,
     string AgentName,
-    string AgentPhone);
+    string AgentPhone,
+    string? AgentEmail = null);
 
 /// <summary>
 /// Un par etiqueta-valor de la ficha (specs CO-first: "Área", "Habitaciones",
@@ -158,7 +162,8 @@ public sealed record PropertyDraft(
     string? Currency = null,
     string? AgentName = null,
     string? AgentPhone = null,
-    string? Address = null);
+    string? Address = null,
+    string? AgentEmail = null);
 
 /// <summary>
 /// Catálogo de listados del vertical Propiedades. Es la pieza del MOTOR que

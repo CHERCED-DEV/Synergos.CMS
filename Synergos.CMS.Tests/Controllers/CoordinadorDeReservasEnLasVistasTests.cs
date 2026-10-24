@@ -14,6 +14,10 @@ namespace Synergos.CMS.Tests.Controllers;
 /// puerta y esté abierta. Acá va lo de esta reserva: un literal en <c>elementSynReserva.cshtml</c> que nadie
 /// cruza dejaría el elemento diciendo «no disponible» con el SSR en verde, y envolver con él el asistente de
 /// hotel (006) le cambiaría el camino a una pantalla que esta línea no toca.</para>
+///
+/// <para><b>El anidamiento, sólo el de ESTE flujo</b> (ajustado por NR-10 de 008, D-008-GATE): la reserva no va dentro de
+/// otro flujo ni envuelve otro. Qué anidamiento vale en general —una operación posterior dentro de su original— lo decide
+/// el gate general (núcleo T086).</para>
 /// </remarks>
 public sealed class CoordinadorDeReservasEnLasVistasTests
 {
@@ -41,7 +45,7 @@ public sealed class CoordinadorDeReservasEnLasVistasTests
     }
 
     [Fact]
-    public void El_flujo_de_la_reserva_solo_envuelve_su_bloque_y_ninguna_vista_anida_dos_flujos()
+    public void El_flujo_de_la_reserva_solo_envuelve_su_bloque_y_ni_anida_ni_se_anida()
     {
         var colocaciones = Vistas()
             .SelectMany(v => Coordinador.Matches(v.Texto).Select(m => (v.Ruta, v.Texto, m.Index, Clave: Clave.Match(m.Groups[1].Value).Groups[1].Value)))
@@ -51,10 +55,12 @@ public sealed class CoordinadorDeReservasEnLasVistasTests
         Assert.Equal(new[] { VistaDelBloque }, deLaReserva.Select(r => r[r.IndexOf("Views", StringComparison.Ordinal)..]));
 
         var anidadas = colocaciones
-            .Where(c => ClaveQueEnvuelve(c.Texto, c.Index) is not null)
+            .Where(c => ClaveQueEnvuelve(c.Texto, c.Index) is { } fuera
+                        && (c.Clave == CaminoDeReserva.Flujo || fuera == CaminoDeReserva.Flujo))
             .Select(c => c.Ruta)
             .ToList();
-        Assert.True(anidadas.Count == 0, $"Una vista coloca un flujo dentro de otro: {string.Join(", ", anidadas)}.");
+        Assert.True(anidadas.Count == 0,
+            $"Una vista anida la reserva dentro de otro flujo, u otro flujo dentro de la reserva: {string.Join(", ", anidadas)}.");
     }
 
     [Fact]

@@ -218,6 +218,13 @@ public interface IDeshacerAgenda
 
     /// <summary>Cancela una reserva ya confirmada.</summary>
     Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct);
+
+    /// <summary>
+    /// Cancela una reserva ya confirmada CON llave (núcleo T052): repetir la misma cancelación devuelve lo que hizo la
+    /// primera, en vez de <c>booking.already_cancelled</c>.
+    /// </summary>
+    /// <remarks>Por defecto, sin ella: el puerto propio de una línea que no la manda cancela como siempre.</remarks>
+    Task<Result<string>> CancelarAsync(string reserva, IdempotencyKey llave, CancellationToken ct) => CancelarAsync(reserva, ct);
 }
 
 /// <summary>Deshacer en <c>Api.Orders</c>.</summary>

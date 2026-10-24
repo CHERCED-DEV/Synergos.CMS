@@ -94,13 +94,25 @@
         "Alquiler.Detail.Requires",
         "Alquiler.Done.Line",
         "Alquiler.Done.Title",
+        "Alquiler.Errors.AlreadyStarted",
+        "Alquiler.Errors.BadQuantity",
+        "Alquiler.Errors.BadWindow",
+        "Alquiler.Errors.Busy",
         "Alquiler.Errors.CancelFailed",
+        "Alquiler.Errors.ConfirmFailed",
+        "Alquiler.Errors.DamageExceedsDeposit",
         "Alquiler.Errors.DetailFailed",
         "Alquiler.Errors.DetailGone",
+        "Alquiler.Errors.NoUnits",
+        "Alquiler.Errors.PriceUnavailable",
         "Alquiler.Errors.QuoteFailed",
         "Alquiler.Errors.ReserveFailed",
+        "Alquiler.Errors.RetentionExpired",
         "Alquiler.Errors.ReturnFailed",
         "Alquiler.Errors.SignInToRent",
+        "Alquiler.Errors.StaffRequired",
+        "Alquiler.Errors.WindowOutOfBounds",
+        "Alquiler.Errors.WindowTooLong",
         "Alquiler.Form.Asked",
         "Alquiler.Form.Bounds",
         "Alquiler.Form.From",
@@ -109,28 +121,52 @@
         "Alquiler.Form.To",
         "Alquiler.Form.Units",
         "Alquiler.Mine.Cancel",
+        "Alquiler.Mine.CancelUntil",
         "Alquiler.Mine.DepositUnknown",
         "Alquiler.Mine.EmptyMessage",
         "Alquiler.Mine.EmptyTitle",
         "Alquiler.Mine.Failed",
         "Alquiler.Mine.Line",
         "Alquiler.Mine.Loading",
+        "Alquiler.Mine.Outcome",
+        "Alquiler.Mine.OutcomeUnknown",
         "Alquiler.Mine.Returned",
         "Alquiler.Mine.SealMismatch",
         "Alquiler.Mine.SealUnverified",
         "Alquiler.Mine.SealVerified",
         "Alquiler.Mine.SignInMessage",
         "Alquiler.Mine.SignInTitle",
+        "Alquiler.Mine.StateCancelled",
+        "Alquiler.Mine.StateConfirmed",
+        "Alquiler.Mine.StateDeclared",
+        "Alquiler.Mine.StateReturned",
         "Alquiler.Nav.Equipment",
         "Alquiler.Nav.Mine",
         "Alquiler.Nav.Sections",
+        "Alquiler.Quote.Confirm",
+        "Alquiler.Quote.Confirming",
         "Alquiler.Quote.Deposit",
+        "Alquiler.Quote.Expired",
+        "Alquiler.Quote.Held",
+        "Alquiler.Quote.HeldCancelled",
         "Alquiler.Quote.Line",
+        "Alquiler.Quote.NotOffered",
         "Alquiler.Quote.Reserve",
         "Alquiler.Quote.Reserving",
+        "Alquiler.Quote.Undone",
         "Alquiler.Seal.Mismatch",
+        "Alquiler.Seal.Pending",
         "Alquiler.Seal.Unverified",
-        "Alquiler.Seal.Verified"
+        "Alquiler.Seal.Verified",
+        "Alquiler.Staff.BadAmount",
+        "Alquiler.Staff.Cancel",
+        "Alquiler.Staff.Confirm",
+        "Alquiler.Staff.Damage",
+        "Alquiler.Staff.EmptyTitle",
+        "Alquiler.Staff.Failed",
+        "Alquiler.Staff.Penalty",
+        "Alquiler.Staff.Title",
+        "Alquiler.Staff.Waiting"
       ],
       "campos": [
         {
@@ -1129,10 +1165,51 @@
       "nombre": "ehr",
       "tipo": "funcionalidad",
       "record": "EhrProps",
-      "diccionario": [],
+      "diccionario": [
+        "Health.Appointment"
+      ],
+      "claves": [
+        "Health.Appointment.BadRequest",
+        "Health.Appointment.BadWindow",
+        "Health.Appointment.Cancel",
+        "Health.Appointment.CancelledNoCharge",
+        "Health.Appointment.ConsentMissing",
+        "Health.Appointment.Copay",
+        "Health.Appointment.CopayUnavailable",
+        "Health.Appointment.Generic",
+        "Health.Appointment.Heading",
+        "Health.Appointment.Loading",
+        "Health.Appointment.NoAgenda",
+        "Health.Appointment.NoCopay",
+        "Health.Appointment.NotCancellable",
+        "Health.Appointment.NotConfirmable",
+        "Health.Appointment.NotFound",
+        "Health.Appointment.PaymentFailed",
+        "Health.Appointment.RefundIssued",
+        "Health.Appointment.SignInRequired",
+        "Health.Appointment.SlotExpired",
+        "Health.Appointment.SlotTaken",
+        "Health.Appointment.StateConfirmed",
+        "Health.Appointment.StatePending",
+        "Health.Appointment.StateReview",
+        "Health.Appointment.StateUndone",
+        "Health.Appointment.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "appointmentPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "zona",
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
@@ -1140,7 +1217,9 @@
       ],
       "ejemplo": {
         "culture": "es-CO",
-        "apiBase": "/api/ehr"
+        "apiBase": "/api/ehr",
+        "appointmentPath": "directa",
+        "zona": "America/Bogota"
       }
     },
     {
@@ -2432,9 +2511,28 @@
         "Realty.Visit"
       ],
       "claves": [
+        "Realty.Visit.Cancel",
+        "Realty.Visit.CancelAsk",
+        "Realty.Visit.CancelFailed",
+        "Realty.Visit.CancelNo",
+        "Realty.Visit.CancelTooLate",
+        "Realty.Visit.CancelYes",
+        "Realty.Visit.Cancelled",
+        "Realty.Visit.CancelledHeading",
+        "Realty.Visit.DefaultMode",
+        "Realty.Visit.FromEmail",
+        "Realty.Visit.InPast",
+        "Realty.Visit.InvalidSlot",
+        "Realty.Visit.NoAgenda",
+        "Realty.Visit.NoticeLabel",
+        "Realty.Visit.NoticeToAccount",
+        "Realty.Visit.OutsideHours",
+        "Realty.Visit.SessionRequired",
+        "Realty.Visit.SlotTaken",
         "Realty.Visit.SlotsEmpty",
         "Realty.Visit.SlotsFailed",
-        "Realty.Visit.SlotsLoading"
+        "Realty.Visit.SlotsLoading",
+        "Realty.Visit.Unavailable"
       ],
       "campos": [
         {
@@ -2460,6 +2558,18 @@
           "tipo": "number",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "visitPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "zonaHoraria",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -2467,7 +2577,9 @@
         "heading": "Encuentra el lugar que estás buscando",
         "subheading": "Compra y arriendo, en lista y en mapa",
         "apiBase": "/api/realty",
-        "defaultRatePercent": 12
+        "defaultRatePercent": 12,
+        "visitPath": "directa",
+        "zonaHoraria": "America/Bogota"
       }
     },
     {

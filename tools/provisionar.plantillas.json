@@ -17,6 +17,13 @@
     "body": "<p>Hola {nombre}:</p><p>Tu compra <b>{numero}</b> en {sitio} quedó confirmada. Total cobrado: <b>{total}</b>.</p><p>Las entradas, con su código QR, están en <a href=\"{enlace}\">{enlace}</a>. Cada asistente necesita la suya para entrar el día del evento: si compraste para otras personas, compártele a cada una la suya.</p><p>Si una de ellas es tuya, también aparece en «Mis entradas» cuando inicias sesión.</p>"
   },
   {
+    "_": "El aviso al paciente de una cita confirmada (003-salud-cita): lo manda el paso notifications.avisar al final de «cerrar» en salud.cita, a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDeLaCitaTests los cruza en los dos sentidos. La fecha, la hora y el profesional NO van en el correo (P7 del lote 2: los valores declarados son NN-6): están detrás del enlace, que abre la cita. Con copago cero, {total} dice «0 COP»: el texto no promete un cobro ni dice que no se cobró nada. Tampoco ofrece cancelar: cancelar una cita confirmada es otro flujo (la ficha F4), que no existe todavía.",
+    "key": "salud.cita.confirmada",
+    "channel": "Email",
+    "subject": "Tu cita {numero} quedó confirmada",
+    "body": "<p>Hola {nombre}:</p><p>Tu cita <b>{numero}</b> en {sitio} quedó confirmada. Copago cobrado: <b>{total}</b>.</p><p>La fecha, la hora y el profesional están en <a href=\"{enlace}\">{enlace}</a>.</p>"
+  },
+  {
     "_": "El aviso al comprador de la tienda (004-tienda-compra): lo manda el paso notifications.avisar al final de «cerrar» en tienda.compra —después de cobrar, despachar y cumplir el pedido—, a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDeLaCompraDeTiendaTests los cruza en los dos sentidos. Las líneas NO van en el correo (el paso no las manda; N-10 al núcleo): están detrás del enlace, que abre la compra en la tienda. No promete fechas de entrega ni dice cómo devolver: la entrega la sabe la transportadora, y la devolución se pide desde «Mis compras».",
     "key": "tienda.compra.confirmada",
     "channel": "Email",
@@ -29,6 +36,13 @@
     "channel": "Email",
     "subject": "Tu reserva {numero} está confirmada",
     "body": "<p>Hola {nombre}:</p><p>Tu reserva <b>{numero}</b> en {sitio} quedó confirmada. Total: <b>{total}</b>.</p><p>El servicio, el día y la hora están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla.</p>"
+  },
+  {
+    "_": "El aviso de una visita a un inmueble agendada por la puerta (008-propiedades-visita): lo manda el paso propiedades.avisar-visita al final de «cerrar» en propiedades.visita, a quien agendó y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS de ese paso (nombre, numero, fecha, hora, modalidad, enlace, sitio); la hora es la del sitio. El título del inmueble NO va: el orquestador no lo conoce y tomarlo del navegador pondría texto ajeno en un correo; está en el enlace. Cancelarla (008-P5, el flujo propiedades.visita-cancelacion) se hace desde el mismo enlace y dentro del plazo de aviso del inmueble, que decide la agenda: el texto no da una hora límite que el paso no conoce.",
+    "key": "propiedades.visita.confirmada",
+    "channel": "Email",
+    "subject": "Tu visita {numero} quedó agendada",
+    "body": "<p>Hola {nombre}:</p><p>Tu visita <b>{numero}</b> en {sitio} quedó agendada para el <b>{fecha}</b> a las <b>{hora}</b>, {modalidad}.</p><p>El inmueble y su dirección están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla. Si no puedes ir, cancélala desde ahí mientras estés a tiempo, o escríbele al agente desde la ficha del inmueble.</p>"
   },
   {
     "_": "El aviso al inquilino (línea 005, research R13): lo manda el paso notifications.avisar al final de «cerrar» en alquiler.renta, a quien alquiló y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDelAvisoTests los cruza en los dos sentidos. No lleva la cifra de la garantía —el paso no la manda, y el correo no es el comprobante—: dice que queda retenida sin cobrarse, y el contrato sellado con su cifra está en el enlace.",

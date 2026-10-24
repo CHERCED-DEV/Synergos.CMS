@@ -1,0 +1,49 @@
+{
+  "clave": "alquiler.cancelacion",
+  "posterior_a": "alquiler.renta",
+  "entrada": ["inquilino", "alquiler"],
+  "tipos": {
+    "inquilino": { "de": "sujeto" },
+    "alquiler": "texto",
+    "cobroId": { "tipo": "texto", "de": "original" },
+    "total": { "tipo": "dinero", "de": "original" },
+    "ventana": { "tipo": "ventana", "de": "original" },
+    "garantiaId": { "tipo": "texto?", "de": "original" },
+    "unidades": { "de": "original", "reservas": "apartar" }
+  },
+  "salida": ["alquiler", "total"],
+  "fases": {
+    "abrir": [
+      "original",
+      "antes-del-inicio",
+      "devolver",
+      "garantia",
+      { "para_cada": "unidades", "como": "unidad", "pasos": ["cancelar"] }
+    ]
+  },
+  "pasos": {
+    "original": {
+      "tipo": "flow.leer-original",
+      "lee": ["alquiler"],
+      "escribe": ["cobroId", "total", "ventana", "garantiaId", "unidades"]
+    },
+    "antes-del-inicio": { "tipo": "alquiler.antes-del-inicio", "lee": ["alquiler", "ventana", "unidades"] },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "total"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver lo cobrado del alquiler"
+    },
+    "garantia": {
+      "tipo": "payments.anular",
+      "lee": ["garantiaId"],
+      "omitir_si_falta": "garantiaId",
+      "motivo": "no se pudo soltar la garantía"
+    },
+    "cancelar": {
+      "tipo": "booking.cancelar",
+      "lee": ["unidad.objetivo"],
+      "motivo": "no se pudo cancelar una unidad del alquiler"
+    }
+  }
+}

@@ -43,6 +43,10 @@ namespace Synergos.CMS.Interfaces;
 /// de LECTURA del vertical y la bandeja lo pinta sin preguntarle a nadie.
 /// </param>
 /// <param name="Desenlace">Cómo se cerró la devolución, con su propio sello; null mientras no se cierre.</param>
+/// <param name="DeclaradaUtc">
+/// Cuándo declaró la devolución quien alquiló, tal como lo anotó este CMS: lo que la cara del personal mide como «lleva
+/// esperando». Null mientras no se declare, y en lo declarado antes de anotarlo.
+/// </param>
 public sealed record RentalAgreement(
     string RentalId,
     string RenterId,
@@ -60,7 +64,8 @@ public sealed record RentalAgreement(
     string SelladoPor = RentalAgreement.SelladoLocal,
     bool SelloPendiente = false,
     RentalState Estado = RentalState.Reserved,
-    DesenlaceDelAlquiler? Desenlace = null)
+    DesenlaceDelAlquiler? Desenlace = null,
+    DateTimeOffset? DeclaradaUtc = null)
 {
     /// <summary>El sellador de la llave local del CMS.</summary>
     public const string SelladoLocal = "local";

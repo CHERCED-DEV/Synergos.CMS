@@ -238,6 +238,27 @@ public sealed class EntradaDePaso
         => Paso.LlaveBase is { } llaveBase
             ? IdempotencyKey.From(SagaId, $"{llaveBase}:{discriminante}")
             : throw new InvalidOperationException($"El paso «{Paso.Id}» ({Paso.Tipo}) necesita «llave_base» y no la declara.");
+
+    /// <summary>
+    /// La llave que el paso se pone ÉL, sin que la definición la declare (núcleo T052): <c>{sagaId}|{palabra}:{discriminante}</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Para un paso que actúa sin llave (<see cref="IPaso.ActuaSinLlave"/>) sobre algo que la capacidad sabe repetir
+    /// con una: cancelar una reserva. El reintento de la MISMA saga repite la misma llave y la capacidad devuelve lo que
+    /// hizo; una saga nueva trae otra, y la capacidad contesta lo de siempre.</para>
+    ///
+    /// <para>La palabra, con sus dos puntos, cabe en las ocho letras de <see cref="LlaveDeSaga.PasoMaximo"/>, y el
+    /// discriminante es un identificador de una capacidad (32).</para>
+    /// </remarks>
+    public IdempotencyKey LlavePropia(string palabra, string discriminante)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(palabra);
+        if (palabra.Length + 1 > 8)
+        {
+            throw new ArgumentException($"«{palabra}» no cabe en la llave de un paso: hasta siete letras.", nameof(palabra));
+        }
+        return IdempotencyKey.From(SagaId, $"{palabra}:{discriminante}");
+    }
 }
 
 /// <summary>Lo que un paso devuelve: cómo sigue la fase, qué produjo y qué reservó.</summary>

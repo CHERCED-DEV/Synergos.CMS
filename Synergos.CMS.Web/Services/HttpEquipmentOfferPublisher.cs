@@ -15,6 +15,10 @@ namespace Synergos.CMS.Web.Services;
 /// <para><b>Sin destino no intenta</b>: un clon limpio no tiene orquestador, y salir a buscarlo en cada publicar del
 /// editor sería esperar a la red para nada. Con destino y el orquestador caído deja el motivo en el log y devuelve
 /// <see cref="EquipmentOfferOutcome.Failed"/>: nunca lanza, porque quien llama es el publicar del editor.</para>
+///
+/// <para><b>Bajar las unidades no cancela nada</b> (NN-6): el orquestador revisa el recurso en la agenda y contesta qué
+/// reservas vigentes quedaron por encima de los cupos. Siguen confirmadas; aquí quedan en el registro, con nombre, para
+/// que el personal decida qué hacer con ellas.</para>
 /// </remarks>
 public sealed class HttpEquipmentOfferPublisher : IEquipmentOfferPublisher
 {
@@ -80,6 +84,13 @@ public sealed class HttpEquipmentOfferPublisher : IEquipmentOfferPublisher
             if (res.IsSuccessStatusCode)
             {
                 _log.LogInformation("Oferta del equipo {Equipo}: {Que} en el orquestador, hecho.", equipo, que);
+                if (await FueraAsync(res, cancellationToken).ConfigureAwait(false) is { Count: > 0 } fuera)
+                {
+                    _log.LogWarning(
+                        "El equipo {Equipo} quedó con menos unidades y {Cuantas} reserva(s) vigente(s) ya no caben ({Reservas}): "
+                        + "siguen confirmadas; qué hacer con ellas lo decide el personal.",
+                        equipo, fuera.Count, string.Join(", ", fuera));
+                }
                 return EquipmentOfferOutcome.Published;
             }
 
@@ -96,6 +107,27 @@ public sealed class HttpEquipmentOfferPublisher : IEquipmentOfferPublisher
             return EquipmentOfferOutcome.Failed;
         }
     }
+
+    /// <summary>
+    /// Las reservas que la revisión de unidades dejó fuera, de la respuesta de la oferta; vacío si no trae ninguna o no
+    /// se puede leer: quien publica ya publicó, y el registro de la oferta en el orquestador las conserva.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> FueraAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        try
+        {
+            var oferta = await res.Content.ReadFromJsonAsync<OfertaWire>(Json, ct).ConfigureAwait(false);
+            return oferta?.OutsideReservations ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Lo que se lee de la respuesta de la oferta; lo cruza <c>ConsumidorCmsDeBffAlquilerTests</c>.</summary>
+    /// <param name="OutsideReservations">Las reservas vigentes por encima de los cupos tras bajar las unidades.</param>
+    internal sealed record OfertaWire(IReadOnlyList<string>? OutsideReservations);
 
     /// <summary>El cuerpo de <c>PublishEquipmentOffer</c>, con los nombres del contrato del orquestador.</summary>
     private static object Oferta(RentalEquipment e) => new

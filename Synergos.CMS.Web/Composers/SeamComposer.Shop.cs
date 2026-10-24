@@ -155,6 +155,9 @@ public sealed partial class SeamComposer
                 HttpTiendaOfferPublisher.ClientName,
                 DestinoDelArbol.De(seccionDeTienda, "http://127.0.0.1:5300/", 10));
         }
+        // Si el catálogo ya ve una ficha publicada en la tienda, preguntado SIN log: al publicar en lote (un import, una
+        // restauración) la ficha puede llegar antes que su siteRoot, y entonces la oferta no se toca (ver el manejador).
+        services.AddSingleton<ITiendaEnElContenido, TiendaEnElContenido>();
         services.AddSingleton<ITiendaOfferPublisher>(sp => new HttpTiendaOfferPublisher(
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<HttpTiendaOfferPublisher>>(),
