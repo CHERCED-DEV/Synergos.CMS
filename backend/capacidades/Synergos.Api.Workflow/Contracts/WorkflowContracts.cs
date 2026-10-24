@@ -3,20 +3,27 @@ using Synergos.Api.Workflow.Domain;
 namespace Synergos.Api.Workflow.Contracts;
 
 // Lo que cruza el cable, separado de Domain/ (doc 08 §4.1).
+//
+// Los campos de las peticiones son anulables CON `= null` (009-P2, el suelo del contrato publicado): un campo
+// ausente ya llegaba como null y lo rechaza el borde con su código; sin el default, el documento los publicaba
+// como requeridos y un generador de tipos obligaría a mandar lo que la capacidad acepta que falte.
 
 /// <summary>Una transición tal como llega.</summary>
-public sealed record TransitionDto(string? Name, string? From, string? To, IReadOnlyList<string>? RequiredRoles);
+public sealed record TransitionDto(
+    string? Name = null, string? From = null, string? To = null, IReadOnlyList<string>? RequiredRoles = null);
 
 /// <summary>Publicar una definición.</summary>
 public sealed record DefineRequest(
-    string? Key, string? InitialState, IReadOnlyList<string>? FinalStates, IReadOnlyList<TransitionDto>? Transitions);
+    string? Key = null, string? InitialState = null, IReadOnlyList<string>? FinalStates = null,
+    IReadOnlyList<TransitionDto>? Transitions = null);
 
 /// <summary>Arrancar una instancia.</summary>
-public sealed record StartRequest(string? DefinitionKey, string? SubjectKind, string? SubjectId);
+public sealed record StartRequest(string? DefinitionKey = null, string? SubjectKind = null, string? SubjectId = null);
 
 /// <summary>Disparar una transición.</summary>
 public sealed record FireRequest(
-    string? Transition, string? ActorKind, string? ActorId, IReadOnlyList<string>? ActorRoles, string? Note);
+    string? Transition = null, string? ActorKind = null, string? ActorId = null,
+    IReadOnlyList<string>? ActorRoles = null, string? Note = null);
 
 /// <summary>Cómo sale una definición.</summary>
 public sealed record DefinitionResponse(
