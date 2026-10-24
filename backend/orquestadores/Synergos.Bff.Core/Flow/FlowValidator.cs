@@ -35,7 +35,10 @@ public static class FlowValidator
     /// <param name="flujo">La definición.</param>
     /// <param name="registro">Los pasos que el orquestador tiene registrados.</param>
     /// <param name="contrato">Lo que el código del orquestador da por hecho de ella.</param>
-    public static IReadOnlyList<string> Validar(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato)
+    /// <param name="procesos">Las definiciones de los procesos contra las que se cruzan sus pasos de procesos (núcleo,
+    /// lote 7); sin ellas no se cruzan, y es <see cref="FlowDefinitionValidator"/> quien exige tenerlas al arrancar.</param>
+    public static IReadOnlyList<string> Validar(
+        FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato, CatalogoDeProcesos? procesos = null)
     {
         ArgumentNullException.ThrowIfNull(flujo);
         ArgumentNullException.ThrowIfNull(registro);
@@ -64,6 +67,10 @@ public static class FlowValidator
         RevisarOmitirSiFalta(flujo, registro, contrato, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
+        if (procesos is not null)
+        {
+            errores.AddRange(flujo.Pasos.Values.OrderBy(p => p.Id, StringComparer.Ordinal).SelectMany(procesos.Revisar));
+        }
 
         return errores.Select(e => $"El flujo «{flujo.Clave}»: {e}").ToList();
     }
@@ -1218,8 +1225,16 @@ public sealed class FlowCatalog
 public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
 {
     private readonly IRegistroDePasos _registro;
+    private readonly CatalogoDeProcesos? _procesos;
 
-    public FlowDefinitionValidator(IRegistroDePasos registro) => _registro = registro;
+    /// <param name="registro">Los pasos registrados.</param>
+    /// <param name="procesos">Las definiciones de los procesos (núcleo, lote 7): las registra el arranque desde
+    /// <c>{Origen}:Procesos:Archivo</c>, y un orquestador sin procesos no las necesita.</param>
+    public FlowDefinitionValidator(IRegistroDePasos registro, CatalogoDeProcesos? procesos = null)
+    {
+        _registro = registro;
+        _procesos = procesos;
+    }
 
     public ValidateOptionsResult Validate(string? name, FlowCatalog options)
     {
@@ -1232,7 +1247,17 @@ public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
             return ValidateOptionsResult.Fail("El catálogo de flujos está vacío: el orquestador no declaró ninguno.");
         }
 
-        var errores = options.Flujos.SelectMany(f => FlowValidator.Validar(f.Flujo, _registro, f.Contrato)).ToList();
+        var errores = options.Flujos.SelectMany(f => FlowValidator.Validar(f.Flujo, _registro, f.Contrato, _procesos)).ToList();
+
+        // Sin catálogo, un paso de procesos no se cruza con nada: la transición que el proceso no tiene se descubriría con
+        // la primera persona que actúa. El arranque declarado ya lo impide al construir; esto cubre a quien registra sin él.
+        if (_procesos is null)
+        {
+            errores.AddRange(options.Flujos
+                .SelectMany(f => f.Flujo.Pasos.Values.Where(p => p.Proceso is not null).Select(p => (f.Flujo.Clave, p.Id, p.Proceso)))
+                .Select(x => $"El flujo «{x.Clave}»: el paso «{x.Id}» actúa sobre el proceso «{x.Proceso}», y el orquestador no "
+                    + "tiene con qué cruzarlo al arrancar: falta el catálogo de procesos ({Origen}:Procesos:Archivo)."));
+        }
         errores.AddRange(FlowValidator.ValidarPosteriores(options.Flujos, _registro));
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);
     }

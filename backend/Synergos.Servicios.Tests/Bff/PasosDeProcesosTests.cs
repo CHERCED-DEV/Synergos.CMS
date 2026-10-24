@@ -1,6 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Pasos;
 using Synergos.Bff.Pasos.Http;
@@ -348,4 +353,218 @@ public sealed class PasosDeProcesosEnLaDefinicionTests
 
     /// <summary>Un trozo de JSON escrito con comillas simples, para no escapar las dobles.</summary>
     private static string Q(string conSimples) => conSimples.Replace('\'', '"');
+}
+
+/// <summary>
+/// La transición como dato del paso cruzada con la definición del proceso AL ARRANCAR (núcleo, lote 7; 009-P3 = A y 009-P6
+/// = A): el proceso existe, la transición está en él y el rol del paso es uno de los que exige.
+/// </summary>
+public sealed class TransicionComoDatoTests
+{
+    private sealed class SinRed : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new InvalidOperationException("Validar no llama a nadie.");
+    }
+
+    /// <summary>El proceso de la muestra, en el formato de <c>tools/provisionar.procesos.json</c>.</summary>
+    internal const string Procesos = """
+        [
+          { "_": "El trámite de la muestra: tomar antes de decidir, subsanar vuelve a revisión." },
+          {
+            "key": "muestra.tramite",
+            "initialState": "radicado",
+            "finalStates": ["aprobado", "rechazado"],
+            "transitions": [
+              { "name": "tomar", "from": "radicado", "to": "en-revision", "requiredRoles": ["funcionario"] },
+              { "name": "aprobar", "from": "en-revision", "to": "aprobado", "requiredRoles": ["funcionario"] },
+              { "name": "rechazar", "from": "en-revision", "to": "rechazado", "requiredRoles": ["funcionario"] },
+              { "name": "pedir-informacion", "from": "en-revision", "to": "informacion-pedida", "requiredRoles": ["funcionario"] },
+              { "name": "subsanar", "from": "informacion-pedida", "to": "en-revision", "requiredRoles": ["ciudadano"] }
+            ]
+          }
+        ]
+        """;
+
+    private static readonly CatalogoDeProcesos Catalogo = CatalogoDeProcesos.Leer(Procesos);
+
+    private static (FlujoDef Flujo, IRegistroDePasos Registro, ContratoDelFlujo Contrato) Armar(string json)
+    {
+        var flujo = FlujoDef.Leer(json);
+        var puertos = new PuertosHttp(new SinRed());
+        var registro = PasosComunes.Registro(puertos);
+        var binding = new BindingDeFlujo(flujo, TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()),
+            registro, new DeshacerComun(puertos, puertos, puertos, puertos, []).Tipos);
+        return (flujo, registro, ContratoDelFlujo.De(binding, flujo.Fases.Select(f => f.Nombre).ToList()));
+    }
+
+    private static IReadOnlyList<string> Errores(string json)
+    {
+        var (flujo, registro, contrato) = Armar(json);
+        return FlowValidator.Validar(flujo, registro, contrato, Catalogo);
+    }
+
+    private static string Q(string conSimples) => conSimples.Replace('\'', '"');
+
+    private static string Decidir(string transiciones = "['aprobar', 'rechazar']", string rol = "funcionario", string proceso = "muestra.tramite")
+        => Q($$"""
+            {
+              'clave': 'muestra.decision',
+              'entrada': ['funcionario', 'expediente', 'decision'],
+              'tipos': { 'funcionario': { 'de': 'sujeto' }, 'expediente': 'texto', 'decision': 'texto' },
+              'salida': ['estado'],
+              'fases': { 'decidir': ['decidir'] },
+              'pasos': {
+                'decidir': {
+                  'tipo': 'workflow.disparar-elegida', 'lee': ['expediente', 'funcionario', 'decision'], 'escribe': ['estado'],
+                  'llave': 'fire', 'proceso': '{{proceso}}', 'transiciones': {{transiciones}}, 'rol': '{{rol}}'
+                }
+              }
+            }
+            """);
+
+    [Fact]
+    public void Con_el_proceso_que_lo_tiene_todo_arranca()
+    {
+        var errores = Errores(Decidir());
+        Assert.True(errores.Count == 0, string.Join(Environment.NewLine, errores));
+    }
+
+    [Fact]
+    public void Un_proceso_que_no_esta_una_transicion_que_no_tiene_y_un_rol_que_no_alcanza_no_arrancan()
+    {
+        Assert.Contains(Errores(Decidir(proceso: "muestra.otro")), e => e.Contains("actúa sobre el proceso «muestra.otro», que no está en el catálogo", StringComparison.Ordinal));
+        Assert.Contains(Errores(Decidir("['aprobar', 'archivar']")), e => e.Contains("dispara «archivar», y «muestra.tramite» no la tiene", StringComparison.Ordinal));
+        Assert.Contains(Errores(Decidir("['aprobar', 'subsanar']")), e => e.Contains("dispara «subsanar» como «funcionario»", StringComparison.Ordinal));
+        Assert.Contains(Errores(Decidir(rol: "ciudadano")), e => e.Contains("dispara «aprobar» como «ciudadano»", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Al_arrancar_un_flujo_con_procesos_pide_el_catalogo_y_con_el_lo_cruza()
+    {
+        var (flujo, registro, contrato) = Armar(Decidir("['aprobar', 'archivar']"));
+        var catalogoDeFlujos = new FlowCatalog().Registrar(flujo, contrato);
+
+        var sinProcesos = new FlowDefinitionValidator(registro).Validate(null, catalogoDeFlujos);
+        Assert.True(sinProcesos.Failed);
+        Assert.Contains("Procesos:Archivo", sinProcesos.FailureMessage, StringComparison.Ordinal);
+
+        var conProcesos = new FlowDefinitionValidator(registro, Catalogo).Validate(null, catalogoDeFlujos);
+        Assert.True(conProcesos.Failed);
+        Assert.Contains("dispara «archivar», y «muestra.tramite» no la tiene", conProcesos.FailureMessage, StringComparison.Ordinal);
+
+        var (sano, registroSano, contratoSano) = Armar(Decidir());
+        Assert.True(new FlowDefinitionValidator(registroSano, Catalogo).Validate(null, new FlowCatalog().Registrar(sano, contratoSano)).Succeeded);
+    }
+
+    [Fact]
+    public void Un_flujo_sin_procesos_arranca_sin_catalogo()
+    {
+        var (flujo, registro, contrato) = Armar(Q("""
+            {
+              'clave': 'muestra.cobro',
+              'entrada': ['quien', 'total'],
+              'tipos': { 'quien': { 'de': 'sujeto' }, 'total': 'dinero' },
+              'salida': ['cobroId'],
+              'fases': { 'abrir': ['autorizar'], 'cerrar': ['capturar'] },
+              'pasos': {
+                'autorizar': {
+                  'tipo': 'payments.autorizar', 'lee': ['quien', 'total'], 'escribe': ['cobroId'], 'llave': 'authorize',
+                  'reserva': { 'consumado_por': 'capturar', 'antes': 'payments.anular', 'despues': 'payments.devolver' }
+                },
+                'capturar': { 'tipo': 'payments.capturar', 'lee': ['cobroId'], 'llave': 'capture', 'cierra_reserva': 'autorizar' }
+              }
+            }
+            """));
+        var resultado = new FlowDefinitionValidator(registro).Validate(null, new FlowCatalog().Registrar(flujo, contrato));
+        Assert.True(resultado.Succeeded, resultado.FailureMessage);
+    }
+}
+
+/// <summary>
+/// El orquestador lee el catálogo de procesos de su configuración (<c>{Origen}:Procesos:Archivo</c>) y cruza con él sus
+/// flujos AL ARRANCAR; uno que actúa sobre procesos sin catálogo no se construye.
+/// </summary>
+public sealed class CatalogoDeProcesosAlArrancarTests : IDisposable
+{
+    private readonly string _carpeta = Directory.CreateTempSubdirectory("procesos-").FullName;
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_carpeta, recursive: true); }
+        catch (IOException) { /* un temporal */ }
+    }
+
+    private static string Q(string conSimples) => conSimples.Replace('\'', '"');
+
+    private string Flujos(string transiciones)
+    {
+        var flujos = Path.Combine(_carpeta, "flujos-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(flujos);
+        File.WriteAllText(Path.Combine(flujos, "muestra.decision.json"), Q($$"""
+            {
+              'clave': 'muestra.decision',
+              'entrada': ['funcionario', 'expediente', 'decision'],
+              'tipos': { 'funcionario': { 'de': 'sujeto' }, 'expediente': 'texto', 'decision': 'texto' },
+              'salida': ['estado'],
+              'fases': { 'decidir': ['decidir'] },
+              'pasos': {
+                'decidir': {
+                  'tipo': 'workflow.disparar-elegida', 'lee': ['expediente', 'funcionario', 'decision'], 'escribe': ['estado'],
+                  'llave': 'fire', 'proceso': 'muestra.tramite', 'transiciones': {{transiciones}}, 'rol': 'funcionario'
+                }
+              }
+            }
+            """));
+        return flujos;
+    }
+
+    private WebApplication Orquestador(string flujos, string? archivo)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["muestra:Flujos:Carpeta"] = flujos,
+            ["muestra:Storage:Root"] = Path.Combine(_carpeta, "sagas"),
+            ["muestra:Procesos:Archivo"] = archivo,
+        });
+        builder.AddOrquestadorDeclarado(new SagaVocabulary("muestra", "el trámite"), typeof(CatalogoDeProcesosAlArrancarTests).Assembly);
+        return builder.Build();
+    }
+
+    private string Archivo()
+    {
+        var archivo = Path.Combine(_carpeta, "procesos.json");
+        File.WriteAllText(archivo, TransicionComoDatoTests.Procesos);
+        return archivo;
+    }
+
+    [Fact]
+    public async Task Con_el_catalogo_arranca_y_con_una_transicion_que_el_proceso_no_tiene_no()
+    {
+        await using (var sano = Orquestador(Flujos(Q("['aprobar', 'rechazar']")), Archivo()))
+        {
+            await sano.StartAsync();
+            await sano.StopAsync();
+        }
+
+        await using var malo = Orquestador(Flujos(Q("['aprobar', 'archivar']")), Archivo());
+        var error = await Assert.ThrowsAsync<OptionsValidationException>(() => malo.StartAsync());
+        Assert.Contains("dispara «archivar», y «muestra.tramite» no la tiene", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sin_el_catalogo_un_orquestador_con_procesos_no_se_construye_y_dice_que_configurar()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Orquestador(Flujos(Q("['aprobar', 'rechazar']")), null));
+        Assert.Contains("muestra:Procesos:Archivo", error.Message, StringComparison.Ordinal);
+        Assert.Contains("muestra.decision", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Un_catalogo_configurado_que_no_existe_no_se_ignora()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Orquestador(Flujos(Q("['aprobar']")), Path.Combine(_carpeta, "no-esta.json")));
+        Assert.Contains("no existe", error.Message, StringComparison.Ordinal);
+    }
 }
