@@ -210,7 +210,10 @@ public sealed class ConsumidorCmsDeApiWorkflowTests
     {
         esquema = Resolver(esquema);
         var propiedades = esquema.GetProperty("properties");
-        foreach (var p in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        var requeridas = esquema.TryGetProperty("required", out var req)
+            ? req.EnumerateArray().Select(x => x.GetString()!).ToHashSet(StringComparer.Ordinal) : [];
+        var nulabilidad = new NullabilityInfoContext();
+        foreach (var p in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(x => x.Name != "EqualityContract"))
         {
             var nombre = JsonNamingPolicy.CamelCase.ConvertName(p.Name);
             if (!propiedades.TryGetProperty(nombre, out var sub))
@@ -218,6 +221,12 @@ public sealed class ConsumidorCmsDeApiWorkflowTests
                 malas.Add($"{donde}.{nombre}: el CMS lo lee y la respuesta no lo publica.");
                 continue;
             }
+            var anulable = Nullable.GetUnderlyingType(p.PropertyType) is not null
+                           || nulabilidad.Create(p).ReadState == NullabilityState.Nullable;
+            var admiteNulo = sub.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.Array
+                             && t.EnumerateArray().Any(x => x.GetString() == "null");
+            if (!anulable && !requeridas.Contains(nombre)) malas.Add($"{donde}.{nombre}: el CMS lo da por seguro y la respuesta no lo promete (no es required).");
+            if (!anulable && admiteNulo) malas.Add($"{donde}.{nombre}: la respuesta puede mandar null y el CMS no lo admite.");
             if (DtoDe(p.PropertyType) is { } anidado)
             {
                 var resuelto = Resolver(sub);

@@ -686,7 +686,7 @@
           "transitions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TransitionDto"
+              "$ref": "#/components/schemas/TransitionResponse"
             }
           }
         }
@@ -924,6 +924,32 @@
               "null",
               "array"
             ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TransitionResponse": {
+        "required": [
+          "name",
+          "from",
+          "to",
+          "requiredRoles"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "requiredRoles": {
+            "type": "array",
             "items": {
               "type": "string"
             }

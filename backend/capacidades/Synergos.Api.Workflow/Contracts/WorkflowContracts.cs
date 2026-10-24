@@ -28,13 +28,16 @@ public sealed record FireRequest(
 /// <summary>Cómo sale una definición.</summary>
 public sealed record DefinitionResponse(
     string Id, string Key, string InitialState, IReadOnlyList<string> FinalStates,
-    IReadOnlyList<string> States, IReadOnlyList<TransitionDto> Transitions)
+    IReadOnlyList<string> States, IReadOnlyList<TransitionResponse> Transitions)
 {
     public static DefinitionResponse From(WorkflowDefinition d) => new(
         d.Id, d.Key, d.InitialState, d.FinalStates,
         d.States.OrderBy(s => s, StringComparer.Ordinal).ToList(),
-        d.Transitions.Select(t => new TransitionDto(t.Name, t.From, t.To, t.RequiredRoles)).ToList());
+        d.Transitions.Select(t => new TransitionResponse(t.Name, t.From, t.To, t.RequiredRoles)).ToList());
 }
+
+/// <summary>Cómo sale una transición.</summary>
+public sealed record TransitionResponse(string Name, string From, string To, IReadOnlyList<string> RequiredRoles);
 
 /// <summary>Un paso de la historia.</summary>
 public sealed record HistoryResponse(string Transition, string From, string To, string ByKind, string ById, string? Note, DateTimeOffset AtUtc);
