@@ -13,8 +13,9 @@ namespace Synergos.CMS.Tests.Bff.Educacion;
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y ≤ 4
 /// ficheros. <b>Interino</b> = lo que espera la oferta genérica con variantes de precio (NM-1): el paso
 /// <c>educacion.linea</c> y el nombre del sujeto, que comparte con la oferta. <b>Oferta</b> = el código del vertical que
-/// esa misma pieza (P12) dejará listo para retirar. Un fichero nuevo del orquestador que no esté en ninguna de las tres
-/// listas es rojo: no puede crecer sin decir de quién es.</para>
+/// esa misma pieza (P12) dejará listo para retirar. <b>Devolución</b> = el flujo posterior del personal (010-P2 B), sólo
+/// declarado. Un fichero nuevo del orquestador que no esté en ninguna de las listas es rojo: no puede crecer sin decir
+/// de quién es.</para>
 /// </remarks>
 public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
 {
@@ -25,6 +26,9 @@ public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
 
     private static readonly string[] DeLaOferta =
         ["Domain/OfertaDeCursos.cs", "Endpoints/OfertasEndpoints.cs", "Clients/CapacidadesDeLaOferta.cs", "Contracts/OfertaContracts.cs"];
+
+    /// <summary>La devolución del personal (lote 8, 010-P2 B): un flujo posterior declarado, sin una línea de C#.</summary>
+    private static readonly string[] DeLaDevolucion = ["flujos/educacion.devolucion.json"];
 
     private static string Raiz() => Proyectos.Dir("Synergos.Bff.Educacion");
 
@@ -41,8 +45,12 @@ public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(Interinos).Concat(DeLaOferta).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(Interinos).Concat(DeLaOferta).Concat(DeLaDevolucion).Order(StringComparer.Ordinal), enDisco);
     }
+
+    [Fact]
+    public void La_devolucion_del_personal_no_cuesta_una_linea_de_CSharp()
+        => Assert.All(DeLaDevolucion, f => Assert.EndsWith(".json", f, StringComparison.Ordinal));
 
     [Fact]
     public void Declarar_la_matricula_cuesta_como_mucho_60_lineas_y_4_ficheros_y_lo_demas_queda_atribuido()

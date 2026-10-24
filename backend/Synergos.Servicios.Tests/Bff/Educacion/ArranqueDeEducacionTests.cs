@@ -51,8 +51,8 @@ public sealed class ArranqueDeEducacionTests
         var curso = raiz.GetProperty("tipos").GetProperty("curso");
         Assert.Equal("ref", curso.GetProperty("tipo").GetString());
         Assert.Equal(SujetoDelPlan.ClaseDelCurso, curso.GetProperty("kind").GetString());
-        // Lote 8, 010-P2: la devolución del personal (fase B) lee el cobro de la original.
-        Assert.Equal(["cobroId"], raiz.GetProperty("para_lo_posterior").EnumerateArray().Select(e => e.GetString()));
+        // Lote 8, 010-P2: la devolución del personal (fase B) lee el cobro de la original y su total.
+        Assert.Equal(["cobroId", "total"], raiz.GetProperty("para_lo_posterior").EnumerateArray().Select(e => e.GetString()));
         // Sin caer a cero: la AUSENCIA de precio rechaza (FR-004), la oferta de un curso gratis publica su cero.
         Assert.Equal("pricing.cotizar-sin-codigo", raiz.GetProperty("pasos").GetProperty("cotizar").GetProperty("tipo").GetString());
     }

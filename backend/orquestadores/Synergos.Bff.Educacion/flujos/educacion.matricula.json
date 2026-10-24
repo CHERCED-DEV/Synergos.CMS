@@ -8,7 +8,7 @@
     "contacto": { "de": "contacto" }
   },
   "salida": ["curso", "plan", "total"],
-  "para_lo_posterior": ["cobroId"],
+  "para_lo_posterior": ["cobroId", "total"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["linea", "cotizar", "desglose", "autorizar"],

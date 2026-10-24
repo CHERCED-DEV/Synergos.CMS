@@ -176,6 +176,29 @@ internal sealed class MatriculaDeCursoReal : IDisposable
         return Enviar(peticion);
     }
 
+    // ── Lo que hace el personal, por la puerta (lote 8, 010-P2 B) ──────────
+
+    public static string Personal(string id) => $"educacion.personal:{id}";
+
+    /// <summary>Devuelve la matrícula por el flujo posterior: lo que pide la puerta con la llave de la DEVOLUCIÓN.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Devolver(string matricula, string llave = "devolucion-1", string personal = "staff-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/educacion.devolucion") { Content = JsonContent.Create(new { matricula }) };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Personal(personal));
+        return Enviar(peticion);
+    }
+
+    /// <summary>Abre y cierra una matrícula de su alumno y devuelve su id; falla si no queda completada.</summary>
+    public async Task<string> Completada(string llave = "matricula-gestion-agil", string alumno = "u-1", object? cuerpo = null)
+    {
+        var (_, abierta) = await Abrir(llave, alumno, cuerpo);
+        var id = abierta.GetProperty("id").GetString()!;
+        var (estado, cerrada) = await Cerrar(id, alumno);
+        Assert.True(estado == HttpStatusCode.OK, cerrada.ToString());
+        return id;
+    }
+
     // ── Lo que quedó en las capacidades ─────────────────────────────────────
 
     public async Task<JsonElement> Leer(string capacidad, string ruta)

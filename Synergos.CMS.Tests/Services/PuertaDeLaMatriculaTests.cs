@@ -57,6 +57,32 @@ public sealed class PuertaDeLaMatriculaTests
         Assert.True(new PuertaDeLosFlujos(tabla, monitor, new DestinosDeLaPuerta(["Educacion"])).Abre(Matricula));
     }
 
+    /// <summary>
+    /// La devolución del personal (lote 8, 010-P2 B, T034): sólo <c>admin</c> la abre, y el sujeto es la persona del
+    /// personal —el rastro de quién devolvió—. Un alumno o un instructor reciben <c>puerta.personal_requerido</c> (la regla
+    /// la prueba <c>FlujosControllerTests</c>); aquí, que la entrada la declare así y que valga contra el contrato.
+    /// </summary>
+    [Fact]
+    public void La_devolucion_es_del_personal_admin_y_la_puerta_la_valida_contra_el_contrato_incrustado()
+    {
+        const string Devolucion = "educacion.devolucion";
+        var ajustes = Ajustes();
+
+        Assert.True(ajustes.Flujos.TryGetValue(Devolucion, out var devolucion), $"{Devolucion} no está en Synergos:Puerta:Flujos.");
+        Assert.Equal(AccesoDeLaPuerta.Personal, devolucion!.Acceso);
+        Assert.Equal(["admin"], devolucion.Roles);
+        Assert.Equal("educacion.personal", devolucion.SujetoKind);
+        Assert.Empty(devolucion.Invitado);
+
+        var sola = new PuertaSettings
+        {
+            Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Devolucion] = devolucion },
+        };
+        var resultado = new ValidadorDeLaPuerta(TablaDeLaPuerta.Incrustada()).Validate(null, sola);
+        Assert.True(resultado.Succeeded, resultado.FailureMessage);
+        Assert.All(TablaDeLaPuerta.Incrustada().DelFlujo(Devolucion), op => Assert.Equal("Educacion", op.Orquestador));
+    }
+
     /// <summary><c>Synergos:Puerta</c> del <c>appsettings.json</c> base, enlazada como la enlaza el CMS.</summary>
     private static PuertaSettings Ajustes()
         => new ConfigurationBuilder()

@@ -1,0 +1,25 @@
+{
+  "clave": "educacion.devolucion",
+  "posterior_a": "educacion.matricula",
+  "acceso": "personal",
+  "entrada": ["personal", "matricula"],
+  "tipos": {
+    "personal": { "de": "sujeto" },
+    "matricula": "texto",
+    "cobroId": { "tipo": "texto", "de": "original" },
+    "total": { "tipo": "dinero", "de": "original" }
+  },
+  "salida": ["matricula", "total"],
+  "fases": {
+    "devolver": ["original", "devolver"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["matricula"], "escribe": ["cobroId", "total"] },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "total"],
+      "llave": "refund",
+      "motivo": "no se pudo devolver lo cobrado de la matrícula"
+    }
+  }
+}
