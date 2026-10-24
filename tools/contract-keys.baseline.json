@@ -16,6 +16,7 @@
     "cover",
     "currency",
     "description",
+    "devueltas",
     "duration",
     "durationMinutes",
     "enrolled",
@@ -35,6 +36,7 @@
     "lessonCount",
     "lessons",
     "level",
+    "matriculaDevolvible",
     "modules",
     "name",
     "orderRef",
@@ -59,6 +61,7 @@
     "totalRevenue",
     "totalStudents",
     "url",
+    "veces",
     "verifyUrl",
     "videoRef"
   ],
