@@ -18,13 +18,27 @@ public sealed class TravelShellFeatureSettings : SeccionDeNegocio<TravelShellFea
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/travel";
 
+    /// <summary>
+    /// Por dónde reserva el elemento: <c>puerta</c> o <c>directa</c> (<see cref="CaminoDeCompra"/>). Por defecto
+    /// <c>directa</c> (línea 006, P5): integrar la puerta no cambia el camino de ningún sitio, aunque el despliegue le dé
+    /// destino a <c>Bff.Viajes</c>; un sitio pasa a la puerta cuando lo declara, después de verificarla en vivo.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío vuelve a la regla (la puerta si abre <c>viajes.reserva</c>).</remarks>
+    public string? BookingPath { get; init; } = CaminoDeCompra.Directa;
+
     /// <inheritdoc />
     protected override NegocioDeTravelShell Fusionar(TravelShellFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeTravelShell negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            ReglasDeNegocio.Camino("BookingPath", negocio.BookingPath),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +48,7 @@ public sealed class TravelShellFeatureSitio
 {
     /// <inheritdoc cref="TravelShellFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="TravelShellFeatureSettings.BookingPath"/>
+    public string? BookingPath { get; init; }
 }

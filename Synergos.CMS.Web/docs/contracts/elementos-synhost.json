@@ -522,12 +522,19 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "bookingPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "destinationLabel": "Hoteles SynergosLabs",
-        "apiBase": "/api/booking"
+        "apiBase": "/api/booking",
+        "bookingPath": "directa"
       }
     },
     {
@@ -3380,13 +3387,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "bookingPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Reserva tu próximo viaje",
         "subheading": "Vuelos, hoteles y paquetes",
-        "apiBase": "/api/travel"
+        "apiBase": "/api/travel",
+        "bookingPath": "directa"
       }
     },
     {
