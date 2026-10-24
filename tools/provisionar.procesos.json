@@ -1,0 +1,29 @@
+[
+  {
+    "_": "Las definiciones de proceso que Api.Workflow guarda como dato (009-gobierno-tramite, FR-001 y FR-009). Una definición publicada NO se reescribe —la capacidad contesta workflow.key_taken—: cambiar un proceso es publicar otra clave y dejar la anterior para los expedientes que nacieron con ella. Los estados son los slugs públicos del expediente (GovStatusSlugs) y toda transición exige un rol. La v1 es la que provisionar.sh publica desde su heredoc DEF_GOB, copiada aquí sin cambiar un carácter (ProcesoDelTramiteTests las compara mientras convivan); provisionar.sh publicará desde este fichero cuando el despliegue lo copie (NP-1 de 009)."
+  },
+  {
+    "key": "gov.tramite",
+    "initialState": "submitted",
+    "finalStates": ["approved", "rejected"],
+    "transitions": [
+      { "name": "approve", "from": "submitted", "to": "approved", "requiredRoles": ["funcionario"] },
+      { "name": "approve", "from": "in-review", "to": "approved", "requiredRoles": ["funcionario"] },
+      { "name": "approve", "from": "info-requested", "to": "approved", "requiredRoles": ["funcionario"] },
+      { "name": "reject", "from": "submitted", "to": "rejected", "requiredRoles": ["funcionario"] },
+      { "name": "request-info", "from": "submitted", "to": "info-requested", "requiredRoles": ["funcionario"] }
+    ]
+  },
+  {
+    "key": "gov.tramite.v2",
+    "initialState": "submitted",
+    "finalStates": ["approved", "rejected"],
+    "transitions": [
+      { "name": "take", "from": "submitted", "to": "in-review", "requiredRoles": ["funcionario"] },
+      { "name": "approve", "from": "in-review", "to": "approved", "requiredRoles": ["funcionario"] },
+      { "name": "reject", "from": "in-review", "to": "rejected", "requiredRoles": ["funcionario"] },
+      { "name": "request-info", "from": "in-review", "to": "info-requested", "requiredRoles": ["funcionario"] },
+      { "name": "resubmit", "from": "info-requested", "to": "in-review", "requiredRoles": ["ciudadano"] }
+    ]
+  }
+]

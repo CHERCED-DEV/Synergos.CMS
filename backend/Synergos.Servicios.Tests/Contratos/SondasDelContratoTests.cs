@@ -86,6 +86,10 @@ public sealed class SondasDelContratoTests
 
         // Abrir una canasta resuelve al dueño después de comprobar que lo nombra: con `{}`, `cart.bad_owner`.
         ["OpenCart"] = """{"ownerKind":"sonda.dueno","ownerId":"d-1"}""",
+
+        // Disparar una transición resuelve quién actúa —y con qué prueba sus roles— después de comprobar que el
+        // cuerpo lo nombra (009-P2): con `{}` contesta `workflow.bad_actor` y nunca mira la cabecera.
+        ["FireTransition"] = """{"transition":"sonda","actorKind":"sonda.actor","actorId":"a-1"}""",
     };
 
     /// <summary>Lo que se manda en la cabecera de identidad para ver si el endpoint la lee: no es un token.</summary>
