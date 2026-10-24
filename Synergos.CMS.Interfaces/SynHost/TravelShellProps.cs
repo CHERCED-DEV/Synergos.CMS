@@ -13,8 +13,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// DECLARA el CMS con la regla de <see cref="CaminoDeCompra"/> —«directa» por defecto en
 /// <c>Synergos:Features:TravelShell:BookingPath</c>, la puerta sólo donde un sitio la declara—; el elemento no lo
 /// adivina.</para>
+///
+/// <para><b>Sus textos de la reserva por la puerta</b> son la sección <c>Travel.Booking</c> del diccionario (ADR 0136):
+/// la app los pide con <c>t()</c> y la página publica sólo las secciones que declaran sus elementos.</para>
 /// </remarks>
-[ElementoSynHost("travel-shell", TipoDeColocable.Funcionalidad)]
+[ElementoSynHost("travel-shell", TipoDeColocable.Funcionalidad, Diccionario = ["Travel.Booking"])]
 public sealed record TravelShellProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,

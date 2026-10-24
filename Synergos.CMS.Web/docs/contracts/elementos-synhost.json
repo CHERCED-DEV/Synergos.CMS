@@ -3437,7 +3437,27 @@
       "nombre": "travel-shell",
       "tipo": "funcionalidad",
       "record": "TravelShellProps",
-      "diccionario": [],
+      "diccionario": [
+        "Travel.Booking"
+      ],
+      "claves": [
+        "Travel.Booking.BadRequest",
+        "Travel.Booking.CancelPending",
+        "Travel.Booking.CancelledNoCharge",
+        "Travel.Booking.Generic",
+        "Travel.Booking.HoldExpired",
+        "Travel.Booking.ItemTaken",
+        "Travel.Booking.NoDates",
+        "Travel.Booking.NotBookable",
+        "Travel.Booking.NotConfirmable",
+        "Travel.Booking.NotFound",
+        "Travel.Booking.PaymentFailed",
+        "Travel.Booking.PriceUnavailable",
+        "Travel.Booking.RefundIssued",
+        "Travel.Booking.SignInRequired",
+        "Travel.Booking.StillPending",
+        "Travel.Booking.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "heading",
