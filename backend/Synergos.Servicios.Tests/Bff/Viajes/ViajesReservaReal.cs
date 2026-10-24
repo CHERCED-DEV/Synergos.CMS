@@ -4,6 +4,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Viajes.Contracts;
@@ -40,6 +42,7 @@ internal sealed class ViajesReservaReal : IDisposable
 
     public ViajesReservaReal(Func<HttpRequestMessage, string?>? falla = null)
     {
+        Reloj = new DobleDeAlquiler.RelojFalso(DateTimeOffset.UtcNow);
         Capacidades = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking")
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
@@ -51,7 +54,11 @@ internal sealed class ViajesReservaReal : IDisposable
         {
             b.UseSetting("viajes:Storage:Root", Path.Combine(_raiz, "viajes"));
             b.UseSetting("Viajes:ApiKey", Llave);
-            b.ConfigureTestServices(s => s.AddSingleton(fabrica));
+            b.ConfigureTestServices(s =>
+            {
+                s.AddSingleton(fabrica);
+                s.AddSingleton<TimeProvider>(Reloj);
+            });
         });
         Orquestador = _fabrica.CreateClient();
         Orquestador.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, Llave);
@@ -61,7 +68,18 @@ internal sealed class ViajesReservaReal : IDisposable
 
     public HttpClient Orquestador { get; }
 
+    /// <summary>El reloj del orquestador (las capacidades llevan el suyo): lo que ve el barrido.</summary>
+    public DobleDeAlquiler.RelojFalso Reloj { get; }
+
     public SagaEngine<SagaDeFlujo> Sagas => _fabrica.Services.GetRequiredService<SagaEngine<SagaDeFlujo>>();
+
+    /// <summary>A los cuántos minutos sin cerrar da el barrido por abandonado un viaje en este despliegue.</summary>
+    public int Abandono => _fabrica.Services.GetRequiredService<IOptions<SweepOptions>>().Value.AbandonAfterMinutes;
+
+    /// <summary>Una vuelta del barrido de la saga declarada, como la daría el de fondo.</summary>
+    public Task UnaVuelta()
+        => _fabrica.Services.GetServices<IHostedService>().OfType<CompensationSweeper<SagaDeFlujo>>().Single()
+            .UnaVueltaAsync(Sagas, CancellationToken.None);
 
     public void Dispose()
     {
