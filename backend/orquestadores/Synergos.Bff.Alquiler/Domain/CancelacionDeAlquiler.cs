@@ -14,9 +14,9 @@ namespace Synergos.Bff.Alquiler.Domain;
 /// (<c>omitir_si_falta</c>, NN-19). Los dos pasos provisionales de T044 se retiraron con eso.</para>
 ///
 /// <para><b>Primero la plata, al final las unidades.</b> La fase sólo se escribe si sale entera, y repetir con la misma
-/// llave vuelve a pasar por las mismas llaves derivadas: devolver y anular otra vez no duplican nada. Cancelar en la
-/// agenda una reserva ya cancelada, en cambio, se rechaza (<c>booking.already_cancelled</c>): si las unidades fueran
-/// primero, una devolución caída dejaría el reintento trabado sin haber devuelto nada.</para>
+/// llave vuelve a pasar por las mismas llaves derivadas: devolver y anular otra vez no duplican nada, y desde el núcleo
+/// T052 tampoco cancelar en la agenda la reserva que ya canceló ESTA operación (<c>booking.cancelar</c> manda su llave
+/// por reserva). El orden se queda: con la plata primero, una devolución caída no suelta ninguna unidad.</para>
 /// </remarks>
 public static class CancelacionDeAlquiler
 {

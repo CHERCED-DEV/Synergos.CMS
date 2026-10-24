@@ -150,7 +150,7 @@ public sealed class CancelacionPosteriorDeAlquilerTests
     public async Task Si_la_devolucion_falla_no_se_solto_nada_y_repetir_termina_sin_devolver_dos_veces()
     {
         // La plata va antes que las unidades: una devolución caída deja las reservas en firme, y el reintento las
-        // cancela. Al revés, el reintento chocaría con una reserva ya cancelada sin haber devuelto nada.
+        // cancela.
         var veces = 0;
         var (r, id) = await Rentado(falla: q => CableQueAnota.Es(q, "POST", "^/v1/payments/[^/]+/refund$")
             && Interlocked.Increment(ref veces) == 1 ? "payments.provider_unavailable" : null);
@@ -176,12 +176,11 @@ public sealed class CancelacionPosteriorDeAlquilerTests
     }
 
     [Fact]
-    public async Task Trinquete_NN18_si_la_agenda_cae_entre_dos_unidades_repetir_se_traba_en_la_ya_cancelada()
+    public async Task Si_la_agenda_cae_entre_dos_unidades_repetir_termina_la_cancelacion_una_sola_vez()
     {
-        // La mitad de NN-18 que el núcleo no trajo: en el recorrido, una reserva ya cancelada no cuenta como hecha. La
-        // plata ya volvió y la garantía se anuló; el reintento se rechaza en la primera unidad y la segunda sigue
-        // tomada, hasta que la cancele el personal. Cuando el núcleo dé por hecha la ya cancelada, esto sale rojo: se
-        // cambia por la cancelación completa.
+        // NN-18 entera (núcleo T052): booking.cancelar manda su llave por reserva, y repetir la MISMA cancelación da por
+        // hecha la que ya se canceló. La plata ya volvió y la garantía se anuló en el primer intento; el reintento con la
+        // misma llave cancela la unidad que faltaba y completa, sin devolver dos veces. Era el trinquete de T048.
         var veces = 0;
         var (r, id) = await Rentado(falla: q => CableQueAnota.Es(q, "POST", "^/v1/reservations/[^/]+/cancel$")
             && Interlocked.Increment(ref veces) == 2 ? "booking.unavailable" : null);
@@ -192,14 +191,15 @@ public sealed class CancelacionPosteriorDeAlquilerTests
         var (fallida, rechazo) = await r.CancelarPorElFlujo(id);
         Assert.Equal(HttpStatusCode.Conflict, fallida);
         Assert.Equal("booking.unavailable", Codigo(rechazo));
-
-        var (otra, trabada) = await r.CancelarPorElFlujo(id);
-
-        Assert.Equal(HttpStatusCode.Conflict, otra);
-        Assert.Equal("booking.already_cancelled", Codigo(trabada));
         Assert.Equal(0, Cancelaciones(r));
-        Assert.Equal(["Cancelled", "Confirmed"], (await EstadosDeLasReservas(r)).Order(StringComparer.Ordinal));
+
+        var (estado, cuerpo) = await r.CancelarPorElFlujo(id);
+
+        Assert.True(estado == HttpStatusCode.Created, cuerpo.ToString());
+        Assert.Equal(["Cancelled", "Cancelled"], await EstadosDeLasReservas(r));
+        Assert.Equal(1, Cancelaciones(r));
         Assert.Equal(0m, await Devolvible(r, cobro));
+        Assert.Equal(Alquiler, (await Cobro(r, cobro)).GetProperty("refunded").GetProperty("amount").GetDecimal());
         Assert.Equal("Voided", (await Cobro(r, garantia)).GetProperty("status").GetString());
     }
 
