@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Synergos.CMS.Application.Configuration;
-using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Puerta;
 
@@ -31,14 +29,11 @@ public sealed class PuertaDeLaTiendaTests
         return config.GetSection(PuertaSettings.Seccion).Get<PuertaSettings>() ?? new PuertaSettings();
     }
 
-    private static SeccionesDelSitio Secciones() => new(
-        [
-            new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m)),
-            new SeccionDeNegocioRegistrada("Storefront", typeof(NegocioDeStorefront), _ => new NegocioDeStorefront("/api/shop")),
-            // El appsettings comiteado abre también la cita (003): su negocio vive en la sección de Ehr.
-            new SeccionDeNegocioRegistrada("Ehr", typeof(NegocioDeEhr), _ => new EhrFeatureSettings().Para(null)),
-        ],
-        new ServiceCollection().BuildServiceProvider());
+    /// <summary>
+    /// Las secciones que el CMS registra, leídas de sus composers: el <c>appsettings.json</c> comiteado abre los flujos de
+    /// TODAS las líneas, y una lista escrita aquí se rompía cada vez que una abría uno con su propia sección.
+    /// </summary>
+    private static SeccionesDelSitio Secciones() => SeccionesDeNegocioDelArbol.Todas();
 
     [Fact]
     public void La_puerta_del_appsettings_comiteado_pasa_el_validador()

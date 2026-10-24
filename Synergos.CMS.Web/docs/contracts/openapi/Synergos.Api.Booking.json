@@ -605,6 +605,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
           }
         ],
         "responses": {
