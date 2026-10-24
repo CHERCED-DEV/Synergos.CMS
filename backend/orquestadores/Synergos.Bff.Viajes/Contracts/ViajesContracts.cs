@@ -16,7 +16,7 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 /// suite al precio de la estándar. Se cotiza contra <c>Api.Pricing</c>.
 /// </remarks>
 public sealed record TripItemRequest(
-    string? ProductRef, string? ProductLabel, DateTimeOffset? Start, DateTimeOffset? End);
+    string? ProductRef = null, string? ProductLabel = null, DateTimeOffset? Start = null, DateTimeOffset? End = null);
 
 /// <summary>Reservar un viaje.</summary>
 /// <param name="PartialConfirm">
@@ -30,7 +30,7 @@ public sealed record TripItemRequest(
 /// llega calculada de fuera.
 /// </remarks>
 public sealed record BookTripRequest(
-    string? TravellerKind, string? TravellerId, IReadOnlyList<TripItemRequest>? Items,
+    string? TravellerKind = null, string? TravellerId = null, IReadOnlyList<TripItemRequest>? Items = null,
     bool? PartialConfirm = null);
 
 /// <summary>Cancelar un viaje, reteniendo lo que diga la política de quien vendió.</summary>
@@ -39,7 +39,7 @@ public sealed record BookTripRequest(
 /// falten, y eso lo sabe quien vendió — no un orquestador que sirve a hoteles, vuelos y autos con
 /// políticas distintas. Sin cuerpo, o con cero, se devuelve todo.
 /// </remarks>
-public sealed record CancelTripRequest(MoneyDto? Retain);
+public sealed record CancelTripRequest(MoneyDto? Retain = null);
 
 /// <summary>Devolver una parte de lo cobrado por un viaje que salió a medias.</summary>
 /// <param name="Amount">Cuánto devolver. Llega calculado por quien vendió.</param>
@@ -51,7 +51,7 @@ public sealed record CancelTripRequest(MoneyDto? Retain);
 /// y con esta puerta puede ordenarlo — igual que ordena la penalidad de
 /// <see cref="CancelTripRequest"/>.
 /// </remarks>
-public sealed record RefundTripRequest(MoneyDto? Amount, string? Reason);
+public sealed record RefundTripRequest(MoneyDto? Amount = null, string? Reason = null);
 
 /// <summary>Un ítem apartado, tal como sale.</summary>
 /// <param name="ProductRef">Qué producto.</param>
