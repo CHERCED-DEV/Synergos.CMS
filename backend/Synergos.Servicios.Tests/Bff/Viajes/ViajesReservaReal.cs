@@ -1,5 +1,7 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -9,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Viajes.Contracts;
+using Synergos.CMS.Tests.Architecture;
 using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Bff.Viajes;
@@ -34,6 +37,9 @@ internal sealed class ViajesReservaReal : IDisposable
     public const string Hotel = "hotel/caribe/DBL";
     public const string Auto = "auto/economico/CTG";
 
+    /// <summary>La que pide el paso <c>avisar</c> de la definición.</summary>
+    public const string PlantillaDelAviso = "viajes.reserva.confirmada";
+
     /// <summary>Dentro de veinte días, a las 10:00 UTC: lejos de cualquier plazo de la agenda.</summary>
     public static readonly DateTimeOffset Salida = new(DateTimeOffset.UtcNow.Date.AddDays(20).AddHours(10), TimeSpan.Zero);
 
@@ -48,6 +54,7 @@ internal sealed class ViajesReservaReal : IDisposable
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
             .Levanta<Synergos.Api.Payments.Contracts.PaymentResponse>("payments")
             .Levanta<Synergos.Api.Notifications.Contracts.SaveTemplateRequest>("notifications");
+        PublicarPlantilla().GetAwaiter().GetResult();
 
         IHttpClientFactory fabrica = falla is null ? Capacidades : new ConFallo(Capacidades, falla);
         _fabrica = new WebApplicationFactory<TripResponse>().WithWebHostBuilder(b =>
@@ -132,8 +139,18 @@ internal sealed class ViajesReservaReal : IDisposable
         return Enviar(peticion, viajero);
     }
 
+    /// <summary>Cerrar, con el contacto del aviso en la cabecera, como lo pone la puerta.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cerrar(string id, string viajero = "u-1")
-        => Enviar(new HttpRequestMessage(HttpMethod.Post, $"{Flujo}/{id}/cerrar"), viajero);
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"{Flujo}/{id}/cerrar");
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Contacto, Base64Url.EncodeToString(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { correo = "ana@ejemplo.co", nombre = "Ana", enlace = $"https://sitio.ejemplo/viajes/?viaje={id}", sitio = "Viajes de prueba" }))));
+        return Enviar(peticion, viajero);
+    }
+
+    /// <summary>Los avisos que salieron para quien viaja.</summary>
+    public async Task<List<JsonElement>> Avisos(string viajero = "u-1")
+        => (await Leer("notifications", $"v1/deliveries?toKind=viajes.viajero&toId={viajero}")).GetProperty("items").EnumerateArray().ToList();
 
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Consultar(string id, string viajero = "u-1")
         => Enviar(new HttpRequestMessage(HttpMethod.Get, $"{Flujo}/{id}"), viajero);
@@ -174,6 +191,21 @@ internal sealed class ViajesReservaReal : IDisposable
         var a = await Leer("booking",
             $"v1/resources/{recurso}/availability?start={Uri.EscapeDataString(inicio.ToString("O"))}&end={Uri.EscapeDataString(fin.ToString("O"))}");
         return a.GetProperty("taken").GetInt32();
+    }
+
+    /// <summary>La plantilla del aviso, del fichero que la provisiona de verdad.</summary>
+    private async Task PublicarPlantilla()
+    {
+        using var fichero = JsonDocument.Parse(File.ReadAllText(Path.Combine(Proyectos.Raiz(), "tools", "provisionar.plantillas.json")));
+        var p = fichero.RootElement.EnumerateArray()
+            .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == PlantillaDelAviso);
+        await Crear("notifications", "v1/templates", "plantilla-viajes", new
+        {
+            key = p.GetProperty("key").GetString(),
+            channel = p.GetProperty("channel").GetString(),
+            subject = p.GetProperty("subject").GetString(),
+            body = p.GetProperty("body").GetString(),
+        });
     }
 
     private async Task Crear(string capacidad, string ruta, string llave, object cuerpo)

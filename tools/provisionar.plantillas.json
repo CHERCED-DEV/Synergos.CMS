@@ -43,5 +43,12 @@
     "channel": "Email",
     "subject": "Tu alquiler {numero} está confirmado",
     "body": "<p>Hola {nombre}:</p><p>Confirmamos tu alquiler <b>{numero}</b> en {sitio}. Te cobramos <b>{total}</b>.</p><p>La garantía queda retenida sin cobrarse hasta que devuelvas el equipo y el personal lo revise.</p><p>Tu contrato sellado y las fechas están en <a href=\"{enlace}\">{enlace}</a>.</p>"
+  },
+  {
+    "_": "El aviso de un viaje confirmado (línea 006, historia 7): lo manda el paso notifications.avisar al final de «cerrar» en viajes.reserva —después de cobrar y de reservar cada ítem—, a quien viaja y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y AvisoDelViajeTests los cruza en los dos sentidos. El itinerario NO va en el correo (el paso no lo manda; NN-6): está detrás del enlace, que abre el viaje. Con total cero, {total} dice «0 COP»: el texto no promete un cobro. No ofrece cancelar: lo confirmado lo gestiona quien vende (006-P3).",
+    "key": "viajes.reserva.confirmada",
+    "channel": "Email",
+    "subject": "Tu viaje {numero} está confirmado",
+    "body": "<p>Hola {nombre}:</p><p>Tu viaje <b>{numero}</b> en {sitio} quedó confirmado: cada parte quedó reservada. Total: <b>{total}</b>.</p><p>El itinerario, con las fechas de cada parte, está en <a href=\"{enlace}\">{enlace}</a>.</p>"
   }
 ]
