@@ -71,7 +71,7 @@ public sealed record RefundTripRequest(MoneyDto? Amount = null, string? Reason =
 /// </remarks>
 public sealed record HeldItemResponse(
     string ProductRef, string ProductLabel, DateTimeOffset Start, DateTimeOffset End, bool Confirmed,
-    bool Unfulfilled = false);
+    bool Unfulfilled);
 
 /// <summary>Cómo sale un viaje.</summary>
 /// <param name="Refunded">

@@ -26,6 +26,10 @@ public sealed class RutasFueraDelContratoTests
         ["Synergos.Api.Payments POST v1/webhooks/wompi"] =
             "La llama la pasarela, no un consumidor del producto: no va detrás de la llave compartida, la protege la " +
             "firma sobre el cuerpo crudo, y su forma es la del proveedor (Wompi), no un contrato nuestro que alguien genere.",
+        ["Synergos.Bff.Viajes POST v1/trips/{id}/cancel"] =
+            "Su cuerpo es opcional a propósito —sin él se devuelve todo, y HttpTravelCartEngine cancela así— y el traductor " +
+            "del contrato HTTP del UI sólo admite cuerpos requeridos (NV-15 de la línea 006). Ningún navegador la llama: " +
+            "la llama la ruta directa del CMS. Sale del documento cuando el traductor admita un cuerpo opcional.",
     };
 
     private static IReadOnlyList<string> FueraDelContrato(PiezaPublicada pieza)

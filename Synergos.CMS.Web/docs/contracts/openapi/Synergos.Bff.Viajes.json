@@ -1014,112 +1014,6 @@
         }
       }
     },
-    "/v1/trips/{id}/cancel": {
-      "post": {
-        "operationId": "CancelTrip",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/CancelTripRequest"
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TripResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/trips/{id}/confirm": {
       "post": {
         "operationId": "ConfirmTrip",
@@ -1236,17 +1130,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/RefundTripRequest"
-                  }
-                ]
+                "$ref": "#/components/schemas/RefundTripRequest"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -1450,21 +1338,6 @@
           }
         }
       },
-      "CancelTripRequest": {
-        "type": "object",
-        "properties": {
-          "retain": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/MoneyDto"
-              }
-            ]
-          }
-        }
-      },
       "CompensacionDeFlujo": {
         "required": [
           "sagaId",
@@ -1526,7 +1399,8 @@
           "productLabel",
           "start",
           "end",
-          "confirmed"
+          "confirmed",
+          "unfulfilled"
         ],
         "type": "object",
         "properties": {
@@ -1548,8 +1422,7 @@
             "type": "boolean"
           },
           "unfulfilled": {
-            "type": "boolean",
-            "default": false
+            "type": "boolean"
           }
         }
       },

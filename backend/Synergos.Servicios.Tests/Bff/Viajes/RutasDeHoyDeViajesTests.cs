@@ -182,6 +182,11 @@ public sealed class RutasDeHoyDeViajesTests : IDisposable
         Assert.Equal(HttpStatusCode.BadRequest, sinLlave);
         Assert.StartsWith("viajes.", problema.GetProperty("code").GetString(), StringComparison.Ordinal);
 
+        // Con llave y sin cuerpo no hay monto: el código de siempre, no el 400 vacío del enlazador.
+        var (sinCuerpo, problemaSinCuerpo, _) = await Enviar(HttpMethod.Post, "v1/trips/viaje-1/refund", null, "devolucion-0");
+        Assert.Equal(HttpStatusCode.BadRequest, sinCuerpo);
+        Assert.Equal("viajes.bad_refund", problemaSinCuerpo.GetProperty("code").GetString());
+
         var (devuelto, viajeDevuelto, _) = await Enviar(HttpMethod.Post, "v1/trips/viaje-1/refund",
             new { amount = new { amount = 100000m, currency = "COP" }, reason = "auto no cumplido" }, "devolucion-1");
         Assert.Equal(HttpStatusCode.OK, devuelto);

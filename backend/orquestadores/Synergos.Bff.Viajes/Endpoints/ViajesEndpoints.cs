@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Core;
 using Synergos.Bff.Viajes.Contracts;
@@ -65,7 +66,11 @@ public static class ViajesEndpoints
                 retener = leida;
             }
             return (await flow.CancelAsync(id, retener, ct)).Map(TripResponse.From).ToHttp();
-        }).WithName("CancelTrip");
+        }).WithName("CancelTrip")
+          // FUERA DEL CONTRATO, y se conserva igual: el cuerpo es opcional a propósito (sin él se devuelve todo, y
+          // HttpTravelCartEngine cancela así), y el traductor del contrato del UI sólo admite cuerpos requeridos
+          // (NV-15). Ningún navegador la llama: la llama el CMS. Declarada en RutasFueraDelContratoTests.
+          .ExcludeFromDescription();
 
         // Devolver una PARTE de lo cobrado, para un viaje que salió a medias. Es la otra mitad de
         // la confirmación parcial (#40): acá no se sabe cuánto vale el ítem caído —el viaje se
@@ -75,10 +80,11 @@ public static class ViajesEndpoints
         // reintento tras un timeout sin llave devolvería dos veces. Es la misma razón por la que
         // el ajuste relativo de Api.Inventory la exige y el absoluto no (#30).
         app.MapPost("/v1/trips/{id}/refund", async Task<Results<Ok<TripResponse>, ProblemHttpResult>> (
-            string id, RefundTripRequest? req, HttpRequest http, TripFlow flow, CancellationToken ct) =>
+            string id, HttpRequest http, TripFlow flow, CancellationToken ct) =>
         {
             if (!IdempotencyHeader.TryRead(http, CodePrefix, out var key, out var falta)) return falta!;
 
+            var req = await CuerpoOpcional<RefundTripRequest>(http, ct);
             if (req?.Amount is not { } m)
             {
                 return Invalid("bad_refund", "Hace falta el monto a devolver.");
@@ -86,7 +92,11 @@ public static class ViajesEndpoints
             if (!TryMoney(m, out var monto, out var mala)) return mala!;
 
             return (await flow.RefundAsync(id, monto, req.Reason, key, ct)).Map(TripResponse.From).ToHttp();
-        }).WithName("RefundTrip").ConLlaveDeIdempotencia();
+        }).WithName("RefundTrip").ConLlaveDeIdempotencia()
+          // El cuerpo se publica REQUERIDO porque lo es: sin él no hay monto y contesta 400 viajes.bad_refund. Se lee a
+          // mano (y no enlazado) sólo para dar ese código, como siempre, en vez del 400 sin cuerpo del enlazador; enlazado
+          // y anulable, el documento lo publicaba opcional.
+          .Accepts<RefundTripRequest>("application/json");
 
         // Volver a intentar lo que se rindió. Es la puerta de la persona a la que se le avisó:
         // sin ella, «se rinde a los ocho intentos» sería «se abandona», y arreglar una
@@ -115,6 +125,23 @@ public static class ViajesEndpoints
 
     private static ProblemHttpResult Invalid(string code, string message)
         => Rejection.Invalid($"{CodePrefix}.{code}", message).ToProblem();
+
+    /// <summary>
+    /// El cuerpo JSON, o nulo si no viene (sin cuerpo, o sin tipo JSON): lo que hacía el enlazador anulable, también con un
+    /// JSON mal formado, que sigue siendo un 400 de la petición.
+    /// </summary>
+    private static async Task<T?> CuerpoOpcional<T>(HttpRequest http, CancellationToken ct) where T : class
+    {
+        if (!http.HasJsonContentType() || http.ContentLength is 0) return null;
+        try
+        {
+            return await http.ReadFromJsonAsync<T>(ct);
+        }
+        catch (JsonException e)
+        {
+            throw new BadHttpRequestException("El cuerpo no es un JSON que se pueda leer.", StatusCodes.Status400BadRequest, e);
+        }
+    }
 
     /// <summary>
     /// Lee un monto del cuerpo sin dejar que una moneda mal escrita se convierta en un 500.
