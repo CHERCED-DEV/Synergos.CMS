@@ -103,16 +103,17 @@ public static class AlquilerEndpoints
 
         // La oferta de un equipo (lote 3, 005-P1): el precio de cada tramo y la garantía en Pricing, y el
         // recurso con sus unidades en Booking. La llama el CMS al publicar la ficha, no un navegador, así que no
-        // lleva marca de la puerta. Repetirla no duplica nada; ver OfertaDeAlquiler.
+        // lleva marca de la puerta. La llave es una por publicación (la pone el CMS): repetirla con ella no duplica
+        // nada, y una publicación nueva vuelve a fijar los precios aunque regrese a un valor de antes; ver OfertaDeAlquiler.
         app.MapPost("/v1/ofertas", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (
             PublishEquipmentOfferRequest req, HttpRequest http, OfertaDeAlquiler ofertas, CancellationToken ct) =>
         {
-            if (!IdempotencyHeader.TryRead(http, CodePrefix, out _, out var falta)) return falta!;
+            if (!IdempotencyHeader.TryRead(http, CodePrefix, out var publicacion, out var falta)) return falta!;
 
             var oferta = new OfertaDeEquipo(req.EquipmentId, req.Currency, req.DailyRate,
                 req.Rates?.Select(t => new TramoDeTarifa(t.MinDays ?? 0, t.PerDay ?? 0m)).ToList(),
                 req.DepositPerUnit, req.MinDays, req.MaxDays, req.Units);
-            return (await ofertas.PublicarAsync(oferta, ct)).Map(EquipmentOfferResponse.From).ToHttp();
+            return (await ofertas.PublicarAsync(oferta, publicacion, ct)).Map(EquipmentOfferResponse.From).ToHttp();
         }).WithName("PublishEquipmentOffer").ConLlaveDeIdempotencia();
 
         app.MapPost("/v1/ofertas/{equipmentId}/retirar", async Task<Results<Ok<EquipmentOfferResponse>, ProblemHttpResult>> (

@@ -115,7 +115,7 @@ public sealed class LiquidacionDeAlquiler
         var previo = _registro.Find(sagaId);
 
         if (previo?.Estado == Declarada) return Task.FromResult(Result.Ok(Vista(saga, previo)));
-        if (saga.Status != SagaStatus.Completed || previo is not null)
+        if (saga.Status != SagaStatus.Completed || previo is not null || CanceladaPorElFlujo(saga))
         {
             return Task.FromResult(Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_declarable",
                 $"El alquiler {sagaId} no está confirmado: no hay devolución que declarar.")));
@@ -145,7 +145,7 @@ public sealed class LiquidacionDeAlquiler
         var previo = _registro.Find(sagaId);
 
         if (previo?.Estado == Devuelta) return Result.Ok(Vista(saga, previo));
-        if (saga.Status != SagaStatus.Completed || previo?.Estado == Cancelada)
+        if (saga.Status != SagaStatus.Completed || previo?.Estado == Cancelada || CanceladaPorElFlujo(saga))
         {
             return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_returnable",
                 $"El alquiler {sagaId} no está confirmado ni declarado: no hay devolución que confirmar."));
@@ -214,6 +214,7 @@ public sealed class LiquidacionDeAlquiler
         var previo = _registro.Find(sagaId);
 
         if (previo?.Estado == Cancelada) return Result.Ok(Vista(saga, previo));
+        if (CanceladaPorElFlujo(saga)) return Result.Ok(Vista(saga, new LiquidacionRegistrada(sagaId, Cancelada, null, null, null, null, null)));
         if (saga.Status != SagaStatus.Completed || previo?.Estado == Devuelta)
         {
             return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_cancellable",
@@ -223,16 +224,7 @@ public sealed class LiquidacionDeAlquiler
         var garantia = Garantia(saga);
         if (porElInquilino)
         {
-            if (previo?.Estado == Declarada)
-            {
-                return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.not_cancellable",
-                    $"El alquiler {sagaId} tiene la devolución declarada: lo resuelve el personal."));
-            }
-            if (Ventana(saga) is not { } ventana || _huso.YaEmpezo(ventana, _reloj.GetUtcNow()))
-            {
-                return Result.Rejected<VistaDeLiquidacion>(Rejection.Conflict("alquiler.already_started",
-                    $"El alquiler {sagaId} ya empezó: desde el día de inicio lo cancela el personal."));
-            }
+            if (ReglaDelInquilino(sagaId, previo, Ventana(saga)) is { } no) return Result.Rejected<VistaDeLiquidacion>(no);
             penalidad = Money.Zero(garantia.Currency);
         }
 
@@ -247,9 +239,7 @@ public sealed class LiquidacionDeAlquiler
                 $"La penalidad ({penalidad.Amount}) supera la garantía retenida ({garantia.Amount})."));
         }
 
-        // Al completar, el intérprete da por hechas las compensaciones armadas; el KIND sigue diciendo qué cierre
-        // produjo una reserva (el «despues» de apartar), y su objetivo es la reserva.
-        foreach (var reserva in saga.Compensations.Where(c => c.Kind == "booking.cancelar").Select(c => c.TargetId).Distinct(StringComparer.Ordinal))
+        foreach (var reserva in ReservasConfirmadas(saga))
         {
             var cancelada = await _agenda.CancelarAsync(reserva, ct);
             if (!cancelada.IsOk) return Result.Rejected<VistaDeLiquidacion>(cancelada.Rejection!);
@@ -281,6 +271,67 @@ public sealed class LiquidacionDeAlquiler
         _log.LogInformation("Alquiler {Saga}: cancelado por {Quien}; penalidad {Penalidad}.", sagaId, quien, penalidad.Amount);
         return Result.Ok(Vista(saga, cancelado));
     }
+
+    /// <summary>
+    /// Si el inquilino puede cancelar este alquiler por el flujo posterior <c>alquiler.cancelacion</c> (NN-8, D-005-NN8):
+    /// lo mismo que pediría <see cref="CancelarAsync"/>, con el turno de la liquidación. Nulo si puede.
+    /// </summary>
+    /// <param name="sagaId">El alquiler.</param>
+    /// <param name="ventana">Su ventana, como la leyó el flujo de la original.</param>
+    public Rejection? AntesDeCancelarPorElFlujo(string sagaId, TimeWindow ventana)
+    {
+        using var turno = _turno.TryAcquire(sagaId);
+        if (turno is null) return Ocupada(sagaId).Rejection;
+
+        if (Hallar(sagaId, dueno: null) is not { } saga) return NoExiste(sagaId).Rejection;
+        var previo = _registro.Find(sagaId);
+        if (previo?.Estado is Cancelada or Devuelta || CanceladaPorElFlujo(saga))
+        {
+            return Rejection.Conflict("alquiler.not_cancellable",
+                $"El alquiler {sagaId} ya se canceló o se devolvió: no hay nada que cancelar.");
+        }
+        return ReglaDelInquilino(sagaId, previo, ventana);
+    }
+
+    /// <summary>
+    /// Las reservas que confirmó la renta: los objetivos de sus compensaciones <c>booking.cancelar</c>.
+    /// </summary>
+    /// <remarks>
+    /// Al completar, el intérprete da por hechas las compensaciones armadas; el KIND sigue diciendo qué cierre produjo una
+    /// reserva (el «despues» de apartar), y su objetivo es la reserva. Vale también para una renta guardada antes de que
+    /// el núcleo anotara el cierre de cada reserva (NN-18), que la cancelación posterior no puede recorrer: por eso la
+    /// cancelación del personal la sigue leyendo de aquí.
+    /// </remarks>
+    public static IReadOnlyList<string> ReservasConfirmadas(SagaDeFlujo saga)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        return saga.Compensations.Where(c => c.Kind == TiposDeDeshacer.CancelarReserva)
+            .Select(c => c.TargetId).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>La regla del inquilino, la misma por los dos caminos: antes del día de inicio y sin devolución declarada.</summary>
+    private Rejection? ReglaDelInquilino(string sagaId, LiquidacionRegistrada? previo, TimeWindow? ventana)
+    {
+        if (previo?.Estado == Declarada)
+        {
+            return Rejection.Conflict("alquiler.not_cancellable",
+                $"El alquiler {sagaId} tiene la devolución declarada: lo resuelve el personal.");
+        }
+        if (ventana is not { } v || _huso.YaEmpezo(v, _reloj.GetUtcNow()))
+        {
+            return Rejection.Conflict("alquiler.already_started",
+                $"El alquiler {sagaId} ya empezó: desde el día de inicio lo cancela el personal.");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Si un <c>alquiler.cancelacion</c> completado canceló este alquiler: el camino posterior del interruptor del CMS. Esa
+    /// saga es del mismo dueño y vive en el mismo almacén.
+    /// </summary>
+    private bool CanceladaPorElFlujo(SagaDeFlujo saga)
+        => _motor.DeDueno(saga.Dueno).Any(s => string.Equals(s.Flujo, CancelacionDeAlquiler.Flujo, StringComparison.Ordinal)
+            && s.Status == SagaStatus.Completed && string.Equals(Texto(s, "alquiler"), saga.Id, StringComparison.Ordinal));
 
     /// <summary>Anula la garantía, o la captura y devuelve el sobrante. El rechazo, si algo no salió.</summary>
     private async Task<Rejection?> MoverGarantiaAsync(string sagaId, string cobro, Money garantia, Money danio, CancellationToken ct)

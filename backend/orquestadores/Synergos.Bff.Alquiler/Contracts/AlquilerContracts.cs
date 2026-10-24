@@ -70,16 +70,20 @@ public sealed record RateTierResponse(int MinDays, decimal PerDay);
 /// <param name="MaxDays">El más largo.</param>
 /// <param name="Units">Las unidades.</param>
 /// <param name="Retired">Si la oferta se retiró: el equipo ya no se ofrece por la puerta.</param>
+/// <param name="OutsideReservations">
+/// Las reservas vigentes que bajar las unidades dejó por encima de los cupos (NN-6): siguen confirmadas; decidir qué hacer
+/// con ellas es del personal.
+/// </param>
 public sealed record EquipmentOfferResponse(
     string EquipmentId, string Currency, decimal DailyRate, IReadOnlyList<RateTierResponse> Rates,
-    decimal DepositPerUnit, int MinDays, int MaxDays, int Units, bool Retired)
+    decimal DepositPerUnit, int MinDays, int MaxDays, int Units, bool Retired, IReadOnlyList<string> OutsideReservations)
 {
     /// <summary>Proyecta lo registrado.</summary>
     /// <param name="o">La oferta registrada.</param>
     /// <returns>La respuesta.</returns>
     public static EquipmentOfferResponse From(OfertaDeAlquilerRegistrada o)
         => new(o.Equipo, o.Moneda, o.ValorDia, o.Tramos.Select(t => new RateTierResponse(t.DesdeDias, t.ValorDia)).ToList(),
-            o.GarantiaUnidad, o.MinDias, o.MaxDias, o.Unidades, o.Retirada);
+            o.GarantiaUnidad, o.MinDias, o.MaxDias, o.Unidades, o.Retirada, o.ReservasFuera ?? []);
 }
 
 /// <summary>Lo que se pide para cerrar un alquiler.</summary>
@@ -142,15 +146,6 @@ public sealed record RentalSettlementResponse(
 /// <param name="Penalty">Lo que retiene el personal; la del inquilino se ignora.</param>
 /// <param name="StaffId">El seudónimo del personal, si cancela él; su clase la pone el orquestador.</param>
 public sealed record CancelDoorRentalRequest(string? Actor = null, MoneyPayload? Penalty = null, string? StaffId = null);
-
-/// <summary>Un alquiler de la puerta del dueño y en qué quedó (línea 005, T024).</summary>
-/// <param name="Id">La saga de <c>alquiler.renta</c>: su contrato se lee por la puerta.</param>
-/// <param name="Status">Running, Completed, Compensating, Compensated o CompensationFailed.</param>
-public sealed record DoorRentalItem(string Id, string Status);
-
-/// <summary>Los alquileres de la puerta del dueño, del más reciente al más viejo.</summary>
-/// <param name="Items">Los alquileres.</param>
-public sealed record DoorRentalsResponse(IReadOnlyList<DoorRentalItem> Items);
 
 /// <summary>Un alquiler tal como sale del orquestador.</summary>
 /// <param name="RentalId">Su identificador.</param>

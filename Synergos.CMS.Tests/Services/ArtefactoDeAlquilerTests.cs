@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -48,12 +50,22 @@ public sealed class ArtefactoDeAlquilerTests
                 throw new HttpRequestException("Connection refused");
             }
 
-            if (ruta == "/v1/alquileres")
+            // «listar» del host (NN-7): las del sujeto, de la más nueva a la más vieja, por estado y por página.
+            if (ruta == "/v1/flujos/alquiler.renta")
             {
-                var suyos = Rentas.Where(r => sujeto == $"{Kind}:{r.Value.Dueno:N}")
-                    .OrderBy(r => r.Key, StringComparer.Ordinal)
-                    .Select(r => new { id = r.Key, status = r.Value.Estado });
-                return Responder(HttpStatusCode.OK, JsonSerializer.Serialize(new { items = suyos }));
+                var q = QueryHelpers.ParseQuery(req.RequestUri.Query);
+                Consultas.Enqueue(req.RequestUri.Query);
+                var estado = q.TryGetValue("estado", out var e) ? e.ToString() : null;
+                var offset = q.TryGetValue("offset", out var o) ? int.Parse(o.ToString(), CultureInfo.InvariantCulture) : 0;
+                var limit = q.TryGetValue("limit", out var l) ? int.Parse(l.ToString(), CultureInfo.InvariantCulture) : 50;
+                var suyos = Rentas.Where(r => sujeto == $"{Kind}:{r.Value.Dueno:N}" && (estado is null || r.Value.Estado == estado))
+                    .OrderByDescending(r => r.Key, StringComparer.Ordinal)
+                    .ToList();
+                var pagina = suyos.Skip(offset).Take(limit).Select(r => Renta(r.Key, r.Value.Estado)).ToList();
+                return Responder(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    items = pagina, total = suyos.Count, offset, hasMore = offset + limit < suyos.Count,
+                }));
             }
 
             var id = Uri.UnescapeDataString(ruta["/v1/flujos/alquiler.renta/".Length..]);
@@ -63,27 +75,32 @@ public sealed class ArtefactoDeAlquilerTests
                     """{"title":"Not Found","status":404,"code":"alquiler.saga_not_found"}""");
             }
 
-            return Responder(HttpStatusCode.OK, JsonSerializer.Serialize(new
-            {
-                id,
-                flujo = "alquiler.renta",
-                numero = "ALQ-" + id.ToUpperInvariant(),
-                estado = renta.Estado,
-                datos = new
-                {
-                    total = new { amount = 420_000m, currency = "COP" },
-                    garantia = new { amount = 500_000m, currency = "COP" },
-                    garantiaId = "pg-garantia",
-                    cobroId = "pg-cobro",
-                    ventana = new { start = "2026-11-02T09:00:00+00:00", end = "2026-11-09T09:00:00+00:00" },
-                    equipo = "andamio-6m",
-                    cantidad = 2,
-                },
-                compensacionesPendientes = 0,
-                error = (string?)null,
-                deshaciendo = false,
-            }));
+            return Responder(HttpStatusCode.OK, JsonSerializer.Serialize(Renta(id, renta.Estado)));
         }
+
+        /// <summary>Las consultas de «listar», tal como llegaron.</summary>
+        public ConcurrentQueue<string> Consultas { get; } = new();
+
+        private static object Renta(string id, string estado) => new
+        {
+            id,
+            flujo = "alquiler.renta",
+            numero = "ALQ-" + id.ToUpperInvariant(),
+            estado,
+            datos = new
+            {
+                total = new { amount = 420_000m, currency = "COP" },
+                garantia = new { amount = 500_000m, currency = "COP" },
+                garantiaId = "pg-garantia",
+                cobroId = "pg-cobro",
+                ventana = new { start = "2026-11-02T09:00:00+00:00", end = "2026-11-09T09:00:00+00:00" },
+                equipo = "andamio-6m",
+                cantidad = 2,
+            },
+            compensacionesPendientes = 0,
+            error = (string?)null,
+            deshaciendo = false,
+        };
 
         public int Veces(string ruta) => Llamadas.Count(l => l.Ruta == ruta);
 
@@ -262,6 +279,27 @@ public sealed class ArtefactoDeAlquilerTests
         await a.Borde(Ana).Mine(CancellationToken.None);
         Assert.Equal(1, a.Orquestador.Veces("/v1/flujos/alquiler.renta/alq-1"));
         Assert.Equal(0, a.Orquestador.Veces("/v1/flujos/alquiler.renta/alq-2"));
+
+        // La lista es «listar» del host, sólo las completadas, y siempre con el sujeto de la sesión.
+        Assert.All(a.Orquestador.Consultas, c => Assert.Contains("estado=Completed", c, StringComparison.Ordinal));
+        Assert.All(a.Orquestador.Llamadas.Where(l => l.Ruta == "/v1/flujos/alquiler.renta"),
+            l => Assert.Equal($"{Kind}:{Ana:N}", l.Sujeto));
+    }
+
+    [Fact]
+    public async Task La_reconciliacion_sigue_las_paginas_hasta_encontrar_lo_que_falta()
+    {
+        // 55 completadas de Ana: las 50 más nuevas ya tienen contrato, las 5 más viejas no (se pagaron con la pestaña
+        // cerrada). Están en la segunda página de «listar».
+        var a = new Arnes();
+        for (var i = 1; i <= 55; i++) a.Orquestador.Rentas[$"alq-{i:000}"] = (Ana, "Completed");
+        for (var i = 6; i <= 55; i++) await a.Artefacto.ContratoAsync($"alq-{i:000}", Ana, CancellationToken.None);
+
+        await a.Artefacto.ReconciliarAsync(Ana, CancellationToken.None);
+
+        for (var i = 1; i <= 5; i++) Assert.NotNull(await a.Ledger.GetAsync($"alq-{i:000}"));
+        Assert.Equal(2, a.Orquestador.Consultas.Count);
+        Assert.Contains(a.Orquestador.Consultas, c => c.Contains("offset=50", StringComparison.Ordinal));
     }
 
     [Fact]

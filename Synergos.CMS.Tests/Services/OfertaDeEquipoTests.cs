@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -6,6 +7,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Catalog;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Notifications;
@@ -23,6 +25,9 @@ public sealed class OfertaDeEquipoTests
     private readonly IEquipmentCatalogProvider _catalogo = Substitute.For<IEquipmentCatalogProvider>();
     private readonly IEquipmentOfferPublisher _ofertas = Substitute.For<IEquipmentOfferPublisher>();
     private readonly IContentService _contenidos = Substitute.For<IContentService>();
+    private readonly IRaizDelAlquiler _raiz = Substitute.For<IRaizDelAlquiler>();
+
+    public OfertaDeEquipoTests() => _raiz.SeVe().Returns(true);
 
     private static IOptionsMonitor<CatalogSettings> Fuentes(string fuente)
     {
@@ -34,8 +39,20 @@ public sealed class OfertaDeEquipoTests
         return fuentes;
     }
 
-    private OfertaDeEquipoAlPublicar AlPublicar(string fuente = "cms")
-        => new(_catalogo, _ofertas, Fuentes(fuente), NullLogger<OfertaDeEquipoAlPublicar>.Instance);
+    private OfertaDeEquipoAlPublicar AlPublicar(string fuente = "cms", ILogger<OfertaDeEquipoAlPublicar>? log = null)
+        => new(_catalogo, _ofertas, Fuentes(fuente), _raiz, log ?? NullLogger<OfertaDeEquipoAlPublicar>.Instance);
+
+    private sealed class LogQueGuarda : ILogger<OfertaDeEquipoAlPublicar>
+    {
+        public List<(LogLevel Nivel, string Texto)> Lineas { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Lineas.Add((logLevel, formatter(state, exception)));
+    }
 
     private OfertaDeEquipoAlRetirar AlRetirar(string fuente = "cms")
         => new(_ofertas, _contenidos, Fuentes(fuente), NullLogger<OfertaDeEquipoAlRetirar>.Instance);
@@ -98,6 +115,26 @@ public sealed class OfertaDeEquipoTests
     }
 
     [Fact]
+    public async Task Sin_la_raiz_del_sitio_a_la_vista_no_se_retira_ni_se_publica_y_queda_un_aviso_sin_error()
+    {
+        // El import que trae el siteRoot y sus equipos en el mismo lote: el árbol publicado todavía no muestra la raíz, y
+        // el catálogo diría que no sirve ningún equipo. Ni se le pregunta (su ERR tumbaba el import completo).
+        _raiz.SeVe().Returns(false);
+        _catalogo.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((RentalEquipment?)null);
+        var log = new LogQueGuarda();
+
+        await AlPublicar(log: log).HandleAsync(new ContentPublishedNotification(
+            [Nodo(1, "equipmentPage", "andamio-6m"), Nodo(2, "equipmentPage", "taladro")], new EventMessages()), default);
+
+        await _ofertas.DidNotReceiveWithAnyArgs().RetireAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
+        await _catalogo.DidNotReceiveWithAnyArgs().GetAsync(default!, default);
+        var (nivel, texto) = Assert.Single(log.Lineas);
+        Assert.Equal(LogLevel.Warning, nivel);
+        Assert.Contains("andamio-6m, taladro", texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Despublicar_mandar_a_la_papelera_o_borrar_retira_y_con_los_que_contiene()
     {
         Hijos(10, Nodo(11, "equipmentPage", "uno"), Nodo(12, "textPage", "no-es-equipo"), Nodo(13, "equipmentPage", "dos"));
@@ -125,7 +162,7 @@ public sealed class OfertaDeEquipoTests
         _catalogo.GetAsync("andamio-6m", Arg.Any<CancellationToken>()).Returns(HttpEquipmentOfferPublisherTests.Equipo());
         Hijos(1);
 
-        await new OfertaDeEquipoAlPublicar(_catalogo, sinDestino, Fuentes("cms"), NullLogger<OfertaDeEquipoAlPublicar>.Instance)
+        await new OfertaDeEquipoAlPublicar(_catalogo, sinDestino, Fuentes("cms"), _raiz, NullLogger<OfertaDeEquipoAlPublicar>.Instance)
             .HandleAsync(new ContentPublishedNotification(Nodo(1, "equipmentPage", "andamio-6m"), new EventMessages()), default);
         await new OfertaDeEquipoAlRetirar(sinDestino, _contenidos, Fuentes("cms"), NullLogger<OfertaDeEquipoAlRetirar>.Instance)
             .HandleAsync(new ContentUnpublishedNotification(Nodo(1, "equipmentPage", "andamio-6m"), new EventMessages()), default);

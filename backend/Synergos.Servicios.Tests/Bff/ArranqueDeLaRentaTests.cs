@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -13,7 +14,8 @@ namespace Synergos.CMS.Tests.Bff;
 /// <summary>
 /// El orquestador de alquiler con la renta declarada (línea 005, T010): arranca validando
 /// <c>flujos/alquiler.renta.json</c> contra sus pasos, una copia rota no arranca, y la llave de cada
-/// capacidad sale una sola vez aunque la configuren las dos máquinas de saga (NN-17).
+/// capacidad sale una sola vez aunque la configuren las dos máquinas de saga (NN-17). Y su interruptor
+/// <c>alquiler:Flujos:Modo</c> en los dos sentidos (FR-029, T045): con «imperativo» queda sólo la ruta directa.
 /// </summary>
 public sealed class ArranqueDeLaRentaTests : IDisposable
 {
@@ -73,8 +75,32 @@ public sealed class ArranqueDeLaRentaTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, salud.StatusCode);
         Assert.True(testigo.Visto is { Succeeded: true }, $"El catálogo no pasó: {testigo.Visto?.FailureMessage}");
 
-        var renta = Assert.Single(fabrica.Services.GetServices<FlujoGenerico>());
-        Assert.Equal("alquiler.renta", renta.Definicion.Clave);
+        // La renta y su cancelación de lo confirmado, que es una operación posterior a ella (NN-8, D-005-NN8).
+        var flujos = fabrica.Services.GetServices<FlujoGenerico>().ToDictionary(f => f.Definicion.Clave);
+        Assert.Equal(["alquiler.cancelacion", "alquiler.renta"], flujos.Keys.Order(StringComparer.Ordinal));
+        Assert.Null(flujos["alquiler.renta"].Definicion.PosteriorA);
+        Assert.Equal("alquiler.renta", flujos["alquiler.cancelacion"].Definicion.PosteriorA);
+    }
+
+    [Fact]
+    public void La_cancelacion_lee_lo_que_la_renta_deja_y_sus_unidades_y_la_garantia_las_mueven_los_pasos_comunes()
+    {
+        // El registro del orquestador reemplaza al del núcleo: sin nombrarlo, flow.leer-original no estaría. Desde el
+        // bloque 7c bis los dos pasos provisionales de T044 se fueron (NN-18, NN-19): queda la regla del día de inicio.
+        using var fabrica = Orquestador(new Testigo());
+        var registro = fabrica.Services.GetRequiredService<IRegistroDePasos>();
+        Assert.True(registro.Para(PasoLeerOriginal.Nombre) is { LeeLaOriginal: true });
+        Assert.Equal(
+            ["alquiler.antes-del-inicio", "alquiler.tramo"],
+            registro.Tipos.Where(t => t.StartsWith("alquiler.", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
+
+        var deja = LaRenta()["para_lo_posterior"]!.AsArray().Select(n => (string?)n).ToList();
+        Assert.Equal(["cobroId", "total", "ventana", "garantiaId", "reservas:apartar"], deja);
+
+        var cancelacion = fabrica.Services.GetServices<FlujoGenerico>().Single(f => f.Definicion.Clave == "alquiler.cancelacion").Definicion;
+        Assert.Equal("booking.cancelar", cancelacion.Pasos["cancelar"].Tipo);
+        Assert.Equal("payments.anular", cancelacion.Pasos["garantia"].Tipo);
+        Assert.Equal("garantiaId", cancelacion.Pasos["garantia"].OmitirSiFalta);
     }
 
     [Fact]
@@ -103,9 +129,94 @@ public sealed class ArranqueDeLaRentaTests : IDisposable
             && m.Contains("«retener»", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void La_garantia_la_conserva_el_paso_comun_del_nucleo()
+    {
+        // NN-4 (lote 6, P7 = A): la reserva de la garantía la cierra payments.conservar, que el intérprete trata como un
+        // cierre que conserva, y ya no una salida propia que tenía que ir al final de «cerrar».
+        var conservar = LaRenta()["pasos"]!["conservar"]!;
+        Assert.Equal("payments.conservar", (string?)conservar["tipo"]);
+        Assert.Equal("retener", (string?)conservar["cierra_reserva"]);
+
+        using var fabrica = Orquestador(new Testigo());
+        var registro = fabrica.Services.GetRequiredService<IRegistroDePasos>();
+        Assert.True(registro.Para("payments.conservar") is { Conserva: true });
+        Assert.DoesNotContain(registro.Tipos, t => t.StartsWith("alquiler.conservar", StringComparison.Ordinal));
+    }
+
     private static IEnumerable<string> Mensajes(Exception? ex)
     {
         for (; ex is not null; ex = ex.InnerException) yield return ex.Message;
+    }
+
+    // ── El interruptor del orquestador (FR-029, T045) ───────────────────────
+
+    [Fact]
+    public async Task Con_el_interruptor_en_imperativo_alquila_por_la_ruta_directa_y_no_expone_los_flujos()
+    {
+        // El flujo imperativo se conserva detrás de alquiler:Flujos:Modo. Con «imperativo» arranca sin el host
+        // declarado: la ruta directa alquila contra las capacidades reales, y ni la renta, ni su cancelación posterior,
+        // ni la liquidación existen.
+        using var r = new RentaDeAlquilerReal(ajustes: new Dictionary<string, string> { ["alquiler:Flujos:Modo"] = "imperativo" });
+        Assert.Equal(HttpStatusCode.OK, (await r.PublicarOferta()).Estado);
+
+        var (estado, cuerpo) = await PorLaDirecta(r);
+        Assert.True(estado == HttpStatusCode.Created, $"{(int)estado} {cuerpo}");
+        Assert.Equal(2, await r.Tomadas());
+
+        Assert.Empty(r.Servicios.GetServices<FlujoGenerico>());
+        Assert.Equal(HttpStatusCode.NotFound, (await r.Cotizar()).Estado);
+        Assert.Equal(HttpStatusCode.NotFound, (await r.Abrir("alq-puerta")).Estado);
+        Assert.Equal(HttpStatusCode.NotFound, (await r.CancelarPorElFlujo("directa-1")).Estado);
+        Assert.Equal(HttpStatusCode.NotFound, (await r.Declarar("directa-1")).Estado);
+    }
+
+    [Fact]
+    public async Task Con_el_valor_por_defecto_estan_la_ruta_directa_y_los_flujos()
+    {
+        using var r = new RentaDeAlquilerReal();
+        Assert.Equal(HttpStatusCode.OK, (await r.PublicarOferta()).Estado);
+
+        var (estado, cuerpo) = await PorLaDirecta(r);
+        Assert.True(estado == HttpStatusCode.Created, $"{(int)estado} {cuerpo}");
+        Assert.Equal(2, await r.Tomadas());
+
+        Assert.Equal(["alquiler.cancelacion", "alquiler.renta"],
+            r.Servicios.GetServices<FlujoGenerico>().Select(f => f.Definicion.Clave).Order(StringComparer.Ordinal));
+        Assert.Equal(HttpStatusCode.OK, (await r.Cotizar(RentaDeAlquilerReal.Pedido(unidades: 1))).Estado);
+    }
+
+    [Fact]
+    public void Una_palabra_que_no_conoce_en_el_interruptor_no_arranca()
+    {
+        using var fabrica = Orquestador(new Testigo(), ("alquiler:Flujos:Modo", "declarativo"));
+
+        var ex = Assert.ThrowsAny<Exception>(() => fabrica.CreateClient());
+        Assert.Contains(Mensajes(ex), m => m.Contains("«declarativo»", StringComparison.Ordinal)
+            && m.Contains("imperativo", StringComparison.Ordinal));
+    }
+
+    /// <summary>Lo que manda la ruta directa del CMS con <c>Synergos:Alquiler:Mode=Bff</c>: el total y la garantía ya cotizados.</summary>
+    private static async Task<(HttpStatusCode Estado, string Cuerpo)> PorLaDirecta(RentaDeAlquilerReal r)
+    {
+        var (inicio, fin) = RentaDeAlquilerReal.Ventana(7);
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/rentals")
+        {
+            Content = JsonContent.Create(new
+            {
+                equipmentId = RentaDeAlquilerReal.Equipo,
+                quantity = 2,
+                start = inicio,
+                end = fin,
+                renterKind = "alquiler.arrendatario",
+                renterId = "u-1",
+                rentalTotal = new { amount = 420_000m, currency = "COP" },
+                deposit = new { amount = 500_000m, currency = "COP" },
+            }),
+        };
+        peticion.Headers.Add("Idempotency-Key", "directa-1");
+        using var respuesta = await r.Orquestador.SendAsync(peticion);
+        return (respuesta.StatusCode, await respuesta.Content.ReadAsStringAsync());
     }
 
     [Fact]

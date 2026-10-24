@@ -34,7 +34,8 @@ public sealed record ContratoDeLaPuerta(
 /// <para><b>«Mis alquileres» reconcilia</b> (FR-020): los alquileres de la puerta del miembro que el orquestador tiene
 /// completados y el registro no, se emiten al listar. Corre en la ruta de lectura, así que tiene techo —como mucho
 /// <see cref="TopeDeReconciliacion"/> y <see cref="PresupuestoDeReconciliacion"/>—: lo que falte sale en la próxima. La
-/// lista la da <c>Bff.Alquiler</c> (<c>GET /v1/alquileres</c>) mientras el host genérico no liste por dueño (NN-7).</para>
+/// lista es la genérica del host, «listar» (<c>GET /v1/flujos/alquiler.renta?estado=Completed</c>, NN-7), por páginas y
+/// siempre del sujeto de la sesión.</para>
 /// </remarks>
 public sealed class ArtefactoDeAlquiler
 {
@@ -49,6 +50,12 @@ public sealed class ArtefactoDeAlquiler
 
     /// <summary>Cuánto puede tardar, como mucho, una reconciliación entera: la espera de quien lee la lista.</summary>
     public static readonly TimeSpan PresupuestoDeReconciliacion = TimeSpan.FromSeconds(3);
+
+    /// <summary>Cuántas sagas pide cada página de «listar».</summary>
+    public const int TamanoDePagina = 50;
+
+    /// <summary>Cuántas páginas lee, como mucho, una reconciliación: el techo si el presupuesto no llegara antes.</summary>
+    public const int PaginasDeReconciliacion = 10;
 
     private const string Cabecera = "X-Synergos-Sujeto";
 
@@ -165,14 +172,10 @@ public sealed class ArtefactoDeAlquiler
         presupuesto.CancelAfter(_presupuesto);
         try
         {
-            var suyos = await ListarAsync(Sujeto(miembro), presupuesto.Token).ConfigureAwait(false);
             var tiene = (await _ledger.ListForAsync(miembro.ToString("N"), presupuesto.Token).ConfigureAwait(false))
                 .Select(a => a.RentalId)
                 .ToHashSet(StringComparer.Ordinal);
-            var faltan = suyos
-                .Where(a => string.Equals(a.Status, "Completed", StringComparison.Ordinal) && !tiene.Contains(a.Id))
-                .Take(TopeDeReconciliacion)
-                .ToList();
+            var faltan = await FaltanAsync(Sujeto(miembro), tiene, presupuesto.Token).ConfigureAwait(false);
 
             await Parallel.ForEachAsync(faltan,
                 new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = presupuesto.Token },
@@ -253,18 +256,33 @@ public sealed class ArtefactoDeAlquiler
         }
     }
 
-    private async Task<IReadOnlyList<ItemDto>> ListarAsync(string sujeto, CancellationToken ct)
+    /// <summary>
+    /// Las rentas completadas del miembro que el registro no tiene, de la más nueva a la más vieja y hasta
+    /// <see cref="TopeDeReconciliacion"/>, leyendo «listar» página a página.
+    /// </summary>
+    private async Task<IReadOnlyList<RentaDto>> FaltanAsync(string sujeto, IReadOnlySet<string> tiene, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, "v1/alquileres");
-        req.Headers.TryAddWithoutValidation(Cabecera, sujeto);
-        using var res = await _clientes.CreateClient(ClientName).SendAsync(req, ct).ConfigureAwait(false);
-        if (!res.IsSuccessStatusCode)
+        var faltan = new List<RentaDto>(TopeDeReconciliacion);
+        for (var pagina = 0; pagina < PaginasDeReconciliacion && faltan.Count < TopeDeReconciliacion; pagina++)
         {
-            _log.LogWarning("Alquiler contestó {Estado} al listar los alquileres de la puerta de un miembro.", (int)res.StatusCode);
-            return [];
+            var ruta = $"v1/flujos/{Flujo}?estado=Completed&offset={pagina * TamanoDePagina}&limit={TamanoDePagina}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, ruta);
+            req.Headers.TryAddWithoutValidation(Cabecera, sujeto);
+            using var res = await _clientes.CreateClient(ClientName).SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                _log.LogWarning("Alquiler contestó {Estado} al listar los alquileres de la puerta de un miembro.", (int)res.StatusCode);
+                break;
+            }
+
+            var leida = await res.Content.ReadFromJsonAsync<PaginaDto>(Json, ct).ConfigureAwait(false);
+            faltan.AddRange((leida?.Items ?? [])
+                .Where(r => string.Equals(r.Estado, "Completed", StringComparison.Ordinal) && !tiene.Contains(r.Id))
+                .Take(TopeDeReconciliacion - faltan.Count));
+            if (leida is not { HasMore: true }) break;
         }
 
-        return (await res.Content.ReadFromJsonAsync<ListaDto>(Json, ct).ConfigureAwait(false))?.Items ?? [];
+        return faltan;
     }
 
     // Lo que se lee del orquestador: sólo los campos que se usan, con los nombres de su JSON. Los cruza
@@ -280,7 +298,6 @@ public sealed class ArtefactoDeAlquiler
 
     internal sealed record RentaDto(string Id, string Estado, DatosDto? Datos);
 
-    internal sealed record ItemDto(string Id, string Status);
-
-    internal sealed record ListaDto(IReadOnlyList<ItemDto>? Items);
+    /// <summary>Una página de «listar»: las rentas del dueño y si hay más.</summary>
+    internal sealed record PaginaDto(IReadOnlyList<RentaDto>? Items, bool HasMore);
 }
