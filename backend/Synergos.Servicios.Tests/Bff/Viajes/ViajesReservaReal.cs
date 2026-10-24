@@ -1,4 +1,5 @@
 using System.Buffers.Text;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -56,7 +57,7 @@ internal sealed class ViajesReservaReal : IDisposable
             .Levanta<Synergos.Api.Notifications.Contracts.SaveTemplateRequest>("notifications");
         PublicarPlantilla().GetAwaiter().GetResult();
 
-        IHttpClientFactory fabrica = falla is null ? Capacidades : new ConFallo(Capacidades, falla);
+        IHttpClientFactory fabrica = new ConFallo(Capacidades, falla ?? (_ => null), _llamadas);
         _fabrica = new WebApplicationFactory<TripResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("viajes:Storage:Root", Path.Combine(_raiz, "viajes"));
@@ -72,6 +73,11 @@ internal sealed class ViajesReservaReal : IDisposable
     }
 
     public ArnesDeCapacidades Capacidades { get; }
+
+    private readonly ConcurrentQueue<(string Capacidad, string Metodo, string Ruta)> _llamadas = new();
+
+    /// <summary>Cuántas veces el orquestador ESCRIBIÓ en una capacidad (todo lo que no es GET), en el cable.</summary>
+    public int Escrituras(string capacidad) => _llamadas.Count(l => l.Capacidad == capacidad && l.Metodo != "GET");
 
     public HttpClient Orquestador { get; }
 
@@ -143,6 +149,10 @@ internal sealed class ViajesReservaReal : IDisposable
         peticion.Headers.Add("Idempotency-Key", llave);
         return Enviar(peticion, viajero);
     }
+
+    /// <summary>El total de un itinerario SIN apartar nada: la fase que abre, anticipada hasta el bloque que reserva.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cotizar(string viajero = "u-1", object[]? items = null)
+        => Enviar(new HttpRequestMessage(HttpMethod.Post, $"{Flujo}/cotizar") { Content = JsonContent.Create(new { items = items ?? ItinerarioDePrueba() }) }, viajero);
 
     /// <summary>Cerrar, con el contacto del aviso en la cabecera, como lo pone la puerta.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cerrar(string id, string viajero = "u-1")
@@ -254,19 +264,30 @@ internal sealed class ViajesReservaReal : IDisposable
         }
     }
 
-    /// <summary>Contesta un rechazo en el cable cuando <c>falla</c> devuelve un código; si no, deja pasar.</summary>
-    private sealed class ConFallo(IHttpClientFactory real, Func<HttpRequestMessage, string?> falla) : IHttpClientFactory
+    /// <summary>
+    /// Anota cada llamada con su capacidad y contesta un rechazo en el cable cuando <c>falla</c> devuelve un código; si
+    /// no, deja pasar.
+    /// </summary>
+    private sealed class ConFallo(
+        IHttpClientFactory real,
+        Func<HttpRequestMessage, string?> falla,
+        ConcurrentQueue<(string Capacidad, string Metodo, string Ruta)> llamadas) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name)
         {
             var interno = real.CreateClient(name);
-            return new HttpClient(new Cable(interno, falla)) { BaseAddress = interno.BaseAddress };
+            return new HttpClient(new Cable(name, interno, falla, llamadas)) { BaseAddress = interno.BaseAddress };
         }
 
-        private sealed class Cable(HttpClient interno, Func<HttpRequestMessage, string?> falla) : HttpMessageHandler
+        private sealed class Cable(
+            string capacidad,
+            HttpClient interno,
+            Func<HttpRequestMessage, string?> falla,
+            ConcurrentQueue<(string Capacidad, string Metodo, string Ruta)> llamadas) : HttpMessageHandler
         {
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
             {
+                llamadas.Enqueue((capacidad, r.Method.Method, r.RequestUri!.AbsolutePath));
                 if (falla(r) is { } codigo)
                 {
                     return new HttpResponseMessage(HttpStatusCode.Conflict)
