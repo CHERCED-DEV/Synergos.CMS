@@ -396,7 +396,7 @@ public sealed class ProvisionWiringTests
               "opening":[{"day":"Tuesday","from":"09:00","to":"10:00"}],"slotMinutes":60}]
             """;
 
-        var publicar = await Correr(capacidades.Url, manifiesto);
+        var publicar = await CorrerConManifiesto(capacidades.Url, manifiesto);
         Assert.True(publicar.Codigo == 0, publicar.Salida);
         Assert.Contains("+ puesto recurso realty.listado/listado-x revisado", publicar.Salida, StringComparison.Ordinal);
         Assert.Equal(2, capacidades.EscriturasDeAgenda.Count);
@@ -443,10 +443,15 @@ public sealed class ProvisionWiringTests
     /// entidades vacío: lo que se mira acá son las plantillas.
     /// </summary>
     private static Task<(int Codigo, string Salida)> Correr(string url, params string[] extra)
-        => Correr(url, "[]", extra);
+        => CorrerConManifiesto(url, "[]", extra);
 
-    /// <summary>Lo mismo, con el manifiesto de entidades que se le pase.</summary>
-    private static async Task<(int Codigo, string Salida)> Correr(string url, string manifiesto, params string[] extra)
+    /// <summary>
+    /// Lo mismo, con el manifiesto de entidades que se le pase. Lleva OTRO nombre a propósito: como
+    /// sobrecarga de <see cref="Correr(string, string[])"/>, C# elegía ésta para
+    /// <c>Correr(url, "--verificar")</c> —tiene más parámetros declarados— y «--verificar» acababa
+    /// escrito como manifiesto: las pruebas de verificar corrían el guion en modo publicar.
+    /// </summary>
+    private static async Task<(int Codigo, string Salida)> CorrerConManifiesto(string url, string manifiesto, params string[] extra)
     {
         var vacio = Path.Combine(Path.GetTempPath(), "provisionar-vacio-" + Guid.NewGuid().ToString("n") + ".json");
         await File.WriteAllTextAsync(vacio, manifiesto);
