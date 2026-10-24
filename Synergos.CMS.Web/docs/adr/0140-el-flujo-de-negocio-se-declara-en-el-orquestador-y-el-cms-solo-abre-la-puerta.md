@@ -1909,7 +1909,19 @@ CMS, «directa» por defecto.
 - **Declarado y fuera:** el total del motor en proceso sale de los precios que manda el navegador (defecto 2, otra
   funcionalidad). Por la puerta el total lo cotiza el servidor antes de apartar (`cotizar`, sin una escritura en la
   agenda ni en pagos) y es el mismo que abrir autoriza.
-- **En vivo:** pendiente en la copia piloto antes de la LISTA (lo que mueve plata: las devoluciones de 006-P3 y P6).
+- **Verificado en vivo** en la copia piloto, sin miembro (2026-10-24):
+  - el recorrido contra el orquestador y sus capacidades reales, con sujetos sintéticos: cotizar el viaje de tres
+    ítems sin escribir nada; abrir dos veces con la misma llave da el mismo viaje y autoriza lo cotizado (1.095.000);
+    cerrar dos veces captura una vez, confirma las tres reservas y manda UN aviso (el `.eml`, con el número, el total en
+    es-CO y el enlace); otro miembro no ve el viaje; el personal devuelve una parte una sola vez con la misma llave y
+    pasarse es el rechazo de Payments con el cobro intacto; cancelar antes de confirmar anula sin capturar; cancelar lo
+    confirmado con una penalidad mayor no toca nada, y con 60.000 cancela la reserva y devuelve 600.000 una vez;
+  - la puerta del CMS sin sesión: 401 `puerta.sesion_requerida` en cotizar, abrir y los dos flujos del personal;
+  - `/hoteles/` con el asistente en su `<synergos-flujo>`, el bundle de la línea y la consola limpia: el invitado
+    llega a confirmar y lee «Inicia sesión para reservar tu viaje.», con una sola llamada a la puerta y ninguna a
+    `/hold` ni a `/pay`.
+
+  Queda el recorrido en el navegador con un viajero y un miembro del personal de prueba, a pedido del arquitecto.
 
 ## Relación con otras ADRs
 
