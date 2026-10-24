@@ -21,8 +21,8 @@ namespace Synergos.CMS.Tests.Bff.Viajes;
 /// </summary>
 /// <remarks>
 /// <para><b>Reservar es <c>abrir</c>, confirmar es <c>cerrar</c> y cancelar es <c>cancelar</c></b>, con quien viaja en la
-/// cabecera que pone la puerta. Lo único que el guion suma para este motor es dónde pregunta por el recurso de cada
-/// producto: el adaptador común de la agenda va a <c>/v1/resources/por-sujeto</c> con el mismo sujeto.</para>
+/// cabecera que pone la puerta. Los dos motores preguntan por el recurso de cada producto en la misma ruta
+/// (<c>/v1/resources/por-sujeto</c>), así que el guion es el mismo sin añadirle nada.</para>
 ///
 /// <para><b>Cancelar va sin penalidad</b>: por la puerta, quien viaja sólo cancela lo que no confirmó (006-P3); cancelar
 /// lo confirmado con la penalidad de quien vende es la operación posterior <c>viajes.cancelacion</c> (T027), y sus casos
@@ -60,7 +60,6 @@ public sealed class TripCompensationDeclaradaTests : OraculoDelViaje, IDisposabl
         public ConductorDeclarado(CapacidadesFalsas caps)
         {
             Reloj = new RelojFalso(Ahora);
-            caps.Alias("GET /v1/resources/por-sujeto", "GET /v1/resources");
 
             _fabrica = new WebApplicationFactory<TripResponse>().WithWebHostBuilder(b =>
             {

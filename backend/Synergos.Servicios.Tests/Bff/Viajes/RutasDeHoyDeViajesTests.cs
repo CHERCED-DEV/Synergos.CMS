@@ -68,7 +68,7 @@ public sealed class RutasDeHoyDeViajesTests : IDisposable
             string? json = clave switch
             {
                 "POST /v1/quotes" => """{"subtotal":{"amount":500000,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":500000,"currency":"COP"}}""",
-                "GET /v1/resources" => """{"id":"rec","subjectKind":"viajes.producto","subjectId":"x","capacity":10}""",
+                "GET /v1/resources/por-sujeto" =>"""{"id":"rec","subjectKind":"viajes.producto","subjectId":"x","capacity":10}""",
                 "POST /v1/holds" => $$"""{"id":"h-{{++_apartados}}","resourceId":"rec","expiresAt":"2026-08-05T10:15:00+00:00"}""",
                 "POST /v1/payments" => """{"id":"pg1","status":"Authorized","amount":{"amount":500000,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}""",
                 "POST /v1/payments/pg1/capture" => """{"id":"pg1","status":"Captured","amount":{"amount":500000,"currency":"COP"},"refundable":{"amount":500000,"currency":"COP"}}""",

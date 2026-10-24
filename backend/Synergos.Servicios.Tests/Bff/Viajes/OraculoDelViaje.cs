@@ -116,18 +116,6 @@ public abstract class OraculoDelViaje
         public CapacidadesFalsas Ok(string patron, string json)
             => Cuando(patron, _ => Json(HttpStatusCode.OK, json));
 
-        /// <summary>
-        /// Lo que llegue a <paramref name="ruta"/> lo contesta el guion de <paramref name="como"/>, con su mismo estado (la
-        /// misma secuencia): un motor que pregunta lo mismo por otra ruta de la misma capacidad.
-        /// </summary>
-        public CapacidadesFalsas Alias(string ruta, string como)
-        {
-            _alias[ruta] = como;
-            return this;
-        }
-
-        private readonly Dictionary<string, string> _alias = new(StringComparer.Ordinal);
-
         /// <summary>Respuestas distintas para llamadas sucesivas a la misma ruta.</summary>
         public CapacidadesFalsas Secuencia(string patron, params string[] jsons)
         {
@@ -157,7 +145,6 @@ public abstract class OraculoDelViaje
             var path = request.RequestUri!.AbsolutePath;
             var clave = $"{request.Method.Method} {path}";
             var cuerpo = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
-            if (_alias.TryGetValue(clave, out var como)) clave = como;
 
             lock (Llamadas)
             {
@@ -267,7 +254,7 @@ public abstract class OraculoDelViaje
     private protected static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
         .Ok("POST /v1/quotes", """{"subtotal":{"amount":1200000,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":1200000,"currency":"COP"}}""")
         // Tres recursos, uno por producto. La capacidad los devuelve por sujeto.
-        .Secuencia("GET /v1/resources",
+        .Secuencia("GET /v1/resources/por-sujeto",
             """{"id":"rec-vuelo","subjectKind":"viajes.producto","subjectId":"vuelo/AV-8020/2026-09-01","capacity":180}""",
             """{"id":"rec-hotel","subjectKind":"viajes.producto","subjectId":"hotel/caribe/DBL","capacity":40}""",
             """{"id":"rec-auto","subjectKind":"viajes.producto","subjectId":"auto/economico/CTG","capacity":12}""")
