@@ -121,7 +121,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         catch (Exception ex) when (NoContesto(ex, cancellationToken))
         {
             _log.LogWarning(ex, "Api.Booking no contestó al listar la agenda de {Listado}.", listado);
-            return agenda;
+            return SinComprobar(agenda);
         }
 
         if (recurso is null)
@@ -133,7 +133,7 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
                 "El listado {Listado} no tiene recurso en Api.Booking. Registrarlo con "
                 + "POST /v1/resources (subjectKind={Kind}). Sin él no se puede apartar ninguna visita.",
                 listado, Config.ListingKind);
-            return agenda;
+            return SinComprobar(agenda);
         }
 
         // Una consulta por franja. Son seis, y se paga a propósito: la capacidad contesta por
@@ -144,14 +144,16 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         var resultado = new List<VisitSlot>(agenda.Count);
         foreach (var slot in agenda)
         {
-            resultado.Add(slot with
-            {
-                Available = await EstaLibreAsync(recurso, slot.StartUtc, cancellationToken).ConfigureAwait(false),
-            });
+            var (libre, comprobada) = await EstaLibreAsync(recurso, slot.StartUtc, cancellationToken).ConfigureAwait(false);
+            resultado.Add(slot with { Available = libre, Checked = comprobada });
         }
 
         return resultado;
     }
+
+    /// <summary>La agenda tal cual, marcada como NO comprobada: se muestra libre porque no se pudo saber.</summary>
+    private static IReadOnlyList<VisitSlot> SinComprobar(IReadOnlyList<VisitSlot> agenda)
+        => agenda.Select(s => s with { Checked = false }).ToList();
 
     /// <inheritdoc />
     public async Task<VisitResult> BookAsync(
@@ -231,7 +233,8 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         return string.IsNullOrWhiteSpace(recurso?.Id) ? null : recurso!.Id;
     }
 
-    private async Task<bool> EstaLibreAsync(string recurso, DateTimeOffset inicio, CancellationToken ct)
+    /// <summary>Si la franja sigue libre, y si eso lo dijo la agenda o se supone por degradación.</summary>
+    private async Task<(bool Libre, bool Comprobada)> EstaLibreAsync(string recurso, DateTimeOffset inicio, CancellationToken ct)
     {
         var ruta = $"v1/resources/{Uri.EscapeDataString(recurso)}/availability"
                  + $"?start={Instante(inicio)}&end={Instante(inicio + VisitAgenda.Duracion)}";
@@ -239,14 +242,14 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
         try
         {
             using var res = await Cliente().GetAsync(ruta, ct).ConfigureAwait(false);
-            if (!res.IsSuccessStatusCode) return true;   // ver el remark de GetSlotsAsync
+            if (!res.IsSuccessStatusCode) return (true, false);   // ver el remark de GetSlotsAsync
 
             var disp = await res.Content.ReadFromJsonAsync<DisponibilidadDto>(Json, ct).ConfigureAwait(false);
-            return disp?.Available ?? true;
+            return disp is null ? (true, false) : (disp.Available, true);
         }
         catch (Exception ex) when (NoContesto(ex, ct))
         {
-            return true;
+            return (true, false);
         }
     }
 
@@ -276,11 +279,15 @@ public sealed class HttpVisitSchedulingService : IVisitSchedulingService
             // El motivo de la capacidad se traduce a algo que el visitante pueda accionar. Un
             // «no disponible» genérico para los tres casos sería una regresión frente a lo que
             // hoy dice el motor en proceso (HU #33 §3).
+            //
+            // Los códigos son los que EMITE Api.Booking (BookingRules), no los que se recordaban: se esperaban
+            // insufficient_capacity e in_the_past, que la agenda no emite, y una franja tomada salía con el
+            // mensaje genérico (D-2, 008-propiedades-visita). RealtyWiringTests cruza cada uno con la capacidad.
             throw new InvalidOperationException(problema?.Codigo switch
             {
-                "booking.insufficient_capacity" => "Ese horario ya lo tomaron. Elegí otro de la agenda.",
+                "booking.at_capacity" => "Ese horario ya lo tomaron. Elegí otro de la agenda.",
                 "booking.outside_opening_hours" => "Ese horario está fuera de la agenda de visitas.",
-                "booking.in_the_past" => "Ese horario ya pasó. Elegí uno de los próximos días.",
+                "booking.window_in_the_past" => "Ese horario ya pasó. Elegí uno de los próximos días.",
                 _ => "No pudimos apartar la visita. No quedó agendada.",
             });
         }

@@ -292,6 +292,9 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<RealtyVisitLedger>(),
                     // Las horas de visita son las del sitio (Synergos:Listados), no las de UTC.
                     sp.GetRequiredService<IOptions<ListadosSettings>>().Value.Zona()));
+            // Con el motor en proceso, la visita no se declara por la puerta (008, FR-019): sus franjas
+            // saldrían de otro cupo que el de la agenda donde aparta el orquestador.
+            services.AddSingleton<IValidateOptions<RealtyFeatureSettings>, LaVisitaPorLaPuertaPideLaAgenda>();
         }
         services.AddSingleton<IMortgageCalculator, StubMortgageCalculator>();
         // La configuración de negocio de Propiedades (ADR 0137, #196): la API y la tasa con que

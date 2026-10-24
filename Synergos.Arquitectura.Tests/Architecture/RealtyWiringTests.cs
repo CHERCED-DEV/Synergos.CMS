@@ -96,6 +96,31 @@ public sealed class RealtyWiringTests
         Assert.Contains("Mode { get; init; } = \"Stub\"", settings, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Cada código de rechazo que traduce el cliente lo EMITE la agenda (D-2, 008-propiedades-visita).
+    /// </summary>
+    /// <remarks>
+    /// El cliente traducía <c>booking.insufficient_capacity</c> y <c>booking.in_the_past</c>, que <c>Api.Booking</c> no
+    /// emite (emite <c>at_capacity</c> y <c>window_in_the_past</c>): una franja tomada salía con el mensaje genérico, y sus
+    /// pruebas no lo veían porque simulaban la agenda con los códigos del propio cliente. El gate cruza las dos fuentes.
+    /// </remarks>
+    [Fact]
+    public void Cada_codigo_que_traduce_el_cliente_lo_emite_la_agenda()
+    {
+        var traducidos = Regex.Matches(CodigoDelCliente(), "\"(booking\\.[a-z_]+)\"\\s*=>")
+            .Select(m => m.Groups[1].Value).ToList();
+        Assert.True(traducidos.Count >= 3, $"El gate encontró {traducidos.Count} códigos traducidos: dejó de ver el switch.");
+
+        var dominio = string.Join('\n', Directory.EnumerateFiles(
+                Path.Combine(RepoRoot(), "backend", "capacidades", "Synergos.Api.Booking", "Domain"), "*.cs")
+            .Select(File.ReadAllText));
+        var emitidos = Regex.Matches(dominio, "CodePrefix\\}\\.([a-z_]+)\"").Select(m => $"booking.{m.Groups[1].Value}").ToHashSet();
+
+        var fantasmas = traducidos.Where(c => !emitidos.Contains(c)).ToList();
+        Assert.True(fantasmas.Count == 0,
+            $"El cliente traduce códigos que la agenda no emite: {string.Join(", ", fantasmas)} (emite: {string.Join(", ", emitidos.Order())}).");
+    }
+
     [Fact]
     public void El_identificador_del_recurso_NO_se_adivina()
     {

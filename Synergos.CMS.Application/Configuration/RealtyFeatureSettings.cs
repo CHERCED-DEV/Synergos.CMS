@@ -23,11 +23,19 @@ public sealed class RealtyFeatureSettings : SeccionDeNegocio<RealtyFeatureSitio,
     /// <remarks>El 12 es el que el bundle traía compilado: con los valores base nada cambia.</remarks>
     public decimal DefaultRatePercent { get; init; } = 12m;
 
+    /// <summary>
+    /// Por dónde agenda la visita: <c>puerta</c> (el flujo <c>propiedades.visita</c>, con sesión) o <c>directa</c>
+    /// (la ruta del portal, anónima como siempre). Sin valor, <c>directa</c> (008-P1, como 006-P5): desplegar el
+    /// orquestador no le pide cuenta a nadie, y un sitio declara <c>puerta</c> después de verificarla en vivo.
+    /// </summary>
+    public string? VisitPath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeRealty Fusionar(RealtyFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
-            DefaultRatePercent: propio?.DefaultRatePercent ?? DefaultRatePercent);
+            DefaultRatePercent: propio?.DefaultRatePercent ?? DefaultRatePercent,
+            VisitPath: CaminoDelFlujo.Normalizar(propio?.VisitPath ?? VisitPath) ?? CaminoDelFlujo.Directa);
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeRealty negocio)
@@ -35,6 +43,9 @@ public sealed class RealtyFeatureSettings : SeccionDeNegocio<RealtyFeatureSitio,
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             ReglasDeNegocio.Porcentaje("DefaultRatePercent", negocio.DefaultRatePercent),
+            CaminoDelFlujo.EsValido(negocio.VisitPath)
+                ? null
+                : $"VisitPath: «{negocio.VisitPath}» tiene que ser «{CaminoDelFlujo.Puerta}» o «{CaminoDelFlujo.Directa}», o no estar (y la visita va por la directa).",
         }.OfType<string>();
 }
 
@@ -48,4 +59,7 @@ public sealed class RealtyFeatureSitio
 
     /// <inheritdoc cref="RealtyFeatureSettings.DefaultRatePercent"/>
     public decimal? DefaultRatePercent { get; init; }
+
+    /// <inheritdoc cref="RealtyFeatureSettings.VisitPath"/>
+    public string? VisitPath { get; init; }
 }

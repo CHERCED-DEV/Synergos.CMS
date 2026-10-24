@@ -2476,9 +2476,28 @@
         "Realty.Visit"
       ],
       "claves": [
+        "Realty.Visit.Cancel",
+        "Realty.Visit.CancelAsk",
+        "Realty.Visit.CancelFailed",
+        "Realty.Visit.CancelNo",
+        "Realty.Visit.CancelTooLate",
+        "Realty.Visit.CancelYes",
+        "Realty.Visit.Cancelled",
+        "Realty.Visit.CancelledHeading",
+        "Realty.Visit.DefaultMode",
+        "Realty.Visit.FromEmail",
+        "Realty.Visit.InPast",
+        "Realty.Visit.InvalidSlot",
+        "Realty.Visit.NoAgenda",
+        "Realty.Visit.NoticeLabel",
+        "Realty.Visit.NoticeToAccount",
+        "Realty.Visit.OutsideHours",
+        "Realty.Visit.SessionRequired",
+        "Realty.Visit.SlotTaken",
         "Realty.Visit.SlotsEmpty",
         "Realty.Visit.SlotsFailed",
-        "Realty.Visit.SlotsLoading"
+        "Realty.Visit.SlotsLoading",
+        "Realty.Visit.Unavailable"
       ],
       "campos": [
         {
@@ -2504,6 +2523,18 @@
           "tipo": "number",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "visitPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "zonaHoraria",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -2511,7 +2542,9 @@
         "heading": "Encuentra el lugar que estás buscando",
         "subheading": "Compra y arriendo, en lista y en mapa",
         "apiBase": "/api/realty",
-        "defaultRatePercent": 12
+        "defaultRatePercent": 12,
+        "visitPath": "directa",
+        "zonaHoraria": "America/Bogota"
       }
     },
     {

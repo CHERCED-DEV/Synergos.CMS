@@ -112,21 +112,81 @@ sin_python() {
 
 # ── El manifiesto ────────────────────────────────────────────────────────────
 #
-# Una línea por entrada, con los siete campos SIEMPRE presentes —vacíos los que
+# Una línea por entrada, con los nueve campos SIEMPRE presentes —vacíos los que
 # no apliquen— y 0x1F entre ellos. Ver el aviso de más abajo sobre por qué no es
 # un tabulador.
+#
+# Los dos últimos son la AGENDA de un recurso y su huella (NP-2 de 008): si la
+# entrada declara `opening`, `cancellationNoticeMinutes` o `slotMinutes`, el
+# octavo es el cuerpo ENTERO de `POST /v1/resources/{id}/revise` —cupo, horario,
+# plazo de aviso y franja—, en ASCII y en una línea como el de una plantilla, y
+# el noveno, sus 16 primeros hexadecimales de sha256. Sin ninguno de los tres,
+# los dos van vacíos y el recurso se registra como siempre: siempre abierto.
 #
 # La salida se fuerza a UTF-8 y a `\n`: el Python de Windows escribe `\r\n` en
 # stdout, y `read` dejaba el `\r` pegado al último campo — `moneda` llegaba como
 # «COP\r» (medido, #170).
 leer_manifiesto() {
   "${PYTHON[@]}" - "$1" <<'PY'
-import json, sys
+import hashlib, json, sys
 sys.stdout.reconfigure(encoding='utf-8', newline='\n')
 for e in json.load(open(sys.argv[1], encoding='utf-8')):
-    print('\x1f'.join(str(e.get(k, '')) for k in
-                      ('tipo', 'subjectKind', 'subjectId', 'capacity',
-                       'timeZoneId', 'amount', 'currency')))
+    agenda = huella = ''
+    if e.get('tipo') == 'recurso' and any(k in e for k in ('opening', 'cancellationNoticeMinutes', 'slotMinutes')):
+        cuerpo = {'capacity': e.get('capacity', 1), 'opening': e.get('opening') or []}
+        for k in ('cancellationNoticeMinutes', 'slotMinutes'):
+            if k in e:
+                cuerpo[k] = e[k]
+        agenda = json.dumps(cuerpo, ensure_ascii=True, sort_keys=True, separators=(',', ':'))
+        huella = hashlib.sha256(agenda.encode('ascii')).hexdigest()[:16]
+    print('\x1f'.join([str(e.get(k, '')) for k in
+                       ('tipo', 'subjectKind', 'subjectId', 'capacity',
+                        'timeZoneId', 'amount', 'currency')] + [agenda, huella]))
+PY
+}
+
+# ── La agenda de un recurso que ya está ──────────────────────────────────────
+#
+#   comparar <agenda-declarada> <fichero>  contra el recurso que devolvió la
+#                                          capacidad: IGUAL · DIFIERE 0x1F
+#                                          campos 0x1F id-del-recurso
+#   fuera <fichero>                        cuántas reservas vigentes dejó fuera
+#                                          una revisión (no se cancela ninguna)
+#
+# Compara lo que la revisión cambia —cupo, horario, plazo de aviso y franja—.
+# El horario, como conjunto de (día, desde, hasta): ni el orden ni las
+# mayúsculas del día ni «9:00» frente a «09:00» son una diferencia. Si lo
+# fueran, cada corrida revisaría otra vez lo mismo.
+agenda_py() {
+  "${PYTHON[@]}" - "$@" <<'PY'
+import json, sys
+sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+
+def hora(h):
+    try:
+        partes = [int(x) for x in str(h).split(':')[:2]]
+        return '%02d:%02d' % (partes[0], partes[1] if len(partes) > 1 else 0)
+    except ValueError:
+        return str(h)
+
+def horario(o):
+    return sorted((str(x.get('day', '')).lower(), hora(x.get('from', '')), hora(x.get('to', ''))) for x in (o or []))
+
+if sys.argv[1] == 'comparar':
+    deseada = json.loads(sys.argv[2])
+    actual = json.load(open(sys.argv[3], encoding='utf-8'))
+    distintos = []
+    if int(actual.get('capacity') or 0) != int(deseada.get('capacity', 1)):
+        distintos.append('capacity')
+    if horario(actual.get('opening')) != horario(deseada.get('opening')):
+        distintos.append('opening')
+    if int(actual.get('cancellationNoticeMinutes') or 0) != int(deseada.get('cancellationNoticeMinutes', 0)):
+        distintos.append('cancellationNoticeMinutes')
+    if actual.get('slotMinutes') != deseada.get('slotMinutes'):
+        distintos.append('slotMinutes')
+    print('DIFIERE\x1f%s\x1f%s' % (' '.join(distintos), actual.get('id', '')) if distintos else 'IGUAL')
+elif sys.argv[1] == 'fuera':
+    print(len(json.load(open(sys.argv[2], encoding='utf-8')).get('outside') or []))
 PY
 }
 
@@ -238,22 +298,54 @@ if [ "${1:-}" = "--autoprueba" ]; then
   fi
   TMP="$(mktemp)"
   cat > "$TMP" <<'JSON'
-[{"tipo":"precio","subjectKind":"k","subjectId":"s","amount":320000,"currency":"COP"}]
+[{"tipo":"precio","subjectKind":"k","subjectId":"s","amount":320000,"currency":"COP"},
+ {"tipo":"recurso","subjectKind":"r","subjectId":"x","capacity":2,"opening":[{"day":"Monday","from":"09:00","to":"10:00"}],"slotMinutes":60},
+ {"tipo":"recurso","subjectKind":"r","subjectId":"y"}]
 JSON
   fallos_prueba=0
   vistas=0
-  while IFS=$'\x1f' read -r tipo kind id capacidad zona monto moneda; do
+  while IFS=$'\x1f' read -r tipo kind id capacidad zona monto moneda agenda huella; do
     vistas=$((vistas + 1))
-    [ "$tipo"      = "precio" ] || { echo "AUTOPRUEBA tipo=[$tipo]";           fallos_prueba=1; }
-    [ "$capacidad" = ""       ] || { echo "AUTOPRUEBA capacidad=[$capacidad]"; fallos_prueba=1; }
-    [ "$zona"      = ""       ] || { echo "AUTOPRUEBA zona=[$zona]";           fallos_prueba=1; }
-    [ "$moneda"    = "COP"    ] || { echo "AUTOPRUEBA moneda=[$moneda]";       fallos_prueba=1; }
-    [ "$monto"     = "320000" ] || { echo "AUTOPRUEBA monto=[$monto] — se esperaba 320000. Los campos se CORRIERON: un separador que bash considera whitespace colapsa las rachas, y la oferta acaba publicandose a cero."; fallos_prueba=1; }
+    case "$tipo:$id" in
+      precio:s)
+        [ "$capacidad" = ""       ] || { echo "AUTOPRUEBA capacidad=[$capacidad]"; fallos_prueba=1; }
+        [ "$zona"      = ""       ] || { echo "AUTOPRUEBA zona=[$zona]";           fallos_prueba=1; }
+        [ "$moneda"    = "COP"    ] || { echo "AUTOPRUEBA moneda=[$moneda]";       fallos_prueba=1; }
+        [ "$monto"     = "320000" ] || { echo "AUTOPRUEBA monto=[$monto] — se esperaba 320000. Los campos se CORRIERON: un separador que bash considera whitespace colapsa las rachas, y la oferta acaba publicandose a cero."; fallos_prueba=1; }
+        [ "$agenda$huella" = ""   ] || { echo "AUTOPRUEBA un precio no tiene agenda: [$agenda] [$huella]"; fallos_prueba=1; } ;;
+      recurso:x)
+        # La agenda es el cuerpo ENTERO de la revisión: con el cupo, y sin el plazo que no se declaró.
+        [ "$agenda" = '{"capacity":2,"opening":[{"day":"Monday","from":"09:00","to":"10:00"}],"slotMinutes":60}' ] \
+          || { echo "AUTOPRUEBA agenda=[$agenda]"; fallos_prueba=1; }
+        [ "${#huella}" = "16" ] || { echo "AUTOPRUEBA huella de la agenda=[$huella]"; fallos_prueba=1; } ;;
+      recurso:y)
+        [ "$agenda$huella" = "" ] || { echo "AUTOPRUEBA un recurso sin agenda declarada la trae: [$agenda]"; fallos_prueba=1; } ;;
+      *) echo "AUTOPRUEBA tipo=[$tipo] id=[$id]"; fallos_prueba=1 ;;
+    esac
   done < <(leer_manifiesto "$TMP")
   rm -f "$TMP"
   # Sin esto la prueba pasaria en verde leyendo CERO lineas, que es justo lo que
   # deja un lector roto.
-  [ "$vistas" = "1" ] || { echo "AUTOPRUEBA el lector devolvio $vistas lineas, se esperaba 1"; fallos_prueba=1; }
+  [ "$vistas" = "3" ] || { echo "AUTOPRUEBA el lector devolvio $vistas lineas, se esperaba 3"; fallos_prueba=1; }
+
+  # ── La agenda de un recurso que ya está: cada veredicto ─────────────────────
+  #
+  # El de IGUAL lleva el horario en otro orden, el día en minúsculas y «9:00»:
+  # si eso fuera una diferencia, cada corrida revisaría otra vez el recurso.
+  ACT="$(mktemp)"
+  DECL='{"capacity":1,"cancellationNoticeMinutes":120,"opening":[{"day":"Monday","from":"09:00","to":"10:00"},{"day":"Monday","from":"11:00","to":"12:00"}],"slotMinutes":60}'
+  agenda_es() {  # agenda_es <recurso-json> <esperado>
+    local v
+    printf '%s' "$1" > "$ACT"
+    v="$(agenda_py comparar "$DECL" "$ACT" | tr '\037' '|')"
+    [ "$v" = "$2" ] || { echo "AUTOPRUEBA agenda comparar dio [$v], se esperaba [$2] para $1"; fallos_prueba=1; }
+  }
+  agenda_es '{"id":"r1","capacity":1,"opening":[{"day":"monday","from":"11:00","to":"12:00"},{"day":"Monday","from":"9:00","to":"10:00"}],"cancellationNoticeMinutes":120,"slotMinutes":60}' "IGUAL"
+  agenda_es '{"id":"r1","capacity":1,"opening":[],"cancellationNoticeMinutes":0,"slotMinutes":null}' "DIFIERE|opening cancellationNoticeMinutes slotMinutes|r1"
+  agenda_es '{"id":"r2","capacity":3,"opening":[{"day":"Monday","from":"09:00","to":"10:00"},{"day":"Monday","from":"11:00","to":"12:00"}],"cancellationNoticeMinutes":120,"slotMinutes":30}' "DIFIERE|capacity slotMinutes|r2"
+  printf '%s' '{"resource":{"id":"r1"},"outside":[{"id":"res-1"},{"id":"res-2"}]}' > "$ACT"
+  [ "$(agenda_py fuera "$ACT")" = "2" ] || { echo "AUTOPRUEBA agenda fuera no cuenta las reservas que quedan fuera"; fallos_prueba=1; }
+  rm -f "$ACT"
 
   # ── Las plantillas: el lector y el comparador, sin red ──────────────────────
   #
@@ -295,6 +387,7 @@ JSON
 
   [ "$fallos_prueba" = "0" ] || exit 1
   echo "OK: el manifiesto se lee con los campos alineados, tambien sin capacity ni timeZoneId."
+  echo "OK: la agenda de un recurso se lee entera y se compara sin depender del orden ni del formato."
   echo "OK: las plantillas se leen en ASCII y en una linea, y el comparador da cada veredicto."
   exit 0
 fi
@@ -524,18 +617,53 @@ echo "── recursos y precios por entidad"
   # Created, «+ puesto precio», y cada viaje gratis—. Lo destapó correr esto
   # contra las tres capacidades vivas y mirar el almacén, no leer el script.
   # 0x1F (unit separator) no es IFS whitespace: las rachas NO se colapsan.
-  while IFS=$'\x1f' read -r tipo kind id capacidad zona monto moneda; do
+  ACTUAL="$(mktemp)"
+  while IFS=$'\x1f' read -r tipo kind id capacidad zona monto moneda agenda huella; do
     [ -z "${tipo:-}" ] && continue
     case "$tipo" in
       recurso)
         r="$(pedir GET "$BOOKING_URL/v1/resources?subjectKind=$kind&subjectId=$id")"
-        if [ "$(codigo "$r")" = "200" ]; then ok "recurso $kind/$id"; continue; fi
+        if [ "$(codigo "$r")" = "200" ]; then
+          # Ya está. Sin agenda declarada, como siempre: no se toca. Con ella, la
+          # de la capacidad tiene que ser ÉSA: un recurso registrado antes de
+          # declararla —con horario vacío, siempre abierto— se REVISA (NP-2 de
+          # 008). La llave lleva la huella de la agenda, como la de un precio la
+          # del monto: cambiarla en el manifiesto revisa otra vez y repetirla no
+          # hace nada. La revisión no cancela reservas: dice cuáles quedan fuera.
+          if [ -z "$agenda" ]; then ok "recurso $kind/$id"; continue; fi
+          printf '%s' "$r" | head -n-1 > "$ACTUAL"
+          IFS=$'\x1f' read -r veredicto campos rid < <(agenda_py comparar "$agenda" "$ACTUAL")
+          case "${veredicto:-}" in
+            IGUAL) ok "recurso $kind/$id" ;;
+            DIFIERE)
+              if [ "$VERIFICAR" = "1" ]; then falta "recurso $kind/$id: su agenda no es la del manifiesto ($campos)"; continue; fi
+              r="$(pedir POST "$BOOKING_URL/v1/resources/$rid/revise" "$agenda" "provisionar:revisar:$kind:$id:$huella")"
+              case "$(codigo "$r")" in
+                200)
+                  printf '%s' "$r" | head -n-1 > "$ACTUAL"
+                  puesto "recurso $kind/$id revisado ($campos)"
+                  fuera="$(agenda_py fuera "$ACTUAL")"
+                  [ "${fuera:-0}" = "0" ] || echo "  ⚠ $fuera reserva(s) vigente(s) de $kind/$id quedan fuera de la agenda nueva: no se cancela ninguna, decidilo vos."
+                  ;;
+                *) falla "recurso $kind/$id → revisar $(codigo "$r"): $(printf '%s' "$r" | head -n-1)" ;;
+              esac
+              ;;
+            *) falla "recurso $kind/$id: no se pudo comparar su agenda con la del manifiesto" ;;
+          esac
+          continue
+        fi
         if [ "$VERIFICAR" = "1" ]; then falta "recurso $kind/$id"; continue; fi
-        # Horario VACÍO = siempre abierto, que es lo correcto para una noche de
-        # hotel: cruza la medianoche. Quien necesite franjas las pone en el
-        # manifiesto el día que haga falta.
-        cuerpo="$(printf '{"subjectKind":"%s","subjectId":"%s","capacity":%s,"timeZoneId":"%s","opening":[]}' \
-                  "$kind" "$id" "${capacidad:-1}" "${zona:-America/Bogota}")"
+        # Sin agenda declarada, horario VACÍO = siempre abierto, que es lo
+        # correcto para una noche de hotel: cruza la medianoche. Quien necesite
+        # franjas las declara en el manifiesto (`opening`,
+        # `cancellationNoticeMinutes`, `slotMinutes`) y se registra con ellas.
+        if [ -n "$agenda" ]; then
+          cuerpo="$(printf '{"subjectKind":"%s","subjectId":"%s","timeZoneId":"%s",%s' \
+                    "$kind" "$id" "${zona:-America/Bogota}" "${agenda#\{}")"
+        else
+          cuerpo="$(printf '{"subjectKind":"%s","subjectId":"%s","capacity":%s,"timeZoneId":"%s","opening":[]}' \
+                    "$kind" "$id" "${capacidad:-1}" "${zona:-America/Bogota}")"
+        fi
         r="$(pedir POST "$BOOKING_URL/v1/resources" "$cuerpo" "provisionar:res:$kind:$id")"
         case "$(codigo "$r")" in
           200|201) puesto "recurso $kind/$id" ;;
@@ -580,6 +708,7 @@ echo "── recursos y precios por entidad"
       *) falla "tipo desconocido en el manifiesto: $tipo" ;;
     esac
   done < <(leer_manifiesto "$MANIFIESTO")
+  rm -f "$ACTUAL"
 
 echo
 if [ "$fallos" -gt 0 ]; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# La copia de seguridad de los datos de las 26 (HU #31).
+# La copia de seguridad de los datos de las 27 (HU #31).
 #
 # ─────────────────────────────────────────────────────────────────────────────
 # LAS IMÁGENES SE RECONSTRUYEN EN MINUTOS. LOS DATOS NO SE RECONSTRUYEN NUNCA.
