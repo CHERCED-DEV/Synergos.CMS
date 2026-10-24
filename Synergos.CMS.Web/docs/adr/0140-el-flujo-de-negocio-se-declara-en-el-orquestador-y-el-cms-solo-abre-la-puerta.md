@@ -1869,6 +1869,48 @@ JSON, el patrón escala. La cita imperativa sigue en `/v1/appointments` (la ruta
 
   Queda el recorrido en el navegador con un miembro de prueba, a pedido del arquitecto.
 
+## Viajes en el patrón (2026-10-24, 006)
+
+`viajes.reserva` reserva un viaje de varios ítems (vuelo, noches de hotel, auto) por la puerta, y **no es el caso
+común** (006-P1): cada ítem aparta su recurso por índice, el itinerario es un tipo de valor del vertical y lo de
+después de confirmar lo opera quien vende. `TripFlow` sigue sirviendo `/v1/trips` (la ruta directa del CMS) y la
+puerta sirve `/v1/flujos/viajes.reserva` sobre el host genérico, detrás de `viajes:Flujos:Modo` («declarado» por
+defecto; «imperativo» apaga sólo la puerta). `travel-shell` y `booking-wizard` reservan por el camino que declara el
+CMS, «directa» por defecto.
+
+- **Medido** con `specs/006-viajes-hoteles/medicion/medir-006.mjs` (el método de la 005: el conteo de Salud por
+  `git blame` sobre HEAD), y el arranque contado también a mano desde su diff:
+  - el orquestador sirve el flujo con **2 ficheros y 16 líneas de pegamento** (el arranque, 11; el csproj, 5) y la
+    definición (89 líneas de JSON). Lo del vertical va aparte: tres pasos propios (revisar el itinerario, el sujeto
+    del producto, el vencimiento; 81 líneas) y el tipo `itinerario` (68), una lista guardable que el núcleo no trae.
+    Eventos costó 13 ficheros y 316 líneas sólo por declarar; Salud, 4 y 7;
+  - lo posterior (devolver una parte, cancelar lo confirmado con su penalidad): **2 JSON (64 líneas) y un paso**
+    (`viajes.menos-retencion`, 32), con 10 líneas de la puerta en el `appsettings`;
+  - el contrato traducible al UI sin cambiar el cable de `/v1/trips` costó 24 líneas en el orquestador (NV-15); el
+    molde F2 de `/v1/trips` (14) es del camino imperativo, no de declarar;
+  - el CMS: 12 ficheros y 59 líneas (el camino en el negocio de los dos elementos, sus vistas con el coordinador, el
+    `productRef` de cada oferta), más la puerta (7 líneas), la plantilla (7) y 19 textos de `Travel.Booking`;
+  - el UI: 15 ficheros y 888 líneas. El portal, 582 (la estrategia por camino, el transporte sobre las funciones
+    generadas, el total cotizado, el viaje pendiente y su cancelación, «Mis viajes» por `listar`, el enlace del aviso
+    y el defecto 1); el asistente de hotel, 306. Como en Salud, el UI es la experiencia de reservar.
+- **Las diferencias entre caminos, declaradas** (no se igualan):
+
+  | | Ruta directa (`/v1/trips`, el CMS) | La puerta (`viajes.reserva`) |
+  |---|---|---|
+  | Sesión | sin cuenta (el hotel y el carrito) | miembro (`viajes.viajero`); sin sesión, la puerta lo dice |
+  | La penalidad | la calcula el CMS | la pone quien vende al cancelar lo confirmado (`viajes.cancelacion`); quien viaja no cancela lo confirmado (006-P3) |
+  | Lo parcial | la confirmación parcial (#40) | todo o nada (006-P6) hasta que el host le pregunte al vertical (NV-13) |
+  | Quién devuelve | el CMS ordena devolver lo no cumplido | quien vende: una parte (`viajes.devolucion`), o el total cotizado menos la penalidad al cancelar |
+
+- **Corregido** (cada uno con su mutante en rojo): el portal mandaba las líneas del carrito sin su periodo y el CMS
+  rechazaba todo carrito así (defecto 1); el asistente de hotel no consultaba ni cancelaba (defecto 3: por la puerta
+  consulta ante un cierre sin respuesta legible y ofrece cancelar lo no confirmado); el cliente de capacidades de
+  Viajes pedía el recurso por una ruta fuera del contrato de `Api.Booking`.
+- **Declarado y fuera:** el total del motor en proceso sale de los precios que manda el navegador (defecto 2, otra
+  funcionalidad). Por la puerta el total lo cotiza el servidor antes de apartar (`cotizar`, sin una escritura en la
+  agenda ni en pagos) y es el mismo que abrir autoriza.
+- **En vivo:** pendiente en la copia piloto antes de la LISTA (lo que mueve plata: las devoluciones de 006-P3 y P6).
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la
