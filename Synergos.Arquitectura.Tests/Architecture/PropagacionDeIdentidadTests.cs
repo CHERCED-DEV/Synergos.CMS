@@ -86,6 +86,7 @@ public sealed class PropagacionDeIdentidadTests
     {
         "Synergos.Bff.Core", "Synergos.Bff.Pasos", "Synergos.Bff.Tienda", "Synergos.Bff.Salud",
         "Synergos.Bff.Eventos", "Synergos.Bff.Viajes", "Synergos.Bff.Alquiler", "Synergos.Bff.Reservas",
+        "Synergos.Bff.Propiedades",
     };
 
     private static string RepoRoot()

@@ -14,10 +14,16 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// con cada inmueble. La cara, la operación y el diseño de resultados (<c>role</c>,
 /// <c>operation</c>, <c>layout</c>) sólo entraban por ese JSON: quedan como valores del componente
 /// hasta que un editor necesite elegirlos, y entonces entran como selector.</para>
+///
+/// <para><b>El camino de la visita y la hora del sitio</b> (008-propiedades-visita): <c>VisitPath</c> dice si la visita
+/// va por la puerta (<c>propiedades.visita</c>) o por la ruta directa, y <c>ZonaHoraria</c> en qué huso escribe el
+/// elemento una visita que le llega como instantes (la del enlace del aviso). Las dos son del despliegue.</para>
 /// </remarks>
 [ElementoSynHost("realty", TipoDeColocable.Funcionalidad, Diccionario = ["Realty.Visit"])]
 public sealed record RealtyProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal DefaultRatePercent);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal DefaultRatePercent,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string VisitPath,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria);

@@ -233,6 +233,29 @@ public sealed class RealtyContractShapeTests
     }
 
     /// <summary>
+    /// 008-propiedades-visita (R5): cada franja trae también sus INSTANTES —la ventana que pide la visita por la
+    /// puerta— y si la agenda la comprobó. Aditivo: <c>date</c> y <c>time</c> siguen como estaban.
+    /// </summary>
+    [Fact]
+    public async Task Slots_TraenLosInstantesDeLaFranja_YSiLaAgendaLaComprobo()
+    {
+        var inicio = new DateTimeOffset(2026, 10, 3, 14, 0, 0, TimeSpan.Zero);
+        _visits.GetSlotsAsync("L-1", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new Synergos.CMS.Interfaces.VisitSlot("L-1-a", inicio),
+            new Synergos.CMS.Interfaces.VisitSlot("L-1-b", inicio.AddHours(2), Checked: false),
+        });
+
+        var slots = Json(await BuildSut().VisitSlots("L-1", default)).GetProperty("slots").EnumerateArray().ToList();
+
+        Assert.Equal(("2026-10-03", "09:00"), (slots[0].GetProperty("date").GetString(), slots[0].GetProperty("time").GetString()));
+        Assert.Equal(inicio, slots[0].GetProperty("start").GetDateTimeOffset());
+        Assert.Equal(inicio.AddMinutes(60), slots[0].GetProperty("end").GetDateTimeOffset());
+        Assert.True(slots[0].GetProperty("checked").GetBoolean());
+        Assert.False(slots[1].GetProperty("checked").GetBoolean());
+    }
+
+    /// <summary>
     /// La relación con el POST, con el motor DE VERDAD y el reloj fijo: toda franja que ofrece el
     /// GET la acepta POST visit, y después ya no se ofrece.
     /// </summary>

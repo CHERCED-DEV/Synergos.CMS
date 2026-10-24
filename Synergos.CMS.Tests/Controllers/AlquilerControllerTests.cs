@@ -190,7 +190,8 @@ public sealed class AlquilerControllerTests
     /// lo intenta quien sea. Con un registro por borde, «no consta» y «no es tuyo» dan lo mismo.
     /// </summary>
     private static AlquilerController BordeSobre(
-        EquipmentAgreementLedger ledger, RentalServiceFalso seam, IMemberAccessGate puerta, PuertaFalsa? deLaPuerta = null)
+        EquipmentAgreementLedger ledger, RentalServiceFalso seam, IMemberAccessGate puerta, PuertaFalsa? deLaPuerta = null,
+        TimeProvider? reloj = null)
         => new(
             new StubEquipmentCatalogProvider(),
             seam,
@@ -199,7 +200,16 @@ public sealed class AlquilerControllerTests
             ledger,
             SinPuerta(ledger, new EquipmentAgreementIssuer(ledger, null, new RelojFijo())),
             puerta,
-            NullLogger<AlquilerController>.Instance);
+            NullLogger<AlquilerController>.Instance,
+            reloj ?? new RelojFijo());
+
+    /// <summary>Un reloj que se mueve a mano: para ver que la espera no se reinicia al repetir.</summary>
+    private sealed class RelojQueAvanza(DateTimeOffset inicio) : TimeProvider
+    {
+        public DateTimeOffset Ahora { get; set; } = inicio;
+
+        public override DateTimeOffset GetUtcNow() => Ahora;
+    }
 
     /// <summary>El dueño reserva (y así queda su contrato en el registro); devuelve el registro.</summary>
     private static async Task<EquipmentAgreementLedger> ReservadoPorElDueno(RentalServiceFalso seam)
@@ -412,6 +422,37 @@ public sealed class AlquilerControllerTests
         Assert.Equal(1, seam.Declaraciones);
         Assert.Equal(RentalState.Declared, (await ledger.GetAsync("ALQ-1"))!.Estado);
     }
+
+    [Fact]
+    public async Task Mis_alquileres_dicen_en_que_quedo_cada_uno_y_cuando_se_declaro_la_devolucion()
+    {
+        // T034/T035: la bandeja pinta el estado del registro, y la cara del personal mide la espera desde que se
+        // declaró. Repetir la declaración no reinicia esa espera.
+        var seam = new RentalServiceFalso(new RentalResult(RentalOutcome.Ok, En(RentalState.Declared), null, null));
+        var ledger = await ReservadoPorElDueno(seam);
+        var reloj = new RelojQueAvanza(new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero));
+
+        var antes = await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro)).Mine(CancellationToken.None);
+        Assert.Equal("reserved", Assert.Single(Lista(antes)).State);
+        Assert.Null(Assert.Single(Lista(antes)).DeclaredUtc);
+
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro), reloj: reloj)
+            .DeclareReturn("ALQ-1", new DeclareReturnRequest("declarar-1"), CancellationToken.None);
+        reloj.Ahora = reloj.Ahora.AddDays(2);
+        await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro), reloj: reloj)
+            .DeclareReturn("ALQ-1", new DeclareReturnRequest("declarar-1"), CancellationToken.None);
+
+        var despues = Assert.Single(Lista(await BordeSobre(ledger, seam, new PuertaDeMiembro(Miembro)).Mine(CancellationToken.None)));
+        Assert.Equal("declared", despues.State);
+        Assert.Equal(new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero), despues.DeclaredUtc);
+
+        var personal = Assert.Single(Lista(await BordeSobre(ledger, seam, new PuertaDeMiembro(Otro, personal: true))
+            .StaffReturns(CancellationToken.None)));
+        Assert.Equal(despues.DeclaredUtc, personal.DeclaredUtc);
+    }
+
+    private static IReadOnlyList<AgreementDto> Lista(ActionResult<IReadOnlyList<AgreementDto>> res)
+        => Assert.IsAssignableFrom<IReadOnlyList<AgreementDto>>(Assert.IsType<OkObjectResult>(res.Result).Value);
 
     [Fact]
     public async Task Declarar_un_alquiler_ajeno_no_existe()

@@ -185,8 +185,14 @@ public static class BookingEndpoints
                 .ToHttp();
         }).WithName("ListReservations");
 
-        app.MapPost("/v1/reservations/{id}/cancel", (string id, BookingService svc) =>
-            svc.CancelReservation(id).Map(ReservationResponse.From).ToHttp()).WithName("CancelReservation");
+        // Con llave (núcleo T052), repetir la MISMA cancelación devuelve lo que hizo la primera: el reintento de una
+        // operación posterior cuya devolución cayó. Sin ella, como siempre.
+        app.MapPost("/v1/reservations/{id}/cancel", (string id, HttpRequest http, BookingService svc) =>
+        {
+            if (!IdempotencyHeader.TryReadOpcional(http, BookingRules.CodePrefix, out var key, out var mala)) return mala!;
+
+            return svc.CancelReservation(id, key).Map(ReservationResponse.From).ToHttp();
+        }).WithName("CancelReservation").ConLlaveDeIdempotencia(siempre: false);
 
         return app;
     }

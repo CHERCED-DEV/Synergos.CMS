@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
@@ -50,8 +51,50 @@ public sealed class HttpEquipmentOfferPublisherTests
         }
     }
 
-    private static HttpEquipmentOfferPublisher Publicador(HttpMessageHandler cable, bool hayDestino = true)
-        => new(new Fabrica(cable), NullLogger<HttpEquipmentOfferPublisher>.Instance, hayDestino);
+    private static HttpEquipmentOfferPublisher Publicador(
+        HttpMessageHandler cable, bool hayDestino = true, ILogger<HttpEquipmentOfferPublisher>? log = null)
+        => new(new Fabrica(cable), log ?? NullLogger<HttpEquipmentOfferPublisher>.Instance, hayDestino);
+
+    private sealed class LogQueGuarda : ILogger<HttpEquipmentOfferPublisher>
+    {
+        public List<(LogLevel Nivel, string Texto)> Lineas { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Lineas.Add((logLevel, formatter(state, exception)));
+    }
+
+    [Fact]
+    public async Task Bajar_las_unidades_deja_en_el_registro_las_reservas_que_ya_no_caben()
+    {
+        // NN-6: el orquestador revisó el recurso y contesta qué reservas vigentes quedaron por encima de los cupos.
+        var orquestador = new OrquestadorFalso
+        {
+            Responde = () => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"equipmentId":"andamio-6m","units":1,"outsideReservations":["r-2","r-3"]}""",
+                    Encoding.UTF8, "application/json"),
+            },
+        };
+        var log = new LogQueGuarda();
+
+        Assert.Equal(EquipmentOfferOutcome.Published, await Publicador(orquestador, log: log).PublishAsync(Equipo(unidades: 1)));
+
+        var aviso = Assert.Single(log.Lineas, l => l.Nivel == LogLevel.Warning);
+        Assert.Contains("r-2, r-3", aviso.Texto, StringComparison.Ordinal);
+
+        // Sin reservas fuera, o con una respuesta que no se lee, no hay aviso: publicar ya salió bien.
+        var callado = new LogQueGuarda();
+        orquestador.Responde = () => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("no-es-json", Encoding.UTF8, "application/json"),
+        };
+        Assert.Equal(EquipmentOfferOutcome.Published, await Publicador(orquestador, log: callado).PublishAsync(Equipo()));
+        Assert.DoesNotContain(callado.Lineas, l => l.Nivel == LogLevel.Warning);
+    }
 
     [Fact]
     public async Task Publica_la_oferta_con_lo_que_dice_la_ficha()

@@ -20,6 +20,11 @@ namespace Synergos.CMS.Web.Notifications;
 /// y no de una segunda lectura de las propiedades que se desviaría. Un equipo que el catálogo omite (sin nombre, mal
 /// formado) no tiene ficha, y tampoco oferta: la que tuviera publicada se RETIRA.</para>
 ///
+/// <para><b>Sin la raíz del sitio a la vista no decide nada</b>: un import que trae el siteRoot y sus equipos en el
+/// mismo lote publica los equipos con el árbol publicado todavía sin la raíz, y el catálogo vacío retiraba sus ofertas
+/// con un ERR en el registro (visto en la copia piloto de la línea 005; tumbó el CI del import completo con la tienda).
+/// Entonces ni se publica ni se retira: queda un aviso, y se repara republicando esos equipos.</para>
+///
 /// <para><b>Nunca tumba el publicar</b>: el contenido ya se guardó cuando esto corre. Lo que falle queda en el log,
 /// y se repara republicando.</para>
 /// </remarks>
@@ -32,22 +37,26 @@ public sealed class OfertaDeEquipoAlPublicar : INotificationAsyncHandler<Content
     private readonly IEquipmentCatalogProvider _catalogo;
     private readonly IEquipmentOfferPublisher _ofertas;
     private readonly IOptionsMonitor<CatalogSettings> _fuentes;
+    private readonly IRaizDelAlquiler _raiz;
     private readonly ILogger<OfertaDeEquipoAlPublicar> _log;
 
     /// <summary>Construye el manejador.</summary>
     /// <param name="catalogo">El catálogo de equipos, la misma proyección que la ficha.</param>
     /// <param name="ofertas">Quien publica la oferta en el orquestador.</param>
     /// <param name="fuentes">De dónde sale cada catálogo.</param>
+    /// <param name="raiz">Si el árbol publicado ya muestra la raíz del sitio de alquiler.</param>
     /// <param name="log">Dónde queda lo que no se pudo.</param>
     public OfertaDeEquipoAlPublicar(
         IEquipmentCatalogProvider catalogo,
         IEquipmentOfferPublisher ofertas,
         IOptionsMonitor<CatalogSettings> fuentes,
+        IRaizDelAlquiler raiz,
         ILogger<OfertaDeEquipoAlPublicar> log)
     {
         _catalogo = catalogo;
         _ofertas = ofertas;
         _fuentes = fuentes;
+        _raiz = raiz;
         _log = log;
     }
 
@@ -60,6 +69,15 @@ public sealed class OfertaDeEquipoAlPublicar : INotificationAsyncHandler<Content
             .Where(c => string.Equals(c.ContentType.Alias, EquipmentPageAlias, StringComparison.Ordinal))
             .ToList();
         if (equipos.Count == 0 || !DelContenido(_fuentes)) return;
+
+        if (!_raiz.SeVe())
+        {
+            _log.LogWarning(
+                "Se publicaron {Equipos} y el árbol publicado todavía no muestra la raíz del sitio de alquiler: no se publica "
+                + "ni se retira ninguna oferta. Se repara republicando esos equipos con la raíz ya publicada.",
+                string.Join(", ", equipos.Select(c => c.GetValue<string>(PropiedadDelSlug)?.Trim() ?? $"#{c.Id}")));
+            return;
+        }
 
         foreach (var contenido in equipos)
         {

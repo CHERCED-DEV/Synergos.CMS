@@ -10,11 +10,30 @@
     "timeZoneId": "America/Bogota"
   },
   {
+    "_": "El horario de visitas por defecto de 008-P3 —a las 9:00 y a las 11:00 de todos los días, en franjas de 60 minutos— y dos horas de aviso para cancelar. Con él, la agenda lista las franjas libres (la lectura «disponibilidad» de propiedades.visita) y no deja apartar fuera de él.",
     "tipo": "recurso",
     "subjectKind": "realty.listado",
     "subjectId": "listado-demo-1",
     "capacity": 1,
-    "timeZoneId": "America/Bogota"
+    "timeZoneId": "America/Bogota",
+    "opening": [
+      { "day": "Monday", "from": "09:00", "to": "10:00" },
+      { "day": "Monday", "from": "11:00", "to": "12:00" },
+      { "day": "Tuesday", "from": "09:00", "to": "10:00" },
+      { "day": "Tuesday", "from": "11:00", "to": "12:00" },
+      { "day": "Wednesday", "from": "09:00", "to": "10:00" },
+      { "day": "Wednesday", "from": "11:00", "to": "12:00" },
+      { "day": "Thursday", "from": "09:00", "to": "10:00" },
+      { "day": "Thursday", "from": "11:00", "to": "12:00" },
+      { "day": "Friday", "from": "09:00", "to": "10:00" },
+      { "day": "Friday", "from": "11:00", "to": "12:00" },
+      { "day": "Saturday", "from": "09:00", "to": "10:00" },
+      { "day": "Saturday", "from": "11:00", "to": "12:00" },
+      { "day": "Sunday", "from": "09:00", "to": "10:00" },
+      { "day": "Sunday", "from": "11:00", "to": "12:00" }
+    ],
+    "cancellationNoticeMinutes": 120,
+    "slotMinutes": 60
   },
   {
     "tipo": "recurso",

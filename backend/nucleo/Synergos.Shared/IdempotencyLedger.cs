@@ -98,4 +98,30 @@ public static class IdempotencyHeader
         missing = null;
         return true;
     }
+
+    /// <summary>
+    /// Lee la cabecera donde es OPCIONAL de verdad (núcleo T052): sin ella, <paramref name="key"/> es nula y el
+    /// endpoint hace lo de siempre; con ella, repetir la misma operación devuelve lo que hizo la primera.
+    /// </summary>
+    /// <remarks>
+    /// Una que no sirve —demasiado larga— es el mismo 400 que una ausente donde se exige: quien la manda cuenta con
+    /// ella, y hacer como si no hubiera llegado le quitaría justo lo que pidió.
+    /// </remarks>
+    public static bool TryReadOpcional(HttpRequest http, string codePrefix, out IdempotencyKey? key, out ProblemHttpResult? mala)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        if (string.IsNullOrEmpty(http.Headers[Name].ToString()))
+        {
+            key = null;
+            mala = null;
+            return true;
+        }
+        if (!TryRead(http, codePrefix, out var leida, out mala))
+        {
+            key = null;
+            return false;
+        }
+        key = leida;
+        return true;
+    }
 }

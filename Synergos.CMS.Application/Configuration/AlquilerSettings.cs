@@ -44,6 +44,23 @@ public sealed class AlquilerSettings
     /// </remarks>
     public int MaxRentalDays { get; init; } = 30;
 
+    /// <summary>El inquilino cancela lo confirmado por el flujo posterior <c>alquiler.cancelacion</c> (por defecto).</summary>
+    public const string CancelacionPosterior = "Posterior";
+
+    /// <summary>El inquilino cancela lo confirmado por la liquidación propia del orquestador (<c>cancelar-confirmado</c>).</summary>
+    public const string CancelacionPropia = "Propia";
+
+    /// <summary>
+    /// Por dónde cancela el INQUILINO un alquiler confirmado de la puerta (línea 005, NN-8; aclaración D-005-NN8):
+    /// <see cref="CancelacionPosterior"/> o <see cref="CancelacionPropia"/>, que se conserva detrás de este interruptor.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>La regla de cuál gana</b>: el personal cancela SIEMPRE por la propia —es la que fija la penalidad—; el
+    /// inquilino, por la que diga esta clave. Las dos aplican la misma regla del día de inicio y una ve lo que hizo la
+    /// otra. Lo lee el composer con la pieza de los interruptores: una palabra que no reconoce no arranca.</para>
+    /// </remarks>
+    public string Cancellation { get; init; } = CancelacionPosterior;
+
     /// <summary>El huso por defecto del despliegue: el mismo que <c>Alquiler:TimeZone</c> del orquestador.</summary>
     public const string HusoPorDefecto = "America/Bogota";
 

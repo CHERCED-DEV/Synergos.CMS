@@ -37,6 +37,7 @@ public sealed class AlquilerController : ControllerBase
     private readonly ArtefactoDeAlquiler _artefacto;
     private readonly IMemberAccessGate _gate;
     private readonly ILogger<AlquilerController> _log;
+    private readonly TimeProvider _reloj;
 
     /// <summary>Construye el borde.</summary>
     /// <param name="catalog">El eje 1.</param>
@@ -47,6 +48,7 @@ public sealed class AlquilerController : ControllerBase
     /// <param name="artefacto">El contrato de un alquiler de la puerta, que se emite al leerlo (T024).</param>
     /// <param name="gate">Quién está en sesión.</param>
     /// <param name="log">Para decir qué se rechazó.</param>
+    /// <param name="reloj">Cuándo es ahora, para anotar cuándo se declaró una devolución; el del sistema si no llega.</param>
     public AlquilerController(
         IEquipmentCatalogProvider catalog,
         IEquipmentRentalService rentals,
@@ -55,7 +57,8 @@ public sealed class AlquilerController : ControllerBase
         EquipmentAgreementLedger ledger,
         ArtefactoDeAlquiler artefacto,
         IMemberAccessGate gate,
-        ILogger<AlquilerController> log)
+        ILogger<AlquilerController> log,
+        TimeProvider? reloj = null)
     {
         _catalog = catalog;
         _rentals = rentals;
@@ -65,6 +68,7 @@ public sealed class AlquilerController : ControllerBase
         _artefacto = artefacto;
         _gate = gate;
         _log = log;
+        _reloj = reloj ?? TimeProvider.System;
     }
 
     // ── EJE 1 · el catálogo ─────────────────────────────────────────────────
@@ -377,7 +381,15 @@ public sealed class AlquilerController : ControllerBase
 
         if (contrato is not null && contrato.Estado != resultado.Rental.State)
         {
-            contrato = contrato with { Estado = resultado.Rental.State };
+            // Cuándo se declaró la devolución lo anota quien supo de la transición: la cara del personal mide con
+            // eso cuánto lleva esperando. Una sola vez: repetir la declaración no reinicia la espera.
+            contrato = contrato with
+            {
+                Estado = resultado.Rental.State,
+                DeclaradaUtc = resultado.Rental.State == RentalState.Declared
+                    ? contrato.DeclaradaUtc ?? _reloj.GetUtcNow()
+                    : contrato.DeclaradaUtc,
+            };
             await _ledger.RecordAsync(contrato, ct).ConfigureAwait(false);
         }
 
@@ -749,10 +761,15 @@ public sealed record RentalDto(
 /// </param>
 /// <param name="SealPending">El servicio de firma no contestó al emitirlo: se sella al volver.</param>
 /// <param name="Outcome">Cómo se cerró la devolución, con su propio sello; null mientras no se cierre.</param>
+/// <param name="State">
+/// En qué punto está el alquiler según el registro (T034): <c>reserved</c> (confirmado), <c>declared</c>,
+/// <c>returned</c> o <c>cancelled</c>. «Mis alquileres» lo pinta y decide con él qué se puede hacer.
+/// </param>
+/// <param name="DeclaredUtc">Cuándo se declaró la devolución; null si no se declaró o no consta.</param>
 public sealed record AgreementDto(
     string RentalId, string EquipmentName, int Quantity, DateOnly Start, DateOnly End,
     decimal RentalTotal, decimal DepositHeld, string Currency, DateTimeOffset IssuedUtc, string Seal, bool? Verified,
-    bool SealPending = false, AgreementOutcomeDto? Outcome = null)
+    bool SealPending = false, AgreementOutcomeDto? Outcome = null, string State = "reserved", DateTimeOffset? DeclaredUtc = null)
 {
     /// <summary>Proyecta un comprobante.</summary>
     /// <param name="a">El comprobante.</param>
@@ -765,7 +782,9 @@ public sealed record AgreementDto(
             a.Desenlace is not { } d
                 ? null
                 : new AgreementOutcomeDto(d.ConfirmadoUtc, d.Danio, d.GarantiaLiberada, d.Sello, desenlaceComprobado,
-                    d.SelloPendiente));
+                    d.SelloPendiente),
+            a.Estado.ToString().ToLowerInvariant(),
+            a.DeclaradaUtc);
 }
 
 /// <summary>Cómo se cerró la devolución de un alquiler (decisión 5 del lote 1; 005-P6): lo que confirmó el personal.</summary>

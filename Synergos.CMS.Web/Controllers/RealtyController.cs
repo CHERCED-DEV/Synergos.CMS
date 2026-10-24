@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
@@ -277,8 +278,24 @@ public sealed class RealtyController : ControllerBase
         var franjas = await _visits.GetSlotsAsync(id.Trim(), cancellationToken);
         return Ok(new VisitSlotsResponse(franjas
             .Where(f => f.Available)
-            .Select(f => FranjaEnElSitio(f.StartUtc))
+            .Select(FranjaOfrecida)
             .ToList()));
+    }
+
+    /// <summary>
+    /// La franja como la ofrece la lectura: en la hora del sitio (<c>date</c>, <c>time</c>, lo de siempre) y, desde
+    /// 008-propiedades-visita, también como instantes (<c>start</c>, <c>end</c>) y con <c>checked</c>.
+    /// </summary>
+    /// <remarks>
+    /// Los instantes son la <c>ventana</c> que pide la visita por la puerta: convertir la hora del sitio en el
+    /// navegador sería adivinar su huso. <c>checked</c> dice si la agenda contestó por la franja (FR-020). Aditivo:
+    /// quien sólo lee <c>date</c> y <c>time</c> no cambia.
+    /// </remarks>
+    private VisitSlotOfferDto FranjaOfrecida(Interfaces.VisitSlot franja)
+    {
+        var enElSitio = FranjaEnElSitio(franja.StartUtc);
+        return new VisitSlotOfferDto(
+            enElSitio.Date, enElSitio.Time, franja.StartUtc, franja.StartUtc + VisitAgenda.Duracion, franja.Checked);
     }
 
     // ── 3. Agendar visita (reusa el motor, SIN pago) ────────────────────
@@ -712,6 +729,14 @@ public sealed class RealtyController : ControllerBase
         }
 
         var leads = await _leads.GetForAgentAsync(agent, cancellationToken);
+        // Los «sin agente asignado» (inmuebles sin correo de agente, o retirados) los ve el administrador, para que
+        // ninguno se pierda (008-P6); un agente sólo ve los de los inmuebles que declaran su correo.
+        if (_gate.HasAnyRole("admin"))
+        {
+            leads = leads.Concat(await _leads.GetUnassignedAsync(cancellationToken))
+                .DistinctBy(l => l.LeadId, StringComparer.Ordinal)
+                .ToList();
+        }
 
         // El título del inmueble NO vive en AgentLead (solo su id) y la tarjeta del CRM lo
         // lee: sin él, TODAS las filas decían "Inmueble". Se resuelve una vez por inmueble
@@ -770,7 +795,7 @@ public sealed class RealtyController : ControllerBase
     public async Task<IActionResult> PublishListing([FromBody] PublishListingRequest? request, CancellationToken cancellationToken)
     {
         // Publicar al catálogo era anónimo: cualquiera colgaba un inmueble en el sitio.
-        var (denied, _) = RequireAgent();
+        var (denied, publicador) = RequireAgent();
         if (denied is not null) { return denied; }
         if (request is null)
         {
@@ -780,8 +805,12 @@ public sealed class RealtyController : ControllerBase
         PropertyDetail published;
         try
         {
+            // Quien publica es el agente del inmueble: sus leads le llegan a su consola (008-P6).
             published = await _catalog.PublishListingAsync(
-                request.ToDraft(MapOperationToDomain(request.Operation)),
+                request.ToDraft(MapOperationToDomain(request.Operation)) with
+                {
+                    AgentEmail = string.IsNullOrWhiteSpace(publicador) ? null : publicador,
+                },
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -1161,8 +1190,11 @@ public sealed class RealtyController : ControllerBase
 
     public sealed record VisitSlotDto(string Date, string Time);
 
+    /// <summary>Una franja ofrecida: en la hora del sitio, como instantes, y si la agenda la comprobó.</summary>
+    public sealed record VisitSlotOfferDto(string Date, string Time, DateTimeOffset Start, DateTimeOffset End, bool Checked);
+
     /// <summary>Las franjas libres de un inmueble, en la hora del sitio (<c>GET listing/{id}/slots</c>).</summary>
-    public sealed record VisitSlotsResponse(IReadOnlyList<VisitSlotDto> Slots);
+    public sealed record VisitSlotsResponse(IReadOnlyList<VisitSlotOfferDto> Slots);
 
     /// <summary>
     /// Contrato UI (<c>Visit</c>): <c>id | listingId | listingTitle | slot{date,time} | mode |

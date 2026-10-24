@@ -190,15 +190,59 @@ public sealed class StubLeadCaptureService : ILeadCaptureService, IDisposable
 
         await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
 
+        // El agente se reconoce AL LEER (D-1, 008-P6): la consola pregunta con el correo de la sesión y el lead guarda
+        // el agente por el nombre de la ficha, así que nunca coincidían y un agente no veía ningún lead guardado. Ahora
+        // vale el correo que declara la ficha de su inmueble —resuelto contra el catálogo, como el título—, y los leads
+        // de antes aparecen sin migrar nada. El nombre guardado sigue valiendo para quien lo use (superset).
         var key = agentId.Trim();
+        var correos = await CorreosDeLosAgentesAsync(cancellationToken).ConfigureAwait(false);
         var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
-        return all
-            .Where(l => string.Equals(l.AgentId, key, StringComparison.OrdinalIgnoreCase))
+        return Ordenados(all.Where(l =>
+            string.Equals(l.AgentId, key, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(correos(l.ListingId), key, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public async Task<IReadOnlyList<AgentLead>> GetUnassignedAsync(CancellationToken cancellationToken = default)
+    {
+        if (_catalog is null)
+        {
+            return Array.Empty<AgentLead>();
+        }
+
+        await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        var correos = await CorreosDeLosAgentesAsync(cancellationToken).ConfigureAwait(false);
+        var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+        return Ordenados(all.Where(l => correos(l.ListingId) is null));
+    }
+
+    private static IReadOnlyList<AgentLead> Ordenados(IEnumerable<LeadRecord> leads)
+        => leads
             .OrderByDescending(l => l.CreatedAt)
             .ThenBy(l => l.LeadId, StringComparer.Ordinal)
             .Select(l => new AgentLead(
                 l.LeadId, l.AgentId, l.ListingId, l.Name, l.Email, l.Phone, l.Message, l.Status, l.CreatedAt))
             .ToList();
+
+    /// <summary>
+    /// El correo del agente de cada inmueble, consultado UNA vez por inmueble: <c>null</c> si la ficha no lo declara o
+    /// ya no está en el catálogo. Sin catálogo, ninguno.
+    /// </summary>
+    private async Task<Func<string, string?>> CorreosDeLosAgentesAsync(CancellationToken cancellationToken)
+    {
+        if (_catalog is null)
+        {
+            return _ => null;
+        }
+
+        var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+        var correos = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var listado in all.Select(l => l.ListingId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var ficha = await _catalog.GetListingAsync(listado, cancellationToken).ConfigureAwait(false);
+            correos[listado] = string.IsNullOrWhiteSpace(ficha?.AgentEmail) ? null : ficha.AgentEmail.Trim();
+        }
+
+        return listado => correos.GetValueOrDefault(listado ?? string.Empty);
     }
 
     public async Task<LeadAdvanceResult> AdvanceLeadAsync(string leadId, LeadStatus status, CancellationToken cancellationToken = default)

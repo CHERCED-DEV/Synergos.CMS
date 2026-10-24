@@ -77,6 +77,12 @@ public interface ILeadCaptureService
     Task<IReadOnlyList<AgentLead>> GetForAgentAsync(string agentId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Los leads «sin agente asignado» (008-P6): los de inmuebles que no declaran el correo de su agente, o que ya no
+    /// están en el catálogo. Los ve el rol administrador, para que ninguno se pierda. Lista vacía si no hay.
+    /// </summary>
+    Task<IReadOnlyList<AgentLead>> GetUnassignedAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Avanza el lead al estado <paramref name="status"/> del embudo y devuelve su nuevo
     /// estado. Idempotente (avanzar al estado actual no re-audita). Lanza
     /// <see cref="ArgumentException"/> si el lead no existe. Cada avance deja rastro en

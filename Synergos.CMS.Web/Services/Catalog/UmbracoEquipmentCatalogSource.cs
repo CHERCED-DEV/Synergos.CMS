@@ -3,6 +3,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.PublishedCache;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services.Catalog;
@@ -32,7 +33,7 @@ namespace Synergos.CMS.Web.Services.Catalog;
 /// misma razón que en Salud (#118): ese identificador lo GENERA la capacidad y se resuelve
 /// preguntando por el sujeto (<c>GET /v1/resources?subjectKind=&amp;subjectId=</c>, HU #25).</para>
 /// </remarks>
-public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipment>
+public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipment>, IRaizDelAlquiler
 {
     internal const string Vertical = "Alquiler";
     private const string EquipmentPageAlias = "equipmentPage";
@@ -105,6 +106,24 @@ public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipme
         return Task.FromResult<IReadOnlyList<RentalEquipment>>(equipos);
     }
 
+    /// <inheritdoc />
+    public bool SeVe()
+        => _umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext)
+           && umbracoContext.Content is { } contenido
+           && Alcance() is { } brandKey
+           && Raiz(contenido, brandKey) is not null;
+
+    /// <summary>El <c>brandKey</c> del siteRoot del vertical, o null si el despliegue no lo dice.</summary>
+    private string? Alcance()
+        => _catalog.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b) ? b.Trim() : null;
+
+    /// <summary>El siteRoot con ese <c>brandKey</c> en el árbol publicado, o null.</summary>
+    private static IPublishedContent? Raiz(IPublishedContentCache contenido, string brandKey)
+        => contenido.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
+            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
+                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Los <c>equipmentPage</c> publicados bajo el siteRoot configurado, o vacío.</summary>
     private IReadOnlyList<IPublishedContent> ResolveNodes()
     {
@@ -114,9 +133,7 @@ public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipme
             return Array.Empty<IPublishedContent>();
         }
 
-        var brandKey = _catalog.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
-            ? b.Trim()
-            : null;
+        var brandKey = Alcance();
 
         if (string.IsNullOrWhiteSpace(brandKey))
         {
@@ -128,10 +145,7 @@ public sealed class UmbracoEquipmentCatalogSource : ICatalogSource<RentalEquipme
             return Array.Empty<IPublishedContent>();
         }
 
-        var siteRoot = umbracoContext.Content.GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
-            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
-                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+        var siteRoot = Raiz(umbracoContext.Content, brandKey);
 
         if (siteRoot is null)
         {

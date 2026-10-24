@@ -74,8 +74,10 @@ internal sealed class CitaDeSaludReal : IDisposable
         });
         Orquestador = _fabrica.CreateClient();
         Orquestador.DefaultRequestHeaders.Add(SharedKeyAuth.HeaderName, Llave);
-        Llamadas = cable.Llamadas;
+        _llamadas = cable.Llamadas;
     }
+
+    private readonly List<string> _llamadas;
 
     public ArnesDeCapacidades Capacidades { get; }
 
@@ -83,8 +85,32 @@ internal sealed class CitaDeSaludReal : IDisposable
 
     public IServiceProvider Servicios => _fabrica.Services;
 
-    /// <summary>Lo que el orquestador pidió a las capacidades, <c>METODO /ruta</c>.</summary>
-    public IReadOnlyList<string> Llamadas { get; }
+    /// <summary>
+    /// Lo que la cita pidió a las capacidades, <c>METODO /ruta</c>, sin las vueltas del barrido de avisos, como
+    /// <c>CompraDeTiendaReal.Llamadas</c>.
+    /// </summary>
+    public IReadOnlyList<string> Llamadas
+    {
+        get
+        {
+            lock (_llamadas) return _llamadas.Where(l => !EsDelBarridoDeAvisos(l)).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Si <paramref name="llamada"/> (<c>METODO /ruta</c>) es del barrido de avisos (<see cref="DeliverySweeper"/>).
+    /// Ese barrido corre solo desde que arranca el orquestador, así que no es de ninguna cita ni lleva su número.
+    /// </summary>
+    /// <remarks>Sólo él usa estas rutas: la cita avisa con <c>POST /v1/deliveries</c>.</remarks>
+    public static bool EsDelBarridoDeAvisos(string llamada)
+        => llamada == "GET /v1/deliveries/queued"
+            || (llamada.StartsWith("POST /v1/deliveries/", StringComparison.Ordinal)
+                && (llamada.EndsWith("/retry", StringComparison.Ordinal) || llamada.EndsWith("/give-up", StringComparison.Ordinal)));
+
+    /// <summary>Una vuelta del barrido de avisos, como la da el proceso cada pocos segundos.</summary>
+    public Task BarrerAvisos()
+        => Servicios.GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<DeliverySweeper>().Single()
+            .UnaVueltaAsync(CancellationToken.None);
 
     public string Raiz => Path.Combine(_raiz, "salud");
 
@@ -620,10 +646,17 @@ public sealed class NumeroDeLaCitaEnElRegistroTests
             Assert.Equal(saga, l.Valores.GetValueOrDefault("Saga"));
         });
 
+    private const string Llamada = "Llamada ";
+
+    /// <summary>Las líneas de las llamadas de la cita: las del barrido de avisos no son de ninguna cita.</summary>
     private static List<(string Categoria, LogLevel Nivel, string Mensaje, List<string> Textos, Dictionary<string, object?> Valores)> Llamadas(
         Reservas.RegistroConAmbitos registro)
     {
-        lock (registro.Lineas) return registro.Lineas.Where(l => l.Categoria == CitaDeSaludReal.LlamadasAlArnes).ToList();
+        lock (registro.Lineas)
+        {
+            return registro.Lineas.Where(l => l.Categoria == CitaDeSaludReal.LlamadasAlArnes
+                && !CitaDeSaludReal.EsDelBarridoDeAvisos(l.Mensaje[Llamada.Length..])).ToList();
+        }
     }
 
     [Fact]
@@ -636,6 +669,15 @@ public sealed class NumeroDeLaCitaEnElRegistroTests
         var (_, abierta) = await c.Abrir();
         var id = abierta.GetProperty("id").GetString()!;
         var (_, cerrada) = await c.Cerrar(id);
+
+        // El barrido de avisos corre solo y pasa por el mismo cable: una vuelta suya caía a veces dentro del registro
+        // de la cita, sin su número (3 rojas de 20 corridas). Se fuerza una para que el caso sea fijo, y se comprueba
+        // que de verdad cayó.
+        await c.BarrerAvisos();
+        lock (registro.Lineas)
+        {
+            Assert.Contains(registro.Lineas, l => l.Categoria == CitaDeSaludReal.LlamadasAlArnes && l.Mensaje == Llamada + "GET /v1/deliveries/queued");
+        }
 
         Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
         var llamadas = Llamadas(registro);

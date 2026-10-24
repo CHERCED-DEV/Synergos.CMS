@@ -26,7 +26,8 @@ public sealed record PropertyListingContent(
     double? Lat = null,
     double? Lng = null,
     string? AgentName = null,
-    string? AgentPhone = null);
+    string? AgentPhone = null,
+    string? AgentEmail = null);
 
 /// <summary>
 /// Las etiquetas de las características, resueltas del Dictionary uSync por el llamador.
@@ -202,7 +203,8 @@ public static class PropertyContentRules
             Gallery: gallery,
             Location: new PropertyLocation(lat, lng, address, neighborhood, city),
             AgentName: content.AgentName?.Trim() ?? string.Empty,
-            AgentPhone: content.AgentPhone?.Trim() ?? string.Empty);
+            AgentPhone: content.AgentPhone?.Trim() ?? string.Empty,
+            AgentEmail: string.IsNullOrWhiteSpace(content.AgentEmail) ? null : content.AgentEmail.Trim());
 
         return new EventContentResult<PropertyDetail?>(detail, issues);
     }

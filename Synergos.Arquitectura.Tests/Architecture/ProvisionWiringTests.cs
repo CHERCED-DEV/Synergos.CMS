@@ -117,6 +117,26 @@ public sealed class ProvisionWiringTests
     }
 
     /// <summary>
+    /// La llave de idempotencia con que se REVISA un recurso lleva la huella de su agenda (NP-2 de 008).
+    /// </summary>
+    /// <remarks>
+    /// Es la regla del precio sobre la agenda: <c>ReviseResource</c> consulta el libro de idempotencia antes de nada, así
+    /// que con una llave sin la huella, cambiar el horario en el manifiesto contestaría 200 y dejaría el de la primera
+    /// revisión para siempre.
+    /// </remarks>
+    [Fact]
+    public void La_llave_de_la_revision_de_un_recurso_lleva_la_huella_de_su_agenda()
+    {
+        var m = Regex.Match(Guion(), @"/revise""[^\n]*""(provisionar:revisar:[^""]*)""");
+
+        Assert.True(m.Success,
+            "No se encontró la llave con la que provisionar.sh revisa un recurso. Si se reescribió esa línea, mové este gate con ella.");
+        Assert.True(m.Groups[1].Value.Contains("$huella", StringComparison.Ordinal),
+            $"La llave de la revisión es «{m.Groups[1].Value}» y no lleva la huella de la agenda: cambiar el horario en el "
+            + "manifiesto contestaría 200 sin cambiar nada.");
+    }
+
+    /// <summary>
     /// Un recurso se BUSCA por sujeto antes de crearse.
     /// </summary>
     /// <remarks>
@@ -345,6 +365,57 @@ public sealed class ProvisionWiringTests
         Assert.Contains($"✓ plantilla {ClaveDelAviso}", segunda.Salida, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Un recurso que ya está pero sin la agenda que declara el manifiesto —registrado cuando el guion escribía siempre
+    /// <c>"opening":[]</c>—: publicar lo REVISA, con la agenda entera y la huella en la llave. Y uno que no está se
+    /// registra CON su agenda (NP-2 de 008: el horario de visitas de un inmueble).
+    /// </summary>
+    /// <remarks>
+    /// <para>UNA corrida, y las plantillas ya publicadas y de a todas por página: lo que se mira acá es el recurso, y cada
+    /// corrida y cada página de más son intérpretes de Python contra el plazo de dos minutos. Que <c>--verificar</c> lo da
+    /// en rojo, y que una segunda corrida no lo revisa otra vez, se comprobó a mano contra una agenda de mentira (bitácora
+    /// de 008, 2026-10-22); el veredicto que decide las dos cosas es el del comparador, y ése lo corre la autoprueba.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Publicar_revisa_un_recurso_sin_la_agenda_del_manifiesto_y_registra_uno_nuevo_con_ella()
+    {
+        await using var capacidades = await NotificationsDeMentira.Levantar(
+            Declaradas().Select(d => Plantilla(d["key"], d["subject"], d["body"])).ToArray());
+        capacidades.PorPagina = 100;
+        capacidades.Recursos.Add(new Dictionary<string, object?>
+        {
+            ["id"] = "rec-1", ["subjectKind"] = "realty.listado", ["subjectId"] = "listado-x", ["capacity"] = 1,
+            ["timeZoneId"] = "America/Bogota", ["opening"] = Array.Empty<object>(), ["cancellationNoticeMinutes"] = 0,
+            ["slotMinutes"] = null,
+        });
+        const string manifiesto = """
+            [{"tipo":"recurso","subjectKind":"realty.listado","subjectId":"listado-x","capacity":1,"timeZoneId":"America/Bogota",
+              "opening":[{"day":"Monday","from":"09:00","to":"10:00"},{"day":"Monday","from":"11:00","to":"12:00"}],
+              "cancellationNoticeMinutes":120,"slotMinutes":60},
+             {"tipo":"recurso","subjectKind":"realty.listado","subjectId":"listado-nuevo","capacity":1,"timeZoneId":"America/Bogota",
+              "opening":[{"day":"Tuesday","from":"09:00","to":"10:00"}],"slotMinutes":60}]
+            """;
+
+        var publicar = await CorrerConManifiesto(capacidades.Url, manifiesto);
+        Assert.True(publicar.Codigo == 0, publicar.Salida);
+        Assert.Contains("+ puesto recurso realty.listado/listado-x revisado", publicar.Salida, StringComparison.Ordinal);
+        Assert.Equal(2, capacidades.EscriturasDeAgenda.Count);
+        var (ruta, llave, cuerpo) = capacidades.EscriturasDeAgenda.Single(e => e.Ruta.EndsWith("/revise", StringComparison.Ordinal));
+        Assert.Equal("/v1/resources/rec-1/revise", ruta);
+        Assert.StartsWith("provisionar:revisar:realty.listado:listado-x:", llave, StringComparison.Ordinal);
+        Assert.Equal(1, cuerpo.GetProperty("capacity").GetInt32());
+        Assert.Equal(2, cuerpo.GetProperty("opening").GetArrayLength());
+        Assert.Equal(120, cuerpo.GetProperty("cancellationNoticeMinutes").GetInt32());
+        Assert.Equal(60, cuerpo.GetProperty("slotMinutes").GetInt32());
+
+        var (_, _, nuevo) = capacidades.EscriturasDeAgenda.Single(e => e.Ruta == "/v1/resources");
+        Assert.Equal("listado-nuevo", nuevo.GetProperty("subjectId").GetString());
+        Assert.Equal("America/Bogota", nuevo.GetProperty("timeZoneId").GetString());
+        Assert.Equal("Tuesday", nuevo.GetProperty("opening")[0].GetProperty("day").GetString());
+        Assert.Equal(60, nuevo.GetProperty("slotMinutes").GetInt32());
+        Assert.Empty(capacidades.Publicadas);
+    }
+
     /// <summary>Las plantillas que declara <c>tools/provisionar.plantillas.json</c>, sin los comentarios.</summary>
     private static List<Dictionary<string, string>> Declaradas()
     {
@@ -371,10 +442,19 @@ public sealed class ProvisionWiringTests
     /// Corre <c>tools/provisionar.sh</c> contra <paramref name="url"/>, con un manifiesto de
     /// entidades vacío: lo que se mira acá son las plantillas.
     /// </summary>
-    private static async Task<(int Codigo, string Salida)> Correr(string url, params string[] extra)
+    private static Task<(int Codigo, string Salida)> Correr(string url, params string[] extra)
+        => CorrerConManifiesto(url, "[]", extra);
+
+    /// <summary>
+    /// Lo mismo, con el manifiesto de entidades que se le pase. Lleva OTRO nombre a propósito: como
+    /// sobrecarga de <see cref="Correr(string, string[])"/>, C# elegía ésta para
+    /// <c>Correr(url, "--verificar")</c> —tiene más parámetros declarados— y «--verificar» acababa
+    /// escrito como manifiesto: las pruebas de verificar corrían el guion en modo publicar.
+    /// </summary>
+    private static async Task<(int Codigo, string Salida)> CorrerConManifiesto(string url, string manifiesto, params string[] extra)
     {
         var vacio = Path.Combine(Path.GetTempPath(), "provisionar-vacio-" + Guid.NewGuid().ToString("n") + ".json");
-        await File.WriteAllTextAsync(vacio, "[]");
+        await File.WriteAllTextAsync(vacio, manifiesto);
         try
         {
             var psi = new ProcessStartInfo("bash")
@@ -427,6 +507,8 @@ public sealed class ProvisionWiringTests
     /// las prueba la capacidad real en <c>PlantillaDelAvisoTests</c> y
     /// <c>NotificationServiceTests</c>. Un doble que las imitara sería un segundo modelo escrito a
     /// mano de las mismas reglas (lo que <c>ArnesDeCapacidades</c> explica que no hay que hacer).
+    /// De la agenda contesta lo mismo de poco: el recurso por sujeto, y registrar y revisar se
+    /// apuntan (NP-2 de 008); las reglas del horario las prueba <c>Api.Booking</c>.
     /// </remarks>
     private sealed class NotificationsDeMentira : IAsyncDisposable
     {
@@ -440,6 +522,15 @@ public sealed class ProvisionWiringTests
         }
 
         public List<(string Llave, Dictionary<string, string> Cuerpo)> Publicadas { get; } = new();
+
+        /// <summary>Cuántas plantillas por página contesta la lista: de a una, salvo que el test pida otra cosa.</summary>
+        public int PorPagina { get; set; } = 1;
+
+        /// <summary>Los recursos que ya están en la agenda, como los devuelve <c>Api.Booking</c>.</summary>
+        public List<Dictionary<string, object?>> Recursos { get; } = new();
+
+        /// <summary>Lo que el guion escribió en la agenda: la ruta, la llave y el cuerpo.</summary>
+        public List<(string Ruta, string Llave, JsonElement Cuerpo)> EscriturasDeAgenda { get; } = new();
 
         public string Url => _app.Urls.Single();
 
@@ -456,7 +547,7 @@ public sealed class ProvisionWiringTests
             app.MapGet("/v1/templates", (int? offset) =>
             {
                 var desde = offset ?? 0;
-                var fila = yo._plantillas.Skip(desde).Take(1).ToList();
+                var fila = yo._plantillas.Skip(desde).Take(yo.PorPagina).ToList();
                 return Results.Ok(new
                 {
                     items = fila,
@@ -474,6 +565,25 @@ public sealed class ProvisionWiringTests
                 yo._plantillas.RemoveAll(p => string.Equals(p["key"], cuerpo["key"], StringComparison.OrdinalIgnoreCase));
                 yo._plantillas.Add(new Dictionary<string, string>(cuerpo, StringComparer.Ordinal) { ["id"] = Guid.NewGuid().ToString("n") });
                 return Results.Created("/v1/templates/x", cuerpo);
+            });
+
+            app.MapGet("/v1/resources", (string? subjectKind, string? subjectId) =>
+                yo.Recursos.FirstOrDefault(r => Equals(r["subjectKind"], subjectKind) && Equals(r["subjectId"], subjectId)) is { } r
+                    ? Results.Ok(r)
+                    : Results.NotFound());
+
+            app.MapPost("/v1/resources", async (HttpRequest peticion) =>
+            {
+                var cuerpo = await JsonSerializer.DeserializeAsync<JsonElement>(peticion.Body);
+                yo.EscriturasDeAgenda.Add(("/v1/resources", peticion.Headers["Idempotency-Key"].ToString(), cuerpo));
+                return Results.Created("/v1/resources/nuevo", new { id = "nuevo" });
+            });
+
+            app.MapPost("/v1/resources/{id}/revise", async (string id, HttpRequest peticion) =>
+            {
+                var cuerpo = await JsonSerializer.DeserializeAsync<JsonElement>(peticion.Body);
+                yo.EscriturasDeAgenda.Add(($"/v1/resources/{id}/revise", peticion.Headers["Idempotency-Key"].ToString(), cuerpo));
+                return Results.Ok(new { resource = new { id }, outside = Array.Empty<object>() });
             });
 
             await app.StartAsync();
