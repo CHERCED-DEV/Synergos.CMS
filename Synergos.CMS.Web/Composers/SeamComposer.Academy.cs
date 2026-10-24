@@ -2,9 +2,11 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Academy;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -181,5 +183,23 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<ILogger<RegistroDeMatriculasDeLaPuerta>>(),
             hayOrquestador));
 
+        // La OFERTA de cada curso, al mismo orquestador: sin destino, publicar un curso no sale a la red. Diez segundos,
+        // porque quien espera es el editor que publica, y una oferta que no salió se repara republicando.
+        if (hayOrquestador)
+        {
+            services.AddClienteDelArbolDeServicios(
+                PublicadorDeOfertasDeCursos.ClientName, DestinoDelArbol.De(educacion, educacion["BaseUrl"]!, 10));
+        }
+        services.AddSingleton<IPublicadorDeOfertasDeCursos>(sp => new PublicadorDeOfertasDeCursos(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<PublicadorDeOfertasDeCursos>>(),
+            hayOrquestador));
+        services.AddSingleton<IAcademiaEnElContenido, AcademiaEnElContenido>();
+
+        // Se dispara al publicar y al retirar, NUNCA al arrancar (ADR 0013).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeCursoAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeCursoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeCursoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeCursoAlRetirar>();
     }
 }

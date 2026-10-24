@@ -66,6 +66,61 @@ public sealed class ConsumidorCmsDeBffEducacionTests
         LoQueLeeEstaEn("EducacionMatriculaRespuesta");
     }
 
+    /// <summary>
+    /// Lo que manda el publicador de la oferta (al publicar un curso o al republicar) cabe en <c>PublishCourseOffer</c>:
+    /// un campo renombrado —<c>cursoId</c> por <c>curso</c>— lo rechazaría el orquestador y el curso no se matricularía.
+    /// </summary>
+    [Fact]
+    public async Task Lo_que_manda_publicar_la_oferta_de_un_curso_cabe_en_PublishCourseOffer()
+    {
+        var orquestador = new PublicadorDeOfertasDeCursosTests.OrquestadorFalso();
+
+        await PublicadorDeOfertasDeCursosTests.Publicador(orquestador).PublicarAsync(PublicadorDeOfertasDeCursosTests.Curso());
+
+        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        var op = Raiz.GetProperty("paths").GetProperty(ruta).GetProperty("post");
+        Assert.Equal("PublishCourseOffer", op.GetProperty("operationId").GetString());
+        AdmiteLaLlave(op, llave);
+        using var enviado = JsonDocument.Parse(cuerpo);
+        var oferta = Esquema("PublicarOfertaDeCursoRequest").GetProperty("properties");
+        foreach (var campo in enviado.RootElement.EnumerateObject())
+        {
+            Assert.True(oferta.TryGetProperty(campo.Name, out _), $"PublicarOfertaDeCursoRequest no declara «{campo.Name}».");
+        }
+        var planes = enviado.RootElement.GetProperty("planes");
+        Assert.NotEqual(0, planes.GetArrayLength());
+        var plan = Esquema("PlanDeLaOfertaDto").GetProperty("properties");
+        foreach (var campo in planes.EnumerateArray().SelectMany(p => p.EnumerateObject()))
+        {
+            Assert.True(plan.TryGetProperty(campo.Name, out _), $"PlanDeLaOfertaDto no declara «{campo.Name}».");
+        }
+    }
+
+    /// <summary>El retiro de la oferta (al despublicar o borrar un curso) existe con la ruta y la llave que manda el CMS.</summary>
+    [Fact]
+    public async Task Lo_que_manda_retirar_la_oferta_existe_en_RetireCourseOffer()
+    {
+        var orquestador = new PublicadorDeOfertasDeCursosTests.OrquestadorFalso();
+
+        await PublicadorDeOfertasDeCursosTests.Publicador(orquestador).RetirarAsync("gestion-agil");
+
+        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        Assert.Equal("/v1/ofertas/gestion-agil/retirar", ruta);
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/ofertas/{curso}/retirar").GetProperty("post");
+        Assert.Equal("RetireCourseOffer", op.GetProperty("operationId").GetString());
+        AdmiteLaLlave(op, llave);
+        Assert.False(op.TryGetProperty("requestBody", out _));
+        Assert.Equal("", cuerpo);
+    }
+
+    private static void AdmiteLaLlave(JsonElement op, string? llave)
+    {
+        var cabecera = op.GetProperty("parameters").EnumerateArray()
+            .Single(p => p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "Idempotency-Key");
+        Assert.NotNull(llave);
+        Assert.True(llave!.Length <= cabecera.GetProperty("schema").GetProperty("maxLength").GetInt32());
+    }
+
     private static void LleveElSujeto(JsonElement op)
         => Assert.Contains(op.GetProperty("parameters").EnumerateArray(),
             p => p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "X-Synergos-Sujeto");

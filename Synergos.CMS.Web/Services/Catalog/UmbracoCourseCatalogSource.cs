@@ -4,6 +4,7 @@ using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.PublishedCache;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services.Catalog;
@@ -36,7 +37,7 @@ namespace Synergos.CMS.Web.Services.Catalog;
 public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
 {
     internal const string Vertical = "Academy";
-    private const string CoursePageAlias = "coursePage";
+    internal const string CoursePageAlias = "coursePage";
     private const string SiteRootAlias = "siteRoot";
 
     /// <summary>
@@ -48,15 +49,18 @@ public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
     private readonly IOptionsMonitor<CatalogSettings> _settings;
+    private readonly IVariationContextAccessor _variacion;
     private readonly ILogger<UmbracoCourseCatalogSource> _logger;
 
     public UmbracoCourseCatalogSource(
         IUmbracoContextAccessor umbracoContextAccessor,
         IOptionsMonitor<CatalogSettings> settings,
+        IVariationContextAccessor variacion,
         ILogger<UmbracoCourseCatalogSource> logger)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
         _settings = settings;
+        _variacion = variacion;
         _logger = logger;
     }
 
@@ -98,11 +102,9 @@ public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
             return Array.Empty<IPublishedContent>();
         }
 
-        var brandKey = _settings.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
-            ? b.Trim()
-            : null;
+        var brandKey = MarcaDeLaAcademia(_settings.CurrentValue);
 
-        if (string.IsNullOrWhiteSpace(brandKey))
+        if (brandKey is null)
         {
             // Fallar CERRADO: servir sin acotar mezclaría los cursos de todos los siteRoots.
             _logger.LogError(
@@ -111,10 +113,7 @@ public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
             return Array.Empty<IPublishedContent>();
         }
 
-        var siteRoot = umbracoContext.Content.GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
-            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
-                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+        var siteRoot = BuscarAcademia(umbracoContext.Content, brandKey, _variacion);
 
         if (siteRoot is null)
         {
@@ -122,8 +121,32 @@ public sealed class UmbracoCourseCatalogSource : ICatalogSource<AuthoredCourse>
             return Array.Empty<IPublishedContent>();
         }
 
-        return siteRoot.DescendantsOfType(CoursePageAlias).ToList();
+        return CursosDe(siteRoot, _variacion).ToList();
     }
+
+    /// <summary>
+    /// El <c>siteRoot</c> de la academia, recorriendo la caché publicada desde sus raíces, como lo ve este catálogo.
+    /// </summary>
+    /// <remarks>
+    /// Lo comparten este catálogo y <see cref="AcademiaEnElContenido"/> (010-educacion-matricula), por lo mismo que en la
+    /// tienda: durante un import la caché puede tener un nodo por id sin que el recorrido desde las raíces lo alcance
+    /// todavía, y una comprobación por otro camino diría «lo veo» mientras el catálogo no lo ve.
+    /// </remarks>
+    internal static IPublishedContent? BuscarAcademia(IPublishedContentCache cache, string marca, IVariationContextAccessor variacion)
+        => cache.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>(variacion))
+            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
+                && string.Equals(c.GetProperty("brandKey")?.GetValue()?.ToString()?.Trim(), marca, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Los cursos de la academia, por el mismo recorrido (ver <see cref="BuscarAcademia"/>).</summary>
+    internal static IEnumerable<IPublishedContent> CursosDe(IPublishedContent academia, IVariationContextAccessor variacion)
+        => academia.DescendantsOfType(variacion, CoursePageAlias);
+
+    /// <summary>El <c>brandKey</c> del <c>siteRoot</c> de la academia, o nulo si el despliegue no lo dice.</summary>
+    internal static string? MarcaDeLaAcademia(CatalogSettings ajustes)
+        => ajustes.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
+            ? b.Trim()
+            : null;
 
     /// <summary>
     /// <c>coursePage</c> → <see cref="AuthoredCourse"/>, o null si no es servible.
