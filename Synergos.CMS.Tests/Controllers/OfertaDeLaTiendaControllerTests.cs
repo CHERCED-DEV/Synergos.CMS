@@ -5,6 +5,7 @@ using NSubstitute;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Tests.Services;
 using Synergos.CMS.Web.Controllers;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -16,13 +17,17 @@ public sealed class OfertaDeLaTiendaControllerTests
 {
     private readonly IProductCatalogProvider _catalogo = Substitute.For<IProductCatalogProvider>();
     private readonly ITiendaOfferPublisher _ofertas = Substitute.For<ITiendaOfferPublisher>();
+    private readonly ITiendaEnElContenido _tienda = Substitute.For<ITiendaEnElContenido>();
+
+    public OfertaDeLaTiendaControllerTests()
+        => _tienda.SkusReservables().Returns(new HashSet<string>(StringComparer.Ordinal));
 
     private OfertaDeLaTiendaController Montar(bool sesion = true, string? rol = "admin")
     {
         var gate = Substitute.For<IMemberAccessGate>();
         gate.IsAuthenticated.Returns(sesion);
         gate.HasAnyRole(Arg.Any<string>()).Returns(c => rol is not null && c.Arg<string>().Split(',').Contains(rol));
-        return new OfertaDeLaTiendaController(_catalogo, _ofertas, gate, NullLogger<OfertaDeLaTiendaController>.Instance);
+        return new OfertaDeLaTiendaController(_catalogo, _ofertas, gate, _tienda, NullLogger<OfertaDeLaTiendaController>.Instance);
     }
 
     private static CatalogProductSummary Resumen(string id) => new(id, id, 1m, "COP", "", "", null, 0d, 0, 1);
@@ -64,7 +69,7 @@ public sealed class OfertaDeLaTiendaControllerTests
         var r = Assert.IsType<OkObjectResult>(await Montar().Republicar(default));
 
         var cuenta = Assert.IsType<OfertaDeLaTiendaController.RepublicarOfertaResponse>(r.Value);
-        Assert.Equal(new OfertaDeLaTiendaController.RepublicarOfertaResponse(30, 30, 0, 0), cuenta);
+        Assert.Equal(new OfertaDeLaTiendaController.RepublicarOfertaResponse(30, 30, 0, 0, 0), cuenta);
         await _ofertas.Received(30).PublishAsync(Arg.Any<ProductDetail>(), Arg.Any<CancellationToken>());
     }
 
@@ -78,6 +83,24 @@ public sealed class OfertaDeLaTiendaControllerTests
 
         var r = Assert.IsType<OkObjectResult>(await Montar().Republicar(default));
 
-        Assert.Equal(new OfertaDeLaTiendaController.RepublicarOfertaResponse(3, 0, 2, 1), r.Value);
+        Assert.Equal(new OfertaDeLaTiendaController.RepublicarOfertaResponse(3, 0, 2, 1, 0), r.Value);
+    }
+
+    /// <summary>
+    /// FR-026: una ficha marcada reservable es un servicio por cita (su oferta es la de Bff.Reservas). Republicar la
+    /// salta, no pide su ficha y la cuenta aparte.
+    /// </summary>
+    [Fact]
+    public async Task Una_ficha_reservable_no_se_republica_como_producto_y_se_cuenta_aparte()
+    {
+        Catalogo(3, 48);
+        _tienda.SkusReservables().Returns(new HashSet<string>(StringComparer.Ordinal) { "P-002" });
+        _ofertas.PublishAsync(Arg.Any<ProductDetail>(), Arg.Any<CancellationToken>()).Returns(TiendaOfferOutcome.Published);
+
+        var r = Assert.IsType<OkObjectResult>(await Montar().Republicar(default));
+
+        Assert.Equal(new OfertaDeLaTiendaController.RepublicarOfertaResponse(3, 2, 0, 0, 1), r.Value);
+        await _catalogo.DidNotReceive().GetProductAsync("P-002", Arg.Any<CancellationToken>());
+        await _ofertas.DidNotReceive().PublishAsync(Arg.Is<ProductDetail>(p => p.Product.Id == "P-002"), Arg.Any<CancellationToken>());
     }
 }
