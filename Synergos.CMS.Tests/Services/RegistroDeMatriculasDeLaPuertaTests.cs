@@ -185,6 +185,52 @@ public sealed class RegistroDeMatriculasDeLaPuertaTests
         Assert.Equal(0, orquestador.Pedidos);
     }
 
+    // ── Tras la devolución del personal (lote 8, 010-P2 B, T035) ────────────────────────────
+
+    [Fact]
+    public async Task Una_devuelta_sigue_completada_en_el_orquestador_y_ni_anotar_ni_reconciliar_la_reactivan()
+    {
+        var orquestador = new OrquestadorFalso().Con("m-1", Matricula("m-1")).ConLista(Matricula("m-1"));
+        var libro = Libro();
+        var registro = Registro(orquestador, libro);
+        await registro.AnotarAsync("m-1", Ana, "Ana", Correo, default);
+        await libro.DarDeBajaAsync("m-1");
+
+        var otraVez = await registro.AnotarAsync("m-1", Ana, "Ana", Correo, default);
+        await registro.ReconciliarAsync(Ana, "Ana", Correo, default);
+
+        Assert.Equal((409, "academy.enrollment_devuelta"), (otraVez.Estado, otraVez.Codigo));
+        Assert.Empty(await libro.GetEnrollmentsAsync(Correo));
+        Assert.Equal(new Dictionary<string, int> { [Curso] = 1 }, await registro.DevueltasAsync(Correo, default));
+        Assert.Empty(await registro.DevueltasAsync(null, default));
+    }
+
+    /// <summary>
+    /// «Mi aprendizaje» entrega las devueltas por curso (T035): con ellas el elemento arma la llave de una matrícula nueva
+    /// (<c>matricula-{curso}-{n}</c>), porque la devuelta sigue completada en el orquestador.
+    /// </summary>
+    [Fact]
+    public async Task Mi_aprendizaje_entrega_cuantas_matriculas_de_cada_curso_se_devolvieron()
+    {
+        var libro = Libro();
+        await libro.AnotarAsync(new MatriculaDeLaPuerta("m-1", "M-1", Curso, new Student("Ana", Correo), 320_000m, "COP"));
+        await libro.DarDeBajaAsync("m-1");
+        var gate = Substitute.For<IMemberAccessGate>();
+        gate.IsAuthenticated.Returns(true);
+        gate.CurrentMemberEmail.Returns(Correo);
+        gate.CurrentMemberKey.Returns(Ana);
+        var controlador = new Synergos.CMS.Web.Controllers.AcademyController(
+            Substitute.For<ICourseCatalogProvider>(), libro, Substitute.For<ICertificateService>(), Substitute.For<IPriceFormatter>(),
+            gate, libro, registro: Registro(new OrquestadorFalso(), libro, hayDestino: false));
+
+        var r = await controlador.Learning(default);
+
+        var aprendizaje = Assert.IsType<Synergos.CMS.Web.Controllers.AcademyController.LearningResponse>(
+            Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(r).Value);
+        Assert.Empty(aprendizaje.Enrollments);
+        Assert.Equal([new Synergos.CMS.Web.Controllers.AcademyController.MatriculasDevueltasDto(Curso, 1)], aprendizaje.Devueltas);
+    }
+
     /// <summary>El orquestador de Educación, de mentira: contesta lo que se le cargó y apunta el sujeto de cada lectura.</summary>
     internal sealed class OrquestadorFalso : IHttpClientFactory
     {

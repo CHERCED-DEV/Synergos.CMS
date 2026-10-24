@@ -196,6 +196,10 @@ public sealed partial class SeamComposer
             hayOrquestador));
         services.AddSingleton<IAcademiaEnElContenido, AcademiaEnElContenido>();
 
+        // La devolución del personal (lote 8, 010-P2 B): por el reenvío de la puerta, sin cliente propio, como la de la
+        // Tienda.
+        services.AddSingleton<DevolucionesDeMatriculas>();
+
         // Se dispara al publicar y al retirar, NUNCA al arrancar (ADR 0013).
         builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeCursoAlPublicar>();
         builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeCursoAlRetirar>();

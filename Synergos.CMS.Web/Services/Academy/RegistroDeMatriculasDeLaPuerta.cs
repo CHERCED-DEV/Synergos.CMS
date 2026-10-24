@@ -129,6 +129,15 @@ public sealed class RegistroDeMatriculasDeLaPuerta
         }
     }
 
+    /// <summary>
+    /// Cuántas matrículas de la puerta del alumno devolvió el personal, por curso (010-P2 B): «mi aprendizaje» se lo
+    /// entrega al elemento para la llave de una matrícula nueva. Es del libro: no sale a la red.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, int>> DevueltasAsync(string? correo, CancellationToken ct)
+        => string.IsNullOrWhiteSpace(correo)
+            ? new Dictionary<string, int>(StringComparer.Ordinal)
+            : await _libro.DevueltasAsync(correo, ct).ConfigureAwait(false);
+
     private async Task<ResultadoDeLaMatricula> AnotarLeidaAsync(MatriculaLeida m, string? nombre, string correo, CancellationToken ct)
     {
         if (m.Datos?.Curso?.Id is not { Length: > 0 } curso || m.Datos.Total is not { } total) return Invalida();
@@ -136,6 +145,12 @@ public sealed class RegistroDeMatriculasDeLaPuerta
         var anotacion = await _libro.AnotarAsync(
             new MatriculaDeLaPuerta(m.Id, m.Numero, curso, new Student(nombre ?? string.Empty, correo), total.Amount, total.Currency), ct)
             .ConfigureAwait(false);
+        if (anotacion.Devuelta)
+        {
+            // Completada en el orquestador y devuelta por el personal (010-P2 B): no abre el aula, y no se dice «activa».
+            return new ResultadoDeLaMatricula(StatusCodes.Status409Conflict, "academy.enrollment_devuelta",
+                "Esa matrícula se devolvió: el curso ya no está activo.", anotacion);
+        }
         if (anotacion.CobradaDeMas)
         {
             _log.LogWarning(

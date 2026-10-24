@@ -393,7 +393,14 @@ public sealed class AcademyController : ControllerBase
                 Completed: e.Percent >= 100));
         }
 
-        return Ok(new LearningResponse(Enrollments: rows, Paths: Array.Empty<LearningPathDto>()));
+        // Las matrículas de la puerta que el personal devolvió, por curso (010-P2 B): el elemento arma con ellas la llave
+        // de una matrícula nueva, porque la devuelta sigue completada en el orquestador.
+        var devueltas = _registro is null
+            ? new List<MatriculasDevueltasDto>()
+            : (await _registro.DevueltasAsync(student, cancellationToken))
+                .Select(d => new MatriculasDevueltasDto(d.Key, d.Value)).OrderBy(d => d.CourseId, StringComparer.Ordinal).ToList();
+
+        return Ok(new LearningResponse(Enrollments: rows, Paths: Array.Empty<LearningPathDto>(), Devueltas: devueltas));
     }
 
     // ── 4. Confirm ─────────────────────────────────────────────────────
@@ -642,6 +649,7 @@ public sealed class AcademyController : ControllerBase
         // vuelta, y pedírselo al motor de matrícula lo obligaría a consultar el catálogo por
         // fila para un dato que es de presentación.
         var students = new List<InstructorStudentDto>();
+        var administra = _gate.HasAnyRole("admin");
         foreach (var ic in result.Courses)
         {
             foreach (var row in await _metrics.GetCourseRosterAsync(ic.Course.Id, cancellationToken))
@@ -659,7 +667,10 @@ public sealed class AcademyController : ControllerBase
                     // con el del instante UTC, quien se inscribió a las 22:30 en Bogotá salía
                     // inscrito al día siguiente.
                     EnrolledAt: TimeZoneInfo.ConvertTime(row.EnrolledAt, _zona)
-                        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+                        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    MatriculaDevolvible: administra && row.MatriculaDeLaPuerta is not null && row.Total > 0m
+                        ? row.MatriculaDeLaPuerta
+                        : null));
             }
         }
 
@@ -1161,13 +1172,17 @@ public sealed class AcademyController : ControllerBase
     /// nombre queda vacía. Es lo correcto — el dato no está — y lo que sobra es el hueco, que se
     /// limpia del lado de la UI.</para>
     /// </remarks>
+    /// <param name="MatriculaDevolvible">El id de la matrícula que el administrador puede devolver (010-P2 B): sólo si
+    /// quien mira es <c>admin</c> y la fila salió por la puerta con algo cobrado. Nulo en todo otro caso, así que la
+    /// consola no ofrece «Devolver» a quien no puede ni donde no hay plata que devolver.</param>
     public sealed record InstructorStudentDto(
         string Id,
         string Name,
         string CourseId,
         string CourseTitle,
         int Percent,
-        string EnrolledAt);
+        string EnrolledAt,
+        string? MatriculaDevolvible = null);
 
     /// <summary>
     /// GET /api/academy/instructor/courses — { courses, students } + totales del panel.
@@ -1207,10 +1222,14 @@ public sealed class AcademyController : ControllerBase
         IReadOnlyList<string> CourseIds,
         int Percent);
 
-    /// <summary>GET /api/academy/learning — { enrollments, paths }.</summary>
+    /// <summary>Cuántas matrículas de la puerta de un curso le devolvió el personal al alumno (010-P2 B).</summary>
+    public sealed record MatriculasDevueltasDto(string CourseId, int Veces);
+
+    /// <summary>GET /api/academy/learning — { enrollments, paths, devueltas }.</summary>
     public sealed record LearningResponse(
         IReadOnlyList<EnrolledCourseDto> Enrollments,
-        IReadOnlyList<LearningPathDto> Paths);
+        IReadOnlyList<LearningPathDto> Paths,
+        IReadOnlyList<MatriculasDevueltasDto>? Devueltas = null);
 
     /// <summary>POST /api/academy/course — { courseId } del curso publicado.</summary>
     public sealed record PublishCourseResponse(string CourseId);

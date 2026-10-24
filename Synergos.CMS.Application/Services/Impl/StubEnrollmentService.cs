@@ -446,7 +446,10 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
         var todas = await LoadAllEnrollmentsAsync(cancellationToken);
         if (todas.FirstOrDefault(e => string.Equals(e.GateMatriculaId, matricula.MatriculaId, StringComparison.Ordinal)) is { } anotada)
         {
-            return new AnotacionDeLaMatricula(anotada.EnrollmentId, anotada.CourseId, YaEstaba: true, CobradaDeMas: false);
+            // Una devuelta sigue completada en el orquestador, y reconciliar o el enlace del aviso la vuelven a pedir: se
+            // dice que se devolvió y la fila sigue dada de baja (010-P2 B).
+            return new AnotacionDeLaMatricula(anotada.EnrollmentId, anotada.CourseId, YaEstaba: true, CobradaDeMas: false,
+                Devuelta: anotada.Status == EnrollmentStatus.Cancelled);
         }
 
         // Nadie queda dos veces en el mismo curso (#121), venga por donde venga: si ya está activo, no se crea otra fila.
@@ -478,6 +481,32 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             .Where(e => e.GateMatriculaId is not null && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
             .Select(e => e.GateMatriculaId!)
             .ToHashSet(StringComparer.Ordinal);
+    }
+
+    public async Task<bool> DarDeBajaAsync(string matriculaId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(matriculaId)) return false;
+
+        var fila = (await LoadAllEnrollmentsAsync(cancellationToken))
+            .FirstOrDefault(e => string.Equals(e.GateMatriculaId, matriculaId.Trim(), StringComparison.Ordinal));
+        if (fila is null) return false;
+        if (fila.Status != EnrollmentStatus.Cancelled)
+        {
+            await WriteEnrollmentAsync(fila with { Status = EnrollmentStatus.Cancelled }, cancellationToken);
+        }
+        return true;
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> DevueltasAsync(string student, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(student)) return new Dictionary<string, int>(StringComparer.Ordinal);
+
+        var email = student.Trim();
+        return (await LoadAllEnrollmentsAsync(cancellationToken))
+            .Where(e => e.GateMatriculaId is not null && e.Status == EnrollmentStatus.Cancelled
+                && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(e => e.CourseId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
     }
 
     // ── IEnrollmentMetrics (cara de lectura para el panel del instructor) ──
@@ -547,7 +576,9 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
                 // La fecha de la MATRÍCULA, que es lo que la columna «Inscrito» dice ser. No hay
                 // registro de cuándo se vio cada lección, así que cualquier otra cosa sería
                 // inventada — la misma advertencia que lleva StudentEnrollment.LastActivityAt.
-                EnrolledAt: enrollment.CreatedAt));
+                EnrolledAt: enrollment.CreatedAt,
+                MatriculaDeLaPuerta: enrollment.GateMatriculaId,
+                Total: enrollment.Total));
         }
 
         return rows;

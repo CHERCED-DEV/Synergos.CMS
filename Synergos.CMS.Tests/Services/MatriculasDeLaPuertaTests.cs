@@ -117,6 +117,72 @@ public sealed class MatriculasDeLaPuertaTests
         Assert.Empty(await libro.GetEnrollmentsAsync(Correo));
     }
 
+    // ── La baja tras la devolución del personal (lote 8, 010-P2 B, T035) ─────────────────────
+
+    [Fact]
+    public async Task Dar_de_baja_la_devuelta_la_saca_del_aula_de_la_consola_y_de_las_cuentas()
+    {
+        var (libro, _) = Libro();
+        await libro.AnotarAsync(DeLaPuerta());
+
+        Assert.True(await libro.DarDeBajaAsync("matricula-dev-clean-architecture"));
+
+        Assert.Empty(await libro.GetEnrollmentsAsync(Correo));
+        Assert.Empty(await libro.GetCourseRosterAsync(Curso));
+        Assert.Equal(new CourseEnrollmentStats(0, 0m), await libro.GetCourseStatsAsync(Curso));
+        Assert.Equal(new Dictionary<string, int> { [Curso] = 1 }, await libro.DevueltasAsync(Correo));
+    }
+
+    [Fact]
+    public async Task Dar_de_baja_dos_veces_no_hace_nada_y_una_que_el_libro_no_tiene_es_false()
+    {
+        var (libro, _) = Libro();
+        await libro.AnotarAsync(DeLaPuerta());
+
+        Assert.True(await libro.DarDeBajaAsync("matricula-dev-clean-architecture"));
+        Assert.True(await libro.DarDeBajaAsync("matricula-dev-clean-architecture"));
+        Assert.False(await libro.DarDeBajaAsync("no-existe"));
+        Assert.False(await libro.DarDeBajaAsync(" "));
+
+        Assert.Equal(1, (await libro.DevueltasAsync(Correo))[Curso]);
+    }
+
+    [Fact]
+    public async Task La_devuelta_no_se_reactiva_al_reconciliarla_y_el_alumno_puede_matricularse_otra_vez()
+    {
+        var (libro, _) = Libro();
+        await libro.AnotarAsync(DeLaPuerta());
+        await libro.DarDeBajaAsync("matricula-dev-clean-architecture");
+
+        // En el orquestador sigue completada: reconciliar o el enlace del aviso la vuelven a pedir.
+        var otraVez = await libro.AnotarAsync(DeLaPuerta());
+        Assert.True(otraVez.YaEstaba);
+        Assert.True(otraVez.Devuelta);
+        Assert.Empty(await libro.GetEnrollmentsAsync(Correo));
+
+        // La nueva matrícula (otra saga, la llave matricula-{curso}-1) sí entra.
+        var nueva = await libro.AnotarAsync(DeLaPuerta("matricula-dev-clean-architecture-1"));
+        Assert.False(nueva.YaEstaba);
+        Assert.False(nueva.Devuelta);
+        Assert.Equal(nueva.EnrollmentId, Assert.Single(await libro.GetEnrollmentsAsync(Correo)).EnrollmentId);
+        Assert.Equal(1, (await libro.DevueltasAsync(Correo))[Curso]);
+    }
+
+    [Fact]
+    public async Task La_consola_sabe_que_fila_salio_por_la_puerta_y_cuanto_se_cobro()
+    {
+        var (libro, _) = Libro();
+        await libro.AnotarAsync(DeLaPuerta());
+        Assert.True((await libro.EnrollAsync("dev-git-fundamentals", new Student("Beto", "beto@synergos.co"))).Enrolled);
+
+        var ana = Assert.Single(await libro.GetCourseRosterAsync(Curso));
+        Assert.Equal(("matricula-dev-clean-architecture", 320_000m), (ana.MatriculaDeLaPuerta, ana.Total));
+        var beto = Assert.Single(await libro.GetCourseRosterAsync("dev-git-fundamentals"));
+        Assert.Null(beto.MatriculaDeLaPuerta);
+        Assert.Equal(0m, beto.Total);
+        Assert.Empty(await libro.DevueltasAsync(Correo));
+    }
+
     /// <summary>Apunta lo que el motor manda al notificador del CMS.</summary>
     private sealed class AvisosApuntados : ITransactionalNotifier
     {
