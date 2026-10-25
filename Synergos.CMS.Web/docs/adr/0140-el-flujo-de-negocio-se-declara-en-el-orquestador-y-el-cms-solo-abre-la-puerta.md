@@ -1921,7 +1921,19 @@ CMS, «directa» por defecto.
     llega a confirmar y lee «Inicia sesión para reservar tu viaje.», con una sola llamada a la puerta y ninguna a
     `/hold` ni a `/pay`.
 
-  Queda el recorrido en el navegador con un viajero y un miembro del personal de prueba, a pedido del arquitecto.
+- **Verificado en vivo con sesión** (2026-10-25), con un viajero y un miembro del personal de prueba que autorizó el
+  arquitecto, sólo en la copia:
+  - el viajero reserva una estadía en `/hoteles/` por la puerta: comprobante 40AF9F51 por 660.000, sólo `abrir` y
+    `cerrar` en la red; el cobro `Captured` por ese total, la reserva `Confirmed` del 23 al 26 y un `.eml` a su correo;
+  - con `cerrar` cortado en la red, la estadía queda pendiente (cobro `Authorized`, un cupo tomado) y el asistente
+    ofrece cancelarla: cobro `Voided`, cupo suelto y ningún correo;
+  - el viajero no abre los flujos del personal (403 `puerta.personal_requerido`); el personal, por la puerta, cancela
+    con penalidad (600.000 devueltos una vez con la misma llave, la reserva `Cancelled`), la penalidad mayor no toca
+    nada, devolver más de lo que queda es el rechazo de Payments y una devolución parcial sale una vez;
+  - `listar` y `consultar` dan al viajero su viaje, y a otro miembro no;
+  - el botón y el aviso nuevos con contraste AA en los siete temas.
+- **Declarado:** lo posterior (lo devuelto, la cancelación del personal) no se ve en la original, y «Mis viajes» lo
+  pintaría confirmado (NV-16 de la línea); el enlace del aviso apunta a `/viajes/`, que la base real no tiene.
 
 ## Relación con otras ADRs
 
