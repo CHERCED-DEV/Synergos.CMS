@@ -80,6 +80,7 @@ public sealed class CatalogTramiteCatalogProvider : ITramiteCatalogProvider
 
         return catalog.FirstOrDefault(d =>
             string.Equals(d.Summary.Id, id, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(d.Summary.Slug, id, StringComparison.OrdinalIgnoreCase));
+            || string.Equals(d.Summary.Slug, id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(d.Summary.Clave, id, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -15,7 +15,7 @@ namespace Synergos.CMS.Tests.Contracts;
 /// <remarks>
 /// Lo que lee el artefacto se saca de los tipos con que lee (<see cref="ArtefactoDelExpediente.RadicacionLeida"/> y los
 /// suyos), con el nombre con que viajan: un campo renombrado de un lado y no del otro es rojo aquí, y no un nulo en el
-/// expediente. El publicador de la oferta (T034) se suma a este mismo censo.
+/// expediente. Y lo que manda el publicador de la oferta (T034), contra sus dos operaciones.
 /// </remarks>
 public sealed class ConsumidorCmsDeBffGobiernoTests
 {
@@ -46,6 +46,56 @@ public sealed class ConsumidorCmsDeBffGobiernoTests
     [Fact]
     public void Cada_campo_que_lee_el_artefacto_lo_publica_la_respuesta_de_la_radicacion()
         => LoQueLeeEstaEn(typeof(ArtefactoDelExpediente.RadicacionLeida), Esquema("GobiernoRadicacionRespuesta"), "GobiernoRadicacionRespuesta");
+
+    /// <summary>
+    /// Lo que manda el publicador al publicar un trámite cabe en <c>PublishTramiteOffer</c> (T034): un campo renombrado
+    /// —<c>tramiteId</c> por <c>tramite</c>— lo rechazaría el orquestador y el trámite no se radicaría por la puerta.
+    /// </summary>
+    [Fact]
+    public async Task Lo_que_manda_publicar_la_oferta_de_un_tramite_cabe_en_PublishTramiteOffer()
+    {
+        var orquestador = new PublicadorDeOfertasDeGobiernoTests.OrquestadorFalso();
+        var clave = Guid.NewGuid();
+
+        await PublicadorDeOfertasDeGobiernoTests.Publicador(orquestador)
+            .PublicarAsync(PublicadorDeOfertasDeGobiernoTests.Tramite(clave, marcadoGratuito: false, tasa: 65_500m)!);
+
+        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        var op = Raiz.GetProperty("paths").GetProperty(ruta).GetProperty("post");
+        Assert.Equal("PublishTramiteOffer", op.GetProperty("operationId").GetString());
+        AdmiteLaLlave(op, llave);
+        using var enviado = JsonDocument.Parse(cuerpo);
+        var oferta = Propiedades(Esquema("PublicarOfertaDeTramiteRequest"));
+        foreach (var campo in enviado.RootElement.EnumerateObject())
+        {
+            Assert.True(oferta.TryGetProperty(campo.Name, out _), $"PublicarOfertaDeTramiteRequest no declara «{campo.Name}».");
+        }
+    }
+
+    /// <summary>El retiro de la oferta (al despublicar o borrar un trámite) existe con la ruta y la llave que manda el CMS.</summary>
+    [Fact]
+    public async Task Lo_que_manda_retirar_la_oferta_existe_en_RetireTramiteOffer()
+    {
+        var orquestador = new PublicadorDeOfertasDeGobiernoTests.OrquestadorFalso();
+
+        await PublicadorDeOfertasDeGobiernoTests.Publicador(orquestador).RetirarAsync("2f6c1d4e-0000-4000-8000-000000000001");
+
+        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        Assert.Equal("/v1/ofertas/2f6c1d4e-0000-4000-8000-000000000001/retirar", ruta);
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/ofertas/{tramite}/retirar").GetProperty("post");
+        Assert.Equal("RetireTramiteOffer", op.GetProperty("operationId").GetString());
+        AdmiteLaLlave(op, llave);
+        Assert.False(op.TryGetProperty("requestBody", out _));
+        Assert.Equal("", cuerpo);
+    }
+
+    private static void AdmiteLaLlave(JsonElement op, string? llave)
+    {
+        var cabecera = op.GetProperty("parameters").EnumerateArray()
+            .Single(p => p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "Idempotency-Key");
+        Assert.NotNull(llave);
+        Assert.True(llave!.Length <= cabecera.GetProperty("schema").GetProperty("maxLength").GetInt32());
+    }
 
     /// <summary>
     /// Cada propiedad del tipo con que se lee, por el nombre con que viaja (su <see cref="JsonPropertyNameAttribute"/> o
