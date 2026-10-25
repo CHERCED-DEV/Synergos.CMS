@@ -28,6 +28,34 @@ public sealed record GovCitizen(
     Guid? MemberKey = null);
 
 /// <summary>
+/// Lo que el ciudadano contestó al radicar sobre la notificación electrónica de los actos de su
+/// trámite (009, S-7 y FR-017).
+/// </summary>
+/// <param name="Accepted">Si la aceptó. No aceptarla no impide radicar.</param>
+/// <param name="TextVersion">La versión del texto que leyó (<c>Gov.Tramite.Consent.Version</c>): es lo
+/// que prueba QUÉ aceptó.</param>
+/// <param name="RespondedAt">Cuándo contestó.</param>
+/// <remarks>
+/// <b>Sin respuesta registrada es «no consta»</b>, y se representa con <c>null</c>, nunca como una
+/// aceptación: así están los expedientes anteriores a 009 y los radicados sin la casilla. Notificar
+/// electrónicamente a quien no consta que lo aceptó dejaría corriendo un término sobre un medio que
+/// nadie autorizó.
+/// </remarks>
+public sealed record NotificationConsent(bool Accepted, string TextVersion, DateTimeOffset RespondedAt);
+
+/// <summary>Cómo viaja la aceptación hacia la consola: <c>accepted | declined | unknown</c>.</summary>
+public static class NotificationConsentSlugs
+{
+    public const string Accepted = "accepted";
+    public const string Declined = "declined";
+    public const string Unknown = "unknown";
+
+    /// <summary>El slug de una respuesta, o <see cref="Unknown"/> si no consta.</summary>
+    public static string ToSlug(NotificationConsent? consent)
+        => consent is null ? Unknown : consent.Accepted ? Accepted : Declined;
+}
+
+/// <summary>
 /// Resultado de radicar una solicitud: el expediente recién creado
 /// (<see cref="Case"/>, en estado <c>Radicado</c> con su número de radicado y primer
 /// hito del timeline) + la <see cref="PaymentSessionId"/> si el trámite cobra tasa (el
@@ -68,9 +96,13 @@ public interface IApplicationService
     /// <see cref="ArgumentException"/> si el trámite no existe o faltan campos
     /// requeridos del formulario.
     /// </summary>
+    /// <param name="consent">Lo que contestó sobre la notificación electrónica (009, FR-017), que se
+    /// guarda con las respuestas; <c>null</c> es «no consta». Con default, para que quien radica sin
+    /// la casilla siga igual; antes del token, que va último (CA1068).</param>
     Task<RadicarResult> RadicarAsync(
         string tramiteId,
         IReadOnlyDictionary<string, string> answers,
         GovCitizen citizen,
+        NotificationConsent? consent = null,
         CancellationToken cancellationToken = default);
 }

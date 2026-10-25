@@ -137,6 +137,7 @@ public sealed class StubApplicationService : IApplicationService
         string tramiteId,
         IReadOnlyDictionary<string, string> answers,
         GovCitizen citizen,
+        NotificationConsent? consent = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(tramiteId))
@@ -278,7 +279,10 @@ public sealed class StubApplicationService : IApplicationService
             },
             Decision: null,
             PaymentSessionId: paymentSessionId,
-            PaymentStatus: paymentStatus);
+            PaymentStatus: paymentStatus,
+            // La respuesta sobre la notificación electrónica va con las respuestas (009, FR-017):
+            // null es «no consta», nunca una aceptación.
+            Consent: consent is null ? null : consent with { TextVersion = consent.TextVersion.Trim() });
         await WriteAsync(state, cancellationToken);
 
         // Rastro forense append-only del primer estado del expediente (ADR 0037).
@@ -393,6 +397,17 @@ public sealed class StubApplicationService : IApplicationService
     }
 
     /// <summary>
+    /// Cuántas veces entró el expediente en <paramref name="status"/>, según su historia. 0 si no existe.
+    /// </summary>
+    /// <remarks>
+    /// Desde que la subsanación vuelve a revisión (009, D-2) un expediente puede pasar dos veces por el
+    /// mismo estado, y cada paso es un hecho distinto: quien avisa al ciudadano lo necesita para no
+    /// tratar el segundo como repetición del primero.
+    /// </remarks>
+    public int VecesEn(string caseIdOrRadicado, CaseStatus status)
+        => Resolve(caseIdOrRadicado)?.History.Count(h => h.Status == status) ?? 0;
+
+    /// <summary>
     /// Adjunta un documento (ya aceptado) al expediente. Lanza
     /// <see cref="ArgumentException"/> si el expediente no existe.
     /// </summary>
@@ -500,7 +515,8 @@ public sealed class StubApplicationService : IApplicationService
         Decision: s.Decision,
         // El estado del cobro de la tasa, que el agregado guardaba desde la ADR 0116
         // fase 5 y la proyección no declaraba: se escribía y no lo leía nadie (#116).
-        FeeStatus: s.PaymentStatus);
+        FeeStatus: s.PaymentStatus,
+        NotificationConsent: s.Consent);
 
     /// <summary>
     /// Días HÁBILES restantes del término. Terminal ⇒ 0.
@@ -915,4 +931,7 @@ internal sealed record CaseState(
     string? PaymentSessionId = null,
     // Estado del cobro la última vez que se consultó. Un trámite con tasa que
     // nunca capturó NO debería avanzar, y sin este campo nadie podía saberlo.
-    string? PaymentStatus = null);
+    string? PaymentStatus = null,
+    // Lo que contestó sobre la notificación electrónica de los actos (009, S-7). Null es «no
+    // consta»: así se leen los expedientes guardados antes de que existiera el campo.
+    NotificationConsent? Consent = null);

@@ -90,6 +90,13 @@ public static class TransactionalEmailCopy
                 Intro: "Estas son las entradas que compraste. Compártelas con las personas que van a asistir: cada una necesita la suya para entrar el día del evento.",
                 CodeLabel: "Número de orden",
                 ActionLabel: "Ver las entradas"),
+
+            [Clave(NotificationTypes.GovCaseDecided, NotificationVariants.GovCaseInReview)] = new(
+                Subject: "Tu trámite está en revisión",
+                Heading: "Estamos revisando tu trámite",
+                Intro: "Tu solicitud está en revisión. Te avisaremos cuando haya una decisión; con tu número de radicado puedes consultar el estado.",
+                CodeLabel: "Radicado",
+                ActionLabel: "Consultar mi trámite"),
         };
 
     private static string Clave(string type, string variant) => $"{type}|{variant}";

@@ -203,6 +203,7 @@
   ],
   "gov": [
     "acknowledgeBefore",
+    "actions",
     "agency",
     "answers",
     "application",
@@ -239,6 +240,7 @@
     "name",
     "note",
     "notification",
+    "notificationConsent",
     "notifications",
     "notifiedAt",
     "opened",
@@ -258,6 +260,7 @@
     "services",
     "sizeBytes",
     "slaDaysLeft",
+    "stale",
     "state",
     "status",
     "steps",
