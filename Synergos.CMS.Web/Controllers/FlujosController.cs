@@ -216,7 +216,7 @@ public sealed class FlujosController : ControllerBase
             var origen = $"{Request.Scheme}://{Request.Host}";
             cabeceras[LoQuePoneLaPuerta.CabeceraDelContacto] = LoQuePoneLaPuerta.Contacto(
                 correo, _miembro.CurrentMemberDisplayName,
-                LoQuePoneLaPuerta.Enlace(origen, ajustes.Aviso?.Ruta, parametros),
+                LoQuePoneLaPuerta.Enlace(origen, RutaDelAviso(ajustes.Aviso, parametros), parametros),
                 _sitio() ?? Request.Host.Host);
         }
 
@@ -233,6 +233,24 @@ public sealed class FlujosController : ControllerBase
             await _enVivo.PublicarAsync(op.Flujo, ajustes, op.Operacion, parametros, salida.Cuerpo, ct);
         }
         return new EmptyResult();
+    }
+
+    /// <summary>
+    /// La ruta del enlace del aviso (D-006-AVISO): la del SITIO de la petición si el flujo la declara por sitio y ésta es
+    /// una ruta del sitio que se puede armar con los parámetros de la operación; si no, la del flujo. Nunca un enlace a
+    /// una página que el sitio no tiene.
+    /// </summary>
+    private string? RutaDelAviso(AvisoDelFlujoSettings? aviso, IReadOnlyDictionary<string, string> parametros)
+    {
+        if (aviso is { Seccion: { } seccion, Campo: { } campo }
+            && _secciones?.Actual(seccion) is { } negocio
+            && LoQuePoneLaPuerta.Propiedad(negocio.GetType(), campo)?.GetValue(negocio) is string { Length: > 1 } delSitio
+            && delSitio[0] == '/' && !delSitio.StartsWith("//", StringComparison.Ordinal)
+            && LoQuePoneLaPuerta.Enlace(string.Empty, delSitio, parametros) is not null)
+        {
+            return delSitio;
+        }
+        return aviso?.Ruta;
     }
 
     /// <summary>Un fallo de la puerta como problem+json, con <c>code</c> y <c>transient</c> como un rechazo.</summary>

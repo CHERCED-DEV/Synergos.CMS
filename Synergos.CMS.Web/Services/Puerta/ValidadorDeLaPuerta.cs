@@ -182,7 +182,7 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
         }
     }
 
-    private static void RevisarAviso(string donde, IReadOnlyList<OperacionDeLaPuerta> ops, AvisoDelFlujoSettings? aviso, List<string> errores)
+    private void RevisarAviso(string donde, IReadOnlyList<OperacionDeLaPuerta> ops, AvisoDelFlujoSettings? aviso, List<string> errores)
     {
         if (aviso is null) return;
 
@@ -203,6 +203,25 @@ public sealed class ValidadorDeLaPuerta : IValidateOptions<PuertaSettings>
             {
                 errores.Add($"{donde}:Aviso:Ruta pide {{{m.Groups[1].Value}}} y la operación que avisa no lo trae.");
             }
+        }
+
+        // La ruta por sitio (D-006-AVISO): opcional, y con las dos claves. La de cada sitio la valida su sección; la que
+        // no se pueda armar en una petición cae en Ruta.
+        if (aviso.Seccion is null && aviso.Campo is null) return;
+        if (aviso.Seccion is null || aviso.Campo is null)
+        {
+            errores.Add($"{donde}:Aviso necesita Seccion y Campo juntos para la ruta por sitio.");
+            return;
+        }
+        var tipo = _secciones?.TipoDe(aviso.Seccion);
+        if (tipo is null)
+        {
+            errores.Add($"{donde}:Aviso:Seccion «{aviso.Seccion}» no es una sección de negocio registrada.");
+            return;
+        }
+        if (LoQuePoneLaPuerta.Propiedad(tipo, aviso.Campo)?.PropertyType != typeof(string))
+        {
+            errores.Add($"{donde}:Aviso:Campo «{aviso.Campo}» no es un campo de texto de {tipo.Name}.");
         }
     }
 }

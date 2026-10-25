@@ -25,11 +25,18 @@ public sealed class BookingWizardFeatureSettings : SeccionDeNegocio<BookingWizar
     /// <remarks>Un sitio con el valor vacío vuelve a la regla (la puerta si abre <c>viajes.reserva</c>).</remarks>
     public string? BookingPath { get; init; } = CaminoDeCompra.Directa;
 
+    /// <summary>
+    /// La ruta del enlace del aviso de una estadía reservada en el sitio (D-006-AVISO): la página del sitio que abre el
+    /// viaje, con sus marcadores (<c>/hoteles/?viaje={id}</c>). Sin valor, rige la ruta del flujo en la puerta.
+    /// </summary>
+    public string? AvisoRuta { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeBookingWizard Fusionar(BookingWizardFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
-            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath));
+            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath),
+            AvisoRuta: string.IsNullOrWhiteSpace(propio?.AvisoRuta ?? AvisoRuta) ? null : (propio?.AvisoRuta ?? AvisoRuta)!.Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeBookingWizard negocio)
@@ -37,7 +44,14 @@ public sealed class BookingWizardFeatureSettings : SeccionDeNegocio<BookingWizar
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             ReglasDeNegocio.Camino("BookingPath", negocio.BookingPath),
+            RutaDelSitio("AvisoRuta", negocio.AvisoRuta),
         }.OfType<string>();
+
+    /// <summary>Una ruta del sitio (<c>/…</c>), nunca de otro origen; vacía vale (rige la del flujo).</summary>
+    private static string? RutaDelSitio(string clave, string? ruta)
+        => ruta is null || (ruta.Length > 1 && ruta[0] == '/' && !ruta.StartsWith("//", StringComparison.Ordinal))
+            ? null
+            : $"{clave} «{ruta}» tiene que ser una ruta del sitio (/…).";
 }
 
 /// <summary>
@@ -50,4 +64,7 @@ public sealed class BookingWizardFeatureSitio
 
     /// <inheritdoc cref="BookingWizardFeatureSettings.BookingPath"/>
     public string? BookingPath { get; init; }
+
+    /// <inheritdoc cref="BookingWizardFeatureSettings.AvisoRuta"/>
+    public string? AvisoRuta { get; init; }
 }
