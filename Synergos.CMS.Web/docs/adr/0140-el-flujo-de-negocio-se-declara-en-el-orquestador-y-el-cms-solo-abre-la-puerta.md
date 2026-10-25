@@ -1935,6 +1935,45 @@ CMS, «directa» por defecto.
 - **Declarado:** lo posterior (lo devuelto, la cancelación del personal) no se ve en la original, y «Mis viajes» lo
   pintaría confirmado (NV-16 de la línea); el enlace del aviso apunta a `/viajes/`, que la base real no tiene.
 
+## Educación en el patrón (2026-10-25, 010)
+
+`educacion.matricula` es el primer flujo declarado en un orquestador **nuevo**, `Synergos.Bff.Educacion`, sin motor
+imperativo propio: la ruta directa sigue siendo el motor de matrícula del CMS, y el camino lo elige
+`Synergos:Features:Academy:EnrollmentPath` («directa» por defecto). La devolución del personal,
+`educacion.devolucion`, es un flujo posterior con cero líneas de C#.
+
+- **Medido** con dos métodos que coinciden: la prueba `MetricaDeEducacionTests` y el conteo a mano, sin comentarios
+  ni líneas en blanco. El flujo cuesta **19 líneas de C# en 4 ficheros** (el arranque, la definición, la
+  configuración y el proyecto): SC-007 superado (≤ 60 y ≤ 4). Aparte, y atribuidos a NM-1 (la oferta por plan del
+  núcleo, P12):
+  - el paso interino `educacion.linea`, 52 líneas;
+  - la oferta de los cursos, 172 líneas.
+
+  Un fichero del orquestador sin atribuir es rojo.
+- **Los valores declarados del aviso (T091) cubren NM-2**, con una desviación medida: el curso viaja como
+  referencia, que el validador rechaza con razón en `valores`, y el orquestador sólo conoce su clave. Así que los
+  nombres salen de la oferta que publica el CMS, nunca del navegador: el título del curso y el nombre de cada plan
+  viajan en `POST v1/ofertas`, y `educacion.linea` los escribe como `nombreDelCurso` y `nombreDelPlan`. Una oferta
+  sin nombres cae a la clave y al código.
+- **Verificado en vivo con sesión** en la copia piloto, con un alumno y un admin de prueba que autorizó el
+  arquitecto:
+  - republicar: 4 de 4;
+  - la matrícula por la puerta, sin una sola llamada a la ruta directa, y con doble clic, un solo `abrir` y un
+    solo `cerrar`;
+  - el plan en cuotas y uno inventado: `pricing.price_not_found`, sin cobro;
+  - el curso gratis, sin llamar a pagos;
+  - dos pestañas: una sola matrícula, un cobro y un aviso;
+  - la devolución del admin: un solo reembolso, la matrícula original intacta, el aula cerrada, y la matrícula
+    nueva con la llave `matricula-{curso}-1`.
+
+  Cobros leídos en Payments y `.eml` leídos, con el curso y el plan por su nombre.
+- **Corregido en vivo**: dos anotaciones simultáneas de la misma matrícula dejaban dos filas en el libro del aula.
+  Ahora el id de la fila sale de la matrícula.
+- **No verificado en vivo, con su razón**: el botón «Devolver» de la consola. La consola le lista a cada cuenta los
+  cursos cuyo instructor es su correo, y el catálogo real nombra a sus instructores `ins-*`. Con este contenido
+  ninguna cuenta ve filas, así que el botón no aparece: la devolución se verificó con la sesión del admin por el
+  mismo endpoint que llama el botón.
+
 ## Relación con otras ADRs
 
 - **0138** — el coordinador de página tiene ahora adónde enviar: el flujo. Su piloto puede ser la

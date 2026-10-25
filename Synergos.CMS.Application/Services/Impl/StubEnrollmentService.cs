@@ -35,8 +35,11 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// el índice en memoria, saneada para el sistema de archivos).
 /// </para>
 /// </remarks>
-public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetrics
+public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetrics, IMatriculasDeLaPuerta
 {
+    /// <summary>El origen de una matrícula que cerró la puerta (010-educacion-matricula); sin origen, la directa.</summary>
+    public const string OrigenPuerta = "puerta";
+
     private static readonly JsonSerializerOptions _json = new()
     {
         WriteIndented = true,
@@ -427,6 +430,94 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             VerifyUrl: $"/academy/verify/{certId}");
     }
 
+    // ── IMatriculasDeLaPuerta (lo que cerró la puerta, 010-educacion-matricula) ──
+
+    public async Task<AnotacionDeLaMatricula> AnotarAsync(MatriculaDeLaPuerta matricula, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(matricula);
+        ArgumentNullException.ThrowIfNull(matricula.Student);
+        if (string.IsNullOrWhiteSpace(matricula.MatriculaId) || string.IsNullOrWhiteSpace(matricula.CourseId)
+            || string.IsNullOrWhiteSpace(matricula.Student.Email))
+        {
+            throw new ArgumentException("La matrícula de la puerta necesita su id, el curso y el correo del alumno.", nameof(matricula));
+        }
+
+        var email = matricula.Student.Email.Trim();
+        var todas = await LoadAllEnrollmentsAsync(cancellationToken);
+        if (todas.FirstOrDefault(e => string.Equals(e.GateMatriculaId, matricula.MatriculaId, StringComparison.Ordinal)) is { } anotada)
+        {
+            // Una devuelta sigue completada en el orquestador, y reconciliar o el enlace del aviso la vuelven a pedir: se
+            // dice que se devolvió y la fila sigue dada de baja (010-P2 B).
+            return new AnotacionDeLaMatricula(anotada.EnrollmentId, anotada.CourseId, YaEstaba: true, CobradaDeMas: false,
+                Devuelta: anotada.Status == EnrollmentStatus.Cancelled);
+        }
+
+        // Nadie queda dos veces en el mismo curso (#121), venga por donde venga: si ya está activo, no se crea otra fila.
+        // Que ESTA matrícula se haya cobrado igual lo dice quien anota; devolverla es una operación del personal (010-P2).
+        var activa = todas.FirstOrDefault(e => e.Status == EnrollmentStatus.Active
+            && string.Equals(e.CourseId, matricula.CourseId, StringComparison.Ordinal)
+            && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase));
+        if (activa is not null)
+        {
+            return new AnotacionDeLaMatricula(activa.EnrollmentId, activa.CourseId, YaEstaba: true, CobradaDeMas: matricula.Total > 0m);
+        }
+
+        // El id sale de la matrícula: dos anotaciones que se cruzan —dos pestañas que cierran la misma— leen el libro
+        // sin la otra y escriben la MISMA fila, no dos.
+        var nueva = CreateEnrollment(
+            matricula.CourseId, (matricula.Student.Name ?? string.Empty).Trim(), email, EnrollmentStatus.Active,
+            orderRef: null, paymentSessionId: null, total: matricula.Total, currency: matricula.Currency)
+            with { EnrollmentId = IdDeLaPuerta(matricula.MatriculaId), Origin = OrigenPuerta, GateMatriculaId = matricula.MatriculaId };
+        await WriteEnrollmentAsync(nueva, cancellationToken);
+        await AdvanceTrackingAsync(nueva.EnrollmentId, StageEnrolled, cancellationToken);
+        // Sin NotifyActiveAsync a propósito: el aviso de esta matrícula ya lo mandó el paso del flujo.
+        return new AnotacionDeLaMatricula(nueva.EnrollmentId, nueva.CourseId, YaEstaba: false, CobradaDeMas: false);
+    }
+
+    /// <summary>
+    /// El id de la fila de una matrícula de la puerta, derivado de la matrícula. No el hash corto del certificado: con 32
+    /// bits, dos matrículas de miles terminarían en la misma fila.
+    /// </summary>
+    private static string IdDeLaPuerta(string matriculaId)
+        => "enrl_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("puerta|" + matriculaId))).ToLowerInvariant()[..32];
+
+    public async Task<IReadOnlyCollection<string>> AnotadasAsync(string student, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(student)) return Array.Empty<string>();
+
+        var email = student.Trim();
+        return (await LoadAllEnrollmentsAsync(cancellationToken))
+            .Where(e => e.GateMatriculaId is not null && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
+            .Select(e => e.GateMatriculaId!)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    public async Task<bool> DarDeBajaAsync(string matriculaId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(matriculaId)) return false;
+
+        var fila = (await LoadAllEnrollmentsAsync(cancellationToken))
+            .FirstOrDefault(e => string.Equals(e.GateMatriculaId, matriculaId.Trim(), StringComparison.Ordinal));
+        if (fila is null) return false;
+        if (fila.Status != EnrollmentStatus.Cancelled)
+        {
+            await WriteEnrollmentAsync(fila with { Status = EnrollmentStatus.Cancelled }, cancellationToken);
+        }
+        return true;
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> DevueltasAsync(string student, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(student)) return new Dictionary<string, int>(StringComparer.Ordinal);
+
+        var email = student.Trim();
+        return (await LoadAllEnrollmentsAsync(cancellationToken))
+            .Where(e => e.GateMatriculaId is not null && e.Status == EnrollmentStatus.Cancelled
+                && string.Equals(e.StudentEmail, email, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(e => e.CourseId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+    }
+
     // ── IEnrollmentMetrics (cara de lectura para el panel del instructor) ──
 
     public async Task<CourseEnrollmentStats> GetCourseStatsAsync(string courseId, CancellationToken cancellationToken = default)
@@ -494,7 +585,9 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
                 // La fecha de la MATRÍCULA, que es lo que la columna «Inscrito» dice ser. No hay
                 // registro de cuándo se vio cada lección, así que cualquier otra cosa sería
                 // inventada — la misma advertencia que lleva StudentEnrollment.LastActivityAt.
-                EnrolledAt: enrollment.CreatedAt));
+                EnrolledAt: enrollment.CreatedAt,
+                MatriculaDeLaPuerta: enrollment.GateMatriculaId,
+                Total: enrollment.Total));
         }
 
         return rows;
@@ -806,7 +899,9 @@ internal sealed record PersistedEnrollment(
     string? PaymentSessionId,
     decimal Total,
     string Currency,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? Origin = null,
+    string? GateMatriculaId = null);
 
 /// <summary>
 /// La forma SERIALIZADA del progreso de un alumno en un curso (el antiguo

@@ -5,7 +5,33 @@
       "nombre": "academy",
       "tipo": "funcionalidad",
       "record": "AcademyProps",
-      "diccionario": [],
+      "diccionario": [
+        "Academy.Enrollment"
+      ],
+      "claves": [
+        "Academy.Enrollment.Activating",
+        "Academy.Enrollment.Active",
+        "Academy.Enrollment.AlreadyEnrolled",
+        "Academy.Enrollment.BadRequest",
+        "Academy.Enrollment.ChangePlan",
+        "Academy.Enrollment.Enroll",
+        "Academy.Enrollment.Free",
+        "Academy.Enrollment.Generic",
+        "Academy.Enrollment.GoToClassroom",
+        "Academy.Enrollment.Heading",
+        "Academy.Enrollment.Loading",
+        "Academy.Enrollment.NotFound",
+        "Academy.Enrollment.Pay",
+        "Academy.Enrollment.PaymentFailed",
+        "Academy.Enrollment.Refund",
+        "Academy.Enrollment.RefundConfirm",
+        "Academy.Enrollment.RefundFailed",
+        "Academy.Enrollment.Refunded",
+        "Academy.Enrollment.SignInRequired",
+        "Academy.Enrollment.Total",
+        "Academy.Enrollment.Transient",
+        "Academy.Enrollment.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "heading",
@@ -24,13 +50,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "enrollmentPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Aprende lo que el mercado pide",
         "subheading": "Catálogo, lecciones e instructores a tu ritmo",
-        "apiBase": "/api/academy"
+        "apiBase": "/api/academy",
+        "enrollmentPath": "directa"
       }
     },
     {

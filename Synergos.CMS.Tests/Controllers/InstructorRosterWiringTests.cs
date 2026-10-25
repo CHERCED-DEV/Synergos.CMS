@@ -133,6 +133,35 @@ public sealed class InstructorRosterWiringTests
         Assert.Equal("2026-10-02", consola.Students.Single(s => s.CourseId == "excel").EnrolledAt);
     }
 
+    /// <summary>
+    /// «Devolver» sólo donde se puede (lote 8, 010-P2 B, T036): la fila lleva la matrícula devolvible si quien mira es
+    /// <c>admin</c> y la matrícula salió por la puerta con algo cobrado; a un instructor, nunca; una de la ruta directa
+    /// o una gratis, nunca.
+    /// </summary>
+    [Fact]
+    public async Task Solo_el_admin_recibe_la_matricula_devolvible_y_solo_en_filas_de_la_puerta_con_cobro()
+    {
+        DosCursosConUnAlumnoCadaUno();
+        var dia = new DateTimeOffset(2026, 6, 20, 15, 30, 0, TimeSpan.Zero);
+        _metrics.GetCourseRosterAsync("excel", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new CourseRosterEntry("ana-op", "Ana Rincón", "excel", 40, dia, MatriculaDeLaPuerta: "mat-ana", Total: 180_000m),
+            new CourseRosterEntry("caro-op", "Caro Díaz", "excel", 0, dia, MatriculaDeLaPuerta: "mat-caro", Total: 0m),
+        });
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => (c.Arg<string?>() ?? "").Split(',').Contains("admin"));
+
+        var deAdmin = await Consola();
+
+        Assert.Equal("mat-ana", deAdmin.Students.Single(s => s.Name == "Ana Rincón").MatriculaDevolvible);
+        Assert.Null(deAdmin.Students.Single(s => s.Name == "Caro Díaz").MatriculaDevolvible);
+        Assert.Null(deAdmin.Students.Single(s => s.Name == "Beto Salas").MatriculaDevolvible);
+
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => !(c.Arg<string?>() ?? "").Split(',').SequenceEqual(["admin"]));
+        var deInstructor = await Consola();
+
+        Assert.All(deInstructor.Students, s => Assert.Null(s.MatriculaDevolvible));
+    }
+
     [Fact] // instructor sin cursos → lista vacía, no 500 ni null
     public async Task Sin_cursos_la_lista_de_alumnos_va_vacia()
     {

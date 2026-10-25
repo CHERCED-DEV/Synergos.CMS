@@ -2,8 +2,11 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Academy;
 using Synergos.CMS.Web.Services.Catalog;
+using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -114,6 +117,8 @@ public sealed partial class SeamComposer
         });
         services.AddSingleton<IEnrollmentService>(sp => sp.GetRequiredService<StubEnrollmentService>());
         services.AddSingleton<IEnrollmentMetrics>(sp => sp.GetRequiredService<StubEnrollmentService>());
+        // Lo que cierra la puerta (010-educacion-matricula) se anota en el MISMO libro: el aula no distingue el camino.
+        services.AddSingleton<IMatriculasDeLaPuerta>(sp => sp.GetRequiredService<StubEnrollmentService>());
         // Certificado verificable — seam dedicado, compone catálogo + motor.
         //
         // ADR 0124: el id lo FIRMA ICertificateIdSigner (HMAC-SHA256 con llave del servidor,
@@ -160,5 +165,45 @@ public sealed partial class SeamComposer
                 null,
                 sp.GetRequiredService<IJsonEntityStore>()));
 
+        // La matrícula por la puerta (010-educacion-matricula): el registro que anota lo que cierra el orquestador de
+        // Educación. Hay destino sólo si el despliegue dice dónde vive (Synergos:Educacion:BaseUrl, la misma clave con la
+        // que la puerta lo encuentra); sin él, el registro contesta «no disponible» y nada sale a la red.
+        var educacion = builder.Config.GetSection("Synergos:Educacion");
+        var hayOrquestador = !string.IsNullOrWhiteSpace(educacion["BaseUrl"]);
+        if (hayOrquestador)
+        {
+            services.AddClienteDelArbolDeServicios(
+                RegistroDeMatriculasDeLaPuerta.ClientName, DestinoDelArbol.De(educacion, educacion["BaseUrl"]!, 10));
+        }
+        services.AddSingleton(sp => new RegistroDeMatriculasDeLaPuerta(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IMatriculasDeLaPuerta>(),
+            sp.GetRequiredService<IEnrollmentService>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<ILogger<RegistroDeMatriculasDeLaPuerta>>(),
+            hayOrquestador));
+
+        // La OFERTA de cada curso, al mismo orquestador: sin destino, publicar un curso no sale a la red. Diez segundos,
+        // porque quien espera es el editor que publica, y una oferta que no salió se repara republicando.
+        if (hayOrquestador)
+        {
+            services.AddClienteDelArbolDeServicios(
+                PublicadorDeOfertasDeCursos.ClientName, DestinoDelArbol.De(educacion, educacion["BaseUrl"]!, 10));
+        }
+        services.AddSingleton<IPublicadorDeOfertasDeCursos>(sp => new PublicadorDeOfertasDeCursos(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<PublicadorDeOfertasDeCursos>>(),
+            hayOrquestador));
+        services.AddSingleton<IAcademiaEnElContenido, AcademiaEnElContenido>();
+
+        // La devolución del personal (lote 8, 010-P2 B): por el reenvío de la puerta, sin cliente propio, como la de la
+        // Tienda.
+        services.AddSingleton<DevolucionesDeMatriculas>();
+
+        // Se dispara al publicar y al retirar, NUNCA al arrancar (ADR 0013).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeCursoAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeCursoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeCursoAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeCursoAlRetirar>();
     }
 }

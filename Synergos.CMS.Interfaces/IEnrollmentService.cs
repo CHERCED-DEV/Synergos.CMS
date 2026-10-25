@@ -184,6 +184,58 @@ public interface IEnrollmentService
     Task<Certificate?> GetCertificateAsync(string courseId, string student, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Una matrícula que cerró la PUERTA (010-educacion-matricula): la que el orquestador de Educación cobró y el CMS anota
+/// para que el aula la vea. Todo sale de la respuesta del orquestador, leída con el sujeto del miembro de la sesión.
+/// </summary>
+/// <param name="MatriculaId">El id de la matrícula en el orquestador (su saga): la anotación es idempotente por él.</param>
+/// <param name="Numero">El número que ve la persona, el del aviso.</param>
+/// <param name="Student">El alumno: el miembro de la sesión, con el correo con el que el aula lo reconoce.</param>
+public sealed record MatriculaDeLaPuerta(string MatriculaId, string Numero, string CourseId, Student Student, decimal Total, string Currency);
+
+/// <summary>Cómo quedó anotada una matrícula de la puerta en el libro.</summary>
+/// <param name="YaEstaba">El alumno ya tenía ese curso activo (por esta matrícula o por otra): no se creó otra fila.</param>
+/// <param name="CobradaDeMas">El curso ya estaba activo por OTRA matrícula y ésta se cobró: quien anota lo deja dicho.</param>
+/// <param name="Devuelta">Esta matrícula ya se anotó y el personal la devolvió (010-P2 B): sigue dada de baja, no se
+/// reactiva aunque en el orquestador siga completada.</param>
+public sealed record AnotacionDeLaMatricula(string EnrollmentId, string CourseId, bool YaEstaba, bool CobradaDeMas, bool Devuelta = false);
+
+/// <summary>
+/// La cara de ESCRITURA del libro de matrículas para lo que cierra la puerta (010-educacion-matricula, molde 004-P2):
+/// el aula, «mi aprendizaje», el progreso, el certificado y la consola del instructor leen el MISMO libro, así que
+/// una matrícula de la puerta se ve igual que una de la ruta directa.
+/// </summary>
+/// <remarks>
+/// <b>No avisa</b>: el aviso de una matrícula de la puerta lo manda el paso del flujo, y dos correos por una matrícula
+/// serían un defecto. Va aparte de <see cref="IEnrollmentService"/> (ISP): sólo la usa el registro de la puerta.
+/// </remarks>
+public interface IMatriculasDeLaPuerta
+{
+    /// <summary>
+    /// Anota activa la matrícula. Repetirla no crea otra fila; si el alumno ya tenía el curso activo por otra matrícula,
+    /// tampoco, y lo dice (<see cref="AnotacionDeLaMatricula.CobradaDeMas"/>).
+    /// </summary>
+    /// <exception cref="ArgumentException">Si falta el id, el curso o el correo del alumno.</exception>
+    Task<AnotacionDeLaMatricula> AnotarAsync(MatriculaDeLaPuerta matricula, CancellationToken cancellationToken = default);
+
+    /// <summary>Los ids de las matrículas de la puerta ya anotadas del alumno (para reconciliar sin repetir).</summary>
+    Task<IReadOnlyCollection<string>> AnotadasAsync(string student, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Da de baja la matrícula de la puerta que el personal devolvió (lote 8, 010-P2 B), por el id de su saga: el aula,
+    /// «mi aprendizaje» y la consola dejan de verla. Repetirlo no hace nada.
+    /// </summary>
+    /// <returns><c>false</c> si el libro no tiene esa matrícula de la puerta.</returns>
+    Task<bool> DarDeBajaAsync(string matriculaId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cuántas matrículas de la puerta del alumno se devolvieron, por curso: con eso el elemento arma la llave de una
+    /// matrícula nueva (<c>matricula-{curso}-{n}</c>), porque la devuelta sigue completada en el orquestador y la misma
+    /// llave la devolvería a ella.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> DevueltasAsync(string student, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Métricas de matrícula agregadas de un curso: cuántos alumnos y cuánto ingreso acumulado.</summary>
 public sealed record CourseEnrollmentStats(int Students, decimal Revenue);
 
@@ -219,12 +271,17 @@ public sealed record CourseEnrollmentStats(int Students, decimal Revenue);
 /// <para><b>El día que la consola tenga una acción de contactar</b>, lo que hace falta es un
 /// CANAL y no una dirección: <c>Api.Messaging</c> está construida y Gobierno ya la usa.</para>
 /// </remarks>
+/// <param name="MatriculaDeLaPuerta">El id de la saga si la matrícula salió por la puerta (010-educacion-matricula):
+/// es lo que el personal devuelve. Nulo por la ruta directa.</param>
+/// <param name="Total">Lo que se cobró por la matrícula; cero si fue gratis.</param>
 public sealed record CourseRosterEntry(
     string StudentId,
     string StudentName,
     string CourseId,
     int Percent,
-    DateTimeOffset EnrolledAt);
+    DateTimeOffset EnrolledAt,
+    string? MatriculaDeLaPuerta = null,
+    decimal Total = 0m);
 
 /// <summary>
 /// Cara de LECTURA del motor de matrícula para el panel del instructor

@@ -71,6 +71,7 @@
     <ProjectReference Include="..\capacidades\Synergos.Api.Workflow\Synergos.Api.Workflow.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Alquiler\Synergos.Bff.Alquiler.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Core\Synergos.Bff.Core.csproj" />
+    <ProjectReference Include="..\orquestadores\Synergos.Bff.Educacion\Synergos.Bff.Educacion.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Eventos\Synergos.Bff.Eventos.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Reservas\Synergos.Bff.Reservas.csproj" />
     <ProjectReference Include="..\orquestadores\Synergos.Bff.Propiedades\Synergos.Bff.Propiedades.csproj" />
