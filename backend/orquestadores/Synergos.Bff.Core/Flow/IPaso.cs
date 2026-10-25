@@ -68,6 +68,17 @@ public interface IPaso
     /// </remarks>
     bool UsaPlantilla => false;
 
+    /// <summary>
+    /// Si admite <c>valores</c> declarados por la definición (núcleo, NM-2 de 010), y cuáles pone él: <c>null</c> si no los
+    /// admite (por defecto).
+    /// </summary>
+    /// <remarks>
+    /// Un aviso manda sus valores fijos y, además, los nombres del contexto que declare su definición, cada uno con el
+    /// marcador del mismo nombre. Uno declarado que se llame como uno fijo lo pisaría sin que nadie lo viera: el validador
+    /// no lo deja arrancar.
+    /// </remarks>
+    IReadOnlyCollection<string>? ValoresFijos => null;
+
     /// <summary>Si comprueba un permiso con el <c>proposito</c> que declara su definición. Por defecto, no.</summary>
     /// <remarks>
     /// Se cruza como la plantilla, en los dos sentidos: sin propósito no hay qué comprobar, y uno declarado
@@ -262,6 +273,10 @@ public sealed class EntradaDePaso
 
     /// <summary>El valor del <paramref name="indice"/>-ésimo nombre de <c>lee</c>.</summary>
     public T Lee<T>(int indice) => Ambito.Leer<T>(Paso.Lee[indice], _ctx, _alias, _item);
+
+    /// <summary>El valor de <paramref name="nombre"/>, sea del tipo que sea: lo que lee un paso que lo escribe según su tipo
+    /// (los <c>valores</c> de un aviso, NM-2 de 010).</summary>
+    public object? LeePorNombre(string nombre) => Ambito.Leer<object?>(nombre, _ctx, _alias, _item);
 
     /// <summary>La llave FIJA del paso: <c>{sagaId}|{llave}</c>, la misma que <c>saga.KeyFor(llave)</c>.</summary>
     public IdempotencyKey Llave()

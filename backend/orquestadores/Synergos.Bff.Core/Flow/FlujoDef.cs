@@ -160,6 +160,8 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// <param name="Transicion">La transición fija que dispara.</param>
 /// <param name="Transiciones">La lista cerrada de las que puede elegir quien actúa.</param>
 /// <param name="Rol">Con qué rol actúa quien dispara: el que comprobó la puerta (009-P6 = A).</param>
+/// <param name="Valores">Los nombres del contexto que un paso de aviso manda, además de los suyos fijos, cada uno con el
+/// marcador del mismo nombre (núcleo, NM-2 de 010, NN-6 de 003, NR-3 de 008). Sin expresiones: un nombre, un marcador.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -178,8 +180,15 @@ public sealed record PasoDef(
     string? Proceso = null,
     string? Transicion = null,
     IReadOnlyList<string>? Transiciones = null,
-    string? Rol = null)
+    string? Rol = null,
+    IReadOnlyList<string>? Valores = null)
 {
+    /// <summary>
+    /// Todo lo que el paso lee del contexto: sus <see cref="Lee"/> y los <see cref="Valores"/> que declara. Es lo que el
+    /// validador exige escrito antes, y lo que la saga guarda si lo lee una fase posterior.
+    /// </summary>
+    public IEnumerable<string> LoQueLee => Valores is null ? Lee : Lee.Concat(Valores);
+
     /// <summary><c>al_fallar: seguir</c>: el fallo se anota y la fase sigue.</summary>
     public const string Seguir = "seguir";
 
@@ -523,7 +532,8 @@ internal static class LectorDeFlujo
         Objeto(nodo, aqui);
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
-            "omitir_si_cero", "plantilla", "proposito", "omitir_si_falta", "proceso", "transicion", "transiciones", "rol");
+            "omitir_si_cero", "plantilla", "proposito", "omitir_si_falta", "proceso", "transicion", "transiciones", "rol",
+            "valores");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && alFallar is not (PasoDef.Seguir or PasoDef.Soltar))
@@ -560,7 +570,8 @@ internal static class LectorDeFlujo
             Opcional(nodo, "proceso", aqui),
             Opcional(nodo, "transicion", aqui),
             nodo.TryGetProperty("transiciones", out _) ? Textos(nodo, "transiciones", aqui) : null,
-            Opcional(nodo, "rol", aqui));
+            Opcional(nodo, "rol", aqui),
+            nodo.TryGetProperty("valores", out _) ? Textos(nodo, "valores", aqui) : null);
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>
