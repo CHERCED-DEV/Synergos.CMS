@@ -18,13 +18,26 @@ public sealed class BookingWizardFeatureSettings : SeccionDeNegocio<BookingWizar
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/booking";
 
+    /// <summary>
+    /// Por dónde reserva el elemento: <c>puerta</c> o <c>directa</c> (<see cref="CaminoDeCompra"/>). Por defecto
+    /// <c>directa</c> (línea 006, P5), como el portal de viajes: un sitio pasa a la puerta cuando lo declara.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío vuelve a la regla (la puerta si abre <c>viajes.reserva</c>).</remarks>
+    public string? BookingPath { get; init; } = CaminoDeCompra.Directa;
+
     /// <inheritdoc />
     protected override NegocioDeBookingWizard Fusionar(BookingWizardFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeBookingWizard negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            ReglasDeNegocio.Camino("BookingPath", negocio.BookingPath),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +47,7 @@ public sealed class BookingWizardFeatureSitio
 {
     /// <inheritdoc cref="BookingWizardFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="BookingWizardFeatureSettings.BookingPath"/>
+    public string? BookingPath { get; init; }
 }
