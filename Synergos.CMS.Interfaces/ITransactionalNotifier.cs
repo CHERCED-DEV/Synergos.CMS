@@ -34,6 +34,12 @@ public static class NotificationVariants
     /// llévalas contigo», son las que tiene que repartir.
     /// </summary>
     public const string EventBuyerNotAttending = "events.buyer-not-attending";
+
+    /// <summary>
+    /// El expediente entra a «en revisión» (009): al tomarlo y cuando la subsanación vuelve. No es una
+    /// decisión, y el aviso del expediente no puede decir que la hay.
+    /// </summary>
+    public const string GovCaseInReview = "gov.case.in-review";
 }
 
 /// <summary>

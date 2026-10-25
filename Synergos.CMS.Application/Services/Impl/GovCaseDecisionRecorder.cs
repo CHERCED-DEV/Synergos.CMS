@@ -173,7 +173,9 @@ public sealed class GovCaseDecisionRecorder
                 ["Estado"] = @case.CurrentStage,
             },
             ActionPath: $"/gobierno/tramites/{@case.Radicado}",
-            DedupeKey: ClaveDelAviso(@case.Radicado, to, _cases.VecesEn(@case.CaseId, to)));
+            DedupeKey: ClaveDelAviso(@case.Radicado, to, _cases.VecesEn(@case.CaseId, to)),
+            // Entrar a revisión (tomarlo, o la subsanación que vuelve) no es una decisión: su propio texto.
+            Variant: to == CaseStatus.EnRevision ? NotificationVariants.GovCaseInReview : null);
 
         return NotificationEmission.SafeDispatchAsync(_notifier, notification, cancellationToken);
     }
