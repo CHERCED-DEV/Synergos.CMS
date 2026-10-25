@@ -50,8 +50,11 @@ public sealed class PaymentProviderOutcomeTests
         public string Name => "guionado";
         public bool MuevePlata => true;
 
-        public Task<Pagos.PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+        public Task<Pagos.PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, string reference, CancellationToken ct = default)
             => Task.FromResult(_respuesta);
+
+        public Task<Pagos.PaymentAttempt?> FindAuthorizationAsync(string reference, CancellationToken ct = default)
+            => Task.FromResult<Pagos.PaymentAttempt?>(null);
 
         public Task<Pagos.PaymentAttempt> CaptureAsync(string r, Money a, CancellationToken ct = default)
             => Task.FromResult(_respuesta);
@@ -146,17 +149,19 @@ public sealed class PaymentProviderOutcomeTests
     // ── El proveedor que no está configurado ────────────────────────────────
 
     [Fact]
-    public async Task NotConfiguredPaymentProvider_rechaza_las_CUATRO_operaciones()
+    public async Task NotConfiguredPaymentProvider_rechaza_las_CINCO_operaciones()
     {
         // Si alguna dijera que sí, el despliegue a medias volvería a parecer uno que funciona
         // — por esa operación.
         var p = new NotConfiguredPaymentProvider(
             "wompi", "Payments:wompi:ApiKey", NullLogger<NotConfiguredPaymentProvider>.Instance);
 
-        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.AuthorizeAsync(Cop(1000), Pagador)).Outcome);
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.AuthorizeAsync(Cop(1000), Pagador, "cobro-1")).Outcome);
         Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.CaptureAsync("r", Cop(1000))).Outcome);
         Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.RefundAsync("r", Cop(1000))).Outcome);
         Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.VoidAsync("r")).Outcome);
+        // Y buscar un cobro en duda (#183): sin credencial no se puede preguntar, y eso no es «no hay rastro».
+        Assert.Equal(Pagos.PaymentOutcome.NotConfigured, (await p.FindAuthorizationAsync("cobro-1"))!.Outcome);
         Assert.False(p.MuevePlata);
     }
 

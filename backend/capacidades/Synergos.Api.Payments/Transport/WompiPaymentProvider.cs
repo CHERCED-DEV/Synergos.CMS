@@ -87,10 +87,14 @@ public sealed class WompiPaymentProvider : IPaymentProvider
     // ── Autorizar: firmar la intención ──────────────────────────────────────
 
     /// <summary>
-    /// Crea la referencia del comercio y firma la URL del checkout. <b>No hay llamada HTTP</b>: la
-    /// transacción nace cuando el comprador completa el checkout.
+    /// Arma la referencia del comercio con la nuestra y firma la URL del checkout. <b>No hay llamada HTTP</b>:
+    /// la transacción nace cuando el comprador completa el checkout.
     /// </summary>
-    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+    /// <remarks>
+    /// <b>La referencia del comercio sale de la NUESTRA</b> (#183) y no de un Guid nuevo: así volver a autorizar
+    /// un cobro en duda firma la MISMA intención, y <see cref="FindAuthorizationAsync"/> la encuentra.
+    /// </remarks>
+    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, string reference, CancellationToken ct = default)
     {
         if (!_options.IsConfigured)
         {
@@ -115,7 +119,7 @@ public sealed class WompiPaymentProvider : IPaymentProvider
         // La referencia del comercio es lo que se firma y lo único con lo que después se puede
         // conciliar. Es opaca a propósito: el `Ref` del pagador NO entra —una referencia viaja en
         // la URL del navegador del comprador y en los correos de la pasarela—.
-        var referencia = $"syn-{Guid.NewGuid():n}";
+        var referencia = DelComercio(reference);
         var firma = WompiSignature.Integrity(referencia, centavos, MonedaUnica, _options.IntegritySecret!);
 
         var url = new UrlDeCheckout(_options.CheckoutBaseUrl)
@@ -128,6 +132,35 @@ public sealed class WompiPaymentProvider : IPaymentProvider
             .Build();
 
         return Task.FromResult(PaymentAttempt.Ok(referencia, url));
+    }
+
+    /// <summary>La referencia del comercio de un cobro nuestro: opaca, sin nada del pagador.</summary>
+    private static string DelComercio(string nuestra) => $"syn-{nuestra}";
+
+    // ── Buscar: lo que Wompi sabe de un cobro en duda ───────────────────────
+
+    /// <summary>
+    /// La transacción de un cobro en duda, por su referencia del comercio (#183): sin transacción no hay rastro, y entonces se
+    /// puede volver a firmar la misma intención.
+    /// </summary>
+    /// <remarks>
+    /// Aprobada o pendiente, la intención ya es de alguien: se asienta autorizada con su referencia y es capturar quien
+    /// constata el desenlace, como siempre. Rechazada, con error o anulada: ese cobro no salió.
+    /// </remarks>
+    public async Task<PaymentAttempt?> FindAuthorizationAsync(string reference, CancellationToken ct = default)
+    {
+        if (!_options.IsConfigured) return PaymentAttempt.NotConfigured($"Falta {_options.QueFalta()}.");
+
+        var referencia = DelComercio(reference);
+        var consulta = await BuscarAsync(referencia, ct).ConfigureAwait(false);
+        // No saber no es «no hubo»: si Wompi no contesta, el cobro sigue en duda.
+        if (consulta.Fallo is { } noContesto) return noContesto;
+        if (consulta.Transaccion is not { } tx) return null;
+
+        var estado = (tx.Status ?? string.Empty).Trim().ToUpperInvariant();
+        return estado is "DECLINED" or "ERROR" or "VOIDED"
+            ? PaymentAttempt.Declined(tx.StatusMessage ?? $"Wompi tiene la transacción de {referencia} en {estado}.")
+            : PaymentAttempt.Ok(referencia);
     }
 
     // ── Capturar: constatar que la plata se movió ───────────────────────────

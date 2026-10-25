@@ -72,10 +72,21 @@ public sealed class LoggingPaymentProvider : IPaymentProvider
     /// <remarks>Dice que NO, y por eso el gate lo puede echar de producción.</remarks>
     public bool MuevePlata => false;
 
-    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, string reference, CancellationToken ct = default)
     {
         _log.LogWarning("SIN PASARELA REAL: se 'autorizó' {Amount} de {Payer} sin mover nada.", amount, payer);
         return Task.FromResult(PaymentAttempt.Ok($"stub-{Guid.NewGuid():n}"));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// No guarda nada, así que nunca hay rastro: un cobro en duda se vuelve a «autorizar», y eso no mueve plata. Es la verdad
+    /// de este proveedor, no un atajo: uno real tiene que contestar lo que sabe.
+    /// </remarks>
+    public Task<PaymentAttempt?> FindAuthorizationAsync(string reference, CancellationToken ct = default)
+    {
+        _log.LogWarning("SIN PASARELA REAL: no hay rastro de {Ref}; se volverá a 'autorizar' sin mover nada.", reference);
+        return Task.FromResult<PaymentAttempt?>(null);
     }
 
     public Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default)
@@ -135,8 +146,13 @@ public sealed class NotConfiguredPaymentProvider : IPaymentProvider
         return PaymentAttempt.NotConfigured($"El medio de pago no está configurado: falta {_queFalta}.");
     }
 
-    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default)
+    public Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, string reference, CancellationToken ct = default)
         => Task.FromResult(Gritar("autorizar"));
+
+    /// <inheritdoc />
+    /// <remarks>Sin credencial no se puede preguntar: el cobro sigue en duda hasta que el operador la ponga.</remarks>
+    public Task<PaymentAttempt?> FindAuthorizationAsync(string reference, CancellationToken ct = default)
+        => Task.FromResult<PaymentAttempt?>(Gritar("buscar un cobro en duda"));
 
     public Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default)
         => Task.FromResult(Gritar("capturar"));
