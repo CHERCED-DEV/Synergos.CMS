@@ -4,8 +4,9 @@ using Synergos.Bff.Core;
 namespace Synergos.CMS.Tests.Bff.Propiedades;
 
 /// <summary>
-/// Historia 4 de 008-propiedades-visita: el aviso de la visita es un paso del flujo (ADR 0140): UN correo al
-/// confirmar, con el día y la hora en la del sitio y la modalidad, y un aviso caído no deshace la visita.
+/// Historia 4 de 008-propiedades-visita: el aviso de la visita es un paso del flujo (ADR 0140), el común del núcleo con
+/// sus «valores» (T091, NR-3): UN correo al confirmar, con el día y las horas en la del sitio y la modalidad en palabras, y
+/// un aviso caído no deshace la visita.
 /// </summary>
 /// <remarks>
 /// Contra <c>Api.Notifications</c> real del arnés, con la plantilla del fichero que la provisiona de verdad
@@ -14,7 +15,7 @@ namespace Synergos.CMS.Tests.Bff.Propiedades;
 public sealed class AvisoDeLaVisitaTests
 {
     [Fact]
-    public async Task Al_confirmar_sale_un_correo_con_el_numero_el_dia_y_la_hora_del_sitio()
+    public async Task Al_confirmar_sale_un_correo_con_el_numero_la_franja_en_la_hora_del_sitio_y_la_modalidad()
     {
         // Lo que se mira son los valores que el paso MANDA de verdad, capturados en el cable: la entrega que
         // registra la capacidad dice el asunto ya relleno, no el cuerpo.
@@ -34,9 +35,11 @@ public sealed class AvisoDeLaVisitaTests
         Assert.Equal($"Tu visita {cerrada.GetProperty("numero").GetString()} quedó agendada", entrega.GetProperty("subject").GetString());
         Assert.Equal("ana@ejemplo.co", entrega.GetProperty("address").GetString());
         Assert.NotNull(mandado);
-        Assert.Contains("\"hora\":\"09:00\"", mandado, StringComparison.Ordinal);
-        Assert.Contains($"\"fecha\":\"{VisitaReal.Inicio:dd/MM/yyyy}\"", mandado, StringComparison.Ordinal);
-        Assert.Contains("\"modalidad\":\"por videollamada\"", mandado, StringComparison.Ordinal);
+        // Las 9:00 de Bogotá son las 14:00 UTC: si saliera en UTC diría «14:00».
+        Assert.Contains($"\"ventana\":\"{VisitaReal.Inicio:dd/MM/yyyy} 09:00 a 10:00\"", mandado, StringComparison.Ordinal);
+        Assert.Contains("\"modoEnTexto\":\"por videollamada\"", mandado, StringComparison.Ordinal);
+        // La visita no se cobra: el aviso no escribe un total que nadie fijó.
+        Assert.DoesNotContain("\"total\"", mandado, StringComparison.Ordinal);
     }
 
     [Fact]
