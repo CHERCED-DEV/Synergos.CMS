@@ -228,7 +228,8 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
                 foreach (var id in bloque?.Pasos ?? [elemento.Paso!])
                 {
                     if (!flujo.Pasos.TryGetValue(id, out var paso)) continue;
-                    foreach (var nombre in paso.Lee)
+                    // Con los valores que declara un aviso (NM-2): el título del curso que se lee al cerrar se guarda al abrir.
+                    foreach (var nombre in paso.LoQueLee)
                     {
                         if (bloque is not null
                             && (string.Equals(nombre, bloque.Como, StringComparison.Ordinal) || Ambito.Campo(nombre, bloque.Como) is not null))

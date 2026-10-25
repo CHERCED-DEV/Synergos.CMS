@@ -67,6 +67,7 @@ public static class FlowValidator
         RevisarOmitirSiFalta(flujo, registro, contrato, errores);
         RevisarModoGenerico(flujo, registro, contrato, errores);
         RevisarLecturas(flujo, registro, contrato, errores);
+        RevisarValores(flujo, registro, contrato, errores);
         if (procesos is not null)
         {
             errores.AddRange(flujo.Pasos.Values.OrderBy(p => p.Id, StringComparer.Ordinal).SelectMany(procesos.Revisar));
@@ -151,7 +152,7 @@ public static class FlowValidator
                     errores.Add($"{aqui} da el paso «{id}», que reserva, cierra, pide llave, avisa u omite: una lectura no escribe "
                         + "en ninguna capacidad.");
                 }
-                foreach (var leido in paso.Lee.Where(n => !disponibles.Contains(n)))
+                foreach (var leido in paso.LoQueLee.Where(n => !disponibles.Contains(n)))
                 {
                     errores.Add($"{aqui}: «{id}» lee «{leido}», que ni entra en la lectura ni lo escribe un paso anterior de ella.");
                 }
@@ -829,6 +830,59 @@ public static class FlowValidator
         }
     }
 
+    /// <summary>Los tipos que un aviso sabe escribir en un correo (núcleo, NM-2 de 010): lo que se lee, en es-CO.</summary>
+    public static readonly IReadOnlyCollection<string> TiposDeUnValorDelAviso =
+        ["texto", "entero", "decimal", "dinero", "fecha", "instante", "ventana", "booleano"];
+
+    /// <summary>
+    /// Los <c>valores</c> que declara un aviso (núcleo, NM-2 de 010; NN-6 de 003, NR-3 de 008): que el paso los admita, que no
+    /// se repitan, que no pisen uno de los suyos y que sean de un tipo que se lee en un correo.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Que alguien los escriba antes lo cruza <see cref="RevisarOrden"/></b>, porque se leen como cualquier lectura
+    /// (<see cref="PasoDef.LoQueLee"/>); y la saga los guarda si los lee una fase posterior.</para>
+    ///
+    /// <para><b>Una referencia, un contacto o una lista no se escriben en un correo</b>: el id de algo no es un texto para
+    /// una persona, el contacto es un dato personal que ya da «nombre», y una lista necesita saber qué campos decir
+    /// (N-10 de 004 y NV-7 de 006 siguen pendientes).</para>
+    /// </remarks>
+    private static void RevisarValores(FlujoDef flujo, IRegistroDePasos registro, ContratoDelFlujo contrato, List<string> errores)
+    {
+        foreach (var paso in flujo.Pasos.Values.Where(p => p.Valores is not null).OrderBy(p => p.Id, StringComparer.Ordinal))
+        {
+            if (registro.Para(paso.Tipo) is not { ValoresFijos: { } fijos })
+            {
+                errores.Add($"el paso «{paso.Id}» declara «valores» y «{paso.Tipo}» no avisa con valores: quien lo lea creerá "
+                    + "que ese paso los manda.");
+                continue;
+            }
+
+            foreach (var repetido in paso.Valores!.GroupBy(v => v, StringComparer.Ordinal).Where(g => g.Count() > 1).Select(g => g.Key))
+            {
+                errores.Add($"el paso «{paso.Id}» nombra «{repetido}» dos veces en «valores».");
+            }
+            foreach (var pisado in paso.Valores!.Where(v => fijos.Contains(v, StringComparer.Ordinal)).Distinct(StringComparer.Ordinal))
+            {
+                errores.Add($"el paso «{paso.Id}» declara el valor «{pisado}», que «{paso.Tipo}» ya pone: el declarado lo pisaría.");
+            }
+
+            if (contrato.Tipos is not { } tipos) continue;
+            foreach (var nombre in paso.Valores!.Distinct(StringComparer.Ordinal))
+            {
+                if (flujo.Tipos?.GetValueOrDefault(nombre) is { EsLista: true })
+                {
+                    errores.Add($"el paso «{paso.Id}» declara el valor «{nombre}», que es una lista: no se sabe qué decir de cada ítem.");
+                }
+                else if (BindingDeFlujo.TipoDe(flujo, tipos, registro, nombre) is { } tipo
+                         && !TiposDeUnValorDelAviso.Contains(tipo.Tipo.Nombre, StringComparer.Ordinal))
+                {
+                    errores.Add($"el paso «{paso.Id}» declara el valor «{nombre}», que es «{tipo.Tipo.Nombre}»: no se escribe en un "
+                        + $"correo (sí: {string.Join(", ", TiposDeUnValorDelAviso)}).");
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Lo que no tiene vuelta (núcleo, lote 7): arrancar una instancia o disparar una transición. Es la regla de forma de la
     /// ADR 0140: lo reversible va antes y se deshace si este paso falla; lo que sólo avisa va después.
@@ -920,7 +974,7 @@ public static class FlowValidator
                 if (Declarado(flujo, fase.Nombre, elemento.Paso ?? string.Empty, errores) is not { } paso) continue;
                 Ubicar(paso.Id, f, null, donde, errores);
 
-                foreach (var nombre in paso.Lee.Where(n => !escritos.Contains(n)))
+                foreach (var nombre in paso.LoQueLee.Where(n => !escritos.Contains(n)))
                 {
                     errores.Add(NadieLoEscribe(paso, nombre, f, fase));
                 }
@@ -1001,7 +1055,7 @@ public static class FlowValidator
             if (Declarado(flujo, $"para_cada {bloque.Fuente}", id, errores) is not { } paso) continue;
             Ubicar(paso.Id, f, bloque, donde, errores);
 
-            foreach (var nombre in paso.Lee)
+            foreach (var nombre in paso.LoQueLee)
             {
                 if (string.Equals(nombre, bloque.Como, StringComparison.Ordinal)) continue;
 

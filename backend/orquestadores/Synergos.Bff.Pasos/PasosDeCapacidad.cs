@@ -237,9 +237,22 @@ public sealed class PasoPagosAnular(IDeshacerCobros cobros) : IPaso
 /// este camino. La llave es fija por saga (<c>llave</c> en la definición), así que repetir el paso
 /// —una confirmación reintentada— no manda dos correos. Lo que falle al mandar vuelve tal cual: si
 /// eso deshace o no la saga lo decide la definición (<c>al_fallar</c>), no el paso.</para>
+///
+/// <para><b>Y los que declare la definición</b> (núcleo, NM-2 de 010; NN-6 de 003, NR-3 de 008): <c>"valores"</c> nombra
+/// lo del contexto que también va, cada uno con el marcador del mismo nombre —el título del curso, el plan, la hora de la
+/// cita—. Sin expresiones: un nombre, un marcador, escrito en es-CO según su tipo (<see cref="Escribir"/>). La hora sale en
+/// la del sitio, la zona que declara el orquestador.</para>
+///
+/// <para><b>El total se puede no nombrar</b> (NR-3 de 008): un aviso de algo que no se cobra no escribe un cero que nadie
+/// fijó, y entonces no lleva <c>{total}</c>.</para>
 /// </remarks>
-public sealed class PasoAvisar(INotificationsPort avisos) : IPaso
+public sealed class PasoAvisar(INotificationsPort avisos, TimeZoneInfo zona) : IPaso
 {
+    /// <summary>La zona del sitio si el orquestador no declara otra (<c>{Origen}:ZonaHoraria</c>), como en Propiedades.</summary>
+    public const string ZonaPorDefecto = "America/Bogota";
+
+    private static readonly string[] Fijos = ["nombre", "numero", "total", "enlace", "sitio"];
+
     /// <summary>El total como se lee en es-CO, sin depender de la cultura del proceso.</summary>
     private static readonly System.Globalization.NumberFormatInfo EsCo = new()
     {
@@ -248,12 +261,16 @@ public sealed class PasoAvisar(INotificationsPort avisos) : IPaso
         NumberGroupSizes = new[] { 3 },
     };
 
+    public PasoAvisar(INotificationsPort avisos) : this(avisos, TimeZoneInfo.FindSystemTimeZoneById(ZonaPorDefecto)) { }
+
     public string Tipo => "notifications.avisar";
     public IReadOnlyList<Type> TiposDeEscritura => [];
     public int Lecturas => 3;
+    public int LecturasOpcionales => 1;
     public int Escrituras => 0;
     public LlaveRequerida Llave => LlaveRequerida.Fija;
     public bool UsaPlantilla => true;
+    public IReadOnlyCollection<string>? ValoresFijos => Fijos;
 
     public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
     {
@@ -261,26 +278,71 @@ public sealed class PasoAvisar(INotificationsPort avisos) : IPaso
         var contacto = entrada.Lee<Contacto?>(1);
         if (contacto is null || string.IsNullOrWhiteSpace(contacto.Correo)) return SalidaDePaso.Sigue();
 
+        var valores = new Dictionary<string, string>(
+            Valores(entrada.SagaId, contacto, entrada.Paso.Lee.Count > 2 ? entrada.Lee<Money>(2) : null), StringComparer.Ordinal);
+        foreach (var nombre in entrada.Paso.Valores ?? [])
+        {
+            valores[nombre] = Escribir(entrada.LeePorNombre(nombre), zona, nombre);
+        }
+
         var avisado = await avisos.AvisarAsync(
-            entrada.Lee<Ref>(0), contacto.Correo, entrada.Paso.Plantilla!,
-            Valores(entrada.SagaId, contacto, entrada.Lee<Money>(2)), entrada.Llave(), ct);
+            entrada.Lee<Ref>(0), contacto.Correo, entrada.Paso.Plantilla!, valores, entrada.Llave(), ct);
 
         return avisado.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(avisado.Rejection!);
     }
 
-    /// <summary>Los valores fijos del aviso.</summary>
-    public static IReadOnlyDictionary<string, string> Valores(string sagaId, Contacto contacto, Money total)
+    /// <summary>Los valores fijos del aviso; sin <paramref name="total"/>, no lleva <c>total</c>.</summary>
+    public static IReadOnlyDictionary<string, string> Valores(string sagaId, Contacto contacto, Money? total)
     {
         ArgumentNullException.ThrowIfNull(contacto);
         var alfanumerico = new string(sagaId.Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
 
-        return new Dictionary<string, string>(StringComparer.Ordinal)
+        var valores = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["nombre"] = contacto.Nombre ?? string.Empty,
             ["numero"] = alfanumerico.Length <= 8 ? alfanumerico : alfanumerico[^8..],
-            ["total"] = $"{total.Amount.ToString("#,##0.##", EsCo)} {total.Currency}",
             ["enlace"] = contacto.Enlace ?? string.Empty,
             ["sitio"] = contacto.Sitio ?? string.Empty,
         };
+        if (total is { } t) valores["total"] = Dinero(t);
+        return valores;
+    }
+
+    /// <summary>
+    /// Un valor declarado como se lee en un correo es-CO: el texto tal cual; los números y el dinero con el punto de miles;
+    /// la fecha <c>dd/MM/yyyy</c>; un instante y una ventana en la hora del sitio (<paramref name="zona"/>); sí o no. Nulo,
+    /// vacío.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Si es de un tipo que no se escribe en un correo; el validador no deja
+    /// arrancar una definición que lo declare.</exception>
+    public static string Escribir(object? valor, TimeZoneInfo zona, string nombre = "valor")
+    {
+        ArgumentNullException.ThrowIfNull(zona);
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        return valor switch
+        {
+            null => string.Empty,
+            string s => s,
+            int n => n.ToString("#,##0", EsCo),
+            decimal d => d.ToString("#,##0.##", EsCo),
+            Money m => Dinero(m),
+            DateOnly f => f.ToString("dd/MM/yyyy", c),
+            DateTimeOffset i => TimeZoneInfo.ConvertTime(i, zona).ToString("dd/MM/yyyy HH:mm", c),
+            TimeWindow v => Ventana(v, zona),
+            bool b => b ? "sí" : "no",
+            _ => throw new InvalidOperationException($"«{nombre}» es {valor.GetType().Name}, que no se escribe en un correo."),
+        };
+    }
+
+    private static string Dinero(Money m) => $"{m.Amount.ToString("#,##0.##", EsCo)} {m.Currency}";
+
+    private static string Ventana(TimeWindow v, TimeZoneInfo zona)
+    {
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        var desde = TimeZoneInfo.ConvertTime(v.Start, zona);
+        var hasta = TimeZoneInfo.ConvertTime(v.End, zona);
+        return desde.Date == hasta.Date
+            ? $"{desde.ToString("dd/MM/yyyy HH:mm", c)} a {hasta.ToString("HH:mm", c)}"
+            : $"{desde.ToString("dd/MM/yyyy HH:mm", c)} a {hasta.ToString("dd/MM/yyyy HH:mm", c)}";
     }
 }
