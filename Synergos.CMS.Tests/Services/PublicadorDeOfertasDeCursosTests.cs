@@ -90,6 +90,9 @@ public sealed class PublicadorDeOfertasDeCursosTests
         var plan = Assert.Single(o.GetProperty("planes").EnumerateArray());
         Assert.Equal("full", plan.GetProperty("codigo").GetString());
         Assert.Equal(320_000m, plan.GetProperty("total").GetDecimal());
+        // Cómo se llaman, para el aviso de la matrícula (NM-2): el título de la ficha y la etiqueta del plan.
+        Assert.Equal("Gestión ágil", o.GetProperty("nombre").GetString());
+        Assert.Equal("Pago de contado", plan.GetProperty("nombre").GetString());
     }
 
     /// <summary>

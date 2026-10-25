@@ -15,7 +15,11 @@
     "cerrar": ["capturar", "avisar"]
   },
   "pasos": {
-    "linea": { "tipo": "educacion.linea", "lee": ["curso", "plan"], "escribe": ["aCotizar"] },
+    "linea": {
+      "tipo": "educacion.linea",
+      "lee": ["curso", "plan"],
+      "escribe": ["aCotizar", "nombreDelCurso", "nombreDelPlan"]
+    },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": {
       "tipo": "pricing.desglose",
@@ -48,7 +52,8 @@
       "lee": ["alumno", "contacto", "total"],
       "llave": "avisar",
       "plantilla": "educacion.matricula.confirmada",
-      "al_fallar": "seguir"
+      "al_fallar": "seguir",
+      "valores": ["nombreDelCurso", "nombreDelPlan"]
     }
   }
 }

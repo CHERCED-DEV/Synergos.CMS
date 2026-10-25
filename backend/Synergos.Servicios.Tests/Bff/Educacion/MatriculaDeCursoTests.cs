@@ -37,6 +37,26 @@ public sealed class MatriculaDeCursoTests
         Assert.Equal(1, await r.Avisos());
     }
 
+    /// <summary>
+    /// NM-2 de 010 con T091 del núcleo: el aviso dice el curso y el plan con los nombres que publicó la oferta del CMS —
+    /// lo que entra al abrir llega al aviso de cerrar—, contra Notifications real (el asunto ya relleno).
+    /// </summary>
+    [Fact]
+    public async Task El_aviso_dice_el_curso_y_el_plan_con_los_nombres_de_la_oferta()
+    {
+        using var r = await new MatriculaDeCursoReal().ConOferta();
+        var (_, abierta) = await r.Abrir(cuerpo: MatriculaDeCursoReal.Cuerpo(plan: "premium"));
+        var id = abierta.GetProperty("id").GetString()!;
+
+        await r.Cerrar(id);
+
+        var asunto = await r.AsuntoDelAviso();
+        Assert.Contains(MatriculaDeCursoReal.Titulo, asunto, StringComparison.Ordinal);
+        Assert.DoesNotContain("gestion-agil", asunto, StringComparison.Ordinal);
+        Assert.Equal("Premium con mentoría", r.Dato(id, "nombreDelPlan"));
+        Assert.Equal(MatriculaDeCursoReal.Titulo, r.Dato(id, "nombreDelCurso"));
+    }
+
     [Fact]
     public async Task Repetir_el_cierre_no_cobra_ni_avisa_dos_veces()
     {

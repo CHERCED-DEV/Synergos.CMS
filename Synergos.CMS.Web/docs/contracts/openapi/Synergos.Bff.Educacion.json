@@ -2009,6 +2009,12 @@
               "number"
             ],
             "format": "decimal"
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -2042,6 +2048,12 @@
             "items": {
               "$ref": "#/components/schemas/PlanDeLaOfertaDto"
             }
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

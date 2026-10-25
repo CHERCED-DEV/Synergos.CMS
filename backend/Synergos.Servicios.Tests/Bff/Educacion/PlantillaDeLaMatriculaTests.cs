@@ -15,8 +15,9 @@ namespace Synergos.CMS.Tests.Bff.Educacion;
 /// </summary>
 /// <remarks>
 /// Como la de la cita, en los dos sentidos: un marcador que el paso no manda deja cada aviso en
-/// <c>missing_placeholder</c>; uno que manda y nadie lee es un dato de más. Y el texto no promete lo que la matrícula
-/// no hace: ni cuotas (lote 8, 010-P1) ni devolución (010-P2), ni el curso, que el paso no manda (NM-2).
+/// <c>missing_placeholder</c>; uno que manda y nadie lee es un dato de más. Los que manda son los fijos del paso y los
+/// que declara la definición en <c>valores</c> (el título del curso y el nombre del plan: NM-2 con T091 del núcleo). Y
+/// el texto no promete lo que la matrícula no hace: ni cuotas (lote 8, 010-P1) ni devolución (010-P2).
 /// </remarks>
 public sealed class PlantillaDeLaMatriculaTests
 {
@@ -39,8 +40,13 @@ public sealed class PlantillaDeLaMatriculaTests
         var paso = ElAvisoDeLaMatricula();
         Assert.Equal("educacion.matricula.confirmada", paso.Plantilla);
         var plantilla = LaAprovisionada(paso.Plantilla!);
-        var valores = PasoAvisar.Valores("matricula-gestion-agil", new Contacto("alumna@ejemplo.co", "Ana", "https://sitio/educacion/?matricula=x", "Academia"),
-            Money.Of(320_000m, "COP"));
+        Assert.Equal(["nombreDelCurso", "nombreDelPlan"], paso.Valores);
+        var valores = new Dictionary<string, string>(PasoAvisar.Valores("matricula-gestion-agil",
+            new Contacto("alumna@ejemplo.co", "Ana", "https://sitio/educacion/?matricula=x", "Academia"), Money.Of(320_000m, "COP")));
+        foreach (var nombre in paso.Valores!)
+        {
+            valores[nombre] = PasoAvisar.Escribir(nombre == "nombreDelCurso" ? "Gestión ágil" : "Pago de contado", TimeZoneInfo.Utc, nombre);
+        }
 
         var relleno = NotificationRules.Fill(plantilla, valores);
         Assert.True(relleno.IsOk, $"La plantilla «{plantilla.Key}» no se rellena con lo que manda el paso: {relleno.Rejection?.Message}");

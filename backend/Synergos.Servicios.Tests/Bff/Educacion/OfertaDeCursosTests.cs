@@ -53,7 +53,20 @@ public sealed class OfertaDeCursosTests
         { new { curso = "gestion-agil", precio = 1m, moneda = "COP", planes = new[] { new { codigo = "a", total = -5m } } }, "planes.total" },
         { new { curso = "gestion-agil", precio = 1m, moneda = "COP", planes = new[] { new { codigo = "a", total = 1m }, new { codigo = "a", total = 2m } } }, "planes.codigo" },
         { new { curso = "gestion-agil", precio = 1m, moneda = "COP", planes = new[] { new { codigo = "a/b", total = 1m } } }, "planes.codigo" },
+        { new { curso = "gestion-agil", precio = 1m, moneda = "COP", nombre = new string('x', OfertaDeCursos.NombreMaximo + 1) }, "nombre" },
+        { new { curso = "gestion-agil", precio = 1m, moneda = "COP", planes = new[] { new { codigo = "a", total = 1m, nombre = new string('x', OfertaDeCursos.NombreMaximo + 1) } } }, "planes.nombre" },
     };
+
+    /// <summary>La oferta guarda cómo se llaman el curso y sus planes: lo escribe <c>educacion.linea</c> para el aviso (NM-2).</summary>
+    [Fact]
+    public async Task Publicar_guarda_el_titulo_del_curso_y_el_nombre_de_cada_plan()
+    {
+        using var r = await new MatriculaDeCursoReal().ConOferta();
+
+        var guardada = new RastroDeCursos(Path.Combine(r.Almacen, "ofertas")).Buscar(MatriculaDeCursoReal.Curso)!;
+        Assert.Equal(MatriculaDeCursoReal.Titulo, guardada.Nombre);
+        Assert.Equal(["Pago de contado", "Premium con mentoría"], guardada.Planes.Select(p => p.Nombre));
+    }
 
     [Theory]
     [MemberData(nameof(Invalidas))]

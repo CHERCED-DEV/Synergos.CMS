@@ -33,7 +33,8 @@ public interface IPublicadorDeOfertasDeCursos
 /// </summary>
 /// <remarks>
 /// <para><b>Manda lo que el catálogo sirve y nada más</b>: el id del curso (el <c>courseSlug</c> con el catálogo en el
-/// contenido), su precio sin plan y el total de cada plan, con su moneda. Los precios los registra el orquestador; el
+/// contenido), su precio sin plan y el total de cada plan, con su moneda; y el título del curso y el nombre de cada plan,
+/// que dice el aviso de la matrícula (NM-2). Los precios los registra el orquestador; el
 /// CMS no habla con la capacidad de precios. Un total cero se publica explícito: es un curso gratis, no uno sin
 /// oferta.</para>
 ///
@@ -142,6 +143,8 @@ public sealed class PublicadorDeOfertasDeCursos : IPublicadorDeOfertasDeCursos
         curso = c.Course.Id,
         precio = c.Course.Price,
         moneda = c.Course.Currency,
-        planes = PlanesOfrecidos(c).Select(p => new { codigo = p.Code, total = p.Total }).ToList(),
+        // Cómo se llaman, como los pinta la ficha: el aviso de la matrícula los dice (NM-2 con T091 del núcleo).
+        nombre = c.Course.Title,
+        planes = PlanesOfrecidos(c).Select(p => new { codigo = p.Code, total = p.Total, nombre = p.Label }).ToList(),
     };
 }

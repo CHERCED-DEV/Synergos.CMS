@@ -11,7 +11,8 @@ using Synergos.Shared;
 // saga, enlace, fachada ni adaptadores. La clase del curso la declara la definición (NR-1).
 //
 // Lo que NO es del caso común queda aparte y atribuido a la oferta genérica del núcleo (P12, NM-1): la oferta
-// de los cursos (sólo precios) y el paso educacion.linea, que comparten el nombre del sujeto de cada plan.
+// de los cursos (precios y nombres) y el paso educacion.linea, que comparten el nombre del sujeto de cada plan y
+// el rastro donde la oferta deja cómo se llaman el curso y sus planes, para el aviso.
 //
 // ANTES DE DESPLEGAR: los destinos de pricing, payments y notifications
 // (Educacion__Capabilities__<cap>__BaseUrl/ApiKey), Educacion:ApiKey, Educacion:Alerts y la plantilla
@@ -21,8 +22,9 @@ using Synergos.Shared;
 var builder = WebApplication.CreateBuilder(args);
 builder.AddCorrelation();
 
-builder.AddOrquestadorDeclarado(new SagaVocabulary("educacion", "la matrícula"), typeof(Program).Assembly, new PasoLineaDelPlan());
-builder.AddOfertaDeCursos(RastroDeCursos.De(builder.Configuration));
+var rastro = RastroDeCursos.De(builder.Configuration);
+builder.AddOrquestadorDeclarado(new SagaVocabulary("educacion", "la matrícula"), typeof(Program).Assembly, new PasoLineaDelPlan(rastro));
+builder.AddOfertaDeCursos(rastro);
 
 var app = builder.Build();
 app.UseCorrelation();

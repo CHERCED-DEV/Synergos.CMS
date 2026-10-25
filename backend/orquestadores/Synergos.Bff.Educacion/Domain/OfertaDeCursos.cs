@@ -8,12 +8,14 @@ using Synergos.Shared;
 
 namespace Synergos.Bff.Educacion.Domain;
 
-/// <summary>El precio de un plan, como lo publicó la oferta.</summary>
-public sealed record PlanOfertado(string Codigo, decimal Total);
+/// <summary>El precio de un plan, como lo publicó la oferta, y su nombre si la oferta lo trajo.</summary>
+public sealed record PlanOfertado(string Codigo, decimal Total, string? Nombre = null);
 
 /// <summary>Lo que este orquestador publicó de un curso: el rastro de sus propios pasos.</summary>
 /// <param name="Retirada">Si la oferta se retiró: sus precios dejaron de valer.</param>
-public sealed record CursoOfertado(string Curso, decimal Precio, string Moneda, IReadOnlyList<PlanOfertado> Planes, bool Retirada);
+/// <param name="Nombre">El título del curso si la oferta lo trajo: lo escribe <c>educacion.linea</c> para el aviso.</param>
+public sealed record CursoOfertado(
+    string Curso, decimal Precio, string Moneda, IReadOnlyList<PlanOfertado> Planes, bool Retirada, string? Nombre = null);
 
 /// <summary>El rastro de las ofertas publicadas, en el almacén del orquestador (ADR 0105).</summary>
 /// <remarks>
@@ -68,7 +70,7 @@ public sealed class OfertaDeCursos(CapacidadesDeLaOferta capacidades, RastroDeCu
 
         var curso = Ref.Create(SujetoDelPlan.ClaseDelCurso, o.Curso!.Trim());
         var moneda = o.Moneda!.Trim().ToUpperInvariant();
-        var planes = (o.Planes ?? []).Select(p => new PlanOfertado(p.Codigo!.Trim(), p.Total!.Value)).ToList();
+        var planes = (o.Planes ?? []).Select(p => new PlanOfertado(p.Codigo!.Trim(), p.Total!.Value, Nombre(p.Nombre))).ToList();
 
         var precio = Money.Of(o.Precio!.Value, moneda);
         var fijado = await capacidades.FijarPrecioAsync(SujetoDelPlan.De(curso, null), precio, null,
@@ -94,7 +96,7 @@ public sealed class OfertaDeCursos(CapacidadesDeLaOferta capacidades, RastroDeCu
             }
         }
 
-        var oferta = new CursoOfertado(curso.Id, precio.Amount, moneda, planes, Retirada: false);
+        var oferta = new CursoOfertado(curso.Id, precio.Amount, moneda, planes, Retirada: false, Nombre(o.Nombre));
         rastro.Guardar(oferta);
         return Result.Ok(oferta);
     }
@@ -132,6 +134,7 @@ public sealed class OfertaDeCursos(CapacidadesDeLaOferta capacidades, RastroDeCu
         if (!SujetoDelPlan.EsClave(o.Curso?.Trim())) return Mal("curso", "hace falta la clave del curso");
         if (o.Precio is not >= 0m) return Mal("precio", "tiene que ser mayor o igual que 0");
         if (o.Moneda?.Trim() is not { Length: 3 } moneda || !moneda.All(char.IsAsciiLetter)) return Mal("moneda", "tiene que ser un código ISO 4217");
+        if (o.Nombre?.Trim().Length > NombreMaximo) return Mal("nombre", $"pasa de {NombreMaximo} caracteres");
 
         var codigos = new HashSet<string>(StringComparer.Ordinal);
         foreach (var p in o.Planes ?? [])
@@ -139,12 +142,19 @@ public sealed class OfertaDeCursos(CapacidadesDeLaOferta capacidades, RastroDeCu
             if (!SujetoDelPlan.EsClave(p.Codigo?.Trim())) return Mal("planes.codigo", $"«{p.Codigo}» no es el código de un plan");
             if (p.Total is not >= 0m) return Mal("planes.total", $"el del plan «{p.Codigo}» tiene que ser mayor o igual que 0");
             if (!codigos.Add(p.Codigo!.Trim())) return Mal("planes.codigo", $"«{p.Codigo}» está dos veces");
+            if (p.Nombre?.Trim().Length > NombreMaximo) return Mal("planes.nombre", $"el del plan «{p.Codigo}» pasa de {NombreMaximo} caracteres");
         }
 
         return null;
 
         static Rejection Mal(string campo, string motivo) => Rejection.Invalid(Invalida, $"La oferta no se publica: «{campo}» {motivo}.");
     }
+
+    /// <summary>Lo más largo que puede ser el título de un curso o el nombre de un plan: van en el asunto de un correo.</summary>
+    public const int NombreMaximo = 200;
+
+    /// <summary>Un nombre recortado, o nulo si no vino: el aviso cae entonces a la clave.</summary>
+    private static string? Nombre(string? nombre) => string.IsNullOrWhiteSpace(nombre) ? null : nombre.Trim();
 
     private static IdempotencyKey Derivada(params string?[] partes)
         => IdempotencyKey.Of("oferta|" + Convert.ToHexString(

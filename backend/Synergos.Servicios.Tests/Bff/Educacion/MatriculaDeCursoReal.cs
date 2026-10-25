@@ -89,16 +89,26 @@ internal sealed class MatriculaDeCursoReal : IDisposable
 
     // ── La oferta ───────────────────────────────────────────────────────────
 
-    /// <summary>La oferta de prueba: el curso a 320.000 COP, de contado al mismo precio y «premium» a 345.600.</summary>
+    /// <summary>El título con que el CMS publica el curso de prueba, y los nombres de sus planes.</summary>
+    public const string Titulo = "Gestión ágil de proyectos";
+
+    /// <summary>
+    /// La oferta de prueba: el curso a 320.000 COP, de contado al mismo precio y «premium» a 345.600, con el título y
+    /// el nombre de cada plan como los manda el CMS (los planes a medida van sin nombre).
+    /// </summary>
     public static object Oferta(string curso = Curso, decimal precio = Precio, params (string Codigo, decimal Total)[] planes)
         => new
         {
             curso,
             precio,
             moneda = "COP",
+            nombre = curso == Curso ? Titulo : null,
             planes = (planes.Length == 0 ? [("full", precio), ("premium", Premium)] : planes)
-                .Select(p => new { codigo = p.Codigo, total = p.Total }).ToList(),
+                .Select(p => new { codigo = p.Codigo, total = p.Total, nombre = planes.Length == 0 ? NombreDelPlan(p.Codigo) : null }).ToList(),
         };
+
+    /// <summary>Cómo se llama cada plan de la oferta de prueba.</summary>
+    public static string NombreDelPlan(string codigo) => codigo == "full" ? "Pago de contado" : "Premium con mentoría";
 
     public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Publicar(object? oferta = null, string llave = "oferta-1")
     {
@@ -216,6 +226,11 @@ internal sealed class MatriculaDeCursoReal : IDisposable
     /// <summary>El estado del cobro en la capacidad de pagos.</summary>
     public async Task<string> Cobro(string saga)
         => (await Leer("payments", $"v1/payments/{Dato(saga, "cobroId")}")).GetProperty("status").GetString()!;
+
+    /// <summary>El asunto, ya relleno por Notifications, del último aviso del alumno.</summary>
+    public async Task<string> AsuntoDelAviso(string alumno = "u-1")
+        => (await Leer("notifications", $"v1/deliveries?toKind=educacion.alumno&toId={alumno}")).GetProperty("items")
+            .EnumerateArray().Last().GetProperty("subject").GetString()!;
 
     /// <summary>Cuántos avisos salieron para el alumno.</summary>
     public async Task<int> Avisos(string alumno = "u-1")
