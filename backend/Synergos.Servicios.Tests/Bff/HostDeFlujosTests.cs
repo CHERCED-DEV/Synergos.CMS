@@ -208,7 +208,14 @@ public sealed class HostDeFlujosTests
         }
         public Task<Result<string>> CapturarAsync(string cobroId, IdempotencyKey llave, CancellationToken ct) => Ok("pg-1", $"capturar {cobroId}");
         public Task<Result<string>> AvisarAsync(Ref destinatario, string direccion, string plantilla,
-            IReadOnlyDictionary<string, string> valores, IdempotencyKey llave, CancellationToken ct) => Ok("dl-1", $"avisar {direccion}");
+            IReadOnlyDictionary<string, string> valores, IdempotencyKey llave, CancellationToken ct)
+        {
+            UltimoAviso = valores;
+            return Ok("dl-1", $"avisar {direccion}");
+        }
+
+        /// <summary>Los valores del último aviso (NM-2 de 010).</summary>
+        public IReadOnlyDictionary<string, string>? UltimoAviso { get; private set; }
         public Task<Result<string>> LiberarAsync(string apartado, CancellationToken ct) => Ok(apartado, $"liberar {apartado}");
         public Task<Result<string>> CancelarAsync(string reserva, CancellationToken ct) => Ok(reserva, $"cancelar {reserva}");
         public Task<Result<string>> AnularAsync(string cobro, CancellationToken ct) => Ok(cobro, $"anular {cobro}");
@@ -608,6 +615,30 @@ public sealed class HostDeFlujosTests
         Assert.Equal("rv-1", cerrada.Value.Datos["reservaId"].Valor!.Value.GetString());
         Assert.DoesNotContain(cerrada.Value.Datos.Keys, k => k == "contacto");
         Assert.Contains("avisar ana@ejemplo.co", banco.Puertos.Llamadas);
+    }
+
+    /// <summary>
+    /// Los valores que declara un aviso (núcleo, NM-2 de 010; NN-6 de 003) llegan al correo de la fase que cierra aunque
+    /// entren al abrir: la saga los guarda porque el aviso los lee, y salen en es-CO, la hora en la del sitio.
+    /// </summary>
+    [Fact]
+    public async Task Los_valores_que_declara_el_aviso_llegan_al_cerrar_desde_lo_que_entro_al_abrir()
+    {
+        using var banco = new Banco(Mutar(
+            "\"plantilla\": \"prueba.cita.confirmada\",", "\"plantilla\": \"prueba.cita.confirmada\", \"valores\": [\"recurso\", \"ventana\"],"));
+        Assert.Empty(banco.Errores());
+        var fachada = banco.Fachada();
+
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        var cerrada = await fachada.ContinuarAsync("cerrar", "cita-1", Paciente,
+            new FlowContext().Set("contacto", new Contacto("ana@ejemplo.co", "Ana", null, null)), CancellationToken.None);
+
+        Assert.True(cerrada.IsOk, cerrada.Rejection?.ToString());
+        var aviso = banco.Puertos.UltimoAviso!;
+        Assert.Equal("rs-1", aviso["recurso"]);
+        // 15:00 a 15:30 UTC es 10:00 a 10:30 en Bogotá, la zona por defecto del sitio.
+        Assert.Equal("20/10/2026 10:00 a 10:30", aviso["ventana"]);
+        Assert.Equal("50.000 COP", aviso["total"]);
     }
 
     [Fact]

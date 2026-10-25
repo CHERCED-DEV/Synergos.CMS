@@ -496,6 +496,9 @@ public sealed class HttpPaymentProvider : IPaymentProvider
         // «Liberado sin cobrar» es Cancelled en el vocabulario del CMS; Refunded sería decir que
         // salió plata que nunca entró.
         "Voided" => PaymentStatus.Cancelled,
+        // «En duda» (#183): la capacidad no sabe si salió, y el reintento con la misma llave lo
+        // resuelve preguntándole al proveedor. Fallido diría que no salió cuando quizá sí.
+        "InDoubt" => PaymentStatus.Pending,
         _ => PaymentStatus.Failed,
     };
 

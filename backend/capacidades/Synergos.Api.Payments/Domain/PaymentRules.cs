@@ -71,8 +71,16 @@ public static class PaymentRules
         // idempotencia se resuelve ANTES que esto, así que un reintento no llega hasta acá.
         PaymentStatus.Captured => Rejection.Conflict($"{CodePrefix}.already_captured", "Ese cobro ya se capturó."),
         PaymentStatus.Voided => Rejection.Conflict($"{CodePrefix}.voided", "Esa autorización se liberó; hay que autorizar de nuevo."),
+        PaymentStatus.InDoubt => EnDuda,
         _ => Rejection.Conflict($"{CodePrefix}.payment_failed", "Ese cobro no llegó a autorizarse."),
     };
+
+    /// <summary>
+    /// Lo que se contesta al capturar o liberar un cobro EN DUDA (#183): no se sabe si se autorizó, y quien lo resuelve es el
+    /// reintento de la autorización con la misma llave, que le pregunta al proveedor.
+    /// </summary>
+    private static Rejection EnDuda => Rejection.Conflict($"{CodePrefix}.payment_in_doubt",
+        "No se sabe si ese cobro se autorizó: hay que reintentar la autorización con la misma llave, que le pregunta al proveedor.");
 
     /// <summary>Si se puede liberar la autorización.</summary>
     public static Rejection? CheckVoidable(Payment payment) => payment.Status switch
@@ -81,6 +89,7 @@ public static class PaymentRules
         PaymentStatus.Voided => null,   // idempotente: liberar lo liberado es el resultado que se quería
         PaymentStatus.Captured => Rejection.Conflict($"{CodePrefix}.already_captured",
             "No se libera un cobro ya capturado. Eso es una devolución."),
+        PaymentStatus.InDoubt => EnDuda,
         _ => Rejection.Conflict($"{CodePrefix}.payment_failed", "Ese cobro no llegó a autorizarse."),
     };
 

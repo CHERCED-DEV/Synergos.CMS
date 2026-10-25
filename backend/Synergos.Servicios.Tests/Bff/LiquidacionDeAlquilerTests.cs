@@ -119,9 +119,22 @@ public sealed class LiquidacionDeAlquilerTests
 
         Assert.Contains(resultados, x => x.Estado == HttpStatusCode.OK);
         Assert.All(resultados, x => Assert.True(x.Estado is HttpStatusCode.OK or HttpStatusCode.ServiceUnavailable, x.Cuerpo.ToString()));
-        Assert.Equal(1, r.Cable.Veces("POST", $"^/v1/payments/{garantia}/capture$"));
-        Assert.Equal(1, r.Cable.Veces("POST", $"^/v1/payments/{garantia}/refund$"));
+        // En carrera de verdad las dos llegan a Payments, y con la MISMA llave —derivada de la saga, no de la
+        // petición—: Payments cobra una vez. Contar llamadas en el cable sólo pasaba cuando el reloj las ponía en fila
+        // (en el CI de Linux salió 2). Lo que se afirma es lo que mueve plata: una llave y el cobro con su sobrante.
+        Assert.Single(LlavesDe(r, $"^/v1/payments/{garantia}/capture$"));
+        Assert.Single(LlavesDe(r, $"^/v1/payments/{garantia}/refund$"));
+        var cobro = await Cobro(r, garantia);
+        Assert.Equal("Captured", cobro.GetProperty("status").GetString());
+        Assert.Equal(120_000m, cobro.GetProperty("refundable").GetProperty("amount").GetDecimal());
     }
+
+    private static string?[] LlavesDe(RentaDeAlquilerReal r, string ruta)
+        => r.Cable.Llamadas
+            .Where(l => l.Metodo == "POST" && System.Text.RegularExpressions.Regex.IsMatch(l.Ruta, ruta))
+            .Select(l => l.Llave)
+            .Distinct()
+            .ToArray();
 
     [Fact]
     public async Task Un_alquiler_ajeno_no_existe_y_lo_devuelto_ya_no_se_declara()

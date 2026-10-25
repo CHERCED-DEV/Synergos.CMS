@@ -179,4 +179,98 @@ public sealed class AvisarTests : IDisposable
         }, valores);
         Assert.Equal("12.345,5 COP", PasoAvisar.Valores("s", Ana, Money.Of(12_345.5m, "COP"))["total"]);
     }
+
+    // ── Los valores que declara la definición (núcleo, NM-2 de 010; NN-6 de 003; NR-3 de 008) ──────
+
+    private static readonly TimeZoneInfo Bogota = TimeZoneInfo.FindSystemTimeZoneById(PasoAvisar.ZonaPorDefecto);
+
+    private static PasoDef ConValores(string[] lee, params string[] valores)
+        => new("avisar", "notifications.avisar", lee, Array.Empty<string>(), "avisar", null, null, null, null, PasoDef.Seguir, null,
+            "educacion.matricula.confirmada", Valores: valores);
+
+    [Fact]
+    public async Task Los_valores_declarados_van_con_el_marcador_de_su_nombre_y_en_es_CO()
+    {
+        var puerto = new PuertoQueCuenta();
+        var contexto = new FlowContext()
+            .Set("comprador", Comprador).Set("contacto", Ana).Set("total", Money.Of(320_000m, "COP"))
+            .Set("curso", "Fotografía básica").Set("plan", null)
+            .Set("inicio", new DateTimeOffset(2026, 11, 3, 23, 30, 0, TimeSpan.Zero))
+            .Set("cupos", 1_234).Set("certificado", true).Set("dia", new DateOnly(2026, 11, 4));
+
+        await new PasoAvisar(puerto, Bogota).EjecutarAsync(new EntradaDePaso("s-1", Ref.Create("educacion.matricula", "s-1"),
+            ConValores(["comprador", "contacto", "total"], "curso", "plan", "inicio", "cupos", "certificado", "dia"), contexto, null, null),
+            CancellationToken.None);
+
+        var valores = Assert.Single(puerto.Intentos).Valores;
+        Assert.Equal("Fotografía básica", valores["curso"]);
+        Assert.Equal(string.Empty, valores["plan"]);
+        // 23:30 UTC del 3 es 18:30 del 3 en Bogotá: la hora del sitio, no la del servidor.
+        Assert.Equal("03/11/2026 18:30", valores["inicio"]);
+        Assert.Equal("1.234", valores["cupos"]);
+        Assert.Equal("sí", valores["certificado"]);
+        Assert.Equal("04/11/2026", valores["dia"]);
+        Assert.Equal("320.000 COP", valores["total"]);
+        Assert.Equal("Ana María", valores["nombre"]);
+    }
+
+    [Fact]
+    public async Task Un_aviso_sin_total_no_escribe_un_cero_que_nadie_fijo()
+    {
+        // NR-3 de 008: la visita no se cobra. Con el total como lectura obligatoria, el aviso tenía que inventar un cero.
+        var puerto = new PuertoQueCuenta();
+        var contexto = new FlowContext().Set("comprador", Comprador).Set("contacto", Ana).Set("curso", "Fotografía básica");
+
+        await new PasoAvisar(puerto, Bogota).EjecutarAsync(new EntradaDePaso("s-1", Ref.Create("educacion.matricula", "s-1"),
+            ConValores(["comprador", "contacto"], "curso"), contexto, null, null), CancellationToken.None);
+
+        var valores = Assert.Single(puerto.Intentos).Valores;
+        Assert.False(valores.ContainsKey("total"));
+        Assert.Equal("Fotografía básica", valores["curso"]);
+    }
+
+    [Fact]
+    public void Una_ventana_se_escribe_en_la_hora_del_sitio_y_lo_que_no_se_lee_en_un_correo_no_se_escribe()
+    {
+        var mismaNoche = TimeWindow.Of(new DateTimeOffset(2026, 11, 3, 14, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 3, 15, 30, 0, TimeSpan.Zero));
+        var dosDias = TimeWindow.Of(new DateTimeOffset(2026, 11, 3, 14, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 5, 14, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal("03/11/2026 09:00 a 10:30", PasoAvisar.Escribir(mismaNoche, Bogota));
+        Assert.Equal("03/11/2026 09:00 a 05/11/2026 09:00", PasoAvisar.Escribir(dosDias, Bogota));
+        Assert.Equal("1.234,5", PasoAvisar.Escribir(1_234.5m, Bogota));
+        Assert.Equal("no", PasoAvisar.Escribir(false, Bogota));
+        Assert.Throws<InvalidOperationException>(() => PasoAvisar.Escribir(Comprador, Bogota, "comprador"));
+    }
+
+    [Fact]
+    public async Task Contra_Api_Notifications_real_el_correo_dice_el_curso_que_se_compro()
+    {
+        // NM-2 de 010: con los valores fijos, el correo de la matrícula no podía decir qué curso se compró.
+        using var arnes = NotificacionesConRecogida();
+        using (var http = arnes.CreateClient("notifications"))
+        using (var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/templates")
+        {
+            Content = JsonContent.Create(new
+            {
+                key = "educacion.matricula.confirmada", channel = "Email",
+                subject = "Tu matricula en {curso}", body = "<p>Hola {nombre}: quedaste en {curso} ({total}), matricula {numero}. {enlace}</p>",
+            }),
+        })
+        {
+            peticion.Headers.Add("Idempotency-Key", "prueba:matricula");
+            using var r = await http.SendAsync(peticion);
+            Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        }
+        var contexto = new FlowContext()
+            .Set("comprador", Comprador).Set("contacto", Ana).Set("total", Money.Of(320_000m, "COP")).Set("curso", "Fotografia basica");
+
+        var salida = await new PasoAvisar(new PuertoReal(arnes), Bogota).EjecutarAsync(new EntradaDePaso("s-1",
+            Ref.Create("educacion.matricula", "s-1"), ConValores(["comprador", "contacto", "total"], "curso"), contexto, null, null),
+            CancellationToken.None);
+
+        Assert.Equal(PasoResultado.Continuar, salida.Control);
+        // En el asunto, que en ASCII viaja tal cual; el cuerpo puede ir codificado.
+        var correo = File.ReadAllText(Assert.Single(Directory.GetFiles(_buzon, "*.eml")));
+        Assert.Contains("Tu matricula en Fotografia basica", correo, StringComparison.Ordinal);
+    }
 }

@@ -75,6 +75,9 @@ public sealed class PaymentTransportTests
     }
 
     private static readonly Ref Pagador = Ref.Create("identity.member", "m-1");
+
+    /// <summary>La referencia NUESTRA del cobro (su id), la que se le da al proveedor al autorizar (#183).</summary>
+    private const string Nuestra = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
     private static Money Cop(decimal x) => Money.Of(x, "COP");
 
     private static HttpResponseMessage NoDeberia(HttpRequestMessage _)
@@ -90,7 +93,7 @@ public sealed class PaymentTransportTests
         // no hace falta en el camino más caliente del sistema.
         var (p, espia) = Nuevo(NoDeberia);
 
-        var r = await p.AuthorizeAsync(Cop(119000), Pagador);
+        var r = await p.AuthorizeAsync(Cop(119000), Pagador, Nuestra);
 
         Assert.True(r.IsOk);
         Assert.Empty(espia.Vistas);
@@ -106,7 +109,7 @@ public sealed class PaymentTransportTests
         // adaptador firma lo que manda.
         var (p, _) = Nuevo(NoDeberia);
 
-        var r = await p.AuthorizeAsync(Cop(119000), Pagador);
+        var r = await p.AuthorizeAsync(Cop(119000), Pagador, Nuestra);
 
         var esperada = WompiSignature.Integrity(r.Reference!, 11900000, "COP", Integridad);
         Assert.Contains($"signature%3Aintegrity={esperada}", r.ActionUrl, StringComparison.Ordinal);
@@ -121,7 +124,7 @@ public sealed class PaymentTransportTests
         // el identificador de un miembro sería publicarlo por un canal que no controlamos.
         var (p, _) = Nuevo(NoDeberia);
 
-        var r = await p.AuthorizeAsync(Cop(50000), Ref.Create("identity.member", "ana@ejemplo.co"));
+        var r = await p.AuthorizeAsync(Cop(50000), Ref.Create("identity.member", "ana@ejemplo.co"), Nuestra);
 
         Assert.DoesNotContain("ana", r.Reference, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ana", r.ActionUrl!, StringComparison.OrdinalIgnoreCase);
@@ -135,7 +138,7 @@ public sealed class PaymentTransportTests
         // ahora esa rama solo la habían tocado dobles que decían que sí a todo.
         var (p, espia) = Nuevo(NoDeberia);
 
-        var r = await p.AuthorizeAsync(Money.Of(120m, "USD"), Pagador);
+        var r = await p.AuthorizeAsync(Money.Of(120m, "USD"), Pagador, Nuestra);
 
         Assert.Equal(PaymentOutcome.Declined, r.Outcome);
         Assert.Contains("USD", r.Reason!, StringComparison.Ordinal);
@@ -152,11 +155,66 @@ public sealed class PaymentTransportTests
         sinSecreto.IntegritySecret = null;
         var (p, espia) = Nuevo(NoDeberia, sinSecreto);
 
-        var r = await p.AuthorizeAsync(Cop(119000), Pagador);
+        var r = await p.AuthorizeAsync(Cop(119000), Pagador, Nuestra);
 
         Assert.Equal(PaymentOutcome.NotConfigured, r.Outcome);
         Assert.Contains("IntegritySecret", r.Reason!, StringComparison.Ordinal);
         Assert.Empty(espia.Vistas);
+    }
+
+    [Fact]
+    public async Task La_referencia_del_comercio_sale_de_la_nuestra_y_volver_a_autorizar_firma_la_misma_intencion()
+    {
+        // #183: un cobro en duda se vuelve a autorizar con la MISMA referencia nuestra. Con un Guid nuevo en cada llamada,
+        // la segunda firmaría otra intención, y el comprador podría pagar las dos.
+        var (p, _) = Nuevo(NoDeberia);
+
+        var primera = await p.AuthorizeAsync(Cop(119000), Pagador, Nuestra);
+        var otraVez = await p.AuthorizeAsync(Cop(119000), Pagador, Nuestra);
+
+        Assert.Equal($"syn-{Nuestra}", primera.Reference);
+        Assert.Equal(primera.Reference, otraVez.Reference);
+        Assert.Equal(primera.ActionUrl, otraVez.ActionUrl);
+    }
+
+    // ── Buscar: lo que Wompi sabe de un cobro en duda (#183) ────────────────
+
+    [Fact]
+    public async Task Buscar_pregunta_por_la_referencia_del_comercio_y_sin_transaccion_no_hay_rastro()
+    {
+        var (p, espia) = Nuevo(_ => Responde(HttpStatusCode.OK, """{"data":[]}"""));
+
+        var rastro = await p.FindAuthorizationAsync(Nuestra);
+
+        Assert.Null(rastro);
+        Assert.Contains($"reference=syn-{Nuestra}", Assert.Single(espia.Vistas).RequestUri!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("APPROVED", PaymentOutcome.Ok)]
+    [InlineData("PENDING", PaymentOutcome.Ok)]
+    [InlineData("DECLINED", PaymentOutcome.Declined)]
+    [InlineData("ERROR", PaymentOutcome.Declined)]
+    [InlineData("VOIDED", PaymentOutcome.Declined)]
+    public async Task Con_transaccion_hay_rastro_y_dice_como_quedo(string estado, PaymentOutcome esperado)
+    {
+        var (p, _) = Nuevo(_ => Responde(HttpStatusCode.OK, Lista(estado)));
+
+        var rastro = await p.FindAuthorizationAsync(Nuestra);
+
+        Assert.Equal(esperado, rastro!.Outcome);
+        if (esperado == PaymentOutcome.Ok) Assert.Equal($"syn-{Nuestra}", rastro.Reference);
+    }
+
+    [Fact]
+    public async Task Si_Wompi_no_contesta_no_es_no_hay_rastro()
+    {
+        // No saber no es «no hubo»: con un null aquí, el reintento volvería a autorizar algo que quizá ya se pagó.
+        var (p, _) = Nuevo(_ => Responde(HttpStatusCode.ServiceUnavailable, "caido"));
+
+        var rastro = await p.FindAuthorizationAsync(Nuestra);
+
+        Assert.Equal(PaymentOutcome.Unavailable, rastro!.Outcome);
     }
 
     // ── Capturar: constatar ─────────────────────────────────────────────────

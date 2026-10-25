@@ -107,6 +107,7 @@ public static class FlujosDeclarados
 
         var carpeta = builder.Configuration[$"{vocabulario.Origin}:Flujos:Carpeta"];
         var genericos = Cargar(ensamblado, carpeta).Where(l => l.Flujo.Tipos is not null).Select(l => l.Flujo).ToList();
+        Procesos(builder, vocabulario, genericos);
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<FlowCatalog>, FlowDefinitionValidator>());
         foreach (var flujo in genericos)
@@ -130,6 +131,38 @@ public static class FlujosDeclarados
         }
 
         return builder;
+    }
+
+    /// <summary>
+    /// El catálogo de procesos de <c>{Origen}:Procesos:Archivo</c> (núcleo, lote 7; 009-P3 = A): contra él se cruzan al
+    /// arrancar los pasos de procesos. Un flujo que actúa sobre procesos sin él no se construye.
+    /// </summary>
+    /// <remarks>
+    /// El archivo es la definición versionada que publica la provisión (<c>tools/provisionar.procesos.json</c>): el
+    /// despliegue lo pone donde el orquestador lo lee (NP-1 de 009). Configurado y ausente no se ignora, como la carpeta
+    /// de flujos.
+    /// </remarks>
+    private static void Procesos(WebApplicationBuilder builder, SagaVocabulary vocabulario, IReadOnlyList<FlujoDef> flujos)
+    {
+        var clave = $"{vocabulario.Origin}:Procesos:Archivo";
+        var archivo = builder.Configuration[clave];
+        if (string.IsNullOrWhiteSpace(archivo))
+        {
+            var conProcesos = flujos.Where(f => f.Pasos.Values.Any(p => p.Proceso is not null)).Select(f => f.Clave).ToList();
+            if (conProcesos.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"{string.Join(", ", conProcesos.Select(c => $"«{c}»"))} actúa sobre procesos y falta «{clave}»: sin las "
+                    + "definiciones de los procesos, la transición que el proceso no tiene se descubriría con la primera persona que actúa.");
+            }
+            return;
+        }
+
+        if (!File.Exists(archivo))
+        {
+            throw new InvalidOperationException($"El catálogo de procesos «{archivo}» está configurado en «{clave}» y no existe.");
+        }
+        builder.Services.AddSingleton(CatalogoDeProcesos.Leer(File.ReadAllText(archivo)));
     }
 
     private static BindingDeFlujo Binding(IServiceProvider sp, FlujoDef flujo)

@@ -135,6 +135,40 @@ public sealed class TiendaEnElContenidoTests
         Assert.False(Montar().Ve(Ficha));
     }
 
+    /// <summary>Una ficha con su SKU y, si se da, la marca reservable de 011 (<c>compReservable</c>).</summary>
+    private static IPublishedContent FichaConSku(int id, string sku, object? reservable)
+    {
+        var ficha = Nodo(id, "productPage");
+        var propiedadSku = Substitute.For<IPublishedProperty>();
+        propiedadSku.GetValue(Arg.Any<string?>(), Arg.Any<string?>()).Returns(sku);
+        ficha.GetProperty("productSku").Returns(propiedadSku);
+        if (reservable is not null)
+        {
+            var marca = Substitute.For<IPublishedProperty>();
+            marca.GetValue(Arg.Any<string?>(), Arg.Any<string?>()).Returns(reservable);
+            ficha.GetProperty("reservable").Returns(marca);
+        }
+        return ficha;
+    }
+
+    [Fact]
+    public void Los_SKU_reservables_son_los_de_las_fichas_marcadas_de_la_tienda_y_ninguno_de_otro_sitio()
+    {
+        // FR-026: un servicio por cita no se republica como producto. La marca se lee con los valores que acepta 011.
+        var cita = FichaConSku(1101, "SVC-CITA-30", true);
+        var taza = FichaConSku(1102, "TAZA-001", false);
+        var vieja = FichaConSku(1103, "SVC-VIEJA", "1");
+        var plana = FichaConSku(1104, "LIBRETA-001", null);
+        var deOtroSitio = FichaConSku(2101, "SVC-ASESORIA-30", true);
+        var categoria = Nodo(1010, "productCategoryPage", hijos: [cita, taza, vieja, plana]);
+        var tienda = Nodo(1000, "siteRoot", "ecommerce", hijos: categoria);
+        var otroSitio = Nodo(2000, "siteRoot", "propiedades", hijos: deOtroSitio);
+        EnLaRaiz(otroSitio, tienda);
+
+        Assert.Equal(new[] { "SVC-CITA-30", "SVC-VIEJA" }, Montar().SkusReservables().Order(StringComparer.Ordinal));
+        Assert.Empty(Montar(alcance: null).SkusReservables());
+    }
+
     [Fact]
     public void Sin_el_alcance_de_la_tienda_o_sin_contexto_no_se_ve_nada()
     {

@@ -241,6 +241,22 @@ public sealed class HttpPaymentProviderTests
     }
 
     [Fact]
+    public async Task Un_cobro_EN_DUDA_se_lee_pendiente_y_no_fallido()
+    {
+        // #183: la capacidad deja «en duda» lo que no sabe si salió, y el reintento con la misma llave lo resuelve. Leído como
+        // fallido, el CMS le diría a quien paga que su pago no salió cuando quizá sí.
+        var capacidad = new CapacidadFalsa().Ok("GET /v1/payments/pay_1", """
+            {"id":"pay_1","status":"InDoubt","amount":{"amount":95000,"currency":"COP"},
+             "refunded":{"amount":0,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}
+            """);
+
+        var salida = await Provider(capacidad).GetStatusAsync("pay_1");
+
+        Assert.Equal(PaymentStatus.Pending, salida.Status);
+        Assert.Equal(0m, salida.AmountCaptured);
+    }
+
+    [Fact]
     public async Task La_captura_PARCIAL_se_rechaza_diciendolo_en_vez_de_cobrar_el_total()
     {
         // El seam la admite —cobrar por noche, cobrar sólo lo despachado— y Api.Payments captura
