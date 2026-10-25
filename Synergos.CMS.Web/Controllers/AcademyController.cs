@@ -617,7 +617,12 @@ public sealed class AcademyController : ControllerBase
         var (denied, instructor) = RequireInstructor();
         if (denied is not null) { return denied; }
 
+        var administra = _gate.HasAnyRole("admin");
         var result = await _catalog.GetForInstructorAsync(instructor, cancellationToken);
+        if (administra)
+        {
+            result = await ConTodosLosCursosAsync(result, cancellationToken);
+        }
 
         var courses = result.Courses.Select(ic => new InstructorCourseDto(
             // studentCount real desde las métricas del panel (la card lo lee en course.studentCount).
@@ -649,7 +654,6 @@ public sealed class AcademyController : ControllerBase
         // vuelta, y pedírselo al motor de matrícula lo obligaría a consultar el catálogo por
         // fila para un dato que es de presentación.
         var students = new List<InstructorStudentDto>();
-        var administra = _gate.HasAnyRole("admin");
         foreach (var ic in result.Courses)
         {
             foreach (var row in await _metrics.GetCourseRosterAsync(ic.Course.Id, cancellationToken))
@@ -681,6 +685,35 @@ public sealed class AcademyController : ControllerBase
             TotalStudents: result.TotalStudents,
             TotalRevenue: result.TotalRevenue,
             TotalRevenueFormatted: _priceFormatter.Format(result.TotalRevenue, result.Currency)));
+    }
+
+    /// <summary>
+    /// La consola de un <c>admin</c>: los cursos de TODO el catálogo, con sus métricas, y no sólo los que dicta
+    /// (decisión del director sobre el hallazgo 1 de 010-educacion-matricula).
+    /// </summary>
+    /// <remarks>
+    /// El catálogo nombra a sus instructores con su propia clave (<c>ins-*</c>) y la consola los compara con el correo de
+    /// la sesión, así que un admin que no dicta nada veía la consola vacía y nunca podía devolver una matrícula. Un
+    /// instructor sigue viendo sólo los suyos. Enlazar instructores con miembros en el contenido es de producto.
+    /// </remarks>
+    private async Task<InstructorCoursesResult> ConTodosLosCursosAsync(InstructorCoursesResult propios, CancellationToken cancellationToken)
+    {
+        var catalogo = await _catalog.SearchAsync(new CourseQuery(), cancellationToken);
+        var cursos = new List<InstructorCourse>(catalogo.Courses.Count);
+        foreach (var curso in catalogo.Courses
+            .OrderByDescending(c => c.Rating)
+            .ThenBy(c => c.Title, StringComparer.Ordinal))
+        {
+            var cuentas = await _metrics.GetCourseStatsAsync(curso.Id, cancellationToken);
+            cursos.Add(new InstructorCourse(curso, new CourseMetrics(cuentas.Students, cuentas.Revenue, propios.Currency, curso.Rating)));
+        }
+
+        return propios with
+        {
+            Courses = cursos,
+            TotalStudents = cursos.Sum(c => c.Metrics.Students),
+            TotalRevenue = cursos.Sum(c => c.Metrics.Revenue),
+        };
     }
 
     // ── 9. Publish course (curriculum builder del instructor) ───────────
