@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Web.Services.Reservas;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Web;
 
@@ -14,6 +15,13 @@ public interface ITiendaEnElContenido
     /// Nunca deja log.
     /// </summary>
     bool Ve(Guid nodo);
+
+    /// <summary>
+    /// Los SKU de las fichas de la tienda marcadas reservables (<c>compReservable</c> de 011): servicios por cita, que no
+    /// se venden como productos de carrito (FR-026). Por el mismo recorrido que el catálogo; vacío sin tienda a la
+    /// vista. Nunca deja log.
+    /// </summary>
+    IReadOnlySet<string> SkusReservables();
 }
 
 /// <summary>
@@ -35,6 +43,9 @@ public interface ITiendaEnElContenido
 /// </remarks>
 public sealed class TiendaEnElContenido : ITiendaEnElContenido
 {
+    /// <summary>El alias con que el catálogo lee el SKU de una ficha (su <c>Id</c> en el catálogo).</summary>
+    private const string PropiedadDelSku = "productSku";
+
     private readonly IUmbracoContextAccessor _contexto;
     private readonly IOptionsMonitor<CatalogSettings> _ajustes;
     private readonly IVariationContextAccessor _variacion;
@@ -62,4 +73,36 @@ public sealed class TiendaEnElContenido : ITiendaEnElContenido
         return tienda is not null
             && UmbracoProductCatalogSource.FichasDe(tienda, _variacion).Any(ficha => ficha.Key == nodo);
     }
+
+    /// <inheritdoc />
+    public IReadOnlySet<string> SkusReservables()
+    {
+        var marca = UmbracoProductCatalogSource.MarcaDeLaTienda(_ajustes.CurrentValue);
+        if (marca is null || !_contexto.TryGetUmbracoContext(out var contexto) || contexto.Content is not { } cache)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var tienda = UmbracoProductCatalogSource.BuscarTienda(cache, marca, _variacion);
+        if (tienda is null)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        return UmbracoProductCatalogSource.FichasDe(tienda, _variacion)
+            .Where(ficha => Marcada(ficha.GetProperty(FichaReservable.Marca)?.GetValue()))
+            .Select(ficha => ficha.GetProperty(PropiedadDelSku)?.GetValue()?.ToString()?.Trim())
+            .Where(sku => !string.IsNullOrEmpty(sku))
+            .Select(sku => sku!)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>La marca en verdadero, con los mismos valores que acepta <see cref="FichaReservable.Leer"/>.</summary>
+    private static bool Marcada(object? valor) => valor switch
+    {
+        bool b => b,
+        int i => i == 1,
+        string s => s.Trim() is "1" or "true" or "True",
+        _ => false,
+    };
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Reservas;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Notifications;
 
@@ -27,6 +28,10 @@ namespace Synergos.CMS.Web.Notifications;
 /// entonces no se retira nada ni se pregunta al catálogo (que dejaría un ERR que es para las páginas); queda un aviso y
 /// se repara republicando. Una ficha de otro sitio tampoco se toca. Retirar es sólo para lo que el catálogo, viendo la
 /// ficha en la tienda, omite de verdad.</para>
+///
+/// <para><b>Una ficha reservable no es un producto de carrito</b> (FR-026, la nota de 011): un servicio por cita se
+/// ofrece en <c>Bff.Reservas</c> y aquí no se publica nada para él. Si ya tenía una oferta de tienda NO se retira:
+/// retirar lo publicado cambia la base, y eso lo decide el director.</para>
 ///
 /// <para><b>Nunca tumba el publicar</b>: el contenido ya se guardó cuando esto corre. Lo que falle queda en
 /// el log, y se repara republicando.</para>
@@ -70,6 +75,14 @@ public sealed class OfertaDeTiendaAlPublicar : INotificationAsyncHandler<Content
         {
             var sku = contenido.GetValue<string>(PropiedadDelSku)?.Trim();
             if (string.IsNullOrEmpty(sku)) continue;
+
+            if (FichaReservable.Leer(contenido) is not null)
+            {
+                _log.LogInformation(
+                    "Se publicó la ficha reservable {Sku}: es un servicio por cita (Bff.Reservas), no se publica como "
+                    + "producto de la tienda.", sku);
+                continue;
+            }
 
             if (!_tienda.Ve(contenido.Key))
             {

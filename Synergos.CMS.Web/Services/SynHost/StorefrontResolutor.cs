@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -6,7 +8,8 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary>
 /// <c>elementSynStorefront</c> → <see cref="StorefrontProps"/>: lo que escribe el editor, más dónde vive
-/// la API, por dónde compra y a qué país despacha el sitio de la petición (ADR 0137).
+/// la API, por dónde compra, a qué país despacha el sitio de la petición (ADR 0137) y en qué zona dice sus fechas (la de
+/// los listados, como Realty).
 /// </summary>
 /// <remarks>
 /// <b>El camino de compra lo decide acá el CMS</b> (ADR 0140) con la regla de cualquier flujo
@@ -23,17 +26,20 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeStorefront> _negocio;
     private readonly ICaminoDeLosFlujos _caminos;
+    private readonly string _zona;
     private readonly ILogger<StorefrontResolutor> _log;
 
     public StorefrontResolutor(
         IPublishedValueFallback fallback,
         INegocioDelSitio<NegocioDeStorefront> negocio,
         ICaminoDeLosFlujos caminos,
+        IOptions<ListadosSettings> listados,
         ILogger<StorefrontResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
+        _zona = listados.Value.ZonaHoraria;
         _log = log;
     }
 
@@ -47,6 +53,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
             PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath),
-            ShippingCountry: negocio.ShippingCountry));
+            ShippingCountry: negocio.ShippingCountry,
+            ZonaHoraria: _zona));
     }
 }

@@ -66,6 +66,9 @@ public sealed class ContratoConsumidorPasosTests
         ["DespacharEnvioAsync"] = p => p.DespacharEnvioAsync(
             Ref.Create("orders.pedido", "pd-1"),
             new Synergos.Bff.Pasos.DireccionDeEnvio("Calle 1 # 2-3", null, "Bogotá", null, null, "CO", "Ana"), "servientrega", Llave, Ct),
+        ["ArrancarInstanciaAsync"] = p => p.ArrancarInstanciaAsync("muestra.tramite", Algo, Llave, Ct),
+        ["DispararTransicionAsync"] = p => p.DispararTransicionAsync("wf-1", "tomar", Alguien, ["funcionario"], "La reviso yo.", Llave, Ct),
+        ["LeerInstanciaAsync"] = p => p.LeerInstanciaAsync("wf-1", Ct),
     };
 
     /// <summary>

@@ -58,11 +58,15 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IOrdersPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IWorkflowPort>(sp => sp.GetRequiredService<PuertosHttp>());
 
         builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
         // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
         // de su original.
-        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(),
+        // La zona del sitio, en la que un aviso escribe una hora (NM-2 de 010, NN-6 de 003): la del orquestador, o la de Bogotá.
+        var zona = TimeZoneInfo.FindSystemTimeZoneById(
+            builder.Configuration[$"{vocabulario.Origin}:ZonaHoraria"] is { Length: > 0 } declarada ? declarada : PasoAvisar.ZonaPorDefecto);
+        builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), zona,
             [new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), sp.GetRequiredService<TiposDeValor>()), .. propios]));
         return builder.AddFlujosGenericos(vocabulario, ensamblado);
     }
@@ -71,8 +75,12 @@ public static class OrquestadorDeclarado
 /// <summary>Los pasos comunes sobre los adaptadores HTTP: los que cualquier flujo declarado puede nombrar.</summary>
 public static class PasosComunes
 {
-    /// <summary>Los pasos comunes, cumplidos por <paramref name="puertos"/>.</summary>
+    /// <summary>Los pasos comunes, cumplidos por <paramref name="puertos"/>, con el aviso en la hora de Bogotá.</summary>
     public static IReadOnlyList<IPaso> De(PuertosHttp puertos)
+        => De(puertos, TimeZoneInfo.FindSystemTimeZoneById(PasoAvisar.ZonaPorDefecto));
+
+    /// <summary>Los pasos comunes, cumplidos por <paramref name="puertos"/>; el aviso escribe la hora en <paramref name="zona"/>.</summary>
+    public static IReadOnlyList<IPaso> De(PuertosHttp puertos, TimeZoneInfo zona)
         =>
         [
             new PasoCotizacion(puertos), new PasoCotizacionSinCodigo(puertos), new PasoCotizacionOCero(puertos), new PasoDesglose(),
@@ -83,14 +91,20 @@ public static class PasosComunes
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
-            new PasoAvisar(puertos), new PasoUnaLinea(),
+            new PasoAvisar(puertos, zona), new PasoUnaLinea(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
+            new PasoProcesoArrancar(puertos), new PasoProcesoDisparar(puertos), new PasoProcesoDispararElegida(puertos),
+            new PasoProcesoLeer(puertos),
         ];
 
     /// <summary>El registro con los comunes y los del dominio. Un tipo repetido no arranca.</summary>
     public static IRegistroDePasos Registro(PuertosHttp puertos, params IPaso[] propios)
         => new RegistroDePasos(De(puertos).Concat(propios));
+
+    /// <summary>El registro con los comunes —el aviso en la hora de <paramref name="zona"/>— y los del dominio.</summary>
+    public static IRegistroDePasos Registro(PuertosHttp puertos, TimeZoneInfo zona, params IPaso[] propios)
+        => new RegistroDePasos(De(puertos, zona).Concat(propios));
 }
 
 /// <summary>

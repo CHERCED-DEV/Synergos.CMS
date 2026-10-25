@@ -58,25 +58,25 @@ public sealed class PaymentService : IDisposable
             // falla: un reintento tras un timeout cobra dos veces a una persona real.
             if (_idempotency.Find("payment", key) is { } yaEra)
             {
-                return _payments.Find(yaEra) is { } previo
-                    ? Result.Ok(previo)
-                    : Rejection.Conflict($"{PaymentRules.CodePrefix}.idempotency_orphan", "La llave ya se usó pero el cobro no está.");
+                if (_payments.Find(yaEra) is not { } previo)
+                {
+                    return Rejection.Conflict($"{PaymentRules.CodePrefix}.idempotency_orphan", "La llave ya se usó pero el cobro no está.");
+                }
+                return previo.Status == PaymentStatus.InDoubt
+                    ? await ResolverEnDudaAsync(previo, ct).ConfigureAwait(false)
+                    : Result.Ok(previo);
             }
 
             var motivo = PaymentRules.CheckAmount(amount);
             if (motivo is not null) return Result.Rejected<Payment>(motivo);
 
-            var intento = await _provider.AuthorizeAsync(amount, payer, ct).ConfigureAwait(false);
-            var referencia = intento.IsOk ? intento.Reference : null;
+            // LA LLAVE SE ANOTA ANTES DE HABLAR CON LA PASARELA, y el cobro nace en duda (#183, decisión 4 del
+            // lote 1). Así ni una caída del proceso entre la pasarela y el almacén deja la llave libre para un
+            // segundo cobro: el reintento encuentra el cobro en duda y le pregunta al proveedor antes de autorizar.
             var id = Guid.NewGuid().ToString("n");
-
-            // El intento se registra HAYA SIDO ACEPTADO O NO. Un rechazo sin rastro deja al
-            // cliente diciendo "yo lo intenté" y al sistema sin manera de saber si es cierto.
-            var payment = new Payment(
-                id, forWhat, payer, amount,
-                referencia is null ? PaymentStatus.Failed : PaymentStatus.Authorized,
-                _provider.Name, referencia, Array.Empty<Refund>(), Now,
-                CapturedAtUtc: null, ActionUrl: intento.ActionUrl,
+            var enDuda = new Payment(
+                id, forWhat, payer, amount, PaymentStatus.InDoubt,
+                _provider.Name, ProviderReference: null, Array.Empty<Refund>(), Now,
                 // Se guarda TAMBIÉN cuando el cobro falla. Un intento rechazado sin saber quién
                 // lo hizo es la mitad de un rastro: el registro existe justamente para poder
                 // contestar «quién intentó pagar esto», y eso no depende de que saliera bien.
@@ -86,19 +86,66 @@ public sealed class PaymentService : IDisposable
                 // por diseño— así que el rastro dice la verdad sobre sí mismo en vez de afirmar un
                 // `CmsSession` que nadie comprobó.
                 PaidWith: assertion);
-
-            _payments.Put(payment);
+            _payments.Put(enDuda);
             _idempotency.Remember("payment", key, id);
 
-            // El motivo sale tal cual del proveedor, y el reintento depende de CUÁL fue: un
-            // rechazo firme no se reintenta y una caída sí.
-            var rechazo = PaymentRules.FromAttempt(intento, "la autorización");
-            return rechazo is not null ? Result.Rejected<Payment>(rechazo) : Result.Ok(payment);
+            // La referencia que va al proveedor es la NUESTRA (el id): con ella se le pregunta después si hubo cobro.
+            var intento = await _provider.AuthorizeAsync(amount, payer, id, ct).ConfigureAwait(false);
+            return Asentar(enDuda, intento);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Lo que deja un intento de autorizar: <see cref="PaymentStatus.Authorized"/> si salió, <see cref="PaymentStatus.Failed"/>
+    /// si el proveedor dijo que no, y EN DUDA si no se sabe (no contestó, o no estaba configurado).
+    /// </summary>
+    /// <remarks>
+    /// <b>Un fallo pasajero ya no cierra la llave</b> (#183). Antes salía <c>Failed</c>, y el reintento con la misma llave
+    /// devolvía ese <c>Failed</c> para siempre: o el comprador se quedaba sin poder pagar aunque la pasarela volviera, o —con
+    /// otra llave— se arriesgaba un segundo cobro si el primero sí había salido. El intento se registra igual HAYA SIDO
+    /// ACEPTADO O NO: un rechazo sin rastro deja al cliente diciendo «yo lo intenté» y al sistema sin manera de saber si es
+    /// cierto.
+    /// </remarks>
+    private Result<Payment> Asentar(Payment enDuda, PaymentAttempt intento)
+    {
+        var asentado = intento.Outcome switch
+        {
+            PaymentOutcome.Ok => enDuda with
+            {
+                Status = PaymentStatus.Authorized, ProviderReference = intento.Reference, ActionUrl = intento.ActionUrl,
+            },
+            PaymentOutcome.Declined => enDuda with { Status = PaymentStatus.Failed },
+            _ => enDuda,
+        };
+        if (asentado != enDuda) _payments.Put(asentado);
+
+        // El motivo sale tal cual del proveedor, y el reintento depende de CUÁL fue: un
+        // rechazo firme no se reintenta y una caída sí.
+        var rechazo = PaymentRules.FromAttempt(intento, "la autorización");
+        return rechazo is not null ? Result.Rejected<Payment>(rechazo) : Result.Ok(asentado);
+    }
+
+    /// <summary>
+    /// El reintento de un cobro EN DUDA (#183): primero se le pregunta al proveedor por la autorización con nuestra referencia, y
+    /// sólo si no hay rastro de ella se vuelve a autorizar —con la misma referencia—.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Había cobro:</b> se asienta lo que el proveedor cuenta y NO se autoriza otra vez. Es el doble cobro que esto
+    /// impide.</para>
+    /// <para><b>No había:</b> se autoriza, y lo que salga se asienta como el primer intento.</para>
+    /// <para><b>No se pudo preguntar:</b> sigue en duda, y el rechazo es transitorio: no saber no es «no hubo».</para>
+    /// </remarks>
+    private async Task<Result<Payment>> ResolverEnDudaAsync(Payment enDuda, CancellationToken ct)
+    {
+        var rastro = await _provider.FindAuthorizationAsync(enDuda.Id, ct).ConfigureAwait(false);
+        if (rastro is not null) return Asentar(enDuda, rastro);
+
+        var intento = await _provider.AuthorizeAsync(enDuda.Amount, enDuda.Payer, enDuda.Id, ct).ConfigureAwait(false);
+        return Asentar(enDuda, intento);
     }
 
     public Result<Payment> Get(string id)
