@@ -601,7 +601,9 @@
         "Travel.Booking.RoomBadRequest",
         "Travel.Booking.RoomNotBookable",
         "Travel.Booking.RoomTaken",
+        "Travel.Booking.SignIn",
         "Travel.Booking.SignInRequired",
+        "Travel.Booking.StaySignIn",
         "Travel.Booking.StillPending",
         "Travel.Booking.Unavailable"
       ],
@@ -3563,7 +3565,9 @@
         "Travel.Booking.RoomBadRequest",
         "Travel.Booking.RoomNotBookable",
         "Travel.Booking.RoomTaken",
+        "Travel.Booking.SignIn",
         "Travel.Booking.SignInRequired",
+        "Travel.Booking.StaySignIn",
         "Travel.Booking.StillPending",
         "Travel.Booking.Unavailable"
       ],
