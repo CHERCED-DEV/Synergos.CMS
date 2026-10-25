@@ -58,7 +58,9 @@ public sealed class GovActNotificationControllerTests
         _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
     }
 
-    private static CaseDetail Expediente(Guid? memberKey) => new(
+    /// <param name="aceptada">Lo que contestó sobre la notificación electrónica al radicar; <c>null</c> es
+    /// «no consta». Por defecto la aceptó: es lo que hace falta para notificar (009, S-7).</param>
+    private static CaseDetail Expediente(Guid? memberKey, bool? aceptada = true) => new(
         CaseId: "case-1001",
         Radicado: "SG-2026-000001",
         TramiteId: "licencia",
@@ -74,7 +76,10 @@ public sealed class GovActNotificationControllerTests
         Currency: "COP",
         RadicadoAt: DateTimeOffset.UtcNow.AddDays(-3),
         Timeline: Array.Empty<CaseTimelineEntry>(),
-        Decision: null);
+        Decision: null,
+        NotificationConsent: aceptada is null
+            ? null
+            : new NotificationConsent(aceptada.Value, "2026-10-v1", DateTimeOffset.UtcNow.AddDays(-3)));
 
     private static GovActNotification Acto(
         DateTimeOffset? opened = null, string? openedWith = null) => new(
@@ -143,6 +148,28 @@ public sealed class GovActNotificationControllerTests
         _tracking.GetCaseAsync("case-1001", Arg.Any<CancellationToken>()).Returns(Expediente(memberKey: null));
 
         Assert.IsType<ConflictObjectResult>(await BuildSut().Notify(Peticion, default));
+        await _notifications.DidNotReceiveWithAnyArgs().NotifyAsync(
+            default!, default!, default, default!, default!, default, default, default);
+    }
+
+    /// <summary>
+    /// Sin la aceptación de la notificación electrónica no se notifica por aquí (009, S-7).
+    /// </summary>
+    /// <remarks>
+    /// Rechazada o «no consta» dan lo mismo: no constar no es aceptar. El código viaja para que la
+    /// consola diga qué pasa —el acto se notifica por otro medio— en vez de un «no se pudo».
+    /// </remarks>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task Notificar_Sin_Aceptacion_Devuelve409_Con_Su_Codigo_Y_No_Notifica(bool? aceptada)
+    {
+        Funcionario();
+        _tracking.GetCaseAsync("case-1001", Arg.Any<CancellationToken>()).Returns(Expediente(Ciudadano, aceptada));
+
+        var conflicto = Assert.IsType<ConflictObjectResult>(await BuildSut().Notify(Peticion, default));
+
+        Assert.Contains("gov.sin_aceptacion", conflicto.Value!.ToString(), StringComparison.Ordinal);
         await _notifications.DidNotReceiveWithAnyArgs().NotifyAsync(
             default!, default!, default, default!, default!, default, default, default);
     }

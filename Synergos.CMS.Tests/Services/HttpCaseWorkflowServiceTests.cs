@@ -71,24 +71,41 @@ public sealed class HttpCaseWorkflowServiceTests
 
     // La definición tal como la publica el despliegue: los estados SON los slugs públicos del
     // expediente, que es lo que hace que la traducción de vuelta sea una lectura y no una tabla.
-    private const string Definicion = """
+    // Es la v1: la de los expedientes que nacieron antes de 009 y siguen con ella.
+    private const string DefinicionV1 = """
         {"key":"gov.tramite","initialState":"submitted",
          "finalStates":["approved","rejected"],
          "transitions":[
-           {"name":"approve","from":"submitted","to":"approved"},
-           {"name":"approve","from":"in-review","to":"approved"},
-           {"name":"reject","from":"submitted","to":"rejected"},
-           {"name":"request-info","from":"submitted","to":"info-requested"}]}
+           {"name":"approve","from":"submitted","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"approve","from":"in-review","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"reject","from":"submitted","to":"rejected","requiredRoles":["funcionario"]},
+           {"name":"request-info","from":"submitted","to":"info-requested","requiredRoles":["funcionario"]}]}
         """;
 
-    private static string Instancia(string estado)
-        => $$"""{"id":"wf-1","definitionKey":"gov.tramite","state":"{{estado}}"}""";
+    // La v2 (tools/provisionar.procesos.json): se toma antes de decidir y la subsanación vuelve.
+    private const string DefinicionV2 = """
+        {"key":"gov.tramite.v2","initialState":"submitted",
+         "finalStates":["approved","rejected"],
+         "transitions":[
+           {"name":"take","from":"submitted","to":"in-review","requiredRoles":["funcionario"]},
+           {"name":"approve","from":"in-review","to":"approved","requiredRoles":["funcionario"]},
+           {"name":"reject","from":"in-review","to":"rejected","requiredRoles":["funcionario"]},
+           {"name":"request-info","from":"in-review","to":"info-requested","requiredRoles":["funcionario"]},
+           {"name":"resubmit","from":"info-requested","to":"in-review","requiredRoles":["ciudadano"]}]}
+        """;
+
+    private static readonly CaseActor Ana = new(
+        CaseRoles.KindFuncionario, "f-ana", "Ana Funcionaria", "ana@entidad.gov.co");
+
+    private static string Instancia(string estado, string clave = "gov.tramite")
+        => $$"""{"id":"wf-1","definitionKey":"{{clave}}","state":"{{estado}}"}""";
 
     private static string Pagina(params string[] items)
         => $$"""{"items":[{{string.Join(",", items)}}],"total":{{items.Length}},"offset":0,"hasMore":false}""";
 
     private static CapacidadFalsa Feliz() => new CapacidadFalsa()
-        .Ok("GET /v1/definitions/gov.tramite", Definicion)
+        .Ok("GET /v1/definitions/gov.tramite", DefinicionV1)
+        .Ok("GET /v1/definitions/gov.tramite.v2", DefinicionV2)
         .Ok("GET /v1/instances", Pagina(Instancia("submitted")))
         .Ok("POST /v1/instances/wf-1/fire", Instancia("approved"));
 
@@ -117,7 +134,7 @@ public sealed class HttpCaseWorkflowServiceTests
         var capacidad = Feliz();
         var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
-        var resultado = await svc.DecideAsync(caseId, "approve", "Todo en orden.");
+        var resultado = await svc.DecideAsync(caseId, "approve", "Todo en orden.", Ana);
 
         Assert.Equal(CaseStatus.Resuelto, resultado.Status);
         Assert.Equal(CaseStatus.Resuelto, casos.FindCase(caseId)!.Status);
@@ -143,7 +160,7 @@ public sealed class HttpCaseWorkflowServiceTests
 
         var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
-        var resultado = await svc.DecideAsync(caseId, "approve", "");
+        var resultado = await svc.DecideAsync(caseId, "approve", "", Ana);
 
         Assert.Equal(CaseStatus.Subsanacion, resultado.Status);
         Assert.Equal(CaseStatus.Subsanacion, casos.FindCase(caseId)!.Status);
@@ -169,8 +186,8 @@ public sealed class HttpCaseWorkflowServiceTests
         var capacidad = Feliz();
         var (svc, _, caseId) = await ArmarAsync(capacidad);
 
-        await svc.DecideAsync(caseId, "approve", "Va.");
-        var segunda = await svc.DecideAsync(caseId, "approve", "Va otra vez.");
+        await svc.DecideAsync(caseId, "approve", "Va.", Ana);
+        var segunda = await svc.DecideAsync(caseId, "approve", "Va otra vez.", Ana);
 
         Assert.Equal(CaseStatus.Resuelto, segunda.Status);
         // Y la nota de la primera es la que queda: la segunda no re-decide nada.
@@ -184,8 +201,8 @@ public sealed class HttpCaseWorkflowServiceTests
         var capacidad = Feliz();
         var (svc, _, caseId) = await ArmarAsync(capacidad);
 
-        await svc.DecideAsync(caseId, "approve", "");
-        await svc.DecideAsync(caseId, "approve", "");
+        await svc.DecideAsync(caseId, "approve", "", Ana);
+        await svc.DecideAsync(caseId, "approve", "", Ana);
 
         Assert.Equal(1, capacidad.Veces("/v1/definitions/gov.tramite"));
     }
@@ -209,7 +226,7 @@ public sealed class HttpCaseWorkflowServiceTests
         var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DecideAsync(caseId, "approve", ""));
+            () => svc.DecideAsync(caseId, "approve", "", Ana));
 
         Assert.Contains("Sí se puede: reject", ex.Message, StringComparison.Ordinal);
         // Y el expediente NO se movió: la decisión se aplica DESPUÉS de que la capacidad la acepta.
@@ -223,7 +240,7 @@ public sealed class HttpCaseWorkflowServiceTests
         var (svc, _, caseId) = await ArmarAsync(capacidad);
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(
-            () => svc.DecideAsync(caseId, "archivar", ""));
+            () => svc.DecideAsync(caseId, "archivar", "", Ana));
 
         Assert.Contains("approve", ex.Message, StringComparison.Ordinal);
         Assert.Equal(0, capacidad.Veces("/fire"));
@@ -239,13 +256,15 @@ public sealed class HttpCaseWorkflowServiceTests
     [Fact]
     public async Task Sin_definicion_publicada_no_se_decide_y_lo_dice()
     {
-        var capacidad = new CapacidadFalsa();     // ninguna ruta: /definitions da 404
+        // El expediente aún no tiene proceso y /definitions da 404: la de los nuevos no está publicada.
+        var capacidad = new CapacidadFalsa().Ok("GET /v1/instances", Pagina());
         var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DecideAsync(caseId, "approve", ""));
+            () => svc.DecideAsync(caseId, "approve", "", Ana));
 
         Assert.Contains("despliegue", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("gov.tramite.v2", ex.Message, StringComparison.Ordinal);
         Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
     }
 
@@ -265,7 +284,7 @@ public sealed class HttpCaseWorkflowServiceTests
 
         var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DecideAsync(caseId, "approve", ""));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DecideAsync(caseId, "approve", "", Ana));
 
         Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
     }
@@ -292,7 +311,7 @@ public sealed class HttpCaseWorkflowServiceTests
             new FabricaCaida(capacidad), casos, Options.Create(new GobSettings { Mode = "Api" }));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DecideAsync(abierto.CaseId, "approve", ""));
+            () => svc.DecideAsync(abierto.CaseId, "approve", "", Ana));
 
         Assert.Contains("no responde", ex.Message, StringComparison.Ordinal);
         Assert.Contains("NO se aplicó", ex.Message, StringComparison.Ordinal);
@@ -352,7 +371,7 @@ public sealed class HttpCaseWorkflowServiceTests
         using var seFue = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => svc.DecideAsync(caseId, "approve", "", seFue.Token));
+            () => svc.DecideAsync(caseId, "approve", "", Ana, seFue.Token));
 
         Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
     }
@@ -363,7 +382,7 @@ public sealed class HttpCaseWorkflowServiceTests
         var (svc, casos, caseId) = Colgado(TimeSpan.FromMilliseconds(100));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DecideAsync(caseId, "approve", ""));
+            () => svc.DecideAsync(caseId, "approve", "", Ana));
 
         Assert.Contains("tardó demasiado", ex.Message, StringComparison.Ordinal);
         Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
@@ -398,27 +417,212 @@ public sealed class HttpCaseWorkflowServiceTests
         var enMarcha = casos.ListCases().First(c => c.Status == CaseStatus.EnRevision);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DecideAsync(enMarcha.CaseId, "approve", ""));
+            () => svc.DecideAsync(enMarcha.CaseId, "approve", "", Ana));
 
         Assert.Contains("migrarlos", ex.Message, StringComparison.Ordinal);
         Assert.Equal(0, capacidad.Veces("/fire"));
     }
 
-    [Fact] // uno recién radicado SÍ se arranca: no hay historia que inventar.
-    public async Task Un_expediente_recien_radicado_arranca_su_proceso()
+    /// <summary>
+    /// Uno recién radicado SÍ se arranca —no hay historia que inventar—, y con la v2.
+    /// </summary>
+    /// <remarks>
+    /// La definición con que arranca es la de los ajustes (<c>gov.tramite.v2</c> por defecto,
+    /// 009-FR-008), y su primer paso es TOMARLO (P4): en la v2 un expediente radicado no se decide.
+    /// </remarks>
+    [Fact]
+    public async Task Un_expediente_recien_radicado_arranca_su_proceso_con_la_v2_y_se_toma()
     {
         var capacidad = Feliz();
         capacidad.Ok("GET /v1/instances", Pagina());
-        capacidad.Ok("POST /v1/instances", Instancia("submitted"));
+        capacidad.Ok("POST /v1/instances", Instancia("submitted", "gov.tramite.v2"));
+        capacidad.Ok("POST /v1/instances/wf-1/fire", Instancia("in-review", "gov.tramite.v2"));
 
-        var (svc, _, caseId) = await ArmarAsync(capacidad);
+        var (svc, casos, caseId) = await ArmarAsync(capacidad);
 
-        var resultado = await svc.DecideAsync(caseId, "approve", "");
+        var resultado = await svc.TakeAsync(caseId, Ana, null);
 
-        Assert.Equal(CaseStatus.Resuelto, resultado.Status);
+        Assert.Equal(CaseStatus.EnRevision, resultado.Status);
+        Assert.Equal(CaseStatus.EnRevision, casos.FindCase(caseId)!.Status);
+        Assert.Null(resultado.Decision);
+
         // Y la llave del arranque es el expediente: un reintento encuentra la que él mismo creó.
         var arranque = capacidad.Llamadas.First(l => l.Path == "/v1/instances" && l.Method == "POST");
         Assert.Equal($"gov-case-{caseId}", arranque.Key);
+        Assert.Contains("\"definitionKey\":\"gov.tramite.v2\"", arranque.Body, StringComparison.Ordinal);
+
+        var disparo = capacidad.Llamadas.Single(l => l.Path.EndsWith("/fire", StringComparison.Ordinal));
+        Assert.Contains("\"transition\":\"take\"", disparo.Body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Un expediente sigue toda su vida con la definición con que nació (009-FR-008).
+    /// </summary>
+    /// <remarks>
+    /// <para>Los nuevos arrancan con la v2, pero uno cuya instancia es de la v1 se decide con la
+    /// v1 —que no tiene «tomar»—. Leer la definición de los ajustes en vez de la de su instancia le
+    /// cambiaría las reglas a mitad de camino, y la capacidad, que sí sigue la de la instancia,
+    /// rechazaría lo que el CMS acababa de ofrecer.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Un_expediente_que_nacio_con_la_v1_sigue_con_la_v1()
+    {
+        var capacidad = Feliz();                   // la instancia es de la v1 (gov.tramite)
+        var (svc, casos, caseId) = await ArmarAsync(capacidad);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => svc.TakeAsync(caseId, Ana, null));
+
+        Assert.Contains("'gov.tramite'", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(0, capacidad.Veces("/fire"));
+        Assert.Equal(0, capacidad.Veces("/v1/definitions/gov.tramite.v2"));
+        Assert.Equal(CaseStatus.Radicado, casos.FindCase(caseId)!.Status);
+
+        // Y con la v1 se decide como antes: directo desde radicado.
+        var decidido = await svc.DecideAsync(caseId, "approve", "", Ana);
+        Assert.Equal(CaseStatus.Resuelto, decidido.Status);
+    }
+
+    /// <summary>
+    /// Quien actúa viaja en el disparo con SU identidad, y es quien firma lo anotado (D-5 de 009).
+    /// </summary>
+    /// <remarks>
+    /// Antes el disparo decía siempre <c>funcionario@entidad.gov.co</c>: la capacidad registraba
+    /// la misma persona para toda decisión y el CMS anotaba lo mismo.
+    /// </remarks>
+    [Fact]
+    public async Task Quien_actua_viaja_en_el_disparo_y_firma_lo_anotado()
+    {
+        var capacidad = Feliz();
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        var resultado = await svc.DecideAsync(caseId, "approve", "Va.", Ana);
+
+        var disparo = capacidad.Llamadas.Single(l => l.Path.EndsWith("/fire", StringComparison.Ordinal));
+        Assert.Contains("\"actorKind\":\"gov.funcionario\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorId\":\"f-ana\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorRoles\":[\"funcionario\"]", disparo.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain(GovCaseDecisionRecorder.OfficerActor, disparo.Body, StringComparison.Ordinal);
+
+        Assert.Equal("ana@entidad.gov.co", resultado.Decision!.DecidedBy);
+    }
+
+    // ── Subsanar (T012): el ciudadano, con su identidad y su rol ────────────
+
+    private static readonly CaseActor Juliana = new(
+        CaseRoles.KindCiudadano, "c-juliana", "Juliana Ríos", "juliana.rios@correo.co");
+
+    /// <summary>
+    /// El ciudadano subsana con SU identidad y el rol de su cara: la guarda de la capacidad rechaza a otra.
+    /// </summary>
+    /// <remarks>
+    /// Con un rol de funcionario en el disparo, cualquier funcionario podría «subsanar» por el ciudadano;
+    /// con el del ciudadano, la capacidad deja la transición sólo a esa cara (FR-006).
+    /// </remarks>
+    [Fact]
+    public async Task El_ciudadano_subsana_con_su_identidad_y_su_rol()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("info-requested", "gov.tramite.v2")));
+        capacidad.Ok("POST /v1/instances/wf-1/fire", Instancia("in-review", "gov.tramite.v2"));
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enSubsanacion = casos.ListCases().First(c => c.Status == CaseStatus.Subsanacion);
+
+        var resultado = await svc.ResubmitAsync(enSubsanacion.CaseId, Juliana, "Adjunté el certificado.");
+
+        Assert.Equal(CaseStatus.EnRevision, resultado.Status);
+        Assert.Equal(CaseStatus.EnRevision, casos.FindCase(enSubsanacion.CaseId)!.Status);
+        var disparo = capacidad.Llamadas.Single(l => l.Path.EndsWith("/fire", StringComparison.Ordinal));
+        Assert.Contains("\"transition\":\"resubmit\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorKind\":\"gov.ciudadano\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorId\":\"c-juliana\"", disparo.Body, StringComparison.Ordinal);
+        Assert.Contains("\"actorRoles\":[\"ciudadano\"]", disparo.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("funcionario", disparo.Body, StringComparison.Ordinal);
+    }
+
+    [Fact] // uno de la v1 no se subsana por aquí: su proceso no tiene ese paso, y no sale a disparar
+    public async Task Uno_de_la_v1_no_se_subsana_porque_su_proceso_no_tiene_ese_paso()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("info-requested")));
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enSubsanacion = casos.ListCases().First(c => c.Status == CaseStatus.Subsanacion);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.ResubmitAsync(enSubsanacion.CaseId, Juliana, null));
+
+        Assert.Equal(0, capacidad.Veces("/fire"));
+        Assert.Equal(CaseStatus.Subsanacion, casos.FindCase(enSubsanacion.CaseId)!.Status);
+    }
+
+    // ── Las acciones servidas (T008): lo que se ofrece es lo que la capacidad aceptaría ──
+
+    /// <summary>
+    /// Las acciones salen de la definición de la instancia y del estado DE LA INSTANCIA.
+    /// </summary>
+    /// <remarks>
+    /// Acá la proyección dice «radicado» y la instancia «en revisión»: la próxima transición la juzga
+    /// la capacidad contra la suya, así que ofrecer «tomar» pondría un botón que ella rechazaría.
+    /// </remarks>
+    [Fact]
+    public async Task Las_acciones_salen_de_la_definicion_y_del_estado_de_la_instancia()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina(Instancia("in-review", "gov.tramite.v2")));
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        Assert.Empty(await svc.ActionsAsync(caseId, CaseRoles.Ciudadano));
+        Assert.Equal(0, capacidad.Veces("/fire"));
+    }
+
+    [Fact] // uno de la v1 ofrece lo de la v1: decidir directo, sin «tomar»
+    public async Task Uno_de_la_v1_ofrece_lo_de_la_v1()
+    {
+        var capacidad = Feliz();
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        Assert.Equal(0, capacidad.Veces("/v1/definitions/gov.tramite.v2"));
+    }
+
+    [Fact] // sin proceso y en el inicial: lo de la definición con que arrancaría, la v2
+    public async Task Un_expediente_sin_proceso_en_el_inicial_ofrece_lo_de_la_v2()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina());
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        Assert.Equal(new[] { "take" }, await svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+        // Ofrecer no arranca nada: la instancia nace al actuar.
+        Assert.Equal(0, capacidad.Llamadas.Count(l => l.Method == "POST"));
+    }
+
+    [Fact] // sin proceso y ya movido: nada hasta migrarlo, que es lo que contestaría al intentarlo
+    public async Task Un_expediente_movido_y_sin_proceso_no_ofrece_nada()
+    {
+        var capacidad = Feliz();
+        capacidad.Ok("GET /v1/instances", Pagina());
+        var (svc, casos, _) = await ArmarAsync(capacidad);
+        var enMarcha = casos.ListCases().First(c => c.Status == CaseStatus.EnRevision);
+
+        Assert.Empty(await svc.ActionsAsync(enMarcha.CaseId, CaseRoles.Funcionario));
+    }
+
+    [Fact] // con la capacidad caída no se ofrece nada de una tabla local: se dice
+    public async Task Con_la_capacidad_caida_no_se_ofrecen_acciones_de_la_tabla_local()
+    {
+        var capacidad = Feliz();
+        capacidad.Falla("GET /v1/instances", HttpStatusCode.ServiceUnavailable, "workflow.unavailable", "no hay quien atienda");
+        var (svc, _, caseId) = await ArmarAsync(capacidad);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ActionsAsync(caseId, CaseRoles.Funcionario));
+    }
+
+    [Fact] // empty: el expediente que no existe es error de quien pregunta
+    public async Task Las_acciones_de_un_expediente_que_no_existe_son_un_error_de_quien_pregunta()
+    {
+        var (svc, _, _) = await ArmarAsync(Feliz());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => svc.ActionsAsync("case-que-no-existe", CaseRoles.Funcionario));
     }
 
     [Fact] // el expediente viaja como Ref opaco, con el Kind configurado.
@@ -427,7 +631,7 @@ public sealed class HttpCaseWorkflowServiceTests
         var capacidad = Feliz();
         var (svc, _, caseId) = await ArmarAsync(capacidad);
 
-        await svc.DecideAsync(caseId, "approve", "");
+        await svc.DecideAsync(caseId, "approve", "", Ana);
 
         var busqueda = capacidad.Llamadas.First(l => l.Path == "/v1/instances" && l.Method == "GET");
         Assert.Contains("subjectKind=gov.expediente", busqueda.Query, StringComparison.Ordinal);

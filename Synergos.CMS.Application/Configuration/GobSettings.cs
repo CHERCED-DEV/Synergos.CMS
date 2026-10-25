@@ -37,15 +37,21 @@ public sealed class GobSettings
     public string ApiKey { get; init; } = string.Empty;
 
     /// <summary>
-    /// La clave de la definición publicada en <c>Api.Workflow</c>.
+    /// La clave de la definición con que ARRANCAN los expedientes nuevos en <c>Api.Workflow</c>.
     /// </summary>
     /// <remarks>
-    /// <b>Configurable porque versionar una definición ES publicar otra clave.</b> La capacidad
+    /// <para><b>Configurable porque versionar una definición ES publicar otra clave.</b> La capacidad
     /// se niega a reescribir una definición viva (<c>workflow.key_taken</c>): cambiarle las
-    /// transiciones a instancias en marcha las dejaría en estados imposibles. Así que el día que
-    /// el proceso cambie de verdad, se publica <c>gov.tramite.v2</c> y se mueve esto.
+    /// transiciones a instancias en marcha las dejaría en estados imposibles. El proceso cambió de
+    /// verdad el 2026-10-16 (009-gobierno-tramite: tomar antes de decidir y la subsanación que vuelve
+    /// a revisión), así que el default es <c>gov.tramite.v2</c>, la de
+    /// <c>tools/provisionar.procesos.json</c>.</para>
+    ///
+    /// <para><b>Sólo decide con qué arranca un expediente.</b> Uno que ya tiene instancia sigue con la
+    /// definición de SU instancia (la v1 los que nacieron con ella), y un despliegue que fije aquí
+    /// <c>gov.tramite</c> sigue arrancando con la v1.</para>
     /// </remarks>
-    public string DefinitionKey { get; init; } = "gov.tramite";
+    public string DefinitionKey { get; init; } = "gov.tramite.v2";
 
     /// <summary>
     /// El <c>Kind</c> con el que este vertical nombra al expediente.

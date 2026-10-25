@@ -579,7 +579,30 @@
       "nombre": "booking-wizard",
       "tipo": "funcionalidad",
       "record": "BookingWizardProps",
-      "diccionario": [],
+      "diccionario": [
+        "Travel.Booking"
+      ],
+      "claves": [
+        "Travel.Booking.BadRequest",
+        "Travel.Booking.CancelPending",
+        "Travel.Booking.CancelledNoCharge",
+        "Travel.Booking.Generic",
+        "Travel.Booking.HoldExpired",
+        "Travel.Booking.ItemTaken",
+        "Travel.Booking.NoDates",
+        "Travel.Booking.NotBookable",
+        "Travel.Booking.NotConfirmable",
+        "Travel.Booking.NotFound",
+        "Travel.Booking.PaymentFailed",
+        "Travel.Booking.PriceUnavailable",
+        "Travel.Booking.RefundIssued",
+        "Travel.Booking.RoomBadRequest",
+        "Travel.Booking.RoomNotBookable",
+        "Travel.Booking.RoomTaken",
+        "Travel.Booking.SignInRequired",
+        "Travel.Booking.StillPending",
+        "Travel.Booking.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "destinationLabel",
@@ -592,12 +615,19 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "bookingPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "destinationLabel": "Hoteles SynergosLabs",
-        "apiBase": "/api/booking"
+        "apiBase": "/api/booking",
+        "bookingPath": "directa"
       }
     },
     {
@@ -1758,7 +1788,42 @@
       "nombre": "gov",
       "tipo": "funcionalidad",
       "record": "GovProps",
-      "diccionario": [],
+      "diccionario": [
+        "Gov.Tramite"
+      ],
+      "claves": [
+        "Gov.Tramite.Action.Approve",
+        "Gov.Tramite.Action.Reject",
+        "Gov.Tramite.Action.RequestInfo",
+        "Gov.Tramite.Action.Resubmit",
+        "Gov.Tramite.Action.Take",
+        "Gov.Tramite.Actions.Hint",
+        "Gov.Tramite.Actions.Stale",
+        "Gov.Tramite.Actions.Waiting",
+        "Gov.Tramite.Consent.Accepted",
+        "Gov.Tramite.Consent.Declined",
+        "Gov.Tramite.Consent.Text",
+        "Gov.Tramite.Consent.Unknown",
+        "Gov.Tramite.Consent.Version",
+        "Gov.Tramite.Error.ActNotPrepared",
+        "Gov.Tramite.Error.Changed",
+        "Gov.Tramite.Error.Closed",
+        "Gov.Tramite.Error.NoOffer",
+        "Gov.Tramite.Error.NotAvailable",
+        "Gov.Tramite.Error.NotFound",
+        "Gov.Tramite.Error.Payment",
+        "Gov.Tramite.Notify.NeedsConsent",
+        "Gov.Tramite.Resubmit.Done",
+        "Gov.Tramite.Resubmit.Failed",
+        "Gov.Tramite.Resubmit.NoDocuments",
+        "Gov.Tramite.Resubmit.Note",
+        "Gov.Tramite.Resubmit.Title",
+        "Gov.Tramite.SignIn",
+        "Gov.Tramite.Take.Done",
+        "Gov.Tramite.Take.Failed",
+        "Gov.Tramite.Take.Hint",
+        "Gov.Tramite.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "heading",
@@ -3474,7 +3539,30 @@
       "nombre": "travel-shell",
       "tipo": "funcionalidad",
       "record": "TravelShellProps",
-      "diccionario": [],
+      "diccionario": [
+        "Travel.Booking"
+      ],
+      "claves": [
+        "Travel.Booking.BadRequest",
+        "Travel.Booking.CancelPending",
+        "Travel.Booking.CancelledNoCharge",
+        "Travel.Booking.Generic",
+        "Travel.Booking.HoldExpired",
+        "Travel.Booking.ItemTaken",
+        "Travel.Booking.NoDates",
+        "Travel.Booking.NotBookable",
+        "Travel.Booking.NotConfirmable",
+        "Travel.Booking.NotFound",
+        "Travel.Booking.PaymentFailed",
+        "Travel.Booking.PriceUnavailable",
+        "Travel.Booking.RefundIssued",
+        "Travel.Booking.RoomBadRequest",
+        "Travel.Booking.RoomNotBookable",
+        "Travel.Booking.RoomTaken",
+        "Travel.Booking.SignInRequired",
+        "Travel.Booking.StillPending",
+        "Travel.Booking.Unavailable"
+      ],
       "campos": [
         {
           "nombre": "heading",
@@ -3493,13 +3581,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "bookingPath",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Reserva tu próximo viaje",
         "subheading": "Vuelos, hoteles y paquetes",
-        "apiBase": "/api/travel"
+        "apiBase": "/api/travel",
+        "bookingPath": "directa"
       }
     },
     {

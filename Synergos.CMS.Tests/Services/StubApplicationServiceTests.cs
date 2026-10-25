@@ -181,4 +181,44 @@ public class StubApplicationServiceTests
         var next = await reseeded.RadicarAsync("trm-pasaporte", PasaporteForm(), Citizen());
         Assert.NotEqual(radicado.Case.Radicado, next.Case.Radicado);
     }
+
+    // ── La aceptación de la notificación electrónica (009, T015, S-7) ─────────────
+
+    private static readonly NotificationConsent Acepto = new(true, "2026-10-v1", Clock);
+
+    [Fact] // happy: la respuesta va con las respuestas, y sobrevive a un reinicio (el store)
+    public async Task Radicar_WithConsent_PersistsItWithTheTextVersion()
+    {
+        var store = new InMemoryJsonEntityStore();
+
+        var radicado = await Make(store: store)
+            .RadicarAsync("trm-certificado-residencia", CertificadoForm(), Citizen(), consent: Acepto);
+
+        Assert.Equal(Acepto, radicado.Case.NotificationConsent);
+        var restarted = Make(store: store);
+        Assert.Equal(Acepto, restarted.FindCase(radicado.Case.CaseId)!.NotificationConsent);
+    }
+
+    [Fact] // no aceptarla no impide radicar (FR-017), y queda dicho que no la aceptó
+    public async Task Radicar_Declined_StillFiles_AndSaysSo()
+    {
+        var radicado = await Make().RadicarAsync(
+            "trm-certificado-residencia", CertificadoForm(), Citizen(), consent: Acepto with { Accepted = false });
+
+        Assert.Equal(CaseStatus.Radicado, radicado.Case.Status);
+        Assert.False(radicado.Case.NotificationConsent!.Accepted);
+        Assert.Equal(NotificationConsentSlugs.Declined, NotificationConsentSlugs.ToSlug(radicado.Case.NotificationConsent));
+    }
+
+    [Fact] // empty: sin respuesta es «no consta», también en los anteriores — nunca una aceptación
+    public async Task Without_an_answer_it_is_unknown_also_for_the_older_cases()
+    {
+        var svc = Make();
+
+        var radicado = await svc.RadicarAsync("trm-certificado-residencia", CertificadoForm(), Citizen());
+
+        Assert.Null(radicado.Case.NotificationConsent);
+        Assert.Null(svc.FindCase("case-1001")!.NotificationConsent);
+        Assert.Equal(NotificationConsentSlugs.Unknown, NotificationConsentSlugs.ToSlug(null));
+    }
 }

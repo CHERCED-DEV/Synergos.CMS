@@ -38,11 +38,11 @@
     "body": "<p>Hola {nombre}:</p><p>Tu reserva <b>{numero}</b> en {sitio} quedó confirmada. Total: <b>{total}</b>.</p><p>El servicio, el día y la hora están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla.</p>"
   },
   {
-    "_": "El aviso de una visita a un inmueble agendada por la puerta (008-propiedades-visita): lo manda el paso propiedades.avisar-visita al final de «cerrar» en propiedades.visita, a quien agendó y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS de ese paso (nombre, numero, fecha, hora, modalidad, enlace, sitio); la hora es la del sitio. El título del inmueble NO va: el orquestador no lo conoce y tomarlo del navegador pondría texto ajeno en un correo; está en el enlace. Cancelarla (008-P5, el flujo propiedades.visita-cancelacion) se hace desde el mismo enlace y dentro del plazo de aviso del inmueble, que decide la agenda: el texto no da una hora límite que el paso no conoce.",
+    "_": "El aviso de una visita a un inmueble agendada por la puerta (008-propiedades-visita): lo manda el paso común notifications.avisar al final de «cerrar» en propiedades.visita, a quien agendó y a la dirección que pone la puerta, que nunca se guarda en la saga. Marcadores: los fijos del paso ({nombre}, {numero}, {enlace}, {sitio}; sin {total}, porque la visita no se cobra) y los dos valores que declara la definición (T091): {ventana} —el día y las horas de la franja, en la hora del sitio— y {modoEnTexto} —«presencial» o «por videollamada»—. El título del inmueble NO va: el orquestador no lo conoce y tomarlo del navegador pondría texto ajeno en un correo; está en el enlace. Cancelarla (008-P5, el flujo propiedades.visita-cancelacion) se hace desde el mismo enlace y dentro del plazo de aviso del inmueble, que decide la agenda: el texto no da una hora límite que el paso no conoce.",
     "key": "propiedades.visita.confirmada",
     "channel": "Email",
     "subject": "Tu visita {numero} quedó agendada",
-    "body": "<p>Hola {nombre}:</p><p>Tu visita <b>{numero}</b> en {sitio} quedó agendada para el <b>{fecha}</b> a las <b>{hora}</b>, {modalidad}.</p><p>El inmueble y su dirección están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla. Si no puedes ir, cancélala desde ahí mientras estés a tiempo, o escríbele al agente desde la ficha del inmueble.</p>"
+    "body": "<p>Hola {nombre}:</p><p>Tu visita <b>{numero}</b> en {sitio} quedó agendada: <b>{ventana}</b>, {modoEnTexto}.</p><p>El inmueble y su dirección están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para verla. Si no puedes ir, cancélala desde ahí mientras estés a tiempo, o escríbele al agente desde la ficha del inmueble.</p>"
   },
   {
     "_": "El aviso al inquilino (línea 005, research R13): lo manda el paso notifications.avisar al final de «cerrar» en alquiler.renta, a quien alquiló y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDelAvisoTests los cruza en los dos sentidos. No lleva la cifra de la garantía —el paso no la manda, y el correo no es el comprobante—: dice que queda retenida sin cobrarse, y el contrato sellado con su cifra está en el enlace.",
@@ -50,6 +50,13 @@
     "channel": "Email",
     "subject": "Tu alquiler {numero} está confirmado",
     "body": "<p>Hola {nombre}:</p><p>Confirmamos tu alquiler <b>{numero}</b> en {sitio}. Te cobramos <b>{total}</b>.</p><p>La garantía queda retenida sin cobrarse hasta que devuelvas el equipo y el personal lo revise.</p><p>Tu contrato sellado y las fechas están en <a href=\"{enlace}\">{enlace}</a>.</p>"
+  },
+  {
+    "_": "El aviso de un viaje confirmado (línea 006, historia 7): lo manda el paso notifications.avisar al final de «cerrar» en viajes.reserva —después de cobrar y de reservar cada ítem—, a quien viaja y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y AvisoDelViajeTests los cruza en los dos sentidos. El itinerario NO va en el correo (el paso no lo manda; NN-6): está detrás del enlace, que abre el viaje. Con total cero, {total} dice «0 COP»: el texto no promete un cobro. No ofrece cancelar: lo confirmado lo gestiona quien vende (006-P3).",
+    "key": "viajes.reserva.confirmada",
+    "channel": "Email",
+    "subject": "Tu viaje {numero} está confirmado",
+    "body": "<p>Hola {nombre}:</p><p>Tu viaje <b>{numero}</b> en {sitio} quedó confirmado: cada parte quedó reservada. Total: <b>{total}</b>.</p><p>El itinerario, con las fechas de cada parte, está en <a href=\"{enlace}\">{enlace}</a>.</p>"
   },
   {
     "_": "El aviso de una matrícula activa (010-educacion-matricula): lo manda el paso notifications.avisar al final de «cerrar» en educacion.matricula, al alumno de la sesión y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y los DECLARADOS en la definición (nombreDelCurso, nombreDelPlan: NM-2 de 010 con T091 del núcleo), y PlantillaDeLaMatriculaTests los cruza en los dos sentidos. El curso y el plan salen con el nombre que publicó la oferta del CMS (el título de la ficha y «Pago de contado»), nunca del navegador; sin plan, {nombreDelPlan} va vacío. Con un curso gratis {total} dice «0 COP»: el texto no promete un cobro. No ofrece devolución: la matrícula no la promete (lote 8, 010-P2).",

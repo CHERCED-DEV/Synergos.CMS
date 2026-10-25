@@ -1,4 +1,6 @@
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
 using Synergos.Bff.Viajes.Clients;
 using Synergos.Bff.Viajes.Domain;
 using Synergos.Bff.Viajes.Endpoints;
@@ -47,21 +49,36 @@ var builder = WebApplication.CreateBuilder(args);
 // El hilo que permite seguir una reserva por los procesos (HU #28).
 builder.AddCorrelation();
 
+// En minúscula porque es el prefijo de los códigos de rechazo (viajes.trip_not_found).
+// Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
+// mayúsculas, así que "viajes:Alerts" encuentra "Viajes:Alerts" del appsettings.
+var vocabulario = new SagaVocabulary("viajes", "la reserva de viaje");
+
 builder.AddSagaMachinery<TripSaga, ViajesCompensationExecutor>(
-    // En minúscula porque es el prefijo de los códigos de rechazo (viajes.trip_not_found).
-    // Sirve además de raíz de configuración: las claves de IConfiguration no distinguen
-    // mayúsculas, así que "viajes:Alerts" encuentra "Viajes:Alerts" del appsettings.
-    new SagaVocabulary("viajes", "la reserva de viaje"),
-    ViajesCapabilities.Pricing, ViajesCapabilities.Booking, ViajesCapabilities.Payments);
+    vocabulario, ViajesCapabilities.Pricing, ViajesCapabilities.Booking, ViajesCapabilities.Payments);
 
 builder.Services.AddSingleton<ViajesCapabilities>();
 builder.Services.AddSingleton<TripFlow>();
+
+// La reserva por la puerta (ADR 0140; línea 006, research R15): flujos/viajes.reserva.json sobre el host
+// genérico, en sus propias rutas (/v1/flujos/viajes.reserva…), que sólo sirve el flujo declarado, con su
+// saga en su carpeta. /v1/trips sigue siendo de TripFlow, que el CMS llama. Por eso el modo arranca en
+// «declarado» (lote 2, matiz 1): «imperativo» apaga la puerta de Viajes sin tocar el otro camino.
+var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
+if (declarado)
+{
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, PasosDeViajes.Propios());
+
+    // Los tipos del host más el itinerario del viaje, que la saga genérica guarda y la puerta devuelve.
+    builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas(), new TipoItinerario()));
+}
 
 var app = builder.Build();
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Viajes:ApiKey"]);
 app.MapViajesEndpoints();
+if (declarado) app.MapFlujosDeclarados();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

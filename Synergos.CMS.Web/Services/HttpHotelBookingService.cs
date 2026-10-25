@@ -328,8 +328,14 @@ public sealed class HttpHotelBookingService : IHotelBookingService
     // ── Traducciones ────────────────────────────────────────────────────────
 
     /// <summary>El producto tal como lo conoce <c>Api.Booking</c>: opaco y sin sustantivos.</summary>
-    internal static string ProductRef(ReservationRequest r)
-        => $"{r.RoomTypeCode.Trim()}/{r.RatePlanCode.Trim()}";
+    internal static string ProductRef(ReservationRequest r) => ProductRef(r.RoomTypeCode, r.RatePlanCode);
+
+    /// <summary>
+    /// La regla del producto de una estadía, en UN sitio: la usa la reserva por el orquestador y la búsqueda del
+    /// asistente, que se la da a cada oferta para reservar por la puerta (línea 006, T018).
+    /// </summary>
+    internal static string ProductRef(string roomTypeCode, string ratePlanCode)
+        => $"{roomTypeCode.Trim()}/{ratePlanCode.Trim()}";
 
     /// <summary>
     /// La noche de hotel como ventana, de medianoche a medianoche UTC.

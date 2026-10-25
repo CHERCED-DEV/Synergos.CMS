@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -91,7 +92,7 @@ public sealed class GovControllerTests
 
         Assert.IsType<UnauthorizedObjectResult>(result);
         await _workflow.DidNotReceive().DecideAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>());
     }
 
     // ── filter (autenticado SIN rol funcionario): 403, no basta con estar logueado ─────
@@ -130,7 +131,7 @@ public sealed class GovControllerTests
         var status = Assert.IsType<ObjectResult>(result);
         Assert.Equal(403, status.StatusCode);
         await _workflow.DidNotReceive().DecideAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>());
     }
 
     // ── happy (funcionario): el guard deja pasar y delega en el seam ───────────────────
@@ -148,6 +149,31 @@ public sealed class GovControllerTests
         await _tracking.Received(1).GetQueueAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
+    // ── D-5 de 009: quien firma la decisión es la persona de la sesión ─────────────────
+
+    [Fact] // happy: el actor sale del GATE —clave, nombre y correo de la cuenta—, nunca del cuerpo
+    public async Task Decision_Officer_PassesTheSessionPersonAsActor()
+    {
+        Officer();
+        var clave = System.Guid.NewGuid();
+        _gate.CurrentMemberKey.Returns(clave);
+        _gate.CurrentMemberEmail.Returns("ana@entidad.gov.co");
+        _gate.CurrentMemberDisplayName.Returns("Ana Funcionaria");
+        _workflow.DecideAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1"));
+
+        var result = await BuildSut().Decision(ValidDecision, default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _workflow.Received(1).DecideAsync(
+            "case-1001", "approve", "ok",
+            Arg.Is<CaseActor>(a => a.Kind == CaseRoles.KindFuncionario
+                && a.Id == clave.ToString("N")
+                && a.Email == "ana@entidad.gov.co"
+                && a.DisplayName == "Ana Funcionaria"),
+            Arg.Any<CancellationToken>());
+    }
+
     // ── control: el rol que se exige es el de funcionario, no uno cualquiera ────────────
 
     [Fact]
@@ -162,6 +188,421 @@ public sealed class GovControllerTests
         // El CSV consultado debe nombrar 'funcionario' (rol de dominio), no venir vacío
         // (que sería "cualquier logueado") ni pedir solo 'admin'.
         _gate.Received().HasAnyRole(Arg.Is<string?>(csv => csv != null && csv.Contains("funcionario")));
+    }
+
+    // ══════════ 009 — TOMAR EL EXPEDIENTE Y LAS ACCIONES SERVIDAS (T009) ══════════
+    //
+    // Decidir exige tomar antes (P4), y la consola y el portal pintan sólo lo que el proceso
+    // permite desde el estado a la cara que mira (D-3): ningún botón que acabe en un rechazo.
+
+    private static readonly System.Guid FuncionariaKey = System.Guid.NewGuid();
+
+    private void OfficerAna()
+    {
+        Officer();
+        _gate.CurrentMemberKey.Returns(FuncionariaKey);
+        _gate.CurrentMemberEmail.Returns("ana@entidad.gov.co");
+        _gate.CurrentMemberDisplayName.Returns("Ana Funcionaria");
+    }
+
+    /// <summary>El controlador con el motor en proceso de verdad, para lo que depende del estado.</summary>
+    private (GovController Sut, StubApplicationService Cases) BuildWithStubEngine()
+    {
+        var cases = new StubApplicationService(
+            new StubTramiteCatalogProvider(), new StubGovFeeCalculator(), new StubPaymentProvider());
+        var sut = new GovController(
+            _catalog, _applications, new StubCaseWorkflowService(cases), new StubCaseTrackingProvider(cases),
+            _documents, _files, _messaging, _gate, _notifications, _audit)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+            },
+        };
+        return (sut, cases);
+    }
+
+    private static GovController.CaseDto CaseOf(IActionResult result)
+        => Assert.IsType<GovController.CaseResponse>(Assert.IsType<OkObjectResult>(result).Value).Case;
+
+    [Fact] // empty (anónimo): 401 y no toca el motor
+    public async Task Take_Anonymous_Returns401_AndSkipsSeam()
+    {
+        Anonymous();
+
+        var result = await BuildSut().Take("case-1001", null, default);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+        await _workflow.DidNotReceive().TakeAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // filter: un ciudadano autenticado no toma expedientes — 403
+    public async Task Take_AuthenticatedNonOfficer_Returns403_AndSkipsSeam()
+    {
+        AuthenticatedWithoutOfficerRole();
+
+        var result = await BuildSut().Take("case-1001", null, default);
+
+        Assert.Equal(403, Assert.IsType<ObjectResult>(result).StatusCode);
+        await _workflow.DidNotReceive().TakeAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // empty: el expediente que no existe es 404, sin llegar al motor
+    public async Task Take_UnknownCase_Returns404_AndSkipsSeam()
+    {
+        OfficerAna();
+        _tracking.GetCaseAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((CaseDetail?)null);
+
+        var result = await BuildSut().Take("case-que-no-existe", null, default);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        await _workflow.DidNotReceive().TakeAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // happy: toma a nombre de la persona de la sesión, con su nota
+    public async Task Take_Officer_TakesAsTheSessionPerson()
+    {
+        OfficerAna();
+        CaseExists();
+        _workflow.TakeAsync(Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1"));
+
+        var result = await BuildSut().Take("case-1001", new GovController.TakeRequest("La reviso yo."), default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _workflow.Received(1).TakeAsync(
+            "case-1001",
+            Arg.Is<CaseActor>(a => a.Kind == CaseRoles.KindFuncionario
+                && a.Id == FuncionariaKey.ToString("N")
+                && a.Email == "ana@entidad.gov.co"),
+            "La reviso yo.",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // filter: lo ilegal, y «tomar» en un proceso que no lo tiene (la v1), son 409 con el motivo
+    public async Task Take_IllegalOrNotInItsProcess_Returns409WithTheReason()
+    {
+        OfficerAna();
+        CaseExists();
+        _workflow.TakeAsync(Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<CaseDetail>(
+                _ => throw new InvalidOperationException("Acción ilegal: está en 'approved'."),
+                _ => throw new ArgumentException("'take' no existe en el proceso 'gov.tramite'."));
+
+        var ilegal = await BuildSut().Take("case-1001", null, default);
+        var otroProceso = await BuildSut().Take("case-1001", null, default);
+
+        Assert.Contains("approved", Assert.IsType<ConflictObjectResult>(ilegal).Value!.ToString());
+        Assert.Contains("gov.tramite", Assert.IsType<ConflictObjectResult>(otroProceso).Value!.ToString());
+    }
+
+    [Fact] // happy: tomar dos veces da el expediente como quedó (doble clic, escenario 6 de la US1)
+    public async Task Take_Twice_IsIdempotent_WithTheStubEngine()
+    {
+        OfficerAna();
+        var (sut, cases) = BuildWithStubEngine();
+
+        var primera = CaseOf(await sut.Take("case-1001", null, default));
+        var segunda = CaseOf(await sut.Take("case-1001", null, default));
+
+        Assert.Equal("in-review", primera.Application.Status);
+        Assert.Equal("in-review", segunda.Application.Status);
+        Assert.Equal(CaseStatus.EnRevision, cases.FindCase("case-1001")!.Status);
+        // Tomado, ya se decide: lo que la consola ofrece ahora son las tres decisiones.
+        Assert.Equal(new[] { "approve", "reject", "request-info" }, segunda.Actions);
+    }
+
+    [Fact] // filter: en subsanación no se toma — se espera al ciudadano — y se dice por qué
+    public async Task Take_InfoRequested_Returns409_WithTheStubEngine()
+    {
+        OfficerAna();
+        var (sut, cases) = BuildWithStubEngine();
+
+        var result = await sut.Take("case-1003", null, default);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(CaseStatus.Subsanacion, cases.FindCase("case-1003")!.Status);
+    }
+
+    [Fact] // las acciones del funcionario salen del estado: radicado → tomar; cerrado → nada
+    public async Task Case_ServesTheOfficerActionsOfItsState_WithTheStubEngine()
+    {
+        OfficerAna();
+        var (sut, _) = BuildWithStubEngine();
+
+        Assert.Equal(new[] { "take" }, CaseOf(await sut.Case("case-1001", default)).Actions);
+        Assert.Empty(CaseOf(await sut.Case("case-1003", default)).Actions);
+        Assert.Empty(CaseOf(await sut.Case("case-1004", default)).Actions);
+        Assert.False(CaseOf(await sut.Case("case-1001", default)).Stale);
+    }
+
+    [Fact] // la consola pide las acciones de la cara del FUNCIONARIO, no las del ciudadano
+    public async Task Case_AsksTheEngineForTheOfficerFace()
+    {
+        OfficerAna();
+        CaseExists();
+        _workflow.ActionsAsync("case-1001", CaseRoles.Funcionario, Arg.Any<CancellationToken>())
+            .Returns(new[] { "take" });
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Equal(new[] { "take" }, dto.Actions);
+        await _workflow.DidNotReceive().ActionsAsync(Arg.Any<string>(), CaseRoles.Ciudadano, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Con el proceso caído, ninguna acción —ni de una tabla local— y <c>stale</c> lo dice.
+    /// </summary>
+    /// <remarks>
+    /// Sin la marca, «sin botones» se leería como «no hay nada que hacer» (FR-012: se dice que se
+    /// puede reintentar). El expediente se sigue viendo: es del CMS.
+    /// </remarks>
+    [Fact]
+    public async Task Case_ProcessDown_ServesNoActions_AndSaysStale()
+    {
+        OfficerAna();
+        CaseExists();
+        _workflow.ActionsAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<string>>(_ => throw new InvalidOperationException("Api.Workflow no responde."));
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Empty(dto.Actions);
+        Assert.True(dto.Stale);
+    }
+
+    [Fact] // el portal pide las acciones de la cara del CIUDADANO para su propio expediente
+    public async Task Application_Owner_ServesTheCitizenActions()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(OwnerKey);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        CaseExists();
+        _workflow.ActionsAsync("case-1001", CaseRoles.Ciudadano, Arg.Any<CancellationToken>())
+            .Returns(new[] { "resubmit" });
+
+        var result = await BuildSut().Application("case-1001", default);
+
+        var dto = Assert.IsType<GovController.ApplicationDetailResponse>(Assert.IsType<OkObjectResult>(result).Value).Application;
+        Assert.Equal(new[] { "resubmit" }, dto.Actions);
+        Assert.False(dto.Stale);
+        await _workflow.DidNotReceive().ActionsAsync(Arg.Any<string>(), CaseRoles.Funcionario, Arg.Any<CancellationToken>());
+    }
+
+    // ══════════ 009 — SUBSANAR (T013): el ciudadano dueño devuelve el expediente a revisión ══════════
+
+    [Fact] // empty (anónimo): 401 y no toca el motor
+    public async Task Resubmit_Anonymous_Returns401_AndSkipsSeam()
+    {
+        Anonymous();
+
+        var result = await BuildSut().Resubmit("case-1001", null, default);
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
+        await _workflow.DidNotReceive().ResubmitAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // EL CASO CENTRAL: otro ciudadano no subsana el expediente ajeno — sería responder por él
+    public async Task Resubmit_ForeignCase_Returns403_AndSkipsSeam()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(System.Guid.NewGuid()); // NO es el dueño
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        CaseExists();
+
+        var result = await BuildSut().Resubmit("case-1001", null, default);
+
+        Assert.Equal(403, Assert.IsType<ObjectResult>(result).StatusCode);
+        await _workflow.DidNotReceive().ResubmitAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // empty: la solicitud que no existe es 404, sin llegar al motor
+    public async Task Resubmit_UnknownCase_Returns404_AndSkipsSeam()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(OwnerKey);
+        _tracking.GetCaseAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((CaseDetail?)null);
+
+        var result = await BuildSut().Resubmit("case-que-no-existe", null, default);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        await _workflow.DidNotReceive().ResubmitAsync(
+            Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // happy: subsana el dueño, firmando con la persona de la sesión y la cara del ciudadano
+    public async Task Resubmit_Owner_ResubmitsAsTheSessionCitizen()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(OwnerKey);
+        _gate.CurrentMemberEmail.Returns("ana@correo.co");
+        _gate.CurrentMemberDisplayName.Returns("Ana");
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        CaseExists();
+        _workflow.ResubmitAsync(Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1"));
+
+        var result = await BuildSut().Resubmit("case-1001", new GovController.ResubmitRequest("Adjunté el certificado."), default);
+
+        Assert.IsType<GovController.ApplicationDetailResponse>(Assert.IsType<OkObjectResult>(result).Value);
+        await _workflow.Received(1).ResubmitAsync(
+            "case-1001",
+            Arg.Is<CaseActor>(a => a.Kind == CaseRoles.KindCiudadano
+                && a.Id == OwnerKey.ToString("N")
+                && a.Email == "ana@correo.co"),
+            "Adjunté el certificado.",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // filter: desde un estado que no es «información solicitada», 409 con el motivo
+    public async Task Resubmit_WrongState_Returns409WithTheReason()
+    {
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(OwnerKey);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        CaseExists();
+        _workflow.ResubmitAsync(Arg.Any<string>(), Arg.Any<CaseActor>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<CaseDetail>(_ => throw new InvalidOperationException("Acción ilegal: está en 'submitted'."));
+
+        var result = await BuildSut().Resubmit("case-1001", null, default);
+
+        Assert.Contains("submitted", Assert.IsType<ConflictObjectResult>(result).Value!.ToString());
+    }
+
+    /// <summary>
+    /// De punta a punta con el motor en proceso: radica el dueño, el funcionario toma y pide información, el dueño
+    /// subsana y el expediente vuelve a revisión (SC-003).
+    /// </summary>
+    [Fact]
+    public async Task Resubmit_Owner_BringsItBackToReview_WithTheStubEngine()
+    {
+        var (sut, cases) = BuildWithStubEngine();
+        var motor = new StubCaseWorkflowService(cases);
+        var dueno = System.Guid.NewGuid();
+        var radicado = (await cases.RadicarAsync(
+            "trm-certificado-residencia",
+            new Dictionary<string, string>
+            {
+                ["nombreCompleto"] = "Ana Torres",
+                ["cedula"] = "1030567890",
+                ["direccion"] = "Cll 45 # 13-25",
+                ["correo"] = "ana.torres@correo.co",
+            },
+            new GovCitizen("Ana Torres", "ana.torres@correo.co", MemberKey: dueno))).Case;
+        var funcionaria = new CaseActor(CaseRoles.KindFuncionario, "f-ana", "Ana Funcionaria", "ana@entidad.gov.co");
+        await motor.TakeAsync(radicado.CaseId, funcionaria, null);
+        await motor.DecideAsync(radicado.CaseId, "request-info", "Falta el recibo.", funcionaria);
+
+        _gate.IsAuthenticated.Returns(true);
+        _gate.CurrentMemberKey.Returns(dueno);
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(false);
+
+        var antes = Assert.IsType<GovController.ApplicationDetailResponse>(
+            Assert.IsType<OkObjectResult>(await sut.Application(radicado.CaseId, default)).Value).Application;
+        Assert.Equal(new[] { "resubmit" }, antes.Actions);
+
+        var result = await sut.Resubmit(radicado.CaseId, new GovController.ResubmitRequest("Adjunté el recibo."), default);
+
+        var dto = Assert.IsType<GovController.ApplicationDetailResponse>(Assert.IsType<OkObjectResult>(result).Value).Application;
+        Assert.Equal("in-review", dto.Status);
+        Assert.Empty(dto.Actions);
+        Assert.Equal(CaseStatus.EnRevision, cases.FindCase(radicado.CaseId)!.Status);
+
+        // El doble clic da el expediente como quedó.
+        var otraVez = await sut.Resubmit(radicado.CaseId, null, default);
+        Assert.IsType<OkObjectResult>(otraVez);
+    }
+
+    // ══════════ 009 — LA ACEPTACIÓN DE LA NOTIFICACIÓN ELECTRÓNICA (T015, S-7) ══════════
+
+    private void RadicarDevuelveUnExpediente()
+        => _applications.RadicarAsync(
+                Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+                Arg.Any<NotificationConsent?>(), Arg.Any<CancellationToken>())
+            .Returns(new RadicarResult(CaseWithDocument("file-1")));
+
+    private static Dictionary<string, string> Respuestas() => new()
+    {
+        ["nombreCompleto"] = "Ana Torres",
+        ["correo"] = "ana.torres@correo.co",
+    };
+
+    [Fact] // happy: la respuesta viaja con la versión del texto que leyó
+    public async Task CreateApplication_SendsTheConsentWithItsTextVersion()
+    {
+        RadicarDevuelveUnExpediente();
+
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest(
+                "trm-cedula", Respuestas(), new GovController.NotificationConsentRequest(true, " 2026-10-v1 ")),
+            default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _applications.Received(1).RadicarAsync(
+            "trm-cedula", Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Is<NotificationConsent?>(c => c != null && c.Accepted && c.TextVersion == "2026-10-v1"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // sin la casilla es «no consta», y radica igual
+    public async Task CreateApplication_WithoutConsent_FilesWithUnknown()
+    {
+        RadicarDevuelveUnExpediente();
+
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest("trm-cedula", Respuestas()), default);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _applications.Received(1).RadicarAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Is<NotificationConsent?>(c => c == null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact] // una aceptación sin la versión del texto no prueba qué se aceptó: 400 y no radica
+    public async Task CreateApplication_ConsentWithoutTextVersion_Returns400_AndSkipsSeam()
+    {
+        var result = await BuildSut().CreateApplication(
+            new GovController.CreateApplicationRequest(
+                "trm-cedula", Respuestas(), new GovController.NotificationConsentRequest(true, " ")),
+            default);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        await _applications.DidNotReceive().RadicarAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<GovCitizen>(),
+            Arg.Any<NotificationConsent?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory] // el expediente del funcionario dice si consta la aceptación, y cuál fue
+    [InlineData(true, "accepted")]
+    [InlineData(false, "declined")]
+    public async Task Case_ShowsWhetherTheCitizenAccepted(bool aceptada, string slug)
+    {
+        Officer();
+        _tracking.GetCaseAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(CaseWithDocument("file-1") with
+            {
+                NotificationConsent = new NotificationConsent(aceptada, "2026-10-v1", System.DateTimeOffset.UtcNow),
+            });
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Equal(slug, dto.NotificationConsent);
+    }
+
+    [Fact] // empty: sin respuesta dice «no consta», no «aceptada»
+    public async Task Case_WithoutAnAnswer_SaysUnknown()
+    {
+        Officer();
+        CaseExists();
+
+        var dto = CaseOf(await BuildSut().Case("case-1001", default));
+
+        Assert.Equal("unknown", dto.NotificationConsent);
     }
 
     // ══════════ T6 — DESCARGA DE DOCUMENTOS (el binario ya existe de verdad) ══════════
