@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Filters;
 using Synergos.CMS.Web.Middlewares;
@@ -34,7 +35,9 @@ public class TimeoutMiddlewareTests
     {
         var context = new DefaultHttpContext();
         var middleware = new TimeoutMiddleware(
-            next: async ctx => await Task.Delay(TimeSpan.FromSeconds(2), ctx.RequestAborted),
+            // Con el reloj del SISTEMA, y sin carrera: el trabajo espera a que venza el plazo, tarde lo que tarde el
+            // temporizador en tener un hilo.
+            next: async ctx => await Task.Delay(Timeout.InfiniteTimeSpan, ctx.RequestAborted),
             timeout: TimeSpan.FromMilliseconds(50));
 
         await middleware.InvokeAsync(context);
@@ -90,13 +93,15 @@ public class TimeoutMiddlewareTests
         // token, así que termina; lo que el plazo rompía era la RESPUESTA. Medido en vivo: 200,
         // Content-Length 0, y el resultado sólo en el log.
         var context = ConCuerpo();
+        var reloj = new RelojManual();
         var middleware = new TimeoutMiddleware(
             next: ctx =>
             {
-                Thread.Sleep(TimeSpan.FromMilliseconds(300));
+                reloj.Avanzar(TimeSpan.FromMilliseconds(300));
                 return EscribirJsonComoMvc(ctx, new { pagesFilled = 8 });
             },
-            timeout: TimeSpan.FromMilliseconds(50));
+            timeout: TimeSpan.FromMilliseconds(50),
+            reloj: reloj);
 
         await middleware.InvokeAsync(context);
 
@@ -107,14 +112,16 @@ public class TimeoutMiddlewareTests
     public async Task Quien_apaga_el_plazo_termina_y_contesta_lo_que_hizo()
     {
         var context = ConCuerpo();
+        var reloj = new RelojManual();
         var middleware = new TimeoutMiddleware(
             next: ctx =>
             {
                 ctx.Features.Get<IHttpRequestTimeoutFeature>()!.DisableTimeout();
-                Thread.Sleep(TimeSpan.FromMilliseconds(300));
+                reloj.Avanzar(TimeSpan.FromMilliseconds(300));
                 return EscribirJsonComoMvc(ctx, new { pagesFilled = 8 });
             },
-            timeout: TimeSpan.FromMilliseconds(50));
+            timeout: TimeSpan.FromMilliseconds(50),
+            reloj: reloj);
 
         await middleware.InvokeAsync(context);
 
@@ -127,14 +134,17 @@ public class TimeoutMiddlewareTests
     {
         var context = new DefaultHttpContext();
         context.Features.Set<IHttpResponseFeature>(new RespuestaEmpezada());
+        var reloj = new RelojManual();
         var middleware = new TimeoutMiddleware(
             next: ctx =>
             {
                 ctx.Response.StatusCode = StatusCodes.Status200OK;
-                Thread.Sleep(TimeSpan.FromMilliseconds(300));
+                reloj.Avanzar(TimeSpan.FromMilliseconds(300));
+                Assert.True(ctx.RequestAborted.IsCancellationRequested, "el plazo tenía que haber vencido al avanzar el reloj");
                 return Task.CompletedTask;
             },
-            timeout: TimeSpan.FromMilliseconds(50));
+            timeout: TimeSpan.FromMilliseconds(50),
+            reloj: reloj);
 
         await middleware.InvokeAsync(context);
 
@@ -179,6 +189,72 @@ public class TimeoutMiddlewareTests
         Assert.NotNull(typeof(DevController)
             .GetCustomAttributes(typeof(SinPlazoDePeticionAttribute), inherit: false)
             .SingleOrDefault());
+    }
+
+    [Fact]
+    public void El_pipeline_la_arma_con_un_solo_argumento_aunque_haya_un_reloj_registrado()
+    {
+        // Program.cs hace UseMiddleware<TimeoutMiddleware>() sin argumentos: con tres constructores y un TimeProvider en el
+        // contenedor, el activador tiene que seguir eligiendo el del plazo de siempre, sin ambigüedad.
+        using var servicios = new ServiceCollection().AddSingleton(TimeProvider.System).BuildServiceProvider();
+
+        var middleware = ActivatorUtilities.CreateInstance<TimeoutMiddleware>(servicios, (RequestDelegate)(_ => Task.CompletedTask));
+
+        Assert.NotNull(middleware);
+    }
+
+    /// <summary>
+    /// Un reloj que sólo avanza cuando la prueba lo dice: el plazo vence en el instante en que se avanza, y no cuando el pool
+    /// de hilos tenga uno libre para el temporizador del sistema (lo que hacía intermitente la prueba del sembrador en el CI).
+    /// </summary>
+    private sealed class RelojManual : TimeProvider
+    {
+        private readonly List<Temporizador> _temporizadores = [];
+        private DateTimeOffset _ahora = new(2026, 10, 24, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _ahora;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var temporizador = new Temporizador(this, callback, state);
+            temporizador.Change(dueTime, period);
+            lock (_temporizadores) _temporizadores.Add(temporizador);
+            return temporizador;
+        }
+
+        /// <summary>Pasa <paramref name="cuanto"/> y dispara, en este hilo, lo que venció.</summary>
+        public void Avanzar(TimeSpan cuanto)
+        {
+            _ahora += cuanto;
+            List<Temporizador> vencidos;
+            lock (_temporizadores) vencidos = _temporizadores.Where(t => t.Vence is { } v && v <= _ahora).ToList();
+            foreach (var t in vencidos) t.Disparar();
+        }
+
+        private sealed class Temporizador(RelojManual reloj, TimerCallback callback, object? state) : ITimer
+        {
+            public DateTimeOffset? Vence { get; private set; }
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                Vence = dueTime == Timeout.InfiniteTimeSpan ? null : reloj._ahora + dueTime;
+                return true;
+            }
+
+            public void Disparar()
+            {
+                Vence = null;
+                callback(state);
+            }
+
+            public void Dispose() => Vence = null;
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
     }
 
     private sealed class RespuestaEmpezada : HttpResponseFeature

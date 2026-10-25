@@ -23,6 +23,13 @@ public enum PaymentStatus
 
     /// <summary>El proveedor lo rechazó. Estado final.</summary>
     Failed,
+
+    /// <summary>
+    /// Se le pidió al proveedor y no se sabe qué pasó (#183, decisión 4 del lote 1): no contestó, no estaba configurado,
+    /// o el proceso cayó entre la pasarela y el almacén. NO es <see cref="Failed"/>: la llave queda abierta, y el reintento
+    /// con la misma llave le pregunta al proveedor por el cobro antes de volver a autorizar.
+    /// </summary>
+    InDoubt,
 }
 
 /// <summary>Una devolución parcial o total.</summary>
@@ -170,7 +177,23 @@ public interface IPaymentProvider
     bool MuevePlata { get; }
 
     /// <summary>Reserva el cupo.</summary>
-    Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, CancellationToken ct = default);
+    /// <param name="amount">Cuánto.</param>
+    /// <param name="payer">Quién paga.</param>
+    /// <param name="reference">La referencia NUESTRA del cobro (su id), la que el proveedor guarda con la operación: con ella
+    /// se le pregunta después si la hubo (<see cref="FindAuthorizationAsync"/>), y volver a autorizar con la misma no abre otra.</param>
+    /// <param name="ct">Cancelación.</param>
+    Task<PaymentAttempt> AuthorizeAsync(Money amount, Ref payer, string reference, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lo que el proveedor sabe de una autorización pedida con <paramref name="reference"/> (#183): <c>null</c> si no hay rastro
+    /// de ella; si la hay, cómo quedó.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que pregunta el reintento de un cobro en duda ANTES de volver a autorizar: sólo «no hay rastro» deja autorizar otra
+    /// vez. Un proveedor que no puede contestar devuelve <see cref="PaymentOutcome.Unavailable"/> o
+    /// <see cref="PaymentOutcome.NotConfigured"/>, y el cobro sigue en duda: no saber no es «no hubo».
+    /// </remarks>
+    Task<PaymentAttempt?> FindAuthorizationAsync(string reference, CancellationToken ct = default);
 
     /// <summary>Mueve la plata.</summary>
     Task<PaymentAttempt> CaptureAsync(string providerReference, Money amount, CancellationToken ct = default);
