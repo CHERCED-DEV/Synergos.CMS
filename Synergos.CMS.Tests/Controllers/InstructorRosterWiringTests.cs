@@ -40,11 +40,32 @@ public sealed class InstructorRosterWiringTests
         InstructorName: "Elena Restrepo", CoverImageUrl: null, Price: 180_000m, Currency: "COP",
         IsFree: false, Rating: 4.8, LessonCount: 10, DurationMinutes: 300);
 
+    /// <summary>Quien mira es instructor y no admin: pasa la puerta de la consola, y «admin» a secas no.</summary>
+    private void ComoInstructor()
+        => _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => !(c.Arg<string?>() ?? "").Split(',').SequenceEqual(["admin"]));
+
+    /// <summary>Quien mira es admin: pasa la puerta de la consola y la de «admin».</summary>
+    private void ComoAdmin()
+        => _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => (c.Arg<string?>() ?? "").Split(',').Contains("admin"));
+
+    /// <summary>El catálogo entero —lo que ve un admin—, con los dos cursos de Elena y uno de otra instructora.</summary>
+    private void CatalogoConTresCursos()
+    {
+        _catalog.SearchAsync(Arg.Any<CourseQuery>(), Arg.Any<CancellationToken>()).Returns(new CourseSearchResult(
+            new[] { Course("sql", "SQL para analistas") with { Rating = 4.5 }, Course("excel", "Excel financiero"), Course("git", "Git desde cero") with { Rating = 4.9 } },
+            3));
+        _metrics.GetCourseStatsAsync("excel", Arg.Any<CancellationToken>()).Returns(new CourseEnrollmentStats(1, 180_000m));
+        _metrics.GetCourseStatsAsync("sql", Arg.Any<CancellationToken>()).Returns(new CourseEnrollmentStats(1, 180_000m));
+        _metrics.GetCourseStatsAsync("git", Arg.Any<CancellationToken>()).Returns(new CourseEnrollmentStats(1, 0m));
+        _metrics.GetCourseRosterAsync("git", Arg.Any<CancellationToken>()).Returns(
+            new[] { new CourseRosterEntry("caro-op", "Caro Díaz", "git", 0, new DateTimeOffset(2026, 6, 26, 9, 0, 0, TimeSpan.Zero)) });
+    }
+
     private void DosCursosConUnAlumnoCadaUno()
     {
         _gate.IsAuthenticated.Returns(true);
         _gate.CurrentMemberEmail.Returns(Instructor);
-        _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
+        ComoInstructor();
         _priceFormatter.Format(Arg.Any<decimal>(), Arg.Any<string>()).Returns("$180.000");
 
         _catalog.GetForInstructorAsync(Instructor, Arg.Any<CancellationToken>()).Returns(
@@ -148,18 +169,58 @@ public sealed class InstructorRosterWiringTests
             new CourseRosterEntry("ana-op", "Ana Rincón", "excel", 40, dia, MatriculaDeLaPuerta: "mat-ana", Total: 180_000m),
             new CourseRosterEntry("caro-op", "Caro Díaz", "excel", 0, dia, MatriculaDeLaPuerta: "mat-caro", Total: 0m),
         });
-        _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => (c.Arg<string?>() ?? "").Split(',').Contains("admin"));
+        CatalogoConTresCursos();
+        ComoAdmin();
 
         var deAdmin = await Consola();
 
         Assert.Equal("mat-ana", deAdmin.Students.Single(s => s.Name == "Ana Rincón").MatriculaDevolvible);
-        Assert.Null(deAdmin.Students.Single(s => s.Name == "Caro Díaz").MatriculaDevolvible);
+        Assert.Null(deAdmin.Students.Single(s => s is { Name: "Caro Díaz", CourseId: "excel" }).MatriculaDevolvible);
         Assert.Null(deAdmin.Students.Single(s => s.Name == "Beto Salas").MatriculaDevolvible);
 
-        _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => !(c.Arg<string?>() ?? "").Split(',').SequenceEqual(["admin"]));
+        ComoInstructor();
         var deInstructor = await Consola();
 
         Assert.All(deInstructor.Students, s => Assert.Null(s.MatriculaDevolvible));
+    }
+
+    /// <summary>
+    /// La consola de un admin es la de TODO el catálogo (hallazgo 1 de 010, decidido por el director): el catálogo nombra
+    /// a sus instructores <c>ins-*</c> y la consola los compara con el correo de la sesión, así que un admin que no dicta
+    /// nada no veía filas y «Devolver» no aparecía nunca.
+    /// </summary>
+    [Fact]
+    public async Task El_admin_ve_los_cursos_y_los_alumnos_de_todo_el_catalogo_aunque_no_dicte_ninguno()
+    {
+        DosCursosConUnAlumnoCadaUno();
+        _catalog.GetForInstructorAsync(Instructor, Arg.Any<CancellationToken>()).Returns(
+            new InstructorCoursesResult(Instructor, Array.Empty<InstructorCourse>(), 0, 0m, "COP"));
+        _metrics.GetCourseRosterAsync("excel", Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new CourseRosterEntry("ana-op", "Ana Rincón", "excel", 40, new DateTimeOffset(2026, 6, 20, 15, 30, 0, TimeSpan.Zero),
+                MatriculaDeLaPuerta: "mat-ana", Total: 180_000m),
+        });
+        CatalogoConTresCursos();
+        ComoAdmin();
+
+        var consola = await Consola();
+
+        Assert.Equal(["git", "excel", "sql"], consola.Courses.Select(c => c.Id));
+        Assert.Equal(["Ana Rincón", "Beto Salas", "Caro Díaz"], consola.Students.Select(s => s.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("mat-ana", consola.Students.Single(s => s.Name == "Ana Rincón").MatriculaDevolvible);
+        Assert.Equal((3, 360_000m), (consola.TotalStudents, consola.TotalRevenue));
+    }
+
+    [Fact] // un instructor sigue viendo sólo lo que dicta: el catálogo entero es del admin
+    public async Task El_instructor_sigue_viendo_solo_sus_cursos()
+    {
+        DosCursosConUnAlumnoCadaUno();
+        CatalogoConTresCursos();
+
+        var consola = await Consola();
+
+        Assert.Equal(["excel", "sql"], consola.Courses.Select(c => c.Id));
+        await _catalog.DidNotReceive().SearchAsync(Arg.Any<CourseQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Fact] // instructor sin cursos → lista vacía, no 500 ni null
@@ -167,7 +228,7 @@ public sealed class InstructorRosterWiringTests
     {
         _gate.IsAuthenticated.Returns(true);
         _gate.CurrentMemberEmail.Returns(Instructor);
-        _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
+        ComoInstructor();
         _priceFormatter.Format(Arg.Any<decimal>(), Arg.Any<string>()).Returns("$0");
         _catalog.GetForInstructorAsync(Instructor, Arg.Any<CancellationToken>()).Returns(
             new InstructorCoursesResult(Instructor, Array.Empty<InstructorCourse>(), 0, 0m, "COP"));

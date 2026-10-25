@@ -14,6 +14,7 @@
         "Academy.Enrollment.AlreadyEnrolled",
         "Academy.Enrollment.BadRequest",
         "Academy.Enrollment.ChangePlan",
+        "Academy.Enrollment.ConsoleEmpty",
         "Academy.Enrollment.Enroll",
         "Academy.Enrollment.Free",
         "Academy.Enrollment.Generic",

@@ -1969,10 +1969,18 @@ imperativo propio: la ruta directa sigue siendo el motor de matrícula del CMS, 
   Cobros leídos en Payments y `.eml` leídos, con el curso y el plan por su nombre.
 - **Corregido en vivo**: dos anotaciones simultáneas de la misma matrícula dejaban dos filas en el libro del aula.
   Ahora el id de la fila sale de la matrícula.
-- **No verificado en vivo, con su razón**: el botón «Devolver» de la consola. La consola le lista a cada cuenta los
-  cursos cuyo instructor es su correo, y el catálogo real nombra a sus instructores `ins-*`. Con este contenido
-  ninguna cuenta ve filas, así que el botón no aparece: la devolución se verificó con la sesión del admin por el
-  mismo endpoint que llama el botón.
+- **El botón «Devolver», decidido y verificado** (decisión del director sobre el hallazgo 1 de la línea). La consola
+  le listaba a cada cuenta los cursos cuyo instructor es su correo, y el catálogo real nombra a sus instructores
+  `ins-*`: ninguna cuenta veía filas y el botón no aparecía. Ahora:
+  - la consola de un `admin` lista los cursos y los alumnos de todo el catálogo; un instructor sigue viendo los
+    suyos;
+  - sin cursos, la consola lo dice («Todavía no tienes cursos asignados.»); caída, que no se pudo cargar. Los
+    cursos de ejemplo sólo salen detrás de `MUESTRAS_DE_LA_CONSOLA`, que una demo declara.
+
+  En vivo, el admin devuelve desde el botón: un solo reembolso por el total y la fila sale de la consola. Enlazar
+  instructores con miembros en el contenido queda para el arquitecto.
+- **SC-001 en tres acciones**: si la sesión trae el nombre y el correo, el asistente salta «Tus datos», por los dos
+  caminos. Medido en vivo: Inscribirme, Continuar y Pagar.
 
 ## Relación con otras ADRs
 

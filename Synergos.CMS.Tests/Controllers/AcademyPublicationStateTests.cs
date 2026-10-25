@@ -46,7 +46,8 @@ public sealed class AcademyPublicationStateTests
         _priceFormatter.Format(Arg.Any<decimal>(), Arg.Any<string?>()).Returns("$ 0");
         _gate.IsAuthenticated.Returns(true);
         _gate.CurrentMemberEmail.Returns("elena@synergos.co");
-        _gate.HasAnyRole(Arg.Any<string?>()).Returns(true);
+        // Instructora y no admin: la consola de un admin es la de todo el catálogo (010), y aquí se mira la de autora.
+        _gate.HasAnyRole(Arg.Any<string?>()).Returns(c => !(c.Arg<string?>() ?? "").Split(',').SequenceEqual(["admin"]));
         _metrics.GetCourseStatsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new CourseEnrollmentStats(0, 0m));
         _metrics.GetCourseRosterAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
