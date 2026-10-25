@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Devolver los datos de las 28 a como estaban (HU #31).
+# Devolver los datos de las 29 a como estaban (HU #31).
 #
 # ─────────────────────────────────────────────────────────────────────────────
 # UNA COPIA QUE NADIE RESTAURÓ NUNCA NO ES UNA COPIA.
