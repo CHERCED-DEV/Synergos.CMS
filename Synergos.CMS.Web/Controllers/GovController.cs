@@ -1,7 +1,11 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Synergos.CMS.Application.Dinero;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services.Gobierno;
+using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -70,7 +74,10 @@ public sealed class GovController : ControllerBase
     private readonly IMemberAccessGate _gate;
     private readonly IGovActNotificationService _notifications;
     private readonly IAuditTrailWriter _audit;
+    private readonly ArtefactoDelExpediente? _artefacto;
 
+    /// <param name="artefacto">Lo que el CMS guarda de una radicación por la puerta (009, T027). Nulo en las pruebas
+    /// que no la usan: la ruta contesta que la radicación por la puerta no está abierta.</param>
     public GovController(
         ITramiteCatalogProvider catalog,
         IApplicationService applications,
@@ -81,7 +88,8 @@ public sealed class GovController : ControllerBase
         IMessagingService messaging,
         IMemberAccessGate gate,
         IGovActNotificationService notifications,
-        IAuditTrailWriter audit)
+        IAuditTrailWriter audit,
+        ArtefactoDelExpediente? artefacto = null)
     {
         _catalog = catalog;
         _applications = applications;
@@ -93,6 +101,7 @@ public sealed class GovController : ControllerBase
         _gate = gate;
         _notifications = notifications;
         _audit = audit;
+        _artefacto = artefacto;
     }
 
     /// <summary>
@@ -299,6 +308,76 @@ public sealed class GovController : ControllerBase
         return Ok(new ApplicationResponse(ToApplicationSummaryDto(result.Case)));
     }
 
+    // ── 4 bis. Las respuestas de una radicación por la puerta (009, T027) ──
+    // POST /api/gov/radicaciones/{radicacion}/respuestas { answers } → { radicado, caseId }   🔒 sesión
+    //
+    // Entre abrir y cerrar: el orquestador ya autorizó la tasa y el CMS guarda lo que él no lleva —las
+    // respuestas, el contacto de la sesión y el radicado—, sólo sobre una radicación en curso del miembro.
+    // Repetirla reemplaza mientras siga abierta. Con el mismo filtro de mismo origen y JSON que la puerta.
+    [HttpPost("radicaciones/{radicacion}/respuestas")]
+    public async Task<IActionResult> RespuestasDeLaRadicacion(string radicacion, CancellationToken cancellationToken)
+    {
+        SinCache();
+        var (denied, _) = RequireMember();
+        if (denied is not null) { return denied; }
+        if (FiltroMismoOrigenJson.Origen(Request) is { } ajeno) return Problema(ajeno);
+        if (FiltroMismoOrigenJson.Tipo(Request) is { } tipo) return Problema(tipo);
+        var (cuerpo, grande) = await FiltroMismoOrigenJson.LeerCuerpoAsync(Request, cancellationToken);
+        if (grande is not null) return Problema(grande);
+        if (_artefacto is null) return Problema(SinArtefacto);
+
+        RespuestasDeLaRadicacionRequest? pedido;
+        try { pedido = JsonSerializer.Deserialize<RespuestasDeLaRadicacionRequest>(cuerpo!, LecturaWeb); }
+        catch (JsonException) { pedido = null; }
+
+        var answers = pedido?.Answers ?? new Dictionary<string, string>();
+        var r = await _artefacto.GuardarRespuestasAsync(radicacion, ResolveCitizen(answers), answers, cancellationToken);
+        return r.Bien
+            ? Ok(new RespuestasDeLaRadicacionResponse(r.Expediente!.Radicado, r.Expediente.CaseId))
+            : Problema(r);
+    }
+
+    /// <summary>
+    /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura: nunca falla hacia quien lee, y
+    /// sin artefacto no hace nada.
+    /// </summary>
+    private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, CancellationToken cancellationToken)
+        => _artefacto?.ReconciliarAsync(lasQueTocan, cancellationToken) ?? Task.CompletedTask;
+
+    private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
+
+    private static readonly ResultadoDelExpediente SinArtefacto = new(
+        StatusCodes.Status503ServiceUnavailable, "gov.radicacion_no_disponible", "La radicación por la puerta no está abierta en este sitio.");
+
+    /// <summary>Que nadie guarde la respuesta: lleva el radicado y las respuestas de una persona.</summary>
+    private void SinCache()
+    {
+        if (HttpContext is { } http) http.Response.Headers.CacheControl = "no-store";
+    }
+
+    private static ContentResult Problema(FalloDeLaPuerta f) => Problema(f.Estado, f.Codigo, f.Mensaje, f.Transitorio, null);
+
+    private static ContentResult Problema(ResultadoDelExpediente r)
+        => Problema(r.Estado, r.Codigo!, r.Mensaje ?? string.Empty, r.Transitorio, r.EstadoDeLaRadicacion);
+
+    /// <summary>Un «no» de la radicación como problem+json, con <c>code</c> y <c>transient</c> como la puerta.</summary>
+    private static ContentResult Problema(int estado, string codigo, string mensaje, bool transitorio, string? deLaRadicacion) => new()
+    {
+        StatusCode = estado,
+        ContentType = "application/problem+json",
+        Content = JsonSerializer.Serialize(new
+        {
+            type = "about:blank",
+            title = ReasonPhrases.GetReasonPhrase(estado),
+            status = estado,
+            detail = mensaje,
+            code = codigo,
+            transient = transitorio,
+            // En qué quedó la saga, cuando eso es el motivo: «Completed», «Compensated».
+            radicacionStatus = deLaRadicacion,
+        }, LecturaWeb),
+    };
+
     // ── 5. Mis solicitudes (carpeta del ciudadano) ─────────────────────
     // GET /api/gov/applications?citizen= → { applications:[...] }
     // El ?citizen=<email> DESAPARECE: era el IDOR. La bandeja es la del member de la sesión.
@@ -308,6 +387,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
         var items = await _tracking.ListForMemberAsync(actorKey, cancellationToken);
         return Ok(new ApplicationsResponse(items.Select(ToApplicationSummaryFromInbox).ToList()));
     }
@@ -320,6 +400,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
         var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
@@ -527,6 +608,7 @@ public sealed class GovController : ControllerBase
     {
         if (RequireOfficer() is { } denied) { return denied; }
 
+        await ReconciliarDeLaPuertaAsync(_ => true, cancellationToken);
         var cases = await _tracking.GetQueueAsync(agency, status, cancellationToken);
         return Ok(new QueueResponse(cases.Select(ToQueueDto).ToList()));
     }
@@ -1110,6 +1192,12 @@ public sealed class GovController : ControllerBase
 
     /// <summary>Lo que contestó sobre la notificación electrónica, con la versión del texto que leyó (009, S-7).</summary>
     public sealed record NotificationConsentRequest(bool Accepted, string? TextVersion);
+
+    /// <summary>Las respuestas de una radicación por la puerta (009, T027): la aceptación ya va en la saga.</summary>
+    public sealed record RespuestasDeLaRadicacionRequest(Dictionary<string, string>? Answers);
+
+    /// <summary>El radicado que acuñó el CMS para la radicación, y el expediente donde quedó.</summary>
+    public sealed record RespuestasDeLaRadicacionResponse(string Radicado, string CaseId);
 
     // (El antiguo `DocumentRequest(ApplicationId, Name)` murió con T6: adjuntar ya no es
     //  un JSON con un nombre, es un multipart con el fichero.)
