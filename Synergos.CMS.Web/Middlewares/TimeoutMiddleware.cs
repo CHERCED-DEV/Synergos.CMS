@@ -29,6 +29,11 @@ namespace Synergos.CMS.Web.Middlewares;
 /// <see cref="IHttpRequestTimeoutFeature"/> —el rasgo estándar de ASP.NET Core— y quien
 /// sabe que su trabajo excede el plazo lo apaga (<c>[SinPlazoDePeticion]</c>). Sin eso, el
 /// 504 dice la verdad sobre el plazo pero se calla lo que el trabajo sí hizo.</para>
+/// <para><b>El plazo corre con un <see cref="TimeProvider"/></b>, el del sistema en producción.
+/// Con el temporizador del sistema, vencer dependía de que el pool de hilos tuviera uno libre
+/// para el callback: con el pool ocupado vencía tarde, y una prueba que dormía 300 ms contra
+/// 50 ms salía 200 en el CI. Medido con 64 peticiones a la vez en un proceso: de 21 a 34 de 64
+/// salían 200. Inyectado, la prueba decide cuándo pasa el tiempo.</para>
 /// </remarks>
 public sealed class TimeoutMiddleware
 {
@@ -37,37 +42,43 @@ public sealed class TimeoutMiddleware
 
     private readonly RequestDelegate _next;
     private readonly TimeSpan _timeout;
+    private readonly TimeProvider _reloj;
 
     public TimeoutMiddleware(RequestDelegate next)
         : this(next, DefaultTimeout) { }
 
     public TimeoutMiddleware(RequestDelegate next, TimeSpan timeout)
+        : this(next, timeout, TimeProvider.System) { }
+
+    public TimeoutMiddleware(RequestDelegate next, TimeSpan timeout, TimeProvider reloj)
     {
         if (timeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(timeout), timeout, "Timeout must be a positive duration.");
         }
+        ArgumentNullException.ThrowIfNull(reloj);
 
         _next = next;
         _timeout = timeout;
+        _reloj = reloj;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
         var originalToken = context.RequestAborted;
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(originalToken);
-        linkedCts.CancelAfter(_timeout);
+        using var plazo = new CancellationTokenSource(_timeout, _reloj);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(originalToken, plazo.Token);
 
         context.RequestAborted = linkedCts.Token;
         var rasgoAnterior = context.Features.Get<IHttpRequestTimeoutFeature>();
-        context.Features.Set<IHttpRequestTimeoutFeature>(new PlazoDeLaPeticion(linkedCts));
+        context.Features.Set<IHttpRequestTimeoutFeature>(new PlazoDeLaPeticion(plazo, linkedCts.Token));
 
         try
         {
             await _next(context).ConfigureAwait(false);
 
-            if (linkedCts.IsCancellationRequested
+            if (plazo.IsCancellationRequested
                 && !originalToken.IsCancellationRequested
                 && !context.Response.HasStarted)
             {
@@ -76,7 +87,7 @@ public sealed class TimeoutMiddleware
             }
         }
         catch (OperationCanceledException)
-            when (linkedCts.IsCancellationRequested && !originalToken.IsCancellationRequested)
+            when (plazo.IsCancellationRequested && !originalToken.IsCancellationRequested)
         {
             if (!context.Response.HasStarted)
             {
@@ -96,9 +107,15 @@ public sealed class TimeoutMiddleware
     {
         private readonly CancellationTokenSource _plazo;
 
-        public PlazoDeLaPeticion(CancellationTokenSource plazo) => _plazo = plazo;
+        /// <param name="plazo">El que vence con el reloj: apagarlo es pararle el temporizador.</param>
+        /// <param name="token">El que ve la petición: el plazo o el cliente que se fue.</param>
+        public PlazoDeLaPeticion(CancellationTokenSource plazo, CancellationToken token)
+        {
+            _plazo = plazo;
+            RequestTimeoutToken = token;
+        }
 
-        public CancellationToken RequestTimeoutToken => _plazo.Token;
+        public CancellationToken RequestTimeoutToken { get; }
 
         public void DisableTimeout() => _plazo.CancelAfter(Timeout.InfiniteTimeSpan);
     }
