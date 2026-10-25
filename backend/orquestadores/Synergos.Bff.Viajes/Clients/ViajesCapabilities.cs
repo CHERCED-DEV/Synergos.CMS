@@ -47,10 +47,13 @@ public sealed class ViajesCapabilities : CapabilityClients
     /// El identificador del recurso lo genera la capacidad, así que <b>no se adivina</b>: se
     /// pregunta por el sujeto. Inventarse una convención fue el error que costó una vuelta en la
     /// HU #25 y no se repite.
+    /// <para>Por <c>/v1/resources/por-sujeto</c>, la búsqueda que <c>Api.Booking</c> publica en su contrato con UNA forma:
+    /// <c>/v1/resources?subjectKind…</c> contesta lo mismo pero queda fuera del contrato porque sin sujeto lista una página
+    /// (lo encontró <c>ContratoConsumidorViajesTests</c>). Es la ruta del paso común <c>booking.hallar</c>.</para>
     /// </remarks>
     public Task<Result<ResourceDto>> FindResourceAsync(Ref subject, CancellationToken ct)
         => Get<ResourceDto>(Booking,
-            $"v1/resources?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}", ct);
+            $"v1/resources/por-sujeto?subjectKind={Uri.EscapeDataString(subject.Kind)}&subjectId={Uri.EscapeDataString(subject.Id)}", ct);
 
     public Task<Result<HoldDto>> HoldAsync(
         string resourceId, TimeWindow window, Ref traveller, IdempotencyKey key, CancellationToken ct)

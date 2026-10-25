@@ -1,2 +1,11 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/BookingWizard", Model.Content)
+@*
+    <synergos-flujo> envuelve el asistente de hotel con el MISMO flujo que el portal de viajes (ADR 0140; línea 006,
+    T016): una estadía es un viaje de un ítem (006-P4). El camino lo declara el CMS (BookingWizardProps.BookingPath,
+    «directa» por defecto); la clave del flujo la pone el servidor, y CoordinadorDelFlujoEnLasVistasTests la cruza con la
+    tabla de la puerta y con Synergos:Puerta:Flujos. El style en línea evita que el elemento, antes de definirse, cambie
+    el layout del ítem.
+*@
+<synergos-flujo flujo="viajes.reserva" style="display:contents">
+    @await Html.PartialAsync("SynHost/BookingWizard", Model.Content)
+</synergos-flujo>

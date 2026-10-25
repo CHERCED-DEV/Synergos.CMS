@@ -3,6 +3,7 @@ using NSubstitute;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -224,6 +225,28 @@ public sealed class BookingControllerTests
         // La política se evalúa POR RATE PLAN y contra el check-in de la búsqueda: una
         // tarifa evaluada con las fechas de otra le miente al huésped en el listado.
         _policy.Received(1).Evaluate(Tarifa, CheckIn, Arg.Any<DateOnly>());
+    }
+
+    /// <summary>
+    /// Cada oferta lleva el producto con que la reserva por la puerta la aparta (línea 006, T018): la MISMA regla que la
+    /// reserva por el orquestador, no el <c>offerId</c>, que se parte por otro separador para volver a <c>hold</c>.
+    /// </summary>
+    [Fact]
+    public async Task Search_da_a_cada_oferta_el_producto_con_la_regla_de_la_reserva_por_el_orquestador()
+    {
+        _availability.SearchAsync(Arg.Any<AvailabilityQuery>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new RoomOffer("DBL", "Doble Superior", Tarifa, "Desayuno", Total, "COP", true, 2, 3),
+            });
+
+        var result = await BuildSut().Search(
+            new BookingController.SearchRequest(CheckIn, CheckOut, UnaHabitacion()), default);
+
+        var oferta = Assert.Single(Body<BookingController.SearchResponse>(result).Offers);
+        Assert.Equal($"DBL/{Tarifa}", oferta.ProductRef);
+        Assert.Equal(HttpHotelBookingService.ProductRef(" DBL ", Tarifa), oferta.ProductRef);
+        Assert.NotEqual(oferta.OfferId, oferta.ProductRef);
     }
 
     [Fact] // empty: sin disponibilidad la respuesta es una lista vacía, no un 404

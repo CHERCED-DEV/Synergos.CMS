@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -122,7 +123,8 @@ public sealed class BookingController : ControllerBase
                 Refundable: offer.Refundable,
                 CancellationPolicy: policy.Description,
                 MinStayNights: offer.MinStayNights,
-                RoomsLeft: offer.RoomsLeft);
+                RoomsLeft: offer.RoomsLeft,
+                ProductRef: HttpHotelBookingService.ProductRef(offer.RoomTypeCode, offer.RatePlanCode));
         }).ToList();
 
         return Ok(new SearchResponse(
@@ -480,6 +482,11 @@ public sealed class BookingController : ControllerBase
     /// <param name="Board">
     /// El régimen, con la clave que lee la UI. <see cref="BoardBasis"/> se conserva.
     /// </param>
+    /// <param name="ProductRef">
+    /// El producto de la estadía como lo reserva el orquestador (<c>viajes.reserva</c>, línea 006): la regla de
+    /// <see cref="HttpHotelBookingService"/>, puesta acá para que el asistente no la derive del <see cref="OfferId"/>,
+    /// que es otra cosa y lleva otro separador.
+    /// </param>
     public sealed record RoomOfferResponse(
         string OfferId,
         string RoomTypeCode,
@@ -493,7 +500,8 @@ public sealed class BookingController : ControllerBase
         bool Refundable,
         string CancellationPolicy,
         int? MinStayNights,
-        int RoomsLeft);
+        int RoomsLeft,
+        string ProductRef);
 
     public sealed record SearchResponse(
         DateOnly CheckIn,

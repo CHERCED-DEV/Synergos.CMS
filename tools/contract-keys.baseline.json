@@ -453,6 +453,7 @@
     "currency",
     "offerId",
     "offers",
+    "productRef",
     "refundable",
     "reservationId",
     "roomTypeName",
