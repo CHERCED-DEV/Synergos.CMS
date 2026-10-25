@@ -12,7 +12,7 @@ namespace Synergos.CMS.Tests.Bff.Propiedades;
 /// <remarks>
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y ≤ 4
 /// ficheros («superado»). <b>Interino</b> = los pasos de dominio que esperan piezas del núcleo: la duración y la
-/// modalidad (NB-1, NR-4) y el aviso sin importe (NR-3). Con ellos, el tramo es «superado con deuda» mientras sumen
+/// modalidad (NB-1, NR-4); el aviso sin importe (NR-3) ya es el común del núcleo (T091). Con ellos, el tramo es «superado con deuda» mientras sumen
 /// menos de 150. Un fichero nuevo del orquestador que no esté en ninguna lista es rojo: no crece sin decir de quién
 /// es.</para>
 /// </remarks>
@@ -50,7 +50,7 @@ public sealed class MetricaDePropiedadesTests(ITestOutputHelper salida)
         var flujo = Lineas(DelFlujo);
         var interino = Lineas(Interinos);
 
-        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NB-1, NR-3, NR-4) {interino}.");
+        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NB-1, NR-4) {interino}.");
         Assert.True(flujo <= 60, $"El C# propio del flujo son {flujo} líneas y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros y la meta es ≤ 4.");
         Assert.True(flujo + interino < 150, $"Con lo interino son {flujo + interino} líneas: el tramo «con deuda» llega a 150.");

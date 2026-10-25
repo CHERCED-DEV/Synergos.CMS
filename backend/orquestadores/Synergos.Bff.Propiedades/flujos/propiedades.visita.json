@@ -21,7 +21,7 @@
     "cerrar": ["confirmar", "avisar"]
   },
   "pasos": {
-    "validar": { "tipo": "propiedades.validar-visita", "lee": ["ventana", "modalidad"], "escribe": ["modo"] },
+    "validar": { "tipo": "propiedades.validar-visita", "lee": ["ventana", "modalidad"], "escribe": ["modo", "modoEnTexto"] },
     "hallar": {
       "tipo": "booking.hallar",
       "lee": ["inmueble"],
@@ -51,8 +51,9 @@
       "motivo": "no se pudo confirmar la visita"
     },
     "avisar": {
-      "tipo": "propiedades.avisar-visita",
-      "lee": ["interesado", "contacto", "ventana", "modo"],
+      "tipo": "notifications.avisar",
+      "lee": ["interesado", "contacto"],
+      "valores": ["ventana", "modoEnTexto"],
       "llave": "avisar",
       "plantilla": "propiedades.visita.confirmada",
       "al_fallar": "seguir"
