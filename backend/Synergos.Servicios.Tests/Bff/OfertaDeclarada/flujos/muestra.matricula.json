@@ -1,0 +1,44 @@
+{
+  "clave": "muestra.matricula",
+  "entrada": ["alumno", "curso", "plan"],
+  "tipos": {
+    "alumno": { "de": "sujeto" },
+    "curso": { "tipo": "ref", "kind": "muestra.curso" },
+    "plan": "texto?"
+  },
+  "salida": ["curso", "plan", "total"],
+  "fases": {
+    "abrir": ["linea", "cotizar", "desglose", "autorizar"],
+    "cerrar": ["capturar"]
+  },
+  "pasos": {
+    "linea": { "tipo": "forma.una-linea-de-oferta", "lee": ["curso", "plan"], "escribe": ["aCotizar"] },
+    "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
+    "desglose": {
+      "tipo": "pricing.desglose",
+      "lee": ["cotizacion"],
+      "escribe": ["subtotal", "descuento", "impuesto", "total"]
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["alumno", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "el cobro de la matrícula no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "matrícula no confirmada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro de la matrícula no se pudo capturar"
+    }
+  }
+}
