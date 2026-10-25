@@ -462,15 +462,24 @@ public sealed class StubEnrollmentService : IEnrollmentService, IEnrollmentMetri
             return new AnotacionDeLaMatricula(activa.EnrollmentId, activa.CourseId, YaEstaba: true, CobradaDeMas: matricula.Total > 0m);
         }
 
+        // El id sale de la matrícula: dos anotaciones que se cruzan —dos pestañas que cierran la misma— leen el libro
+        // sin la otra y escriben la MISMA fila, no dos.
         var nueva = CreateEnrollment(
             matricula.CourseId, (matricula.Student.Name ?? string.Empty).Trim(), email, EnrollmentStatus.Active,
             orderRef: null, paymentSessionId: null, total: matricula.Total, currency: matricula.Currency)
-            with { Origin = OrigenPuerta, GateMatriculaId = matricula.MatriculaId };
+            with { EnrollmentId = IdDeLaPuerta(matricula.MatriculaId), Origin = OrigenPuerta, GateMatriculaId = matricula.MatriculaId };
         await WriteEnrollmentAsync(nueva, cancellationToken);
         await AdvanceTrackingAsync(nueva.EnrollmentId, StageEnrolled, cancellationToken);
         // Sin NotifyActiveAsync a propósito: el aviso de esta matrícula ya lo mandó el paso del flujo.
         return new AnotacionDeLaMatricula(nueva.EnrollmentId, nueva.CourseId, YaEstaba: false, CobradaDeMas: false);
     }
+
+    /// <summary>
+    /// El id de la fila de una matrícula de la puerta, derivado de la matrícula. No el hash corto del certificado: con 32
+    /// bits, dos matrículas de miles terminarían en la misma fila.
+    /// </summary>
+    private static string IdDeLaPuerta(string matriculaId)
+        => "enrl_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("puerta|" + matriculaId))).ToLowerInvariant()[..32];
 
     public async Task<IReadOnlyCollection<string>> AnotadasAsync(string student, CancellationToken cancellationToken = default)
     {

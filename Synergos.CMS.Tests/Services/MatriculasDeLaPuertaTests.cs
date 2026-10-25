@@ -81,6 +81,24 @@ public sealed class MatriculasDeLaPuertaTests
         Assert.Single(await libro.GetEnrollmentsAsync(Correo));
     }
 
+    /// <summary>
+    /// Dos pestañas que cierran la misma matrícula anotan a la vez, y las dos leen el libro antes de que la otra escriba
+    /// (visto en vivo en la copia piloto: dos filas del mismo curso en «mi aprendizaje» y el doble en la consola).
+    /// </summary>
+    [Fact]
+    public async Task Anotar_la_misma_desde_dos_pestanas_a_la_vez_deja_una_sola_fila()
+    {
+        var store = new LecturasCruzadas(new InMemoryJsonEntityStore());
+        var libro = new StubEnrollmentService(new StubCourseCatalogProvider(ContentStream()), new StubPaymentProvider(), null, store, null);
+
+        var anotaciones = await Task.WhenAll(libro.AnotarAsync(DeLaPuerta()), libro.AnotarAsync(DeLaPuerta()));
+
+        Assert.Equal(2, store.Retenidas);
+        var fila = Assert.Single(await libro.GetEnrollmentsAsync(Correo));
+        Assert.All(anotaciones, a => Assert.Equal(fila.EnrollmentId, a.EnrollmentId));
+        Assert.Equal(new CourseEnrollmentStats(1, 320_000m), await libro.GetCourseStatsAsync(Curso));
+    }
+
     [Fact]
     public async Task Con_el_curso_ya_activo_por_la_directa_no_crea_otra_fila_y_dice_que_se_cobro_de_mas()
     {
@@ -181,6 +199,38 @@ public sealed class MatriculasDeLaPuertaTests
         Assert.Null(beto.MatriculaDeLaPuerta);
         Assert.Equal(0m, beto.Total);
         Assert.Empty(await libro.DevueltasAsync(Correo));
+    }
+
+    /// <summary>
+    /// Retiene las dos primeras lecturas de matrículas hasta que llegan las dos: cada anotación ve el libro como estaba
+    /// antes de la otra. Con plazo, para que una anotación que ya no lea dos veces falle en vez de colgarse.
+    /// </summary>
+    private sealed class LecturasCruzadas(IJsonEntityStore interno) : IJsonEntityStore
+    {
+        private readonly TaskCompletionSource _ambas = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _lecturas;
+
+        public int Retenidas => Math.Min(Volatile.Read(ref _lecturas), 2);
+
+        public async Task<IReadOnlyList<string>> ListAsync(string resourceType, CancellationToken cancellationToken = default)
+        {
+            var documentos = await interno.ListAsync(resourceType, cancellationToken);
+            if (resourceType == "enrollments" && Interlocked.Increment(ref _lecturas) is var n && n <= 2)
+            {
+                if (n == 2) _ambas.TrySetResult();
+                await _ambas.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+            }
+            return documentos;
+        }
+
+        public Task WriteAsync(string resourceType, string key, string json, CancellationToken cancellationToken = default)
+            => interno.WriteAsync(resourceType, key, json, cancellationToken);
+
+        public Task<string?> ReadAsync(string resourceType, string key, CancellationToken cancellationToken = default)
+            => interno.ReadAsync(resourceType, key, cancellationToken);
+
+        public Task<bool> DeleteAsync(string resourceType, string key, CancellationToken cancellationToken = default)
+            => interno.DeleteAsync(resourceType, key, cancellationToken);
     }
 
     /// <summary>Apunta lo que el motor manda al notificador del CMS.</summary>
