@@ -97,6 +97,7 @@ ensamblado, igual que su `info.title`.
 | [`openapi/Synergos.Api.Cart.json`](openapi/Synergos.Api.Cart.json) | La capacidad de canastas (núcleo N2). Sólo abrir lee la llave y la identidad del dueño; cerrar no lee llave (cerrar dos veces se rechaza). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 | [`openapi/Synergos.Api.Orders.json`](openapi/Synergos.Api.Orders.json) | La capacidad de pedidos (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 | [`openapi/Synergos.Api.Fulfillment.json`](openapi/Synergos.Api.Fulfillment.json) | La capacidad de despachos y su rastro (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
+| [`openapi/Synergos.Api.Workflow.json`](openapi/Synergos.Api.Workflow.json) | La capacidad de procesos: definiciones como dato (inmutables: versionar es publicar otra clave), instancias por sujeto y transiciones con guarda por rol (009-P2: la construyó la línea de Gobierno con el molde del núcleo, y el núcleo la revisa para sus pasos comunes `workflow.arrancar`, disparar y leer). Disparar declara la llave y el token de identidad, que es lo que prueba los roles. | CMS: los cuatro gates de abajo + `ConsumidorCmsDeApiWorkflowTests` (la ruta directa del trámite) |
 
 Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 

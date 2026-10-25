@@ -445,7 +445,7 @@ public sealed class PurchaseCompensationTests
             NullLogger<Pagos.Transport.WompiPaymentProvider>.Instance);
 
         var intento = await proveedor.AuthorizeAsync(
-            Money.Of(120m, "USD"), Ref.Create("identity.member", "u-1"));
+            Money.Of(120m, "USD"), Ref.Create("identity.member", "u-1"), "cobro-1");
 
         var rechazo = Pagos.Domain.PaymentRules.FromAttempt(intento, "la autorización");
         Assert.NotNull(rechazo);

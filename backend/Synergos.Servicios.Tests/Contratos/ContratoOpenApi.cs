@@ -78,6 +78,9 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Api.Cart.Contracts.CartResponse>("Cart"),
         new PiezaPublicada<Synergos.Api.Orders.Contracts.OrderResponse>("Orders"),
         new PiezaPublicada<Synergos.Api.Fulfillment.Contracts.ShipmentResponse>("Fulfillment"),
+        // Los procesos (009-P2): lo construye la línea de Gobierno con este molde y lo revisa el núcleo, que
+        // espera por él para los pasos comunes workflow.arrancar, disparar y leer.
+        new PiezaPublicada<Synergos.Api.Workflow.Contracts.InstanceResponse>("Workflow"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
         new PiezaPublicada<Synergos.Bff.Salud.Contracts.AppointmentResponse>("Salud"),
         new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
