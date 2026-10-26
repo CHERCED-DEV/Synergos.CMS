@@ -5,6 +5,115 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/cursos/{curso}/nombres": {
+      "post": {
+        "operationId": "PublishCourseNames",
+        "parameters": [
+          {
+            "name": "curso",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NombresDelCursoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NombresDelCursoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/flujos/compensaciones": {
       "get": {
         "operationId": "FlujosCompensaciones",
@@ -1317,7 +1426,7 @@
     },
     "/v1/ofertas": {
       "post": {
-        "operationId": "PublishCourseOffer",
+        "operationId": "PublishDeclaredOffer",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1333,7 +1442,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublicarOfertaDeCursoRequest"
+                "$ref": "#/components/schemas/PublicarOfertaDeclaradaRequest"
               }
             }
           },
@@ -1345,7 +1454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OfertaDeCursoResponse"
+                  "$ref": "#/components/schemas/OfertaDeclaradaResponse"
                 }
               }
             }
@@ -1416,12 +1525,12 @@
         }
       }
     },
-    "/v1/ofertas/{curso}/retirar": {
+    "/v1/ofertas/{pieza}/retirar": {
       "post": {
-        "operationId": "RetireCourseOffer",
+        "operationId": "RetireDeclaredOffer",
         "parameters": [
           {
-            "name": "curso",
+            "name": "pieza",
             "in": "path",
             "required": true,
             "schema": {
@@ -1444,7 +1553,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OfertaDeCursoResponse"
+                  "$ref": "#/components/schemas/OfertaDeclaradaResponse"
                 }
               }
             }
@@ -1930,18 +2039,80 @@
           }
         }
       },
-      "OfertaDeCursoResponse": {
+      "NombreDelPlanDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NombresDelCursoRequest": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "planes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/NombreDelPlanDto"
+            }
+          }
+        }
+      },
+      "NombresDelCursoResponse": {
         "required": [
           "curso",
+          "nombre",
+          "planes"
+        ],
+        "type": "object",
+        "properties": {
+          "curso": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "planes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "OfertaDeclaradaResponse": {
+        "required": [
+          "pieza",
           "precio",
           "moneda",
-          "planes",
+          "variantes",
           "precios",
           "retirada"
         ],
         "type": "object",
         "properties": {
-          "curso": {
+          "pieza": {
             "type": "string"
           },
           "precio": {
@@ -1951,7 +2122,7 @@
           "moneda": {
             "type": "string"
           },
-          "planes": {
+          "variantes": {
             "type": "array",
             "items": {
               "type": "string"
@@ -1994,34 +2165,10 @@
           }
         }
       },
-      "PlanDeLaOfertaDto": {
+      "PublicarOfertaDeclaradaRequest": {
         "type": "object",
         "properties": {
-          "codigo": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "total": {
-            "type": [
-              "null",
-              "number"
-            ],
-            "format": "decimal"
-          },
-          "nombre": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "PublicarOfertaDeCursoRequest": {
-        "type": "object",
-        "properties": {
-          "curso": {
+          "pieza": {
             "type": [
               "null",
               "string"
@@ -2040,20 +2187,14 @@
               "string"
             ]
           },
-          "planes": {
+          "variantes": {
             "type": [
               "null",
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/PlanDeLaOfertaDto"
+              "$ref": "#/components/schemas/VarianteDeLaOfertaDto"
             }
-          },
-          "nombre": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       },
@@ -2094,6 +2235,24 @@
           },
           "transient": {
             "type": "boolean"
+          }
+        }
+      },
+      "VarianteDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
           }
         }
       }

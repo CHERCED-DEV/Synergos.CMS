@@ -20,8 +20,9 @@ namespace Synergos.CMS.Tests.Bff.Educacion;
 /// avisos reales del arnés, con lo que pone la puerta en cabeceras.
 /// </summary>
 /// <remarks>
-/// <para>El curso se publica por la RUTA DE OFERTAS del propio orquestador, como lo hará el CMS: así la matrícula sólo
-/// encuentra los precios que la oferta dejó.</para>
+/// <para>El curso se publica por la RUTA DE OFERTAS del orquestador —la oferta común del núcleo, montada con la clase
+/// del curso—, y sus nombres por la suya, como lo hace el CMS: así la matrícula sólo encuentra los precios que la oferta
+/// dejó.</para>
 ///
 /// <para>Lo que ninguna capacidad real sabe hacer a pedido (rechazar un cobro, caerse) se inyecta en el cable con
 /// <c>falla</c>, sin tocar el orquestador.</para>
@@ -37,7 +38,7 @@ internal sealed class MatriculaDeCursoReal : IDisposable
     public const string LlamadasAlArnes = "Synergos.Arnes.Llamadas";
 
     private readonly string _raiz = Path.Combine(Path.GetTempPath(), "educacion-" + Guid.NewGuid().ToString("N"));
-    private readonly WebApplicationFactory<OfertaDeCursoResponse> _fabrica;
+    private readonly WebApplicationFactory<NombresDelCursoResponse> _fabrica;
 
     public MatriculaDeCursoReal(
         Func<HttpRequestMessage, string?>? falla = null, IReadOnlyDictionary<string, string>? ajustes = null,
@@ -51,7 +52,7 @@ internal sealed class MatriculaDeCursoReal : IDisposable
 
         IHttpClientFactory fabrica = falla is null ? Capacidades : new ConFallo(Capacidades, falla);
         if (registro is not null) fabrica = new ConRegistro(fabrica, registro.CreateLogger(LlamadasAlArnes));
-        _fabrica = new WebApplicationFactory<OfertaDeCursoResponse>().WithWebHostBuilder(b =>
+        _fabrica = new WebApplicationFactory<NombresDelCursoResponse>().WithWebHostBuilder(b =>
         {
             b.UseSetting("educacion:Storage:Root", Almacen);
             b.UseSetting("Educacion:ApiKey", Llave);
@@ -93,19 +94,22 @@ internal sealed class MatriculaDeCursoReal : IDisposable
     public const string Titulo = "Gestión ágil de proyectos";
 
     /// <summary>
-    /// La oferta de prueba: el curso a 320.000 COP, de contado al mismo precio y «premium» a 345.600, con el título y
-    /// el nombre de cada plan como los manda el CMS (los planes a medida van sin nombre).
+    /// La oferta de prueba, como la manda el CMS a la oferta común: la pieza (el curso) a 320.000 COP y sus variantes
+    /// (los planes), de contado al mismo precio y «premium» a 345.600.
     /// </summary>
     public static object Oferta(string curso = Curso, decimal precio = Precio, params (string Codigo, decimal Total)[] planes)
         => new
         {
-            curso,
+            pieza = curso,
             precio,
             moneda = "COP",
-            nombre = curso == Curso ? Titulo : null,
-            planes = (planes.Length == 0 ? [("full", precio), ("premium", Premium)] : planes)
-                .Select(p => new { codigo = p.Codigo, total = p.Total, nombre = planes.Length == 0 ? NombreDelPlan(p.Codigo) : null }).ToList(),
+            variantes = (planes.Length == 0 ? [("full", precio), ("premium", Premium)] : planes)
+                .Select(p => new { codigo = p.Codigo, total = p.Total }).ToList(),
         };
+
+    /// <summary>Los nombres del curso de prueba y de sus planes, como los manda el CMS (NM-3).</summary>
+    public static object Nombres()
+        => new { nombre = Titulo, planes = new[] { "full", "premium" }.Select(c => new { codigo = c, nombre = NombreDelPlan(c) }).ToList() };
 
     /// <summary>Cómo se llama cada plan de la oferta de prueba.</summary>
     public static string NombreDelPlan(string codigo) => codigo == "full" ? "Pago de contado" : "Premium con mentoría";
@@ -117,6 +121,14 @@ internal sealed class MatriculaDeCursoReal : IDisposable
         return await Enviar(peticion);
     }
 
+    /// <summary>Publica cómo se llaman el curso y sus planes (la ruta interina de NM-3).</summary>
+    public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> PublicarNombres(string curso = Curso, object? nombres = null, string? llave = "nombres-1")
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/cursos/{curso}/nombres") { Content = JsonContent.Create(nombres ?? Nombres()) };
+        if (llave is not null) peticion.Headers.Add("Idempotency-Key", llave);
+        return await Enviar(peticion);
+    }
+
     public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Retirar(string curso = Curso, string llave = "retiro-1")
     {
         var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/ofertas/{curso}/retirar");
@@ -124,11 +136,19 @@ internal sealed class MatriculaDeCursoReal : IDisposable
         return await Enviar(peticion);
     }
 
-    /// <summary>Publica la oferta de prueba y falla si no queda publicada.</summary>
+    /// <summary>
+    /// Publica la oferta y falla si no queda publicada. La de prueba va con sus nombres, como la publica el CMS; una
+    /// oferta a medida, sin ellos.
+    /// </summary>
     public async Task<MatriculaDeCursoReal> ConOferta(object? oferta = null)
     {
         var (estado, cuerpo) = await Publicar(oferta);
         Assert.True(estado == HttpStatusCode.OK, $"La oferta no se publicó: {(int)estado} {cuerpo}");
+        if (oferta is null)
+        {
+            var (guardados, nombres) = await PublicarNombres();
+            Assert.True(guardados == HttpStatusCode.OK, $"Los nombres no se publicaron: {(int)guardados} {nombres}");
+        }
         return this;
     }
 

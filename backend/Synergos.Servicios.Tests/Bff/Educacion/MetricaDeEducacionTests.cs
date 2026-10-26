@@ -11,21 +11,19 @@ namespace Synergos.CMS.Tests.Bff.Educacion;
 /// </summary>
 /// <remarks>
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y ≤ 4
-/// ficheros. <b>Interino</b> = lo que espera la oferta genérica con variantes de precio (NM-1): el paso
-/// <c>educacion.linea</c> y el nombre del sujeto, que comparte con la oferta. <b>Oferta</b> = el código del vertical que
-/// esa misma pieza (P12) dejará listo para retirar. <b>Devolución</b> = el flujo posterior del personal (010-P2 B), sólo
-/// declarado. Un fichero nuevo del orquestador que no esté en ninguna de las listas es rojo: no puede crecer sin decir
-/// de quién es.</para>
+/// ficheros. La oferta es la común del núcleo (001-P11 A con N1): la monta el arranque con una línea y la clase de la
+/// pieza en la configuración, y la oferta propia de la línea se retiró. <b>Interino</b> = lo que la oferta común
+/// todavía no publica (NM-3): cómo se llaman el curso y sus planes, para el aviso. <b>Devolución</b> = el flujo
+/// posterior del personal (010-P2 B), sólo declarado. Un fichero nuevo del orquestador que no esté en ninguna de las
+/// listas es rojo: no puede crecer sin decir de quién es.</para>
 /// </remarks>
 public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
 {
     private static readonly string[] DelFlujo =
         ["Program.cs", "flujos/educacion.matricula.json", "appsettings.json", "Synergos.Bff.Educacion.csproj"];
 
-    private static readonly string[] Interinos = ["Domain/PasoLineaDelPlan.cs", "Domain/SujetoDelPlan.cs"];
-
-    private static readonly string[] DeLaOferta =
-        ["Domain/OfertaDeCursos.cs", "Endpoints/OfertasEndpoints.cs", "Clients/CapacidadesDeLaOferta.cs", "Contracts/OfertaContracts.cs"];
+    /// <summary>Los nombres del curso y de sus planes para el aviso (NM-3): el paso, su almacén, su ruta y su contrato.</summary>
+    private static readonly string[] Interinos = ["Domain/NombresDeCursos.cs", "Endpoints/NombresEndpoints.cs", "Contracts/NombresContracts.cs"];
 
     /// <summary>La devolución del personal (lote 8, 010-P2 B): un flujo posterior declarado, sin una línea de C#.</summary>
     private static readonly string[] DeLaDevolucion = ["flujos/educacion.devolucion.json"];
@@ -45,7 +43,7 @@ public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(Interinos).Concat(DeLaOferta).Concat(DeLaDevolucion).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(Interinos).Concat(DeLaDevolucion).Order(StringComparer.Ordinal), enDisco);
     }
 
     [Fact]
@@ -57,9 +55,8 @@ public sealed class MetricaDeEducacionTests(ITestOutputHelper salida)
     {
         var flujo = Lineas(DelFlujo);
         var interino = Lineas(Interinos);
-        var oferta = Lineas(DeLaOferta);
 
-        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NM-1) {interino}; oferta (P12, NM-1) {oferta}.");
+        salida.WriteLine($"MEDIDA: flujo {flujo} líneas en {DelFlujo.Length} ficheros; interino (NM-3) {interino}; oferta: la común del núcleo.");
         Assert.True(flujo <= 60, $"El C# propio del flujo son {flujo} líneas y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros y la meta es ≤ 4.");
     }
