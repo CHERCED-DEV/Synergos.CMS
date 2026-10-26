@@ -26,13 +26,17 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
     private readonly FlujoDef _flujo;
     private readonly TiposDeValor _tipos;
     private readonly IRegistroDePasos _pasos;
+    private readonly IExtensionDelFlujo? _extension;
     private readonly string? _sujeto;
 
     /// <param name="flujo">La definición, con sus <c>tipos</c>.</param>
     /// <param name="tipos">Los tipos de valor que conoce el orquestador.</param>
     /// <param name="pasos">Los pasos registrados: de ellos sale el tipo de lo que escriben.</param>
     /// <param name="deshacer">Los tipos de compensación que sabe deshacer el ejecutor de la saga genérica.</param>
-    public BindingDeFlujo(FlujoDef flujo, TiposDeValor tipos, IRegistroDePasos pasos, IReadOnlyCollection<string> deshacer)
+    /// <param name="extension">Lo que contesta el vertical cuando un cierre por ítem declara <c>al_fallar: soltar</c>
+    /// (NV-13); nula si nadie extiende el flujo.</param>
+    public BindingDeFlujo(
+        FlujoDef flujo, TiposDeValor tipos, IRegistroDePasos pasos, IReadOnlyCollection<string> deshacer, IExtensionDelFlujo? extension = null)
     {
         ArgumentNullException.ThrowIfNull(flujo);
         ArgumentNullException.ThrowIfNull(tipos);
@@ -41,10 +45,14 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
         _flujo = flujo;
         _tipos = tipos;
         _pasos = pasos;
+        _extension = extension;
         Deshacer = deshacer;
 
         _sujeto = flujo.Entrada.FirstOrDefault(n => flujo.Tipos?.GetValueOrDefault(n)?.Origen == OrigenDelValor.Sujeto);
-        Reconstruye = LoQueSeReconstruye(flujo);
+        // Lo que la extensión lee o reescribe al soltar lo tiene la fase que cierra sólo si la saga lo guarda (NV-13).
+        Reconstruye = LoQueSeReconstruye(flujo)
+            .Union((extension?.Lee ?? []).Concat(extension?.Escribe ?? []), StringComparer.Ordinal)
+            .ToList();
         Guarda = Reconstruye.Union(flujo.LoQueSale, StringComparer.Ordinal)
             .Union(flujo.LoQueDejaParaLoPosterior.Where(n => !n.StartsWith(FlowValidator.Reservas, StringComparison.Ordinal)), StringComparer.Ordinal)
             .ToList();
@@ -72,6 +80,8 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
     public TiposDeValor Tipos => _tipos;
 
     public IReadOnlyCollection<string> Deshacer { get; }
+
+    public IReadOnlyCollection<string>? ArmaLaExtension => _extension?.Arma;
 
     /// <summary>El nombre de la entrada que es el dueño (el sujeto de la puerta).</summary>
     public string Sujeto => _sujeto ?? throw new InvalidOperationException(
@@ -168,6 +178,25 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
                 Reservas = new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(saga.Reservas, StringComparer.Ordinal) { [reservante] = nuevas },
             }
             : saga;
+    }
+
+    /// <summary>Si ESTA saga suelta el ítem cuyo cierre falló: lo contesta la extensión del vertical; sin ella, no (NV-13).</summary>
+    public bool SueltaSiFalla(SagaDeFlujo saga, FlowContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        ArgumentNullException.ThrowIfNull(ctx);
+        return _extension?.SueltaSiFalla(saga, ctx) ?? false;
+    }
+
+    /// <summary>
+    /// Lo que la extensión hace con el ítem soltado, con lo que reescribió en el contexto ya guardado en la saga: lo que
+    /// arma se ejecuta en el acto con esta saga, y tiene que encontrar ahí lo que necesita (NV-13).
+    /// </summary>
+    public SagaDeFlujo ConItemSoltado(SagaDeFlujo saga, string reservante, HoldLeg soltada, FlowContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        ArgumentNullException.ThrowIfNull(ctx);
+        return _extension is null ? saga : AlGuardar(_extension.ConItemSoltado(saga, ctx, reservante, soltada), ctx);
     }
 
     public SagaDeFlujo ConError(SagaDeFlujo saga, string? falla)
