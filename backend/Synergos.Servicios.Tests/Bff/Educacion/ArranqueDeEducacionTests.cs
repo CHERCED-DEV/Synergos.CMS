@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Synergos.Bff.Core;
-using Synergos.Bff.Educacion.Domain;
+using Synergos.Bff.Pasos;
 using Synergos.CMS.Tests.Architecture;
 
 namespace Synergos.CMS.Tests.Bff.Educacion;
@@ -41,16 +41,22 @@ public sealed class ArranqueDeEducacionTests
         Assert.Equal(30, otro.Servicios.GetRequiredService<IOptions<SweepOptions>>().Value.AbandonAfterMinutes);
     }
 
+    /// <summary>
+    /// La oferta es la común del núcleo (001-P11 A con N1), montada con la clase que declara la definición para el curso:
+    /// con otra, la oferta publicaría precios que la línea nunca cotiza y todo curso quedaría «sin precio».
+    /// </summary>
     [Fact]
     public void La_clase_que_declara_la_definicion_es_la_que_publica_la_oferta_y_deja_el_cobro_para_lo_posterior()
     {
+        using var r = new MatriculaDeCursoReal();
         using var definicion = JsonDocument.Parse(File.ReadAllText(Path.Combine(
             Proyectos.Dir("Synergos.Bff.Educacion"), "flujos", "educacion.matricula.json")));
         var raiz = definicion.RootElement;
 
         var curso = raiz.GetProperty("tipos").GetProperty("curso");
         Assert.Equal("ref", curso.GetProperty("tipo").GetString());
-        Assert.Equal(SujetoDelPlan.ClaseDelCurso, curso.GetProperty("kind").GetString());
+        Assert.Equal(r.Servicios.GetRequiredService<OfertaDeclarada>().Clase, curso.GetProperty("kind").GetString());
+        Assert.Equal("forma.una-linea-de-oferta", raiz.GetProperty("pasos").GetProperty("linea").GetProperty("tipo").GetString());
         // Lote 8, 010-P2: la devolución del personal (fase B) lee el cobro de la original y su total.
         Assert.Equal(["cobroId", "total"], raiz.GetProperty("para_lo_posterior").EnumerateArray().Select(e => e.GetString()));
         // Sin caer a cero: la AUSENCIA de precio rechaza (FR-004), la oferta de un curso gratis publica su cero.

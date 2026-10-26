@@ -1943,18 +1943,22 @@ imperativo propio: la ruta directa sigue siendo el motor de matrícula del CMS, 
 `educacion.devolucion`, es un flujo posterior con cero líneas de C#.
 
 - **Medido** con dos métodos que coinciden: la prueba `MetricaDeEducacionTests` y el conteo a mano, sin comentarios
-  ni líneas en blanco. El flujo cuesta **19 líneas de C# en 4 ficheros** (el arranque, la definición, la
-  configuración y el proyecto): SC-007 superado (≤ 60 y ≤ 4). Aparte, y atribuidos a NM-1 (la oferta por plan del
-  núcleo, P12):
-  - el paso interino `educacion.linea`, 52 líneas;
-  - la oferta de los cursos, 172 líneas.
+  ni líneas en blanco. El flujo cuesta **20 líneas de C# en 4 ficheros** (el arranque, la definición, la
+  configuración y el proyecto): SC-007 superado (≤ 60 y ≤ 4). Un fichero del orquestador sin atribuir es rojo.
+- **La oferta es la común del núcleo** (lote 11: 001-P11 A con N1; la primera que la adopta, 2026-10-26):
+  - el curso es la pieza (`educacion:Oferta:Clase = educacion.curso`, la clase que la definición declara) y cada
+    plan, una variante; la monta `app.MapOfertaDeclarada()`;
+  - la línea a cotizar la compone `forma.una-linea-de-oferta`;
+  - el CMS publica `pieza` y `variantes`.
 
-  Un fichero del orquestador sin atribuir es rojo.
+  Se retiró el interino que la pieza cubre: la oferta propia (172 líneas) y la línea del plan.
+- **Lo que la pieza no cubre**, interino y declarado (NM-3, 91 líneas): cómo se llaman el curso y sus planes, para el
+  aviso. Lo publica el CMS junto a la oferta (`POST v1/cursos/{curso}/nombres`), y lo escribe el paso
+  `educacion.nombres`.
 - **Los valores declarados del aviso (T091) cubren NM-2**, con una desviación medida: el curso viaja como
   referencia, que el validador rechaza con razón en `valores`, y el orquestador sólo conoce su clave. Así que los
-  nombres salen de la oferta que publica el CMS, nunca del navegador: el título del curso y el nombre de cada plan
-  viajan en `POST v1/ofertas`, y `educacion.linea` los escribe como `nombreDelCurso` y `nombreDelPlan`. Una oferta
-  sin nombres cae a la clave y al código.
+  nombres salen de lo que publica el CMS, nunca del navegador, y el paso los escribe como `nombreDelCurso` y
+  `nombreDelPlan` (hoy, el interino de NM-3). Sin nombres publicados, el aviso cae a la clave y al código.
 - **Verificado en vivo con sesión** en la copia piloto, con un alumno y un admin de prueba que autorizó el
   arquitecto:
   - republicar: 4 de 4;
