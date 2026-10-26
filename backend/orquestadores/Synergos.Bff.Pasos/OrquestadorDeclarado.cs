@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
@@ -59,6 +60,11 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerPedidos>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IWorkflowPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IOfertaPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        // La oferta declarada (P12): sólo se resuelve si el orquestador la monta (`MapOfertaDeclarada`), y entonces exige
+        // su clase en {Origen}:Oferta:Clase.
+        builder.Services.AddSingleton(sp => OfertaDeclarada.De(
+            sp.GetRequiredService<IConfiguration>(), vocabulario, sp.GetRequiredService<IOfertaPort>(), sp.GetRequiredService<TimeProvider>()));
 
         builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
         // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
@@ -91,7 +97,7 @@ public static class PasosComunes
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
-            new PasoAvisar(puertos, zona), new PasoUnaLinea(),
+            new PasoAvisar(puertos, zona), new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
             new PasoProcesoArrancar(puertos), new PasoProcesoDisparar(puertos), new PasoProcesoDispararElegida(puertos),

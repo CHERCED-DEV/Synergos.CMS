@@ -27,6 +27,43 @@ public sealed class PasoUnaLinea : IPaso
 }
 
 /// <summary>
+/// <c>forma.una-linea-de-oferta</c>: lee una pieza y, si la definición la nombra, su variante; escribe la línea a cotizar
+/// (una) con el nombre con que la oferta declarada publicó el precio (P12, NM-1 de 010).
+/// </summary>
+/// <remarks>
+/// Es <c>forma.una-linea</c> con la variante: una variante nula o en blanco cotiza la pieza. El nombre lo da
+/// <see cref="SujetoDeLaOferta"/>, la misma función con que publica <see cref="OfertaDeclarada"/>: separados, el paso y
+/// la oferta se repartirían una convención. Una pieza o una variante que no son claves se rechazan
+/// (<c>flow.linea_invalida</c>) sin cotizar, porque ningún precio se publica con ese nombre.
+/// </remarks>
+public sealed class PasoUnaLineaDeOferta : IPaso
+{
+    public const string LineaInvalida = "flow.linea_invalida";
+
+    public string Tipo => "forma.una-linea-de-oferta";
+    public int Lecturas => 2;
+    public int LecturasOpcionales => 1;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(IReadOnlyList<(Ref Sujeto, int Cantidad)>)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var pieza = entrada.Lee<Ref>(0);
+        var variante = entrada.Paso.Lee.Count > 1 ? entrada.Lee<string?>(1) : null;
+        if (!SujetoDeLaOferta.EsClave(pieza.Id) || (!string.IsNullOrWhiteSpace(variante) && !SujetoDeLaOferta.EsClave(variante.Trim())))
+        {
+            return Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(LineaInvalida,
+                "La pieza o su variante no tienen la forma de una clave de la oferta: ningún precio se llama así.")));
+        }
+
+        IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas = [(SujetoDeLaOferta.De(pieza, variante), 1)];
+        return Task.FromResult(SalidaDePaso.Sigue(lineas));
+    }
+}
+
+/// <summary>
 /// <c>pricing.desglose</c>: lee una cotización y escribe sus cuatro montos: subtotal, descuento, impuesto y
 /// total, en ese orden.
 /// </summary>

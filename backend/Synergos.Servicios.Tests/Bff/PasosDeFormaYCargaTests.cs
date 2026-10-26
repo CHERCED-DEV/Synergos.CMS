@@ -135,6 +135,74 @@ public sealed class PasosDeFormaYCargaTests
         Assert.Equal((servicio, 1), Assert.Single(lineas));
     }
 
+    // ── La línea de una oferta declarada (P12, NM-1 de 010) ─────────────────
+
+    public static TheoryData<string?, string> Variantes() => new()
+    {
+        { "premium", "prueba.curso.variante:mate-1/premium" },
+        { " premium ", "prueba.curso.variante:mate-1/premium" },
+        { null, "prueba.curso:mate-1" },
+        { "  ", "prueba.curso:mate-1" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Variantes))]
+    public async Task La_linea_de_una_oferta_es_la_pieza_o_su_variante_con_el_nombre_que_publica_la_oferta(string? variante, string sujeto)
+    {
+        var pieza = Ref.Create("prueba.curso", "mate-1");
+        var ctx = new FlowContext().Set("pieza", pieza).Set("variante", variante);
+
+        var salida = await new PasoUnaLineaDeOferta().EjecutarAsync(Entrada("forma.una-linea-de-oferta", ctx, "pieza", "variante"), CancellationToken.None);
+
+        var lineas = Assert.IsAssignableFrom<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(Assert.Single(salida.Valores));
+        var (nombre, cantidad) = Assert.Single(lineas);
+        Assert.Equal(sujeto, nombre.ToString());
+        Assert.Equal(1, cantidad);
+        Assert.Equal(SujetoDeLaOferta.De(pieza, variante), nombre);
+    }
+
+    [Fact]
+    public async Task Sin_variante_en_la_definicion_la_linea_de_una_oferta_es_la_pieza()
+    {
+        var pieza = Ref.Create("prueba.curso", "mate-1");
+
+        var salida = await new PasoUnaLineaDeOferta().EjecutarAsync(
+            Entrada("forma.una-linea-de-oferta", new FlowContext().Set("pieza", pieza), "pieza"), CancellationToken.None);
+
+        Assert.Equal((pieza, 1), Assert.Single((IReadOnlyList<(Ref Sujeto, int Cantidad)>)salida.Valores[0]!));
+    }
+
+    public static TheoryData<string, string?> LineasInvalidas() => new()
+    {
+        { "mate-1/premium", null },
+        { "mate-1", "pre/mium" },
+        { "mate-1", "../otro" },
+    };
+
+    [Theory]
+    [MemberData(nameof(LineasInvalidas))]
+    public async Task Una_pieza_o_una_variante_que_no_son_claves_no_se_cotizan(string pieza, string? variante)
+    {
+        var ctx = new FlowContext().Set("pieza", Ref.Create("prueba.curso", pieza)).Set("variante", variante);
+
+        var salida = await new PasoUnaLineaDeOferta().EjecutarAsync(Entrada("forma.una-linea-de-oferta", ctx, "pieza", "variante"), CancellationToken.None);
+
+        Assert.Equal(PasoUnaLineaDeOferta.LineaInvalida, salida.Rechazo?.Code);
+        Assert.Empty(salida.Valores);
+    }
+
+    [Fact]
+    public void La_variante_tiene_una_clase_propia_y_ninguna_pieza_se_llama_como_ella()
+    {
+        var pieza = Ref.Create("prueba.curso", "mate-1");
+
+        var variante = SujetoDeLaOferta.De(pieza, "premium");
+
+        Assert.Equal("prueba.curso.variante", variante.Kind);
+        Assert.NotEqual(pieza.Kind, variante.Kind);
+        Assert.Throws<ArgumentException>(() => SujetoDeLaOferta.De(Ref.Create("prueba.curso", "mate-1/premium"), null));
+    }
+
     [Fact]
     public async Task El_desglose_escribe_subtotal_descuento_impuesto_y_total_en_ese_orden()
     {
