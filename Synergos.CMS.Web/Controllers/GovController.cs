@@ -241,7 +241,10 @@ public sealed class GovController : ControllerBase
             Eligibility: detail.Eligibility,
             Required: detail.Required,
             FeeMinor: ToFeeMinor(s.FeeMinor, s.Currency),
-            Currency: s.Currency)));
+            Currency: s.Currency,
+            // La clave con que el trámite se radica por la puerta (009, T031): la del nodo con el catálogo en el
+            // contenido, la misma con que el publicador ofrece su tasa; en la siembra, su id.
+            Key: s.Clave ?? s.Id)));
     }
 
     // ── 3. Formulario dinámico seccionado ───────────────────────────────
@@ -1250,7 +1253,8 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<string> Eligibility,
         IReadOnlyList<string> Required,
         decimal FeeMinor,
-        string Currency);
+        string Currency,
+        string Key);
 
     public sealed record ServiceDetailResponse(ServiceDetailDto Service);
 
