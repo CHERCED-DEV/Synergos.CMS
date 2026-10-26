@@ -3006,7 +3006,17 @@
       "nombre": "seller",
       "tipo": "funcionalidad",
       "record": "SellerProps",
-      "diccionario": [],
+      "diccionario": [
+        "Seller.Operaciones"
+      ],
+      "claves": [
+        "Seller.Operaciones.LoadFailed",
+        "Seller.Operaciones.Retry",
+        "Seller.Operaciones.Samples",
+        "Seller.Operaciones.SignIn",
+        "Seller.Operaciones.SignInAction",
+        "Seller.Operaciones.StaffOnly"
+      ],
       "campos": [
         {
           "nombre": "heading",
@@ -3025,13 +3035,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "zonaHoraria",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Tu negocio, en un solo panel",
         "subheading": "Ventas, publicaciones, mensajes y devoluciones",
-        "apiBase": "/api/shop"
+        "apiBase": "/api/shop",
+        "zonaHoraria": "America/Bogota"
       }
     },
     {

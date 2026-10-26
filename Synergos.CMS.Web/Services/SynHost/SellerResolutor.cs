@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -6,18 +8,25 @@ namespace Synergos.CMS.Web.Services.SynHost;
 
 /// <summary>
 /// <c>elementSynSeller</c> → <see cref="SellerProps"/>: lo que escribe el editor, más dónde vive
-/// la API para el sitio de la petición (ADR 0137).
+/// la API para el sitio de la petición (ADR 0137) y en qué zona dice sus fechas (la de los listados, como el
+/// storefront).
 /// </summary>
 public sealed class SellerResolutor : IResolutorSynHost<SellerProps>
 {
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeSeller> _negocio;
+    private readonly string _zona;
     private readonly ILogger<SellerResolutor> _log;
 
-    public SellerResolutor(IPublishedValueFallback fallback, INegocioDelSitio<NegocioDeSeller> negocio, ILogger<SellerResolutor> log)
+    public SellerResolutor(
+        IPublishedValueFallback fallback,
+        INegocioDelSitio<NegocioDeSeller> negocio,
+        IOptions<ListadosSettings> listados,
+        ILogger<SellerResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
+        _zona = listados.Value.ZonaHoraria;
         _log = log;
     }
 
@@ -28,6 +37,7 @@ public sealed class SellerResolutor : IResolutorSynHost<SellerProps>
         return new ElementoResuelto<SellerProps>(new SellerProps(
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
-            ApiBase: _negocio.Actual().ApiBase));
+            ApiBase: _negocio.Actual().ApiBase,
+            ZonaHoraria: _zona));
     }
 }
