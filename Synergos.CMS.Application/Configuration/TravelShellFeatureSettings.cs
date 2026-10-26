@@ -26,11 +26,22 @@ public sealed class TravelShellFeatureSettings : SeccionDeNegocio<TravelShellFea
     /// <remarks>Un sitio con el valor vacío vuelve a la regla (la puerta si abre <c>viajes.reserva</c>).</remarks>
     public string? BookingPath { get; init; } = CaminoDeCompra.Directa;
 
+    /// <summary>
+    /// Qué hace un viaje por la puerta si un ítem no se puede confirmar después de cobrar (historia 3):
+    /// <c>todo-o-nada</c> (por defecto: se deshace entero) o <c>parcial</c> (lo que salió se queda; lo caído se suelta y se
+    /// devuelve su parte). Lo pone la puerta en la cabecera de negocio de <c>viajes.reserva</c>; el asistente de hotel
+    /// reserva un ítem, así que para él las dos son lo mismo.
+    /// </summary>
+    /// <remarks>Un sitio con el valor vacío hereda el de la base: la puerta no puede mandar el campo vacío.</remarks>
+    public string ConfirmationPolicy { get; init; } = PoliticaDeConfirmacion.TodoONada;
+
     /// <inheritdoc />
     protected override NegocioDeTravelShell Fusionar(TravelShellFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
-            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath));
+            BookingPath: CaminoDeCompra.Normalizar(propio?.BookingPath ?? BookingPath),
+            ConfirmationPolicy: PoliticaDeConfirmacion.Normalizar(propio?.ConfirmationPolicy)
+                ?? PoliticaDeConfirmacion.Normalizar(ConfirmationPolicy) ?? string.Empty);
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeTravelShell negocio)
@@ -38,6 +49,9 @@ public sealed class TravelShellFeatureSettings : SeccionDeNegocio<TravelShellFea
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             ReglasDeNegocio.Camino("BookingPath", negocio.BookingPath),
+            PoliticaDeConfirmacion.EsValida(negocio.ConfirmationPolicy)
+                ? null
+                : $"ConfirmationPolicy «{negocio.ConfirmationPolicy}» tiene que ser «{PoliticaDeConfirmacion.TodoONada}» o «{PoliticaDeConfirmacion.Parcial}».",
         }.OfType<string>();
 }
 
@@ -51,4 +65,7 @@ public sealed class TravelShellFeatureSitio
 
     /// <inheritdoc cref="TravelShellFeatureSettings.BookingPath"/>
     public string? BookingPath { get; init; }
+
+    /// <inheritdoc cref="TravelShellFeatureSettings.ConfirmationPolicy"/>
+    public string? ConfirmationPolicy { get; init; }
 }

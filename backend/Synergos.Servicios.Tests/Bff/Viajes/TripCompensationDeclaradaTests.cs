@@ -104,6 +104,7 @@ public sealed class TripCompensationDeclaradaTests : OraculoDelViaje, IDisposabl
                 }),
             });
             peticion.Headers.Add("Idempotency-Key", id);
+            ViajesReservaReal.ConNegocio(peticion, ViajesReservaReal.TodoONada);
             return ViajeAsync(peticion, ct);
         }
 

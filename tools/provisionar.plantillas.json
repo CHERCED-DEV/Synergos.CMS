@@ -56,7 +56,7 @@
     "key": "viajes.reserva.confirmada",
     "channel": "Email",
     "subject": "Tu viaje {numero} está confirmado",
-    "body": "<p>Hola {nombre}:</p><p>Tu viaje <b>{numero}</b> en {sitio} quedó confirmado: cada parte quedó reservada. Total: <b>{total}</b>.</p><p>El itinerario, con las fechas de cada parte, está en <a href=\"{enlace}\">{enlace}</a>.</p>"
+    "body": "<p>Hola {nombre}:</p><p>Tu viaje <b>{numero}</b> en {sitio} quedó confirmado. Total: <b>{total}</b>.{nota}</p><p>El itinerario, con las fechas de cada parte, está en <a href=\"{enlace}\">{enlace}</a>.</p>"
   },
   {
     "_": "El aviso de una matrícula activa (010-educacion-matricula): lo manda el paso notifications.avisar al final de «cerrar» en educacion.matricula, al alumno de la sesión y a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y los DECLARADOS en la definición (nombreDelCurso, nombreDelPlan: NM-2 de 010 con T091 del núcleo), y PlantillaDeLaMatriculaTests los cruza en los dos sentidos. El curso y el plan salen con el nombre que publicó la oferta del CMS (el título de la ficha y «Pago de contado»), nunca del navegador; sin plan, {nombreDelPlan} va vacío. Con un curso gratis {total} dice «0 COP»: el texto no promete un cobro. No ofrece devolución: la matrícula no la promete (lote 8, 010-P2).",

@@ -1162,6 +1162,15 @@
               "type": "string"
             },
             "x-synergos-puerta": true
+          },
+          {
+            "name": "X-Synergos-Negocio",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
           }
         ],
         "requestBody": {
@@ -1377,6 +1386,15 @@
         "parameters": [
           {
             "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          },
+          {
+            "name": "X-Synergos-Negocio",
             "in": "header",
             "required": true,
             "schema": {
@@ -3107,6 +3125,41 @@
                     "fin": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "precio": {
+                      "required": [
+                        "amount",
+                        "currency"
+                      ],
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "number",
+                          "format": "decimal"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "noCumplido": {
+                      "type": "boolean"
+                    },
+                    "devuelto": {
+                      "required": [
+                        "amount",
+                        "currency"
+                      ],
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "number",
+                          "format": "decimal"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -3357,6 +3410,41 @@
                     "fin": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "precio": {
+                      "required": [
+                        "amount",
+                        "currency"
+                      ],
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "number",
+                          "format": "decimal"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "noCumplido": {
+                      "type": "boolean"
+                    },
+                    "devuelto": {
+                      "required": [
+                        "amount",
+                        "currency"
+                      ],
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "number",
+                          "format": "decimal"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
