@@ -500,7 +500,7 @@ public sealed class CitaDeSaludTests
     }
 
     [Fact]
-    public async Task El_correo_de_la_cita_lleva_numero_total_y_enlace_y_el_contacto_no_queda_en_la_saga()
+    public async Task El_correo_de_la_cita_lleva_numero_fecha_y_hora_total_y_enlace_y_el_contacto_no_queda_en_la_saga()
     {
         // T024 (US5): se abre el .eml, no el log. La plantilla es la de provisionar.plantillas.json.
         using var c = new CitaDeSaludReal(conRecogida: true);
@@ -517,6 +517,12 @@ public sealed class CitaDeSaludTests
         Assert.Contains(numero, asunto, StringComparison.Ordinal);
         Assert.Contains("50.000 COP", cuerpo, StringComparison.Ordinal);
         Assert.Contains($"healthcare/?cita={id}", cuerpo, StringComparison.Ordinal);
+
+        // NN-6 (núcleo T091): la fecha y la hora de la cita, en la hora del sitio. Bogotá no cambia de hora: UTC−5.
+        var enElSitio = CitaDeSaludReal.Inicio.ToOffset(TimeSpan.FromHours(-5));
+        var franja = $"{enElSitio.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture)} a "
+            + enElSitio.AddMinutes(30).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Contains(franja, cuerpo, StringComparison.Ordinal);
 
         var guardado = string.Concat(Directory.EnumerateFiles(Path.Combine(c.Raiz, "flujos"), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
         Assert.Contains(id, guardado, StringComparison.Ordinal);

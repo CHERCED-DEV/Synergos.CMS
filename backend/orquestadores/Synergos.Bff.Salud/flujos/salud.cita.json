@@ -71,6 +71,7 @@
       "lee": ["paciente", "contacto", "total"],
       "llave": "avisar",
       "plantilla": "salud.cita.confirmada",
+      "valores": ["ventana"],
       "al_fallar": "seguir"
     }
   }
