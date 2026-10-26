@@ -18,13 +18,29 @@ public sealed class GovFeatureSettings : SeccionDeNegocio<GovFeatureSitio, Negoc
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/gov";
 
+    /// <summary>
+    /// Por dónde se radica: <c>puerta</c> (el flujo <c>gobierno.radicacion</c>, con la tasa por el orquestador) o
+    /// <c>directa</c> (la ruta del portal, como siempre). Sin valor no declara nada y decide la entrada de la puerta
+    /// (<c>Synergos:Puerta:Flujos:gobierno.radicacion:Camino</c>, «directa» en el <c>appsettings.json</c> base): un sitio
+    /// declara <c>puerta</c> después de verificarla en vivo (009-gobierno-tramite T033).
+    /// </summary>
+    public string? FilingPath { get; init; }
+
     /// <inheritdoc />
     protected override NegocioDeGov Fusionar(GovFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            FilingPath: CaminoDelFlujo.Normalizar(propio?.FilingPath ?? FilingPath));
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeGov negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            CaminoDelFlujo.EsValido(negocio.FilingPath)
+                ? null
+                : $"FilingPath: «{negocio.FilingPath}» tiene que ser «{CaminoDelFlujo.Puerta}» o «{CaminoDelFlujo.Directa}», o no estar (y decide la entrada de la puerta).",
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +50,7 @@ public sealed class GovFeatureSitio
 {
     /// <inheritdoc cref="GovFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="GovFeatureSettings.FilingPath"/>
+    public string? FilingPath { get; init; }
 }

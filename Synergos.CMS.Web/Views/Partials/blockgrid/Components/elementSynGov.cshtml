@@ -1,2 +1,12 @@
 @model Umbraco.Cms.Core.Models.Blocks.BlockGridItem
-@await Html.PartialAsync("SynHost/Gov", Model.Content)
+@*
+    <synergos-flujo> envuelve el portal de trámites (009-gobierno-tramite T030, ADR 0140 decisión 6 · F4): el coordinador
+    sin render que lleva la radicación a la puerta cuando el sitio declara ese camino. La CLAVE la pone el servidor, no el
+    bundle, y es la de GovResolutor.FlujoDeLaRadicacion; CoordinadorDelFlujoEnLasVistasTests la cruza con la tabla de la
+    puerta y con Synergos:Puerta:Flujos. Con el camino «directa» (el de por defecto) el elemento no le pide nada. Los
+    actos del funcionario y la subsanación (fase C) se anidarán aquí, un coordinador por flujo. El style en línea es para
+    antes de que el bundle defina la etiqueta.
+*@
+<synergos-flujo flujo="gobierno.radicacion" style="display:contents">
+    @await Html.PartialAsync("SynHost/Gov", Model.Content)
+</synergos-flujo>
