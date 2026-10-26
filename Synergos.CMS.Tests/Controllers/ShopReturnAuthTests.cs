@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 
@@ -33,7 +35,7 @@ public class ShopReturnAuthTests
 
     private sealed record Harness(ShopCatalogController Controller, IReturnService Returns);
 
-    private static Harness Make(bool authenticated, string? rolesHeld = null)
+    private static Harness Make(bool authenticated, string? rolesHeld = null, List<string>? rolesDelPersonal = null)
     {
         var gate = Substitute.For<IMemberAccessGate>();
         gate.IsAuthenticated.Returns(authenticated);
@@ -54,6 +56,14 @@ public class ShopReturnAuthTests
 
         var returns = Substitute.For<IReturnService>();
 
+        // Sin declarar, como un despliegue que no toca Synergos:Tienda: el controller no recibe ajustes.
+        IOptionsMonitor<TiendaSettings>? tienda = null;
+        if (rolesDelPersonal is not null)
+        {
+            tienda = Substitute.For<IOptionsMonitor<TiendaSettings>>();
+            tienda.CurrentValue.Returns(new TiendaSettings { RolesDelPersonal = rolesDelPersonal });
+        }
+
         var controller = new ShopCatalogController(
             Substitute.For<IProductCatalogProvider>(),
             Substitute.For<IShopOrderService>(),
@@ -64,7 +74,8 @@ public class ShopReturnAuthTests
             Substitute.For<IMessagingService>(),
             gate,
             Substitute.For<IShopQuery>(),
-            Substitute.For<ICatalogSocialProof>());
+            Substitute.For<ICatalogSocialProof>(),
+            tienda: tienda);
 
         return new Harness(controller, returns);
     }
@@ -146,5 +157,25 @@ public class ShopReturnAuthTests
         Assert.IsType<OkObjectResult>(result);
         await h.Returns.Received(1)
             .AdvanceAsync(RmaId, ShopReturnStatus.Refunded, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task El_personal_es_el_que_declara_el_despliegue_y_admin_deja_de_serlo()
+    {
+        // 013-seller-operaciones, T002 (lote 12, P1 = A): quién es personal lo declara
+        // Synergos:Tienda:RolesDelPersonal. Con un grupo propio, el vendedor atiende la
+        // devolución y un admin que no está en la lista ya no: `admin` era sólo el valor por defecto.
+        var vendedor = Make(authenticated: true, rolesHeld: "vendedor", rolesDelPersonal: ["vendedor"]);
+        vendedor.Returns.AdvanceAsync(RmaId, ShopReturnStatus.Refunded, null, Arg.Any<CancellationToken>())
+            .Returns(new ShopReturnCase(
+                RmaId, "ord_1", "line_1", "Audífonos", 1, 320_000m, "COP",
+                "No me sirvió", ShopReturnStatus.Refunded,
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null));
+        var admin = Make(authenticated: true, rolesHeld: "admin", rolesDelPersonal: ["vendedor"]);
+
+        Assert.IsType<OkObjectResult>(await vendedor.Controller.AdvanceReturn(RmaId, Body(), CancellationToken.None));
+        var prohibido = Assert.IsType<StatusCodeResult>(await admin.Controller.AdvanceReturn(RmaId, Body(), CancellationToken.None));
+        Assert.Equal(StatusCodes.Status403Forbidden, prohibido.StatusCode);
+        await admin.Returns.DidNotReceiveWithAnyArgs().AdvanceAsync(default!, default, default, default);
     }
 }

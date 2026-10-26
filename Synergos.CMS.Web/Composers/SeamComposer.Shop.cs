@@ -120,6 +120,10 @@ public sealed partial class SeamComposer
         // Encenderlo sin el BFF arriba degrada —no se puede comprar, y lo dice— pero la tienda
         // sigue sirviendo catálogo y fichas.
         services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
+        // Quién es personal de la tienda (013-seller-operaciones, T002): un rol en blanco no deja arrancar. Va aparte
+        // del Configure de arriba, que es lo que ModosDelComposeTests reconoce para encontrar la sección del Mode.
+        services.AddOptions<TiendaSettings>().ValidateOnStart();
+        services.AddSingleton<IValidateOptions<TiendaSettings>, ValidadorDeLaTienda>();
 
         // El registro de las compras de la PUERTA (004-tienda-compra, US 6): las anota en el mismo almacén
         // de órdenes para que «Mis compras», el seguimiento, la devolución y las reseñas las vean, con el

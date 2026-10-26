@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Tests.Services;
 using Synergos.CMS.Web.Controllers;
@@ -22,12 +24,18 @@ public sealed class OfertaDeLaTiendaControllerTests
     public OfertaDeLaTiendaControllerTests()
         => _tienda.SkusReservables().Returns(new HashSet<string>(StringComparer.Ordinal));
 
-    private OfertaDeLaTiendaController Montar(bool sesion = true, string? rol = "admin")
+    private OfertaDeLaTiendaController Montar(bool sesion = true, string? rol = "admin", List<string>? rolesDelPersonal = null)
     {
         var gate = Substitute.For<IMemberAccessGate>();
         gate.IsAuthenticated.Returns(sesion);
         gate.HasAnyRole(Arg.Any<string>()).Returns(c => rol is not null && c.Arg<string>().Split(',').Contains(rol));
-        return new OfertaDeLaTiendaController(_catalogo, _ofertas, gate, _tienda, NullLogger<OfertaDeLaTiendaController>.Instance);
+        IOptionsMonitor<TiendaSettings>? ajustes = null;
+        if (rolesDelPersonal is not null)
+        {
+            ajustes = Substitute.For<IOptionsMonitor<TiendaSettings>>();
+            ajustes.CurrentValue.Returns(new TiendaSettings { RolesDelPersonal = rolesDelPersonal });
+        }
+        return new OfertaDeLaTiendaController(_catalogo, _ofertas, gate, _tienda, NullLogger<OfertaDeLaTiendaController>.Instance, ajustes);
     }
 
     private static CatalogProductSummary Resumen(string id) => new(id, id, 1m, "COP", "", "", null, 0d, 0, 1);
@@ -57,6 +65,19 @@ public sealed class OfertaDeLaTiendaControllerTests
         var prohibido = Assert.IsType<ObjectResult>(await Montar(rol: "comprador").Republicar(default));
         Assert.Equal(StatusCodes.Status403Forbidden, prohibido.StatusCode);
         await _ofertas.DidNotReceiveWithAnyArgs().PublishAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task Republica_el_personal_que_declara_el_despliegue_y_no_un_admin_fuera_de_la_lista()
+    {
+        // 013-seller-operaciones, T002: la misma declaración que la RMA y la consola del vendedor.
+        Catalogo(1, 48);
+        _ofertas.PublishAsync(Arg.Any<ProductDetail>(), Arg.Any<CancellationToken>()).Returns(TiendaOfferOutcome.Published);
+
+        Assert.IsType<OkObjectResult>(await Montar(rol: "vendedor", rolesDelPersonal: ["vendedor"]).Republicar(default));
+        var prohibido = Assert.IsType<ObjectResult>(await Montar(rol: "admin", rolesDelPersonal: ["vendedor"]).Republicar(default));
+        Assert.Equal(StatusCodes.Status403Forbidden, prohibido.StatusCode);
+        await _ofertas.Received(1).PublishAsync(Arg.Any<ProductDetail>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
