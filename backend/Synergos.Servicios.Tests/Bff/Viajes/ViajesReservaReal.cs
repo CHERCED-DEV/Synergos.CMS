@@ -126,6 +126,23 @@ internal sealed class ViajesReservaReal : IDisposable
     public static object Item(string producto, DateTimeOffset inicio, DateTimeOffset fin, string? etiqueta = null)
         => new { producto, etiqueta, ventana = new { start = inicio, end = fin } };
 
+    /// <summary>
+    /// Provisiona un alojamiento como el manifiesto (lote 10, 006-H2): su recurso y su tarifa POR NOCHE
+    /// (<c>viajes.tarifa-noche</c>), y ninguna por producto.
+    /// </summary>
+    public async Task<ViajesReservaReal> ConAlojamiento(string producto, decimal porNoche, int cupos = 10)
+    {
+        await Crear("booking", "v1/resources", "recurso-" + producto,
+            new { subjectKind = "viajes.producto", subjectId = producto, capacity = cupos, timeZoneId = "UTC" });
+        await Crear("pricing", "v1/prices", "tarifa-noche-" + producto,
+            new { subjectKind = "viajes.tarifa-noche", subjectId = producto, amount = new { amount = porNoche, currency = "COP" } });
+        return this;
+    }
+
+    /// <summary>Un ítem con la marca de alojamiento: se cotiza por noche.</summary>
+    public static object ItemPorNoche(string producto, DateTimeOffset inicio, DateTimeOffset fin, string? etiqueta = null, bool porNoche = true)
+        => new { producto, etiqueta, ventana = new { start = inicio, end = fin }, porNoche };
+
     /// <summary>Ida en avión, dos noches de hotel y el auto de esos días.</summary>
     public static object[] ItinerarioDePrueba() =>
     [

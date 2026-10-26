@@ -31,6 +31,12 @@ public static class PasosDeViajes
 ///
 /// <para><b>La ventana invertida ya la rechaza el tipo <c>ventana</c></b> al leer el cuerpo (<c>viajes.entrada_invalida</c>);
 /// se comprueba igual aquí porque la regla es del dominio y no del cable.</para>
+///
+/// <para><b>El alojamiento se cotiza por noche</b> (lote 10, 006-H2): un ítem con <c>porNoche</c> va con su tarifa POR NOCHE
+/// (<see cref="TravelSubject.NightOf"/>) y las noches de su ventana como cantidad; vuelo y auto, con la tarifa del producto
+/// y cantidad uno. La marca la pone quien reserva, pero no decide el precio: cada clase de tarifa es otro sujeto en
+/// <c>Api.Pricing</c>, así que un alojamiento marcado «por producto» (o un vuelo marcado «por noche») no encuentra tarifa y
+/// la cotización se rechaza. Nadie paga una noche por tres.</para>
 /// </remarks>
 public sealed class PasoRevisarItinerario : IPaso
 {
@@ -70,7 +76,8 @@ public sealed class PasoRevisarItinerario : IPaso
             }
 
             var etiqueta = item.Has("etiqueta") ? item.Get<string?>("etiqueta")?.Trim() : null;
-            aCotizar.Add((TravelSubject.PriceOf(producto), 1));
+            var porNoche = item.Has("porNoche") && item.Get<bool?>("porNoche") is true;
+            aCotizar.Add(porNoche ? (TravelSubject.NightOf(producto), Noches(ventana)) : (TravelSubject.PriceOf(producto), 1));
             itinerario.Add(new ParadaDelViaje(producto, string.IsNullOrEmpty(etiqueta) ? producto : etiqueta, ventana.Start, ventana.End));
         }
 
@@ -79,6 +86,9 @@ public sealed class PasoRevisarItinerario : IPaso
     }
 
     private static Task<SalidaDePaso> Rechaza(Rejection motivo) => Task.FromResult(SalidaDePaso.Rechaza(motivo));
+
+    /// <summary>Las noches de una estadía: los días que cubre su ventana, al menos una.</summary>
+    public static int Noches(TimeWindow ventana) => Math.Max(1, (int)Math.Ceiling((ventana.End - ventana.Start).TotalDays));
 }
 
 /// <summary>

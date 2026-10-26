@@ -1,0 +1,73 @@
+{
+  "clave": "muestra.viaje",
+  "entrada": ["viajero", "items", "total", "politica"],
+  "tipos": {
+    "viajero": { "de": "sujeto" },
+    "items": { "lista": { "recurso": { "tipo": "ref", "kind": "muestra.cuarto" }, "ventana": "ventana" } },
+    "total": "dinero",
+    "politica": { "de": "negocio", "campo": "confirmacion", "tipo": "texto?" }
+  },
+  "salida": ["total", "vista"],
+  "fases": {
+    "abrir": [
+      "vista",
+      { "para_cada": "items", "como": "item", "pasos": ["hallar", "apartar"] },
+      "autorizar"
+    ],
+    "cerrar": [
+      "capturar",
+      { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["confirmar"] }
+    ]
+  },
+  "pasos": {
+    "vista": { "tipo": "muestra.vista", "lee": ["total"], "escribe": ["vista"] },
+    "hallar": {
+      "tipo": "booking.hallar",
+      "lee": ["item.recurso"],
+      "escribe": ["item.recursoId"],
+      "motivo": "el cuarto no tiene agenda"
+    },
+    "apartar": {
+      "tipo": "booking.apartar-por-indice",
+      "lee": ["item.recursoId", "item.ventana", "viajero"],
+      "escribe": ["item.apartadoId", "item.vence"],
+      "llave_base": "hold",
+      "motivo": "un cuarto del viaje no está disponible",
+      "reserva": {
+        "consumado_por": "confirmar",
+        "antes": "booking.liberar",
+        "despues": "booking.cancelar",
+        "motivo": "viaje no confirmado"
+      }
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["viajero", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "motivo": "el cobro no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "viaje no confirmado"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "el cobro no se pudo capturar"
+    },
+    "confirmar": {
+      "tipo": "booking.confirmar-por-indice",
+      "lee": ["hold.holdId"],
+      "escribe": ["hold.reservaId"],
+      "llave_base": "confirm",
+      "cierra_reserva": "apartar",
+      "al_fallar": "soltar",
+      "motivo": "un cuarto no se pudo confirmar tras cobrar"
+    }
+  }
+}

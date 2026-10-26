@@ -453,7 +453,7 @@ public sealed class TravelController : ControllerBase
         Currency: order.Currency,
         CreatedAt: order.CreatedAt,
         UpdatedAt: order.UpdatedAt,
-        Items: order.Items.Select(i => new ConfirmItemDto(
+        Items: order.Items.Select(i => new TripItemDto(
             Product: i.Product.ToString(),
             OfferId: i.OfferId,
             Label: i.Label,
@@ -461,7 +461,20 @@ public sealed class TravelController : ControllerBase
             Status: i.Status,
             Price: i.Price,
             PriceFormatted: _priceFormatter.Format(i.Price, i.Currency),
-            Currency: i.Currency)).ToList());
+            Currency: i.Currency,
+            Title: i.Label)).ToList(),
+        Ref: order.OrderRef,
+        Title: TituloDelViaje(order));
+
+    /// <summary>
+    /// Cómo se llama un viaje en «Mis viajes»: lo que reservó, parte por parte, como lo nombra la puerta; sin partes, su
+    /// código. Lote 10, 006-H1: travel-shell lee <c>ref</c> y <c>title</c> y descartaba cada viaje que no los traía.
+    /// </summary>
+    private static string TituloDelViaje(TravelOrder order)
+    {
+        var partes = order.Items.Select(i => i.Label.Trim()).Where(l => l.Length > 0).ToList();
+        return partes.Count > 0 ? string.Join(" · ", partes) : order.ConfirmationCode ?? order.OrderRef;
+    }
 
     // El stub de hoteles solo necesita ocupación por habitación; sin edades reales
     // en la query, sembramos edades de niño (8) para satisfacer "niño con adulto".
@@ -516,10 +529,20 @@ public sealed class TravelController : ControllerBase
     public sealed record ConfirmResponse(
         string Status, string ConfirmationCode, string OrderRef, IReadOnlyList<ConfirmItemDto> Items);
 
+    /// <summary>
+    /// Un viaje de «Mis viajes». <c>Ref</c> y <c>Title</c> son las claves que lee travel-shell (ADR 0083: la UI es la
+    /// fuente de verdad); las demás siguen como estaban.
+    /// </summary>
     public sealed record TripDto(
         string OrderRef, string Status, string? ConfirmationCode, string GuestName, string GuestEmail,
         string? CurrentStage, decimal Total, string TotalFormatted, string Currency,
-        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<ConfirmItemDto> Items);
+        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<TripItemDto> Items,
+        string Ref, string Title);
+
+    /// <summary>Una parte de un viaje de «Mis viajes»: la de la confirmación, más el <c>Title</c> que lee travel-shell.</summary>
+    public sealed record TripItemDto(
+        string Product, string OfferId, string Label, string ReservationId, string Status,
+        decimal Price, string PriceFormatted, string Currency, string Title);
 
     public sealed record TripsResponse(IReadOnlyList<TripDto> Trips);
 

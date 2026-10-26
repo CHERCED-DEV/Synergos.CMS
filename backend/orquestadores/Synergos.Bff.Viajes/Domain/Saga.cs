@@ -188,4 +188,11 @@ public static class TravelSubject
     /// hace que dos capacidades dejen de poder desplegarse por separado.
     /// </remarks>
     public static Ref PriceOf(string productRef) => Ref.Create("viajes.tarifa", productRef);
+
+    /// <summary>
+    /// El sujeto con el que <c>Api.Pricing</c> cotiza UNA NOCHE de un alojamiento (lote 10, 006-H2). Otra clase y no
+    /// «la misma tarifa por noches»: así un producto sólo tiene la tarifa de su clase, y marcarlo con la otra la deja sin
+    /// precio en vez de cobrarlo mal.
+    /// </summary>
+    public static Ref NightOf(string productRef) => Ref.Create("viajes.tarifa-noche", productRef);
 }

@@ -36,17 +36,118 @@
     "slotMinutes": 60
   },
   {
+    "_": "Viajes (lote 10, 006-H2 y H4): los productRef de las ofertas del hotel ({RoomTypeCode}/{RatePlanCode}, la regla de HttpHotelBookingService.ProductRef), cada uno con su recurso y su tarifa POR NOCHE (viajes.tarifa-noche), que la puerta multiplica por las noches. Los precios son los del catálogo de la base: FLEX la tarifa base, NREF el 90 %. Las dos tarifas de un tipo comparten las habitaciones de verdad, pero cada productRef es su propio recurso con el cupo del tipo. Vuelo y auto van por producto (viajes.tarifa) y se dan de alta como sus ofertas."
+  },
+  {
     "tipo": "recurso",
     "subjectKind": "viajes.producto",
-    "subjectId": "estandar/flexible",
-    "capacity": 10,
+    "subjectId": "STD/STD-FLEX",
+    "capacity": 6,
     "timeZoneId": "America/Bogota"
   },
   {
     "tipo": "precio",
-    "subjectKind": "viajes.tarifa",
-    "subjectId": "estandar/flexible",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "STD/STD-FLEX",
+    "amount": 220000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "STD/STD-NREF",
+    "capacity": 6,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "STD/STD-NREF",
+    "amount": 198000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "DLX/DLX-FLEX",
+    "capacity": 4,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "DLX/DLX-FLEX",
     "amount": 320000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "DLX/DLX-NREF",
+    "capacity": 4,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "DLX/DLX-NREF",
+    "amount": 288000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "STE/STE-FLEX",
+    "capacity": 2,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "STE/STE-FLEX",
+    "amount": 480000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "STE/STE-NREF",
+    "capacity": 2,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "STE/STE-NREF",
+    "amount": 432000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "FAM/FAM-FLEX",
+    "capacity": 3,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "FAM/FAM-FLEX",
+    "amount": 540000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "FAM/FAM-NREF",
+    "capacity": 3,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-noche",
+    "subjectId": "FAM/FAM-NREF",
+    "amount": 486000,
     "currency": "COP"
   }
 ]

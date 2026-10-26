@@ -506,8 +506,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             }
 
             // La confirmación parcial (NV-2): la definición declara que este cierre puede soltar su ítem, y el
-            // dominio dice si ESTA saga lo admite. La definición no evalúa nada.
-            if (definicion.SueltaSiFalla && item is not null && corrida.Saga is { } enCurso && _binding.SueltaSiFalla(enCurso))
+            // dominio dice si ESTA saga lo admite —en un flujo genérico, la extensión del vertical (NV-13)—. La
+            // definición no evalúa nada.
+            if (definicion.SueltaSiFalla && item is not null && corrida.Saga is { } enCurso && _binding.SueltaSiFalla(enCurso, corrida.Ctx))
             {
                 _log.LogWarning("El flujo {Flujo} suelta un ítem de «{Paso}» en la saga {Saga}: {Codigo}.",
                     _flujo.Clave, definicion.Id, corrida.SagaId, rechazo.Code);
@@ -562,7 +563,7 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         }
 
         var yaEstaban = saga.Compensations.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
-        saga = _binding.ConItemSoltado(saga, reservante, soltada);
+        saga = _binding.ConItemSoltado(saga, reservante, soltada, corrida.Ctx);
         foreach (var nueva in saga.Compensations.Where(c => !yaEstaban.Contains(c.Id) && c.IsPending).ToList())
         {
             saga = await IntentarAsync(corrida, saga, nueva, ct);
