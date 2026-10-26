@@ -53,6 +53,12 @@ public sealed class FlujosControllerTests : IDisposable
 
     private bool _conDestino = true;
 
+    /// <summary>La ruta del aviso que declara el sitio de la petición en la sección de prueba «Sitio» (D-006-AVISO).</summary>
+    private string? _rutaDelSitio;
+
+    /// <summary>Una sección de negocio de prueba con un campo de texto para la ruta del aviso y uno que no es texto.</summary>
+    internal sealed record NegocioDelSitio(string? Aviso, int Cupos = 0);
+
     private AvisoEnVivoDeLaPuerta? _enVivo;
 
     public FlujosControllerTests() => Sesion(Ana);
@@ -169,7 +175,10 @@ public sealed class FlujosControllerTests : IDisposable
         var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
         monitor.CurrentValue.Returns(_ajustes);
         var secciones = new SeccionesDelSitio(
-            [new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m))],
+            [
+                new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m)),
+                new SeccionDeNegocioRegistrada("Sitio", typeof(NegocioDelSitio), _ => new NegocioDelSitio(_rutaDelSitio)),
+            ],
             new ServiceCollection().BuildServiceProvider());
 
         var sut = new FlujosController(
@@ -645,6 +654,52 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Equal("sitio.test", contacto.GetProperty("sitio").GetString());
     }
 
+    /// <summary>El flujo de la compra con su aviso declarado POR SITIO en la sección de prueba (D-006-AVISO).</summary>
+    private void AvisoPorSitio()
+    {
+        var bien = _ajustes.Flujos[Flujo];
+        _ajustes.Flujos[Flujo] = new FlujoDeLaPuertaSettings
+        {
+            Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio,
+            Aviso = new AvisoDelFlujoSettings { Ruta = "/eventos/compra?compra={id}", Seccion = "Sitio", Campo = "Aviso" },
+        };
+    }
+
+    private string EnlaceDelContacto()
+    {
+        var cabecera = Assert.Single(_orquestador.Pedidos).Cabeceras["X-Synergos-Contacto"];
+        return JsonDocument.Parse(Convert.FromBase64String(cabecera.Replace('-', '+').Replace('_', '/').PadRight((cabecera.Length + 3) / 4 * 4, '=')))
+            .RootElement.GetProperty("enlace").GetString()!;
+    }
+
+    [Fact]
+    public async Task El_enlace_del_aviso_es_la_ruta_del_sitio_donde_se_reservo_si_el_flujo_la_declara_por_sitio()
+    {
+        AvisoPorSitio();
+        _rutaDelSitio = "/hoteles/?compra={id}";
+
+        await Pedir("POST", "cerrar", "id=s-1");
+
+        Assert.Equal("https://sitio.test/hoteles/?compra=s-1", EnlaceDelContacto());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("hoteles/?compra={id}")]
+    [InlineData("https://evil.test/?compra={id}")]
+    [InlineData("//evil.test/?compra={id}")]
+    [InlineData("/hoteles/?compra={orden}")]
+    public async Task Un_sitio_sin_ruta_o_con_una_que_no_se_puede_armar_cae_en_la_ruta_del_flujo(string? delSitio)
+    {
+        AvisoPorSitio();
+        _rutaDelSitio = delSitio;
+
+        await Pedir("POST", "cerrar", "id=s-1");
+
+        Assert.Equal("https://sitio.test/eventos/compra?compra=s-1", EnlaceDelContacto());
+    }
+
     // ── Lo que contesta ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -882,7 +937,10 @@ public sealed class FlujosControllerTests : IDisposable
     // ── La configuración, validada al arrancar ─────────────────────────────────────
 
     private static readonly SeccionesDelSitio Secciones = new(
-        [new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m))],
+        [
+            new SeccionDeNegocioRegistrada("Eventos", typeof(NegocioDeEventos), _ => new NegocioDeEventos("/api/eventos", 12m, 10m)),
+            new SeccionDeNegocioRegistrada("Sitio", typeof(NegocioDelSitio), _ => new NegocioDelSitio(null)),
+        ],
         new ServiceCollection().BuildServiceProvider());
 
     private static Microsoft.Extensions.Options.ValidateOptionsResult Validar(string clave, FlujoDeLaPuertaSettings flujo)
@@ -910,6 +968,9 @@ public sealed class FlujosControllerTests : IDisposable
         { "marcador", "la operación que avisa no lo trae" },
         { "sujeto-de", "SujetoDe «documento» tiene que ser «miembro» o «correo»" },
         { "en-vivo", "EnVivo avisa tras «pagar», que no es una operación del flujo" },
+        { "aviso-a-medias", "Aviso necesita Seccion y Campo juntos" },
+        { "aviso-seccion", "Aviso:Seccion «Sitios» no es una sección de negocio registrada" },
+        { "aviso-campo", "Aviso:Campo «Cupos» no es un campo de texto de NegocioDelSitio" },
     };
 
     [Theory]
@@ -932,6 +993,9 @@ public sealed class FlujosControllerTests : IDisposable
                 Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = bien.Aviso,
                 EnVivo = [new AvisoEnVivoSettings { Operacion = "pagar", Canal = "flujo:x:{id}", Nombre = "x" }],
             }),
+            "aviso-a-medias" => (Flujo, ConAviso(bien, new AvisoDelFlujoSettings { Ruta = bien.Aviso!.Ruta, Seccion = "Sitio" })),
+            "aviso-seccion" => (Flujo, ConAviso(bien, new AvisoDelFlujoSettings { Ruta = bien.Aviso!.Ruta, Seccion = "Sitios", Campo = "Aviso" })),
+            "aviso-campo" => (Flujo, ConAviso(bien, new AvisoDelFlujoSettings { Ruta = bien.Aviso!.Ruta, Seccion = "Sitio", Campo = "Cupos" })),
             _ => (Flujo, new FlujoDeLaPuertaSettings { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = new AvisoDelFlujoSettings { Ruta = "/compra?c={orden}" } }),
         };
 
@@ -939,6 +1003,19 @@ public sealed class FlujosControllerTests : IDisposable
 
         Assert.True(r.Failed, caso);
         Assert.Contains(motivo, r.FailureMessage, StringComparison.Ordinal);
+    }
+
+    private static FlujoDeLaPuertaSettings ConAviso(FlujoDeLaPuertaSettings bien, AvisoDelFlujoSettings aviso)
+        => new() { Acceso = bien.Acceso, SujetoKind = bien.SujetoKind, Negocio = bien.Negocio, Aviso = aviso };
+
+    [Fact]
+    public void La_ruta_del_aviso_por_sitio_es_opcional_y_con_su_campo_de_texto_arranca()
+    {
+        var bien = _ajustes.Flujos[Flujo];
+
+        Assert.True(Validar(Flujo, ConAviso(bien, new AvisoDelFlujoSettings { Ruta = bien.Aviso!.Ruta, Seccion = "Sitio", Campo = "Aviso" })).Succeeded);
+        // Sin la ruta del flujo no arranca aunque declare la del sitio: es la que rige donde un sitio no la declara.
+        Assert.True(Validar(Flujo, ConAviso(bien, new AvisoDelFlujoSettings { Seccion = "Sitio", Campo = "Aviso" })).Failed);
     }
 
     private static string RepoRoot()

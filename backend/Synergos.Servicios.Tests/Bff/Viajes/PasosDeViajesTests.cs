@@ -45,6 +45,33 @@ public sealed class PasosDeViajesTests
     }
 
     [Fact]
+    public async Task El_alojamiento_se_cotiza_con_su_tarifa_POR_NOCHE_y_las_noches_de_su_ventana()
+    {
+        var noche = new DateTimeOffset(2026, 11, 23, 0, 0, 0, TimeSpan.Zero);
+        var salida = await Revisar(
+            Item("SYN2200-ECOBAS", noche, noche.AddDays(1), "Bogotá → Cartagena"),
+            Item("STD/STD-FLEX", noche, noche.AddDays(3), "Habitación Estándar").Set("porNoche", (bool?)true),
+            Item("ECON", noche, noche.AddDays(3)).Set("porNoche", (bool?)false));
+
+        var aCotizar = Assert.IsAssignableFrom<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(salida.Valores[0]);
+        Assert.Equal(new[]
+        {
+            (Ref.Create("viajes.tarifa", "SYN2200-ECOBAS"), 1),
+            (Ref.Create("viajes.tarifa-noche", "STD/STD-FLEX"), 3),
+            // El auto de tres días sigue por producto: sólo el alojamiento va por noche (006-H2).
+            (Ref.Create("viajes.tarifa", "ECON"), 1),
+        }, aCotizar);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(24, 1)]
+    [InlineData(25, 2)]
+    [InlineData(72, 3)]
+    public void Las_noches_de_una_estadia_son_los_dias_que_cubre_y_al_menos_una(int horas, int noches)
+        => Assert.Equal(noches, PasoRevisarItinerario.Noches(TimeWindow.Of(Dia, Dia.AddHours(horas))));
+
+    [Fact]
     public async Task El_mismo_producto_en_OTRO_periodo_vale_y_en_el_mismo_no()
     {
         var idaYVuelta = await Revisar(Item("vuelo/AV-8020", Dia, Dia.AddHours(2)), Item("vuelo/AV-8020", Dia.AddDays(4), Dia.AddDays(4).AddHours(2)));

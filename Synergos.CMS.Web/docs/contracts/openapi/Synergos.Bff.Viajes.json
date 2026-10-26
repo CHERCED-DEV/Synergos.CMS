@@ -3254,6 +3254,12 @@
                       "format": "date-time"
                     }
                   }
+                },
+                "porNoche": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
                 }
               }
             }
