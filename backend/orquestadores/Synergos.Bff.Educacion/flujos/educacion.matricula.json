@@ -11,14 +11,15 @@
   "para_lo_posterior": ["cobroId", "total"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
-    "abrir": ["linea", "cotizar", "desglose", "autorizar"],
+    "abrir": ["linea", "nombres", "cotizar", "desglose", "autorizar"],
     "cerrar": ["capturar", "avisar"]
   },
   "pasos": {
-    "linea": {
-      "tipo": "educacion.linea",
+    "linea": { "tipo": "forma.una-linea-de-oferta", "lee": ["curso", "plan"], "escribe": ["aCotizar"] },
+    "nombres": {
+      "tipo": "educacion.nombres",
       "lee": ["curso", "plan"],
-      "escribe": ["aCotizar", "nombreDelCurso", "nombreDelPlan"]
+      "escribe": ["nombreDelCurso", "nombreDelPlan"]
     },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": {

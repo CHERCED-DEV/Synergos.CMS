@@ -5,4 +5,6 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="BookingPath">Por dónde reserva el elemento si el despliegue lo DECLARA
 /// (<see cref="CaminoDeCompra.Puerta"/> o <see cref="CaminoDeCompra.Directa"/>), ya normalizado; nulo si no lo
 /// declara, y entonces decide la regla de <see cref="CaminoDeCompra.Decidir"/> (línea 006, P5).</param>
-public sealed record NegocioDeBookingWizard(string ApiBase, string? BookingPath = null);
+/// <param name="AvisoRuta">La ruta del enlace del aviso de una estadía reservada en ESTE sitio (<c>/hoteles/?viaje={id}</c>),
+/// que la puerta lee por sitio (D-006-AVISO); nula si el sitio no la declara, y entonces rige la del flujo.</param>
+public sealed record NegocioDeBookingWizard(string ApiBase, string? BookingPath = null, string? AvisoRuta = null);

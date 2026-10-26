@@ -167,5 +167,20 @@ public static class FlujosDeclarados
 
     private static BindingDeFlujo Binding(IServiceProvider sp, FlujoDef flujo)
         => new(flujo, sp.GetRequiredService<TiposDeValor>(), sp.GetRequiredService<IRegistroDePasos>(),
-            (sp.GetRequiredService<ICompensationExecutor<SagaDeFlujo>>() as IConoceSusTipos)?.Tipos ?? Array.Empty<string>());
+            (sp.GetRequiredService<ICompensationExecutor<SagaDeFlujo>>() as IConoceSusTipos)?.Tipos ?? Array.Empty<string>(),
+            Extension(sp, flujo));
+
+    /// <summary>
+    /// La extensión del vertical para este flujo (NV-13), si la registró; dos para el mismo flujo no arrancan, porque no
+    /// habría regla de cuál contesta.
+    /// </summary>
+    private static IExtensionDelFlujo? Extension(IServiceProvider sp, FlujoDef flujo)
+    {
+        var suyas = sp.GetServices<IExtensionDelFlujo>().Where(e => string.Equals(e.Flujo, flujo.Clave, StringComparison.Ordinal)).ToList();
+        return suyas.Count <= 1
+            ? suyas.SingleOrDefault()
+            : throw new InvalidOperationException(
+                $"El flujo «{flujo.Clave}» tiene {suyas.Count} extensiones ({string.Join(", ", suyas.Select(e => e.GetType().Name))}) "
+                + "y sólo puede tener una: no habría regla de cuál contesta si suelta un ítem.");
+    }
 }

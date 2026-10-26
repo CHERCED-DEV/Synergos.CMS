@@ -149,6 +149,26 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
     TSaga ConItemSoltado(TSaga saga, string reservante, HoldLeg soltada) => saga;
 
     /// <summary>
+    /// <see cref="SueltaSiFalla(TSaga)"/> con el contexto de la fase (NV-13 de Viajes): lo que pregunta el intérprete. Por
+    /// defecto, la respuesta sin contexto de una saga tipada.
+    /// </summary>
+    /// <remarks>Un binding genérico no guarda la política en un campo de su saga: la tiene en el contexto que la saga
+    /// reconstruye, y se la pasa a la extensión del vertical (<see cref="IExtensionDelFlujo"/>).</remarks>
+    bool SueltaSiFalla(TSaga saga, FlowContext ctx) => SueltaSiFalla(saga);
+
+    /// <summary>
+    /// <see cref="ConItemSoltado(TSaga, string, HoldLeg)"/> con el contexto de la fase (NV-13): lo que llama el intérprete.
+    /// Por defecto, el de una saga tipada.
+    /// </summary>
+    TSaga ConItemSoltado(TSaga saga, string reservante, HoldLeg soltada, FlowContext ctx) => ConItemSoltado(saga, reservante, soltada);
+
+    /// <summary>
+    /// Si un vertical extiende este flujo genérico (NV-13), los tipos de compensación que su extensión puede armar al
+    /// soltar un ítem; nulo si nadie lo extiende. El validador cruza con esto <c>al_fallar: soltar</c>.
+    /// </summary>
+    IReadOnlyCollection<string>? ArmaLaExtension => null;
+
+    /// <summary>
     /// Los tipos de valor con que este binding lee y guarda (núcleo N1): sólo un binding genérico los
     /// tiene. Con ellos, el validador cruza además las reglas del modo genérico.
     /// </summary>
@@ -184,6 +204,8 @@ public enum FormaDeReserva
 /// <param name="Tipos">Los tipos de valor de un binding genérico; con ellos se cruzan las reglas del modo
 /// genérico (núcleo N1). Nulo en una saga tipada.</param>
 /// <param name="Deshacer">Los tipos de compensación que sabe deshacer el ejecutor, si se conocen.</param>
+/// <param name="ArmaLaExtension">Lo que puede armar la extensión del vertical al soltar un ítem (NV-13); nulo si nadie
+/// extiende el flujo.</param>
 /// <remarks>
 /// <b>Existe porque el JSON y el C# se escriben en sitios distintos.</b> La definición nombra fases,
 /// campos y pasos que algún código tiene que poner; si los dos se desvían, el lector y el
@@ -198,7 +220,8 @@ public sealed record ContratoDelFlujo(
     Type Saga,
     IReadOnlyDictionary<string, IReadOnlyCollection<string>>? Efimera = null,
     TiposDeValor? Tipos = null,
-    IReadOnlyCollection<string>? Deshacer = null)
+    IReadOnlyCollection<string>? Deshacer = null,
+    IReadOnlyCollection<string>? ArmaLaExtension = null)
 {
     /// <summary>Ninguna fase con nada efímero.</summary>
     public static IReadOnlyDictionary<string, IReadOnlyCollection<string>> SinEfimera { get; } =
@@ -215,6 +238,6 @@ public sealed record ContratoDelFlujo(
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(fases);
         return new(fases, binding.PoneAlAbrir, binding.Reconstruye, binding.CamposDeItem, binding.Reservas, typeof(TSaga),
-            binding.Efimera, binding.Tipos, binding.Deshacer);
+            binding.Efimera, binding.Tipos, binding.Deshacer, binding.ArmaLaExtension);
     }
 }

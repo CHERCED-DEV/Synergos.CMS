@@ -120,6 +120,18 @@ public sealed class AvisoDelFlujoSettings
 {
     /// <summary>Ruta del sitio, con los parámetros de la operación entre llaves: <c>/eventos/?compra={id}</c>.</summary>
     public string? Ruta { get; init; }
+
+    /// <summary>
+    /// Opcional (D-006-AVISO): la sección de negocio registrada de la que sale la ruta POR SITIO, como el camino. Con
+    /// <see cref="Campo"/>; sin las dos, rige <see cref="Ruta"/> en todos los sitios.
+    /// </summary>
+    public string? Seccion { get; init; }
+
+    /// <summary>
+    /// El campo de texto de <see cref="Seccion"/> con la ruta del sitio donde se reservó. Un sitio que no la declara, o
+    /// que declara una que no se puede armar, cae en <see cref="Ruta"/>: nunca en una página que no existe.
+    /// </summary>
+    public string? Campo { get; init; }
 }
 
 /// <summary>De qué sale el id del sujeto que pone la puerta.</summary>

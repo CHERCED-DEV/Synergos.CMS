@@ -86,7 +86,7 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
         new PiezaPublicada<Synergos.Bff.Alquiler.Contracts.RentalResponse>("Alquiler"),
         new PiezaPublicada<Synergos.Bff.Reservas.Contracts.OfertaDeServicioResponse>("Reservas"),
-        new PiezaPublicada<Synergos.Bff.Educacion.Contracts.OfertaDeCursoResponse>("Educacion"),
+        new PiezaPublicada<Synergos.Bff.Educacion.Contracts.NombresDelCursoResponse>("Educacion"),
         new PiezaPublicada<Synergos.Bff.Propiedades.Domain.PasoValidarVisita>("Propiedades"),
         new PiezaPublicada<Synergos.Bff.Viajes.Contracts.TripResponse>("Viajes"),
         new PiezaPublicada<Synergos.Bff.Gobierno.Contracts.OfertaDeTramiteResponse>("Gobierno",

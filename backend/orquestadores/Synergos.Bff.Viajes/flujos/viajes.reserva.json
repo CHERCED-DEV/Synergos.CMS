@@ -3,7 +3,7 @@
   "entrada": ["viajero", "items"],
   "tipos": {
     "viajero": { "de": "sujeto" },
-    "items": { "lista": { "producto": "texto", "etiqueta": "texto?", "ventana": "ventana" } },
+    "items": { "lista": { "producto": "texto", "etiqueta": "texto?", "ventana": "ventana", "porNoche": "booleano?" } },
     "contacto": { "de": "contacto" }
   },
   "salida": ["itinerario", "subtotal", "descuento", "impuesto", "total", "vence"],

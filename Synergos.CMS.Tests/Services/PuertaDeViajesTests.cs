@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Tests.Services;
@@ -31,15 +34,22 @@ public sealed class PuertaDeViajesTests
         Assert.True(ajustes.Flujos.TryGetValue(Flujo, out var reserva), $"{Flujo} no está en Synergos:Puerta:Flujos.");
         Assert.Equal(AccesoDeLaPuerta.Miembro, reserva!.Acceso);
         Assert.Equal("/viajes/?viaje={id}", reserva.Aviso?.Ruta);
+        // La ruta del sitio donde se reservó (D-006-AVISO): la del asistente, si el sitio la declara.
+        Assert.Equal(("BookingWizard", "AvisoRuta"), (reserva.Aviso?.Seccion, reserva.Aviso?.Campo));
 
         // Sólo esta entrada: las demás las vigila su propia línea.
         var sola = new PuertaSettings
         {
             Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [Flujo] = reserva },
         };
-        var resultado = new ValidadorDeLaPuerta(TablaDeLaPuerta.Incrustada()).Validate(null, sola);
+        var resultado = new ValidadorDeLaPuerta(TablaDeLaPuerta.Incrustada(), SeccionesDeViajes).Validate(null, sola);
         Assert.True(resultado.Succeeded, resultado.FailureMessage);
     }
+
+    /// <summary>Las secciones de negocio de Viajes, como las registra el arranque.</summary>
+    private static readonly SeccionesDelSitio SeccionesDeViajes = new(
+        [new SeccionDeNegocioRegistrada("BookingWizard", typeof(NegocioDeBookingWizard), _ => new NegocioDeBookingWizard("/api/booking"))],
+        new ServiceCollection().BuildServiceProvider());
 
     [Fact]
     public void El_sujeto_de_la_puerta_es_quien_viaja_para_los_clientes_de_viajes()

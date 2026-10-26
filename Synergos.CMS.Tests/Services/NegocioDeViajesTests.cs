@@ -101,6 +101,32 @@ public sealed class NegocioDeViajesTests
         Assert.Contains("o no estar (y decide la regla", error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>La ruta del aviso por sitio (D-006-AVISO): vacía en la base, la del sitio donde se reservó.</summary>
+    [Fact]
+    public void La_ruta_del_aviso_es_del_sitio_que_la_declara_y_en_los_demas_rige_la_del_flujo()
+    {
+        var asistente = Seccion<BookingWizardFeatureSettings>(new() { [$"Sitios:{Bogota}:AvisoRuta"] = " /hoteles/?viaje={id} " });
+
+        Assert.Equal("/hoteles/?viaje={id}", asistente.Para(Bogota).AvisoRuta);
+        Assert.Null(asistente.Para(Medellin).AvisoRuta);
+        Assert.Null(new BookingWizardFeatureSettings().Para(null).AvisoRuta);
+    }
+
+    [Theory]
+    [InlineData("https://evil.test/?viaje={id}")]
+    [InlineData("//evil.test/?viaje={id}")]
+    [InlineData("hoteles/?viaje={id}")]
+    public void Una_ruta_del_aviso_que_no_es_del_sitio_no_deja_arrancar(string ruta)
+    {
+        using var sp = Proveedor<BookingWizardFeatureSettings, NegocioDeBookingWizard>(
+            BookingWizardFeatureSettings.Seccion, "Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:AvisoRuta", ruta);
+
+        var error = Assert.Throws<OptionsValidationException>(() => sp.GetRequiredService<IStartupValidator>().Validate());
+
+        Assert.Contains("AvisoRuta", error.Message, StringComparison.Ordinal);
+        Assert.Contains("tiene que ser una ruta del sitio", error.Message, StringComparison.Ordinal);
+    }
+
     // ── Ayudantes ────────────────────────────────────────────────────────────────────────────
 
     private static TSeccion Seccion<TSeccion>(Dictionary<string, string?> claves)

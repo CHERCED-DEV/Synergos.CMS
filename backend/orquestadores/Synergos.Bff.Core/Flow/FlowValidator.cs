@@ -59,6 +59,7 @@ public static class FlowValidator
 
         RevisarReservas(flujo, donde, contrato, errores);
         RevisarAlFallar(flujo, donde, errores);
+        RevisarExtension(flujo, contrato, errores);
         RevisarSinVuelta(flujo, registro, donde, errores);
         RevisarConservadas(flujo, registro, errores);
         RevisarPosterior(flujo, registro, donde, errores);
@@ -368,6 +369,47 @@ public static class FlowValidator
     /// pueden ir pasos que también siguen: uno que abortara deshaciendo lo demás anularía un pedido que
     /// quizá sí se cumplió.</para>
     /// </remarks>
+    /// <summary>
+    /// La confirmación parcial de un flujo GENÉRICO se cruza con la extensión del vertical que la contesta (NV-13), en
+    /// los dos sentidos, y lo que esa extensión arma con lo que sabe deshacer el ejecutor de la saga.
+    /// </summary>
+    /// <remarks>
+    /// Una saga tipada contesta ella misma (NV-2) y aquí no se mira. En un flujo genérico, un <c>soltar</c> sin extensión
+    /// es una regla que nadie cumple: su enlace dice siempre que no, y el paso aborta como si no la declarara. Una
+    /// extensión sin <c>soltar</c> es código que nadie llama. Lo que la extensión lee o reescribe lo guarda la saga, y sus
+    /// tipos los mira <see cref="RevisarModoGenerico"/> con lo demás que se reconstruye.
+    /// </remarks>
+    private static void RevisarExtension(FlujoDef flujo, ContratoDelFlujo contrato, List<string> errores)
+    {
+        if (contrato.Tipos is null) return;
+
+        var sueltan = flujo.Pasos.Values.Where(p => p.SueltaSiFalla).Select(p => p.Id).Order(StringComparer.Ordinal).ToList();
+        if (contrato.ArmaLaExtension is not { } arma)
+        {
+            foreach (var id in sueltan)
+            {
+                errores.Add($"«{id}» declara «al_fallar: soltar» y ningún vertical extiende el flujo (IExtensionDelFlujo): nadie "
+                    + "diría que una saga lo admite, y el paso abortaría siempre.");
+            }
+            return;
+        }
+
+        if (sueltan.Count == 0)
+        {
+            errores.Add("un vertical lo extiende (IExtensionDelFlujo) y ningún paso declara «al_fallar: soltar»: nadie le "
+                + "preguntaría nada a la extensión.");
+        }
+
+        if (contrato.Deshacer is { } conocidos)
+        {
+            foreach (var tipo in arma.Where(t => !conocidos.Contains(t, StringComparer.Ordinal)).Order(StringComparer.Ordinal))
+            {
+                errores.Add($"su extensión arma «{tipo}» al soltar un ítem, y nadie sabe deshacer ese tipo "
+                    + $"(se conocen: {string.Join(", ", conocidos.Order(StringComparer.Ordinal))}).");
+            }
+        }
+    }
+
     private static void RevisarAlFallar(
         FlujoDef flujo, Dictionary<string, (int Fase, ParaCadaDef? Bloque)> donde, List<string> errores)
     {
@@ -1280,14 +1322,19 @@ public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
 {
     private readonly IRegistroDePasos _registro;
     private readonly CatalogoDeProcesos? _procesos;
+    private readonly IReadOnlyList<IExtensionDelFlujo> _extensiones;
 
     /// <param name="registro">Los pasos registrados.</param>
     /// <param name="procesos">Las definiciones de los procesos (núcleo, lote 7): las registra el arranque desde
     /// <c>{Origen}:Procesos:Archivo</c>, y un orquestador sin procesos no las necesita.</param>
-    public FlowDefinitionValidator(IRegistroDePasos registro, CatalogoDeProcesos? procesos = null)
+    /// <param name="extensiones">Lo que registran los verticales para contestar por sus flujos genéricos (NV-13): cada una
+    /// tiene que extender un flujo genérico que exista.</param>
+    public FlowDefinitionValidator(
+        IRegistroDePasos registro, CatalogoDeProcesos? procesos = null, IEnumerable<IExtensionDelFlujo>? extensiones = null)
     {
         _registro = registro;
         _procesos = procesos;
+        _extensiones = extensiones?.ToList() ?? [];
     }
 
     public ValidateOptionsResult Validate(string? name, FlowCatalog options)
@@ -1313,6 +1360,21 @@ public sealed class FlowDefinitionValidator : IValidateOptions<FlowCatalog>
                     + "tiene con qué cruzarlo al arrancar: falta el catálogo de procesos ({Origen}:Procesos:Archivo)."));
         }
         errores.AddRange(FlowValidator.ValidarPosteriores(options.Flujos, _registro));
+
+        // Una extensión de un flujo que no existe, o de uno tipado, no la llama nadie: suele ser una clave mal escrita.
+        foreach (var extension in _extensiones.OrderBy(e => e.Flujo, StringComparer.Ordinal))
+        {
+            var registrado = options.Flujos.FirstOrDefault(f => string.Equals(f.Flujo.Clave, extension.Flujo, StringComparison.Ordinal));
+            if (registrado is null)
+            {
+                errores.Add($"{extension.GetType().Name} extiende el flujo «{extension.Flujo}», y el orquestador no tiene ese flujo.");
+            }
+            else if (registrado.Contrato.Tipos is null)
+            {
+                errores.Add($"{extension.GetType().Name} extiende el flujo «{extension.Flujo}», que no es genérico: su saga tipada "
+                    + "contesta ella misma si suelta un ítem (NV-2).");
+            }
+        }
         return errores.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errores);
     }
 }
