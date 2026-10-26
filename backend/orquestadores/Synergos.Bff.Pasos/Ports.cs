@@ -44,6 +44,19 @@ public interface IPricingPort
         IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, string? promocion, CancellationToken ct);
 }
 
+/// <summary>Lo que hace una oferta publicada en las capacidades (P12; NM-1 de 010, NN-16 de 005, NE-7 de 007).</summary>
+/// <remarks>Hoy, sólo el precio: el pozo y el recurso de la agenda entran cuando una oferta declarada los pida (001-P11).</remarks>
+public interface IOfertaPort
+{
+    /// <summary>
+    /// Fija el precio de <paramref name="sujeto"/> en <c>Api.Pricing</c>, sin impuesto, vigente hasta
+    /// <paramref name="hasta"/> (nulo: sin fin). Devuelve el identificador del precio.
+    /// </summary>
+    /// <remarks>Retirar un precio es fijarlo con <paramref name="hasta"/> en el instante de retirar: la cotización
+    /// lo rechaza desde entonces y el precio sigue ahí, con su historia.</remarks>
+    Task<Result<string>> FijarPrecioAsync(Ref sujeto, Money precio, DateTimeOffset? hasta, IdempotencyKey llave, CancellationToken ct);
+}
+
 /// <summary>Apartar y consumir existencias de un pozo contable de <c>Api.Inventory</c>.</summary>
 public interface IInventoryPort
 {

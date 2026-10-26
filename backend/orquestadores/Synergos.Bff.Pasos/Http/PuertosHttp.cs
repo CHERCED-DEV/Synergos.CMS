@@ -21,7 +21,7 @@ namespace Synergos.Bff.Pasos.Http;
 /// <c>EventosCapabilities</c>, que sigue siendo el de Eventos (supuesto P5).</para>
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
-    IPricingPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
+    IPricingPort, IOfertaPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
     IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort,
     IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos
 {
@@ -62,6 +62,25 @@ public sealed class PuertosHttp : CapabilityClients,
             Money.Of(q.Tax.Amount, q.Tax.Currency),
             Money.Of(q.Total.Amount, q.Total.Currency),
             q.Lines?.Select(l => (Ref.Create(l.SubjectKind, l.SubjectId), Money.Of(l.UnitPrice.Amount, l.UnitPrice.Currency))).ToList()));
+
+    /// <summary>Fija un precio sin impuesto, vigente hasta <paramref name="hasta"/> (la oferta declarada, P12).</summary>
+    public Task<Result<PrecioDto>> FijarPrecioDeLaOfertaAsync(
+        Ref sujeto, Money precio, DateTimeOffset? hasta, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Post<PrecioDto>(Pricing, "v1/prices", new
+        {
+            subjectKind = sujeto.Kind,
+            subjectId = sujeto.Id,
+            amount = new { amount = precio.Amount, currency = precio.Currency },
+            taxRateBasisPoints = 0,
+            validTo = hasta,
+        }, llave, ct);
+    }
+
+    async Task<Result<string>> IOfertaPort.FijarPrecioAsync(
+        Ref sujeto, Money precio, DateTimeOffset? hasta, IdempotencyKey llave, CancellationToken ct)
+        => (await FijarPrecioDeLaOfertaAsync(sujeto, precio, hasta, llave, ct)).Map(p => p.Id);
 
     // ── Inventory ───────────────────────────────────────────────────────────
 
@@ -385,6 +404,7 @@ public sealed record DineroDto(decimal Amount, string Currency);
 public sealed record CotizacionDto(
     DineroDto Subtotal, DineroDto Tax, DineroDto Total, DineroDto? Discount = null, IReadOnlyList<LineaCotizadaDto>? Lines = null);
 public sealed record LineaCotizadaDto(string SubjectKind, string SubjectId, DineroDto UnitPrice);
+public sealed record PrecioDto(string Id, DateTimeOffset? ValidTo);
 public sealed record ExistenciaDto(string Id);
 public sealed record ApartadoDto(string Id);
 public sealed record CobroDto(string Id, DineroDto Refundable);

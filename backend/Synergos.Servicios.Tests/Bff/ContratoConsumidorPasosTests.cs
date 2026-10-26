@@ -37,6 +37,8 @@ public sealed class ContratoConsumidorPasosTests
     private static readonly Dictionary<string, Func<PuertosHttp, Task>> Recorrido = new(StringComparer.Ordinal)
     {
         ["CotizarHttpAsync"] = p => p.CotizarHttpAsync([(Ref.Create("muestra.servicio", "consulta"), 1)], "BIENVENIDA10", Ct),
+        ["FijarPrecioDeLaOfertaAsync"] = p => p.FijarPrecioDeLaOfertaAsync(
+            Ref.Create("muestra.pieza.variante", "p-1/premium"), Monto, Ventana.End, Llave, Ct),
         ["HallarExistenciaAsync"] = p => p.HallarExistenciaAsync(Ref.Create("muestra.pozo", "p-1"), Ct),
         ["ApartarExistenciaAsync"] = p => p.ApartarExistenciaAsync("po-1", 2, Algo, Llave, Ct),
         ["ConsumirExistenciaAsync"] = p => p.ConsumirExistenciaAsync("ah-1", Ct),
