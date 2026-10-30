@@ -7,9 +7,9 @@ using Synergos.CMS.Web.Services;
 namespace Synergos.CMS.Web.Controllers;
 
 /// <summary>
-/// Las lecturas del personal de la tienda (013-seller-operaciones, T011): la bandeja de los pedidos pagados de la tienda
-/// entera y el detalle de uno con su envío. Las lee la consola del vendedor; la ruta del comprador (<c>GET orders</c>,
-/// «Mis compras») no se toca.
+/// Las rutas del personal de la tienda (013-seller-operaciones): la bandeja de los pedidos pagados de la tienda entera, el
+/// detalle de uno con su envío (T011) y el acto que lo despacha (T019). Las usa la consola del vendedor; la ruta del
+/// comprador (<c>GET orders</c>, «Mis compras») no se toca.
 /// </summary>
 /// <remarks>
 /// <para><b>Sólo el personal</b>, con los roles de <c>Synergos:Tienda:RolesDelPersonal</c> (el mismo valor que la RMA y
@@ -22,23 +22,46 @@ namespace Synergos.CMS.Web.Controllers;
 /// <para><b>El envío de un pedido de la puerta lo lee el orquestador</b>, porque la dirección sólo la guarda el envío; el
 /// de la directa sale de su <c>ShipTo</c>. Si no se pudo leer, <c>envio</c> es nulo con su motivo, y el pedido se ve
 /// igual.</para>
+///
+/// <para><b>El acto decide por el camino del pedido</b> (R4): uno de la puerta envía y entrega por el orquestador
+/// (<see cref="DespachosDeLaPuerta"/>) y, si sale, el seguimiento del comprador lo sigue con la guía como nota; con un
+/// rechazo, el seguimiento se queda donde estaba. Preparar, y todo lo de la directa, sólo mueven el seguimiento, con su
+/// asiento de auditoría: es lo que no deja rastro en una saga del orquestador (FR-002).</para>
 /// </remarks>
 [ApiController]
 [Route("api/shop/seller")]
 public sealed class VendedorDeLaTiendaController : ControllerBase
 {
+    /// <summary>La guía más larga que acepta el acto de enviar.</summary>
+    public const int GuiaMaxima = 80;
+
+    /// <summary>A qué etapa del seguimiento lleva cada acto.</summary>
+    private static readonly IReadOnlyDictionary<string, string> EtapaDelActo = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["preparar"] = "preparing",
+        ["enviar"] = "shipped",
+        ["entregar"] = "delivered",
+    };
+
     private readonly PedidosDeLaTienda _pedidos;
     private readonly RegistroDeComprasDeLaTienda _registro;
+    private readonly DespachosDeLaPuerta _despachos;
+    private readonly IOrderTrackingService _seguimiento;
+    private readonly IAuditTrailWriter _auditoria;
     private readonly IMemberAccessGate _gate;
     private readonly IPriceFormatter _precios;
     private readonly IOptionsMonitor<TiendaSettings>? _tienda;
 
     public VendedorDeLaTiendaController(
-        PedidosDeLaTienda pedidos, RegistroDeComprasDeLaTienda registro, IMemberAccessGate gate, IPriceFormatter precios,
+        PedidosDeLaTienda pedidos, RegistroDeComprasDeLaTienda registro, DespachosDeLaPuerta despachos,
+        IOrderTrackingService seguimiento, IAuditTrailWriter auditoria, IMemberAccessGate gate, IPriceFormatter precios,
         IOptionsMonitor<TiendaSettings>? tienda = null)
     {
         _pedidos = pedidos;
         _registro = registro;
+        _despachos = despachos;
+        _seguimiento = seguimiento;
+        _auditoria = auditoria;
         _gate = gate;
         _precios = precios;
         _tienda = tienda;
@@ -79,6 +102,83 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         return Ok(new DetalleDto(
             dto.OrderRef, dto.OrderNumber, dto.Fecha, dto.Comprador, dto.Camino, dto.Etapa, dto.Total, dto.TotalFormatted,
             dto.Moneda, dto.Lineas, dto.Actos, dto.MotivoSinActos, envio, motivo));
+    }
+
+    /// <summary>
+    /// El acto del personal sobre un pedido pagado: <c>preparar</c>, <c>enviar</c> (con su guía, si la hay) o
+    /// <c>entregar</c>. Contesta el pedido como en la bandeja, ya en su etapa nueva.
+    /// </summary>
+    /// <remarks>
+    /// Sólo el acto que el pedido tiene (<c>actos</c> de la bandeja): otro es 409 con la etapa en que sigue, y repetir uno
+    /// ya hecho también, sin sellar el seguimiento otra vez.
+    /// </remarks>
+    [HttpPost("orders/{orderRef}/advance")]
+    public async Task<IActionResult> Avanzar(string orderRef, [FromBody] ActoDelPedidoDto? cuerpo, CancellationToken ct = default)
+    {
+        if (RequirePersonal() is { } denegado) return denegado;
+
+        var acto = cuerpo?.Acto?.Trim() ?? string.Empty;
+        if (!EtapaDelActo.TryGetValue(acto, out var etapa))
+        {
+            return BadRequest(new { code = "tienda.acto_desconocido", error = $"«{acto}» no es un acto del despacho: preparar, enviar o entregar." });
+        }
+        var guia = cuerpo?.Guia is { } escrita && !string.IsNullOrWhiteSpace(escrita) ? escrita.Trim() : null;
+        if (guia is not null && (acto != "enviar" || guia.Length > GuiaMaxima || guia.Any(char.IsControl)))
+        {
+            return BadRequest(new { code = "tienda.guia_invalida", error = $"La guía: hasta {GuiaMaxima} caracteres, en una línea, y sólo al enviar." });
+        }
+
+        var pedido = await _pedidos.PedidoAsync(orderRef, ct);
+        if (pedido is null) return NotFound(new { error = "Pedido no encontrado." });
+        if (!pedido.Actos.Contains(acto, StringComparer.Ordinal))
+        {
+            return pedido.MotivoSinActos == "despacho_no_disponible"
+                ? Conflict(new { code = DespachosDeLaPuerta.NoDisponible, error = "Los pedidos de la puerta no se despachan desde este sitio.", etapa = pedido.Etapa })
+                : Conflict(new { code = "tienda.acto_fuera_de_orden", error = $"El pedido está en «{pedido.Etapa}»: «{acto}» no le toca.", etapa = pedido.Etapa });
+        }
+
+        var porElOrquestador = pedido.Orden.ViaGate && acto is "enviar" or "entregar";
+        if (porElOrquestador)
+        {
+            var despacho = acto == "enviar"
+                ? await _despachos.EnviarAsync(pedido.Orden.OrderRef, guia, ct)
+                : await _despachos.EntregarAsync(pedido.Orden.OrderRef, ct);
+            if (!despacho.Bien) return Rechazo(despacho);
+        }
+
+        await _seguimiento.AdvanceAsync(pedido.Orden.OrderRef, etapa, guia, ct);
+        if (!porElOrquestador) await AsentarAsync(pedido, acto, etapa, guia, ct);
+
+        var movido = await _pedidos.PedidoAsync(orderRef, ct);
+        return movido is null ? NotFound(new { error = "Pedido no encontrado." }) : Ok(ComoDto(movido));
+    }
+
+    /// <summary>Un rechazo del despacho, con su código: lo transitorio es 503, y lo demás 409 (o la guarda de la puerta).</summary>
+    private ObjectResult Rechazo(DespachoDeLaPuerta despacho) => StatusCode(
+        despacho.Transitorio
+            ? StatusCodes.Status503ServiceUnavailable
+            : despacho.Codigo switch
+            {
+                "puerta.sesion_requerida" => StatusCodes.Status401Unauthorized,
+                "puerta.personal_requerido" => StatusCodes.Status403Forbidden,
+                _ => StatusCodes.Status409Conflict,
+            },
+        new { code = despacho.Codigo, error = despacho.Mensaje, transient = despacho.Transitorio });
+
+    /// <summary>El rastro de un acto que no pasó por el orquestador (FR-002): quién, sobre qué pedido y de qué etapa a cuál.</summary>
+    private Task AsentarAsync(PedidoDeLaTienda pedido, string acto, string etapa, string? guia, CancellationToken ct)
+    {
+        var correo = _gate.CurrentMemberEmail ?? string.Empty;
+        return _auditoria.WriteAsync(new AuditEvent(
+            Id: Guid.NewGuid().ToString("N"),
+            OccurredAtUtc: DateTime.UtcNow,
+            ActorEmail: correo,
+            ActorName: _gate.CurrentMemberDisplayName ?? correo,
+            Action: "shop.order-dispatch",
+            Resource: pedido.Orden.OrderRef,
+            Outcome: "success",
+            Detail: $"{acto}: {pedido.Etapa} → {etapa}" + (guia is null ? string.Empty : $" (guía {guia})"),
+            Assertion: IdentityAssertions.CmsSession), ct);
     }
 
     private IActionResult? RequirePersonal()
@@ -127,6 +227,9 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         MotivoSinActos: p.MotivoSinActos);
 
     // ── Lo que sale (contracts/cms-y-ui.md de 013): la UI es la fuente de las claves que lee (ADR 0083) ──
+
+    /// <summary>El cuerpo del acto: <c>preparar</c>, <c>enviar</c> o <c>entregar</c>, y la guía, sólo al enviar.</summary>
+    public sealed record ActoDelPedidoDto(string? Acto, string? Guia);
 
     /// <summary>Una línea del pedido.</summary>
     public sealed record LineaDto(string Title, int Qty, decimal Amount, string AmountFormatted);

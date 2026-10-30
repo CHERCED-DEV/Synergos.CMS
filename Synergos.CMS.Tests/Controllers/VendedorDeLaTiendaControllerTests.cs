@@ -12,6 +12,7 @@ using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Tests.Controllers;
 
@@ -32,6 +33,10 @@ public sealed class VendedorDeLaTiendaControllerTests
 
     private static readonly ShopShippingAddress Bogota = new("Calle 1 # 2-3", "Apto 4", "Bogotá", "Cundinamarca", "110111", "CO", "Beto");
 
+    /// <summary>Las claves de un pedido de la bandeja (<c>contracts/cms-y-ui.md</c>), que es también lo que contesta el acto.</summary>
+    private static readonly string[] PedidoDeLaBandeja =
+        ["orderRef", "orderNumber", "fecha", "comprador", "camino", "etapa", "total", "totalFormatted", "moneda", "lineas", "actos", "motivoSinActos"];
+
     private const string EnvioDelOrquestador = """
         {"compra":"pta-1","envio":{"id":"shp_1",
          "destino":{"line1":"Carrera 7 # 8-9","line2":null,"city":"Medellín","region":"Antioquia","postalCode":null,"country":"CO","contact":"Ana"},
@@ -48,15 +53,28 @@ public sealed class VendedorDeLaTiendaControllerTests
         public LibroDeComprasDeLaPuerta Libro { get; }
         public VendedorDeLaTiendaController Controlador { get; }
 
+        /// <summary>Si la puerta abre el despacho en el sitio (los dos flujos, T017).</summary>
+        public bool PuertaAbierta { get; set; } = true;
+
+        /// <summary>Lo que el controlador asentó en la auditoría.</summary>
+        public List<AuditEvent> Asientos { get; } = [];
+
         public Tienda(bool sesion = true, string? roles = "admin", List<string>? rolesDelPersonal = null)
         {
             Seguimiento = new StubOrderTrackingService(null, () => T0, Almacen, "tracking-shop");
             Libro = new LibroDeComprasDeLaPuerta(Almacen, Seguimiento, null, () => T0);
             var puerta = Substitute.For<IPuertaDeLosFlujos>();
-            puerta.Abre(Arg.Any<string>()).Returns(true);
+            puerta.Abre(Arg.Any<string>()).Returns(_ => PuertaAbierta);
 
             var ajustesDeLaPuerta = new PuertaSettings();
             ajustesDeLaPuerta.Flujos["tienda.compra"] = new FlujoDeLaPuertaSettings { Acceso = AccesoDeLaPuerta.Miembro, SujetoKind = "tienda.comprador" };
+            foreach (var flujo in new[] { DespachosDeLaPuerta.FlujoDelEnvio, DespachosDeLaPuerta.FlujoDeLaEntrega })
+            {
+                ajustesDeLaPuerta.Flujos[flujo] = new FlujoDeLaPuertaSettings
+                {
+                    Acceso = AccesoDeLaPuerta.Personal, Roles = ["admin"], SujetoKind = "tienda.personal",
+                };
+            }
             var monitor = Substitute.For<IOptionsMonitor<PuertaSettings>>();
             monitor.CurrentValue.Returns(ajustesDeLaPuerta);
             var registro = new RegistroDeComprasDeLaTienda(
@@ -80,8 +98,14 @@ public sealed class VendedorDeLaTiendaControllerTests
                 tienda.CurrentValue.Returns(new TiendaSettings { RolesDelPersonal = rolesDelPersonal });
             }
 
+            var despachos = new DespachosDeLaPuerta(
+                TablaDeLaPuerta.Incrustada(), puerta, new ReenvioDeLaPuerta(Orquestador, NullLogger<ReenvioDeLaPuerta>.Instance), gate, monitor);
+            var auditoria = Substitute.For<IAuditTrailWriter>();
+            auditoria.WriteAsync(Arg.Do<AuditEvent>(e => Asientos.Add(e)), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
             Controlador = new VendedorDeLaTiendaController(
-                new PedidosDeLaTienda(new OrdenesDeLaTienda(Almacen), Seguimiento, puerta), registro, gate, precios, tienda);
+                new PedidosDeLaTienda(new OrdenesDeLaTienda(Almacen), Seguimiento, puerta), registro, despachos, Seguimiento, auditoria,
+                gate, precios, tienda);
         }
 
         public Task Directa(string orderRef, DateTimeOffset cuando, ShopShippingAddress? shipTo = null)
@@ -106,6 +130,12 @@ public sealed class VendedorDeLaTiendaControllerTests
         public Dictionary<string, string> Completadas { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, (HttpStatusCode Estado, string Cuerpo)> Envios { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Lo que contesta un acto del despacho; sin él, el flujo completado con el estado que deja.</summary>
+        public (HttpStatusCode Estado, string Cuerpo)? Despacho { get; set; }
+
+        /// <summary>Los actos del despacho que le llegaron, con su cuerpo.</summary>
+        public List<(string Flujo, string Cuerpo)> Despachos { get; } = [];
+
         public HttpClient CreateClient(string name) => new(new Manejador(this)) { BaseAddress = new Uri("http://tienda.local/") };
 
         private sealed class Manejador(Orquestador o) : HttpMessageHandler
@@ -120,6 +150,18 @@ public sealed class VendedorDeLaTiendaControllerTests
                 if (ruta.StartsWith("/v1/envios/", StringComparison.Ordinal) && o.Envios.TryGetValue(id, out var envio))
                 {
                     return Responder(envio.Estado, envio.Cuerpo);
+                }
+                if (r.Method == HttpMethod.Post && id is DespachosDeLaPuerta.FlujoDelEnvio or DespachosDeLaPuerta.FlujoDeLaEntrega)
+                {
+                    using var lector = new StreamReader(r.Content!.ReadAsStream(ct));
+                    var cuerpo = lector.ReadToEnd();
+                    lock (o.Despachos) o.Despachos.Add((id, cuerpo));
+                    var estado = id == DespachosDeLaPuerta.FlujoDelEnvio ? "InTransit" : "Delivered";
+                    var (codigo, respuesta) = o.Despacho ?? (HttpStatusCode.Created, $$$"""
+                        {"id":"despacho-1","flujo":"{{{id}}}","numero":"ENV00001","estado":"Completed","error":null,
+                         "datos":{"compra":"pta-1","estadoDelEnvio":"{{{estado}}}"}}
+                        """);
+                    return Responder(codigo, respuesta);
                 }
                 if (ruta.StartsWith("/v1/flujos/tienda.compra/", StringComparison.Ordinal) && o.Completadas.ContainsKey(id)
                     && sujeto == $"tienda.comprador:{Ana:n}")
@@ -199,9 +241,7 @@ public sealed class VendedorDeLaTiendaControllerTests
         Assert.Equal(["pedidos", "pagina", "porPagina", "total", "cuentas", "sinConciliar"], Claves(cuerpo));
         Assert.Equal(["paid", "preparing", "shipped", "delivered"], Claves(cuerpo.GetProperty("cuentas")));
         var pedido = cuerpo.GetProperty("pedidos")[0];
-        Assert.Equal(
-            ["orderRef", "orderNumber", "fecha", "comprador", "camino", "etapa", "total", "totalFormatted", "moneda", "lineas", "actos", "motivoSinActos"],
-            Claves(pedido));
+        Assert.Equal(PedidoDeLaBandeja, Claves(pedido));
         Assert.Equal(["title", "qty", "amount", "amountFormatted"], Claves(pedido.GetProperty("lineas")[0]));
         Assert.Equal(("dir-1", "directa", "paid", "Beto"),
             (pedido.GetProperty("orderRef").GetString(), pedido.GetProperty("camino").GetString(), pedido.GetProperty("etapa").GetString(),
@@ -313,4 +353,194 @@ public sealed class VendedorDeLaTiendaControllerTests
         Assert.IsType<NotFoundObjectResult>(await t.Controlador.Detalle("no-existe"));
         Assert.IsType<NotFoundObjectResult>(await t.Controlador.Detalle("pta-pendiente"));
     }
+
+    // ── El acto (T019, R4) ───────────────────────────────────────────────────────────────────
+
+    private static Task<IActionResult> Acto(Tienda t, string orderRef, string? acto, string? guia = null)
+        => t.Controlador.Avanzar(orderRef, new VendedorDeLaTiendaController.ActoDelPedidoDto(acto, guia));
+
+    /// <summary>El estado y el cuerpo de una respuesta que no es 200.</summary>
+    private static (int Estado, JsonElement Cuerpo) Fallo(IActionResult resultado)
+    {
+        var objeto = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.IsNotType<OkObjectResult>(resultado);
+        return (objeto.StatusCode!.Value, JsonSerializer.SerializeToElement(objeto.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+    }
+
+    private static async Task<(string Etapa, string? Nota)> Seguimiento(Tienda t, string orderRef)
+    {
+        var linea = (await t.Seguimiento.GetTimelineAsync(orderRef))!;
+        return (linea.CurrentStage, linea.Stages.Single(s => s.Stage == linea.CurrentStage).Note);
+    }
+
+    [Fact]
+    public async Task Preparar_mueve_el_seguimiento_por_los_dos_caminos_con_su_asiento_y_sin_ir_al_orquestador()
+    {
+        var t = new Tienda();
+        await t.Directa("dir-1", T0, Bogota);
+        await t.DeLaPuerta("pta-1");
+
+        var directa = Cuerpo(await Acto(t, "dir-1", "preparar"));
+        var puerta = Cuerpo(await Acto(t, "pta-1", "preparar"));
+
+        Assert.Equal(("preparing", "enviar"), (directa.GetProperty("etapa").GetString(), directa.GetProperty("actos")[0].GetString()));
+        Assert.Equal(("preparing", "enviar"), (puerta.GetProperty("etapa").GetString(), puerta.GetProperty("actos")[0].GetString()));
+        Assert.Equal(PedidoDeLaBandeja, Claves(puerta));
+        Assert.Empty(t.Orquestador.Despachos);
+        Assert.Equal(["dir-1", "pta-1"], t.Asientos.Select(a => a.Resource));
+        Assert.All(t.Asientos, a => Assert.Equal(("shop.order-dispatch", "preparar: paid → preparing"), (a.Action, a.Detail)));
+    }
+
+    [Fact]
+    public async Task Enviar_y_entregar_uno_de_la_puerta_van_por_el_orquestador_y_despues_el_seguimiento_con_la_guia()
+    {
+        var t = new Tienda();
+        await t.DeLaPuerta("pta-1");
+        await Acto(t, "pta-1", "preparar");
+        t.Asientos.Clear();
+
+        var enviado = Cuerpo(await Acto(t, "pta-1", "enviar", "  GUIA-123  "));
+
+        Assert.Equal(("shipped", "entregar"), (enviado.GetProperty("etapa").GetString(), enviado.GetProperty("actos")[0].GetString()));
+        Assert.Equal(("shipped", "GUIA-123"), await Seguimiento(t, "pta-1"));
+        var (flujo, cuerpo) = Assert.Single(t.Orquestador.Despachos);
+        Assert.Equal(DespachosDeLaPuerta.FlujoDelEnvio, flujo);
+        Assert.Equal("GUIA-123", JsonDocument.Parse(cuerpo).RootElement.GetProperty("guia").GetString());
+        Assert.Contains(t.Orquestador.Pedidos, p => p == $"POST /v1/flujos/tienda.envio tienda.personal:{Personal:n}");
+
+        var entregado = Cuerpo(await Acto(t, "pta-1", "entregar"));
+
+        Assert.Equal("delivered", entregado.GetProperty("etapa").GetString());
+        Assert.Equal(0, entregado.GetProperty("actos").GetArrayLength());
+        Assert.Equal("entregado", entregado.GetProperty("motivoSinActos").GetString());
+        Assert.Equal(DespachosDeLaPuerta.FlujoDeLaEntrega, t.Orquestador.Despachos[1].Flujo);
+        // Lo que pasó por el orquestador tiene su rastro en la saga, que es del personal: no se asienta otra vez.
+        Assert.Empty(t.Asientos);
+    }
+
+    [Fact]
+    public async Task Enviar_y_entregar_uno_de_la_directa_solo_mueven_el_seguimiento_con_su_asiento_y_no_llaman_a_la_puerta()
+    {
+        var t = new Tienda();
+        await t.Directa("dir-1", T0, Bogota);
+        await Acto(t, "dir-1", "preparar");
+
+        Cuerpo(await Acto(t, "dir-1", "enviar", "GUIA-9"));
+        Assert.Equal(("shipped", "GUIA-9"), await Seguimiento(t, "dir-1"));
+        var entregado = Cuerpo(await Acto(t, "dir-1", "entregar"));
+
+        Assert.Equal("delivered", entregado.GetProperty("etapa").GetString());
+        Assert.Empty(t.Orquestador.Despachos);
+        Assert.Equal(
+            ["preparar: paid → preparing", "enviar: preparing → shipped (guía GUIA-9)", "entregar: shipped → delivered"],
+            t.Asientos.Select(a => a.Detail));
+    }
+
+    [Fact]
+    public async Task Un_rechazo_del_orquestador_pasa_con_su_codigo_y_el_seguimiento_se_queda_donde_estaba()
+    {
+        var t = new Tienda();
+        await t.DeLaPuerta("pta-1");
+        await Acto(t, "pta-1", "preparar");
+        t.Orquestador.Despacho = (HttpStatusCode.Conflict,
+            """{"code":"flow.original_sin_dato","detail":"La compra no tiene «envio».","transient":false}""");
+
+        var (estado, cuerpo) = Fallo(await Acto(t, "pta-1", "enviar", "GUIA-123"));
+
+        Assert.Equal((409, "flow.original_sin_dato", false),
+            (estado, cuerpo.GetProperty("code").GetString(), cuerpo.GetProperty("transient").GetBoolean()));
+        Assert.Equal(("preparing", null), await Seguimiento(t, "pta-1"));
+    }
+
+    [Fact]
+    public async Task Una_caida_del_orquestador_es_503_transitorio_y_no_se_mueve_nada()
+    {
+        var t = new Tienda();
+        await t.DeLaPuerta("pta-1");
+        await Acto(t, "pta-1", "preparar");
+        t.Orquestador.Despacho = (HttpStatusCode.ServiceUnavailable,
+            """{"code":"fulfillment.unreachable","detail":"fulfillment no respondió.","transient":true}""");
+
+        var (estado, cuerpo) = Fallo(await Acto(t, "pta-1", "enviar"));
+
+        Assert.Equal((503, true), (estado, cuerpo.GetProperty("transient").GetBoolean()));
+        Assert.Equal("preparing", (await Seguimiento(t, "pta-1")).Etapa);
+    }
+
+    [Fact]
+    public async Task Fuera_de_orden_es_409_con_la_etapa_y_repetir_no_sella_ni_despacha_dos_veces()
+    {
+        var t = new Tienda();
+        await t.DeLaPuerta("pta-1");
+
+        var (antes, saltado) = Fallo(await Acto(t, "pta-1", "enviar"));
+        Assert.Equal((409, "tienda.acto_fuera_de_orden", "paid"),
+            (antes, saltado.GetProperty("code").GetString(), saltado.GetProperty("etapa").GetString()));
+
+        await Acto(t, "pta-1", "preparar");
+        await Acto(t, "pta-1", "enviar", "GUIA-123");
+        var (otraVez, repetido) = Fallo(await Acto(t, "pta-1", "enviar", "GUIA-999"));
+
+        Assert.Equal((409, "shipped"), (otraVez, repetido.GetProperty("etapa").GetString()));
+        Assert.Single(t.Orquestador.Despachos);
+        Assert.Equal(("shipped", "GUIA-123"), await Seguimiento(t, "pta-1"));
+        Assert.Single(t.Asientos);
+    }
+
+    [Fact]
+    public async Task La_guia_es_de_una_linea_de_hasta_80_y_solo_al_enviar_y_el_acto_uno_de_los_tres()
+    {
+        var t = new Tienda();
+        await t.Directa("dir-1", T0, Bogota);
+        await Acto(t, "dir-1", "preparar");
+
+        Assert.Equal(("tienda.guia_invalida", 400), Codigo(await Acto(t, "dir-1", "enviar", new string('x', 81))));
+        Assert.Equal(("tienda.guia_invalida", 400), Codigo(await Acto(t, "dir-1", "enviar", "GUIA\n123")));
+        Assert.Equal(("tienda.guia_invalida", 400), Codigo(await Acto(t, "dir-1", "entregar", "GUIA-123")));
+        Assert.Equal(("tienda.acto_desconocido", 400), Codigo(await Acto(t, "dir-1", "despachar")));
+        Assert.Equal(("tienda.acto_desconocido", 400), Codigo(await Acto(t, "dir-1", null)));
+        Assert.Equal("preparing", (await Seguimiento(t, "dir-1")).Etapa);
+
+        // Ochenta, recortada, sí.
+        Assert.IsType<OkObjectResult>(await Acto(t, "dir-1", "enviar", "  " + new string('x', 80) + "  "));
+
+        static (string?, int) Codigo(IActionResult r)
+        {
+            var (estado, cuerpo) = Fallo(r);
+            return (cuerpo.GetProperty("code").GetString(), estado);
+        }
+    }
+
+    [Fact]
+    public async Task Con_el_despacho_cerrado_en_el_sitio_uno_de_la_puerta_no_se_despacha_y_la_directa_si()
+    {
+        var t = new Tienda { PuertaAbierta = false };
+        await t.DeLaPuerta("pta-1");
+        await t.Directa("dir-1", T0, Bogota);
+
+        var (estado, cuerpo) = Fallo(await Acto(t, "pta-1", "preparar"));
+
+        Assert.Equal((409, DespachosDeLaPuerta.NoDisponible), (estado, cuerpo.GetProperty("code").GetString()));
+        Assert.Equal("paid", (await Seguimiento(t, "pta-1")).Etapa);
+        Assert.IsType<OkObjectResult>(await Acto(t, "dir-1", "preparar"));
+    }
+
+    [Fact]
+    public async Task El_acto_tiene_la_guarda_del_personal_y_no_mueve_nada_sin_ella()
+    {
+        var sinSesion = new Tienda(sesion: false);
+        await sinSesion.DeLaPuerta("pta-1");
+        var sinRol = new Tienda(roles: "editor");
+        await sinRol.DeLaPuerta("pta-1");
+
+        Assert.IsType<UnauthorizedObjectResult>(await Acto(sinSesion, "pta-1", "preparar"));
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(await Acto(sinRol, "pta-1", "preparar")).StatusCode);
+        Assert.Equal("paid", (await Seguimiento(sinSesion, "pta-1")).Etapa);
+        Assert.Equal("paid", (await Seguimiento(sinRol, "pta-1")).Etapa);
+        Assert.Empty(sinSesion.Asientos.Concat(sinRol.Asientos));
+    }
+
+    [Fact]
+    public async Task Un_pedido_que_no_existe_es_404()
+        => Assert.IsType<NotFoundObjectResult>(await Acto(new Tienda(), "no-existe", "preparar"));
 }
