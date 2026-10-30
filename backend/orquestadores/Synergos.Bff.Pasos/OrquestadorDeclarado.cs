@@ -73,7 +73,7 @@ public static class OrquestadorDeclarado
         var zona = TimeZoneInfo.FindSystemTimeZoneById(
             builder.Configuration[$"{vocabulario.Origin}:ZonaHoraria"] is { Length: > 0 } declarada ? declarada : PasoAvisar.ZonaPorDefecto);
         builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), zona,
-            [new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), sp.GetRequiredService<TiposDeValor>()), .. propios]));
+            [new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), TiposDeValor.Sumados(sp.GetServices<TiposDeValor>())), .. propios]));
         return builder.AddFlujosGenericos(vocabulario, ensamblado);
     }
 }

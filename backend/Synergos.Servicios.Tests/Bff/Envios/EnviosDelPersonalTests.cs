@@ -14,6 +14,7 @@ using Synergos.Bff.Pasos;
 using Synergos.Bff.Pasos.Http;
 using Synergos.CMS.Tests.Architecture;
 using Synergos.CMS.Tests.Bff.FlujoDeMuestra;
+using Synergos.Shared;
 
 namespace Synergos.CMS.Tests.Bff;
 
@@ -94,6 +95,42 @@ public sealed class EnviosDelPersonalTests
         Assert.Equal("Ready", (await a.Detalle("desp-1")).Cuerpo.GetProperty("datos").GetProperty("estado").GetString());
     }
 
+    [Fact]
+    public async Task Un_vertical_que_registra_su_propia_lista_de_tipos_no_tapa_los_del_host()
+    {
+        // Medido en vivo con el Bff.Tienda real: su lista (contacto, dirección y sus líneas) tapaba la del host, y la lectura
+        // que devuelve los eventos del envío no arrancaba. Los registros se suman.
+        await using var a = await Bodega.Arrancar(conSusTipos: true);
+        await a.Despachar("desp-1");
+
+        var (estado, cuerpo) = await a.Detalle("desp-1");
+
+        Assert.True(estado == HttpStatusCode.OK, cuerpo.ToString());
+        Assert.Equal(JsonValueKind.Array, cuerpo.GetProperty("datos").GetProperty("eventos").ValueKind);
+    }
+
+    [Fact]
+    public void Sumar_registros_cuenta_una_vez_el_mismo_tipo_y_no_arranca_con_dos_distintos_del_mismo_nombre()
+    {
+        var sumados = TiposDeValor.Sumados([TiposDeValor.Con(new TipoContacto()), TiposDeValor.Con(new TipoContacto(), new TipoEventosDeEnvio())]);
+
+        Assert.NotNull(sumados.Resolver("eventos-de-envio"));
+        Assert.NotNull(sumados.Resolver("contacto"));
+        var ex = Assert.Throws<InvalidOperationException>(() => TiposDeValor.Sumados([TiposDeValor.Con(new TipoFranjas()), TiposDeValor.Con(new OtrasFranjas())]));
+        Assert.Contains("«franjas»", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Un tipo que se llama como las franjas del host y no lo es.</summary>
+    private sealed class OtrasFranjas : ITipoDeValor
+    {
+        public string Nombre => "franjas";
+        public Type Clr => typeof(string);
+        public bool Guardable => false;
+        public object Leer(JsonElement valor, string donde) => valor.GetString()!;
+        public System.Text.Json.Nodes.JsonNode Escribir(object valor) => System.Text.Json.Nodes.JsonValue.Create((string)valor)!;
+        public System.Text.Json.Nodes.JsonObject Esquema() => new() { ["type"] = "string" };
+    }
+
     // ── Lo que el arranque exige (NS-1: el estado; NS-2: el detalle) ───────
 
     private sealed class SinRed : IHttpClientFactory
@@ -161,7 +198,9 @@ public sealed class EnviosDelPersonalTests
 
         public HttpClient Cliente { get; private set; } = null!;
 
-        public static async Task<Bodega> Arrancar()
+        /// <param name="conSusTipos">Si el vertical registra DESPUÉS su propia lista de tipos de valor sin los del envío, como la
+        /// Tienda y Viajes (el interino de N-12 de 004): el host los suma, no los pierde.</param>
+        public static async Task<Bodega> Arrancar(bool conSusTipos = false)
         {
             var b = new Bodega();
             try
@@ -175,7 +214,20 @@ public sealed class EnviosDelPersonalTests
                     ["Muestra:ApiKey"] = Llave,
                 });
                 builder.Services.AddSingleton<IHttpClientFactory>(b.Capacidades);
-                b._app = ArranqueDeLaMuestra.Construir(builder);
+                if (conSusTipos)
+                {
+                    builder.AddCorrelation();
+                    builder.AddOrquestadorDeclarado(ArranqueDeLaMuestra.Vocabulario, typeof(EnviosDelPersonalTests).Assembly);
+                    builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion()));
+                    b._app = builder.Build();
+                    b._app.UseCorrelation();
+                    b._app.UseSharedKeyAuth(b._app.Configuration["Muestra:ApiKey"]);
+                    b._app.MapFlujosDeclarados();
+                }
+                else
+                {
+                    b._app = ArranqueDeLaMuestra.Construir(builder);
+                }
                 await b._app.StartAsync();
                 b.Cliente = b._app.GetTestClient();
                 b.Cliente.DefaultRequestHeaders.Add("X-Synergos-Key", Llave);

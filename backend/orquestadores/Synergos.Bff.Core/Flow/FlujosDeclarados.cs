@@ -166,7 +166,7 @@ public static class FlujosDeclarados
     }
 
     private static BindingDeFlujo Binding(IServiceProvider sp, FlujoDef flujo)
-        => new(flujo, sp.GetRequiredService<TiposDeValor>(), sp.GetRequiredService<IRegistroDePasos>(),
+        => new(flujo, TiposDeValor.Sumados(sp.GetServices<TiposDeValor>()), sp.GetRequiredService<IRegistroDePasos>(),
             (sp.GetRequiredService<ICompensationExecutor<SagaDeFlujo>>() as IConoceSusTipos)?.Tipos ?? Array.Empty<string>(),
             Extension(sp, flujo));
 
