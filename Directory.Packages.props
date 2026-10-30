@@ -147,4 +147,21 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" Condition="'$(TargetFramework)' != 'net8.0'" />
   </ItemGroup>
 
+  <!--
+    SixLabors.ImageSharp 3.2.0 (2026-10-30). GHSA-v76p-62qx-wwq2, HIGH (CWE-787, escritura fuera de
+    límites): rango `>= 3.0.0, < 3.2.0` y `>= 4.0.0, < 4.1.1`, parche en 3.2.0 — DENTRO de la rama 3
+    que trae Umbraco 13, así que se fija y no se suprime (la nota de NU1903 de Directory.Build.props).
+    Llega transitiva (Umbraco.Cms.Imaging.ImageSharp 13.16.2 pide `>= 3.1.12` e ImageSharp.Web 3.1.5
+    `>= 3.1.8`, mínimos sin techo) y puso rojo el restore de Synergos.Arquitectura.Tests en el CI de
+    master `8644cdcd`. Medido en api.nuget.org y en la API de avisos de GitHub: 3.2.0 es la última
+    3.x, va para net6.0 sin dependencias, con la misma licencia en fichero que 3.1.12.
+    Y cierra también los tres avisos del 2026-10-07 que se aceptaban por aviso desde el 2026-10-08
+    (GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w): hoy su rango en la rama 3 llega
+    a `< 3.2.0` con parche en 3.2.0. Su supresión salió de Directory.Build.props, porque ya no
+    contestaba «por qué esto no se arregla». Mutado: volver a 3.1.12 rompe el restore con los cuatro.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.2.0" />
+  </ItemGroup>
+
 </Project>
