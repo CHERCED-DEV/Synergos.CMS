@@ -1120,7 +1120,8 @@ public sealed class ShopCatalogController : ControllerBase
         Status: MapReturnStatusToUi(c.Status),
         RequestedAt: c.RequestedAt,
         UpdatedAt: c.UpdatedAt,
-        Note: c.Note);
+        Note: c.Note,
+        Estado: c.Status.ToString());
 
     // Vocabulario del estado del RMA al que lee la UI (ES). El ciclo interno
     // (Requested→Approved/Received→Refunded, o Rejected terminal) se colapsa a 3.
@@ -1494,7 +1495,10 @@ public sealed class ShopCatalogController : ControllerBase
         string Status,
         DateTimeOffset RequestedAt,
         DateTimeOffset UpdatedAt,
-        string? Note);
+        string? Note,
+        // `estado` es el EXACTO (Requested, Approved, Received, Refunded, Rejected): lo que el personal necesita para
+        // saber qué sigue (013-seller-operaciones, T024). `status` sigue siendo el rótulo del comprador.
+        string? Estado = null);
 
     public sealed record ReturnsResponse(IReadOnlyList<ReturnDto> Returns);
 

@@ -103,10 +103,21 @@ public sealed class VendedorDeLaTiendaControllerTests
             var auditoria = Substitute.For<IAuditTrailWriter>();
             auditoria.WriteAsync(Arg.Do<AuditEvent>(e => Asientos.Add(e)), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
+            // Las devoluciones de verdad, sobre el mismo almacén: validan contra las órdenes que hay en él.
+            var ordenes = new OrdenesDeLaTienda(Almacen);
+            var motor = Substitute.For<IShopOrderService>();
+            motor.GetOrderAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(c => ordenes.UnaAsync(c.ArgAt<string>(0)));
+            Devoluciones = new StubReturnService(motor, null, () => Reloj, Almacen);
+
             Controlador = new VendedorDeLaTiendaController(
-                new PedidosDeLaTienda(new OrdenesDeLaTienda(Almacen), Seguimiento, puerta), registro, despachos, Seguimiento, auditoria,
-                gate, precios, tienda);
+                new PedidosDeLaTienda(ordenes, Seguimiento, puerta), registro, despachos, Seguimiento, auditoria, Devoluciones,
+                ordenes, gate, precios, tienda);
         }
+
+        public StubReturnService Devoluciones { get; }
+
+        /// <summary>El reloj de las devoluciones: avanza a mano para ordenar la cola.</summary>
+        public DateTimeOffset Reloj { get; set; } = T0;
 
         public Task Directa(string orderRef, DateTimeOffset cuando, ShopShippingAddress? shipTo = null)
             => Almacen.WriteAsync(LibroDeComprasDeLaPuerta.ResourceType, orderRef, JsonSerializer.Serialize(new PersistedOrder(
@@ -543,4 +554,63 @@ public sealed class VendedorDeLaTiendaControllerTests
     [Fact]
     public async Task Un_pedido_que_no_existe_es_404()
         => Assert.IsType<NotFoundObjectResult>(await Acto(new Tienda(), "no-existe", "preparar"));
+
+    // ── La cola de devoluciones (T024) ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task La_cola_tiene_la_forma_del_contrato_con_el_pedido_su_camino_y_el_estado_exacto()
+    {
+        var t = new Tienda();
+        await t.Directa("dir-1", T0, Bogota);
+        await t.DeLaPuerta("pta-1");
+        var directa = await t.Devoluciones.RequestAsync("dir-1", "p-1", "Llegó rota");
+        t.Reloj = T0.AddMinutes(5);
+        await t.Devoluciones.RequestAsync("pta-1", "p-2", "No era la talla");
+        await t.Devoluciones.AdvanceAsync(directa.RmaId, ShopReturnStatus.Approved);
+
+        var cuerpo = Cuerpo(await t.Controlador.Devoluciones());
+
+        Assert.Equal(["devoluciones"], Claves(cuerpo));
+        var cola = cuerpo.GetProperty("devoluciones");
+        Assert.Equal(
+            ["rmaId", "orderRef", "orderNumber", "camino", "producto", "cantidad", "motivo", "monto", "montoFormatted", "moneda",
+             "estado", "nota", "solicitada", "actualizada"],
+            Claves(cola[0]));
+        // La pedida antes que la aprobada: lo que más espera, primero.
+        Assert.Equal(("pta-1", "N-pta-1", "puerta", "Requested"),
+            (cola[0].GetProperty("orderRef").GetString(), cola[0].GetProperty("orderNumber").GetString(),
+             cola[0].GetProperty("camino").GetString(), cola[0].GetProperty("estado").GetString()));
+        Assert.Equal(("dir-1", "directa", "Approved", 54_000m, "$ 54.000"),
+            (cola[1].GetProperty("orderRef").GetString(), cola[1].GetProperty("camino").GetString(),
+             cola[1].GetProperty("estado").GetString(), cola[1].GetProperty("monto").GetDecimal(),
+             cola[1].GetProperty("montoFormatted").GetString()));
+    }
+
+    [Fact]
+    public async Task El_estado_de_la_cola_es_el_exacto_y_no_el_rotulo_del_comprador()
+    {
+        // Para el comprador, aprobada y recibida son la misma «en revisión»; para el personal no: una espera la
+        // mercancía y la otra el reembolso.
+        var t = new Tienda();
+        await t.Directa("dir-1", T0, Bogota);
+        await t.Directa("dir-2", T0, Bogota);
+        var aprobada = await t.Devoluciones.RequestAsync("dir-1", "p-1", "Llegó rota");
+        var recibida = await t.Devoluciones.RequestAsync("dir-2", "p-1", "Llegó rota");
+        await t.Devoluciones.AdvanceAsync(aprobada.RmaId, ShopReturnStatus.Approved);
+        await t.Devoluciones.AdvanceAsync(recibida.RmaId, ShopReturnStatus.Approved);
+        await t.Devoluciones.AdvanceAsync(recibida.RmaId, ShopReturnStatus.Received);
+
+        var cola = Cuerpo(await t.Controlador.Devoluciones()).GetProperty("devoluciones");
+
+        Assert.Equal(["Received", "Approved"], cola.EnumerateArray().Select(d => d.GetProperty("estado").GetString()!).ToArray());
+        Assert.Equal([recibida.RmaId, aprobada.RmaId], cola.EnumerateArray().Select(d => d.GetProperty("rmaId").GetString()!).ToArray());
+    }
+
+    [Fact]
+    public async Task La_cola_tiene_la_guarda_del_personal()
+    {
+        Assert.IsType<UnauthorizedObjectResult>(await new Tienda(sesion: false).Controlador.Devoluciones());
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(await new Tienda(roles: "editor").Controlador.Devoluciones()).StatusCode);
+        Assert.Equal(0, Cuerpo(await new Tienda().Controlador.Devoluciones()).GetProperty("devoluciones").GetArrayLength());
+    }
 }

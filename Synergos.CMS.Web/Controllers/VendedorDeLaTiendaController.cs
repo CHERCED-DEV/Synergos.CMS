@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
 
@@ -48,20 +49,24 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
     private readonly DespachosDeLaPuerta _despachos;
     private readonly IOrderTrackingService _seguimiento;
     private readonly IAuditTrailWriter _auditoria;
+    private readonly IReturnService _devoluciones;
+    private readonly OrdenesDeLaTienda _ordenes;
     private readonly IMemberAccessGate _gate;
     private readonly IPriceFormatter _precios;
     private readonly IOptionsMonitor<TiendaSettings>? _tienda;
 
     public VendedorDeLaTiendaController(
         PedidosDeLaTienda pedidos, RegistroDeComprasDeLaTienda registro, DespachosDeLaPuerta despachos,
-        IOrderTrackingService seguimiento, IAuditTrailWriter auditoria, IMemberAccessGate gate, IPriceFormatter precios,
-        IOptionsMonitor<TiendaSettings>? tienda = null)
+        IOrderTrackingService seguimiento, IAuditTrailWriter auditoria, IReturnService devoluciones, OrdenesDeLaTienda ordenes,
+        IMemberAccessGate gate, IPriceFormatter precios, IOptionsMonitor<TiendaSettings>? tienda = null)
     {
         _pedidos = pedidos;
         _registro = registro;
         _despachos = despachos;
         _seguimiento = seguimiento;
         _auditoria = auditoria;
+        _devoluciones = devoluciones;
+        _ordenes = ordenes;
         _gate = gate;
         _precios = precios;
         _tienda = tienda;
@@ -153,6 +158,28 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         return movido is null ? NotFound(new { error = "Pedido no encontrado." }) : Ok(ComoDto(movido));
     }
 
+    /// <summary>
+    /// La cola de devoluciones de la tienda entera (T024): lo que más espera, primero
+    /// (<see cref="IReturnService.GetForStoreAsync"/>), con el estado EXACTO y el pedido de cada una —su número, y su
+    /// camino, que es por donde volverá la plata—. Una devolución cuya orden no se encuentra sale sin número ni camino.
+    /// </summary>
+    [HttpGet("returns")]
+    public async Task<IActionResult> Devoluciones(CancellationToken ct = default)
+    {
+        if (RequirePersonal() is { } denegado) return denegado;
+
+        var casos = await _devoluciones.GetForStoreAsync(ct);
+        var ordenes = (await _ordenes.TodasAsync(ct)).ToDictionary(o => o.OrderRef, StringComparer.Ordinal);
+        return Ok(new DevolucionesDto(casos.Select(c =>
+        {
+            var orden = ordenes.GetValueOrDefault(c.OrderRef);
+            return new DevolucionDto(
+                c.RmaId, c.OrderRef, orden?.OrderNumber, orden is null ? null : orden.ViaGate ? "puerta" : "directa",
+                c.ProductName, c.Quantity, c.Reason, c.RefundAmount, _precios.Format(c.RefundAmount, c.Currency), c.Currency,
+                c.Status.ToString(), c.Note, c.RequestedAt, c.UpdatedAt);
+        }).ToList()));
+    }
+
     /// <summary>Un rechazo del despacho, con su código: lo transitorio es 503, y lo demás 409 (o la guarda de la puerta).</summary>
     private ObjectResult Rechazo(DespachoDeLaPuerta despacho) => StatusCode(
         despacho.Transitorio
@@ -227,6 +254,18 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         MotivoSinActos: p.MotivoSinActos);
 
     // ── Lo que sale (contracts/cms-y-ui.md de 013): la UI es la fuente de las claves que lee (ADR 0083) ──
+
+    /// <summary>
+    /// Una devolución de la cola. <c>estado</c> es el exacto (<c>Requested</c>, <c>Approved</c>, <c>Received</c>,
+    /// <c>Refunded</c>, <c>Rejected</c>); <c>monto</c>, lo que se devolvería (el total de la línea de la orden).
+    /// </summary>
+    public sealed record DevolucionDto(
+        string RmaId, string OrderRef, string? OrderNumber, string? Camino, string Producto, int Cantidad, string Motivo,
+        decimal Monto, string MontoFormatted, string Moneda, string Estado, string? Nota, DateTimeOffset Solicitada,
+        DateTimeOffset Actualizada);
+
+    /// <summary>La cola de devoluciones de la tienda, en su orden.</summary>
+    public sealed record DevolucionesDto(IReadOnlyList<DevolucionDto> Devoluciones);
 
     /// <summary>El cuerpo del acto: <c>preparar</c>, <c>enviar</c> o <c>entregar</c>, y la guía, sólo al enviar.</summary>
     public sealed record ActoDelPedidoDto(string? Acto, string? Guia);
