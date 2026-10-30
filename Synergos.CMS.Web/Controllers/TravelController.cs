@@ -185,26 +185,37 @@ public sealed class TravelController : ControllerBase
             BaggageIncluded: f.BaggageIncluded,
             Price: f.TotalPrice,
             PriceFormatted: _priceFormatter.Format(f.TotalPrice, f.Currency),
-            Currency: f.Currency))).ToList();
+            Currency: f.Currency,
+            // ADR 0083: la UI exige title (sin él descarta la oferta) y lee subtitle top-level.
+            Title: $"{o.Segments[0].Origin} → {o.Segments[^1].Destination}",
+            Subtitle: $"{o.FlightId} · {Escalas(o.Stops)} · {Duracion(o.TotalDurationMinutes)} · {f.FamilyName}"))).ToList();
 
         return Ok(new { offers = results });
     }
 
     // ── 3. Search car ──────────────────────────────────────────────
     // GET /api/travel/search/car?pickupLocation=&dropoffLocation=&pickupDate=&dropoffDate=
+    // travel-shell pregunta con su CarCriteria (?location=&pickUp=&dropOff=); ADR 0083: el borde acepta
+    // esos nombres, y los de antes siguen valiendo.
     [HttpGet("search/car")]
     public async Task<IActionResult> SearchCar(
-        [FromQuery] string pickupLocation,
-        [FromQuery] DateOnly pickupDate,
-        [FromQuery] DateOnly dropoffDate,
+        [FromQuery] string? pickupLocation = null,
+        [FromQuery] DateOnly? pickupDate = null,
+        [FromQuery] DateOnly? dropoffDate = null,
         [FromQuery] string? dropoffLocation = null,
+        [FromQuery] string? location = null,
+        [FromQuery] DateOnly? pickUp = null,
+        [FromQuery] DateOnly? dropOff = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(pickupLocation))
+        var lugar = string.IsNullOrWhiteSpace(pickupLocation) ? location : pickupLocation;
+        var retiro = pickupDate ?? pickUp;
+        var devolucion = dropoffDate ?? dropOff;
+        if (string.IsNullOrWhiteSpace(lugar))
         {
             return BadRequest(new { error = "pickupLocation es requerido." });
         }
-        if (dropoffDate <= pickupDate)
+        if (retiro is null || devolucion is null || devolucion <= retiro)
         {
             return BadRequest(new { error = "dropoffDate debe ser posterior a pickupDate." });
         }
@@ -213,7 +224,7 @@ public sealed class TravelController : ControllerBase
         try
         {
             offers = await _cars.SearchAsync(
-                new CarRentalQuery(pickupLocation.Trim(), dropoffLocation?.Trim(), pickupDate, dropoffDate),
+                new CarRentalQuery(lugar.Trim(), dropoffLocation?.Trim(), retiro.Value, devolucion.Value),
                 cancellationToken);
         }
         catch (ArgumentException ex)
@@ -233,10 +244,31 @@ public sealed class TravelController : ControllerBase
             PricePerDayFormatted: _priceFormatter.Format(c.PricePerDay, c.Currency),
             Price: c.TotalPrice,
             PriceFormatted: _priceFormatter.Format(c.TotalPrice, c.Currency),
-            Currency: c.Currency)).ToList();
+            Currency: c.Currency,
+            // ADR 0083: title/subtitle top-level y las facetas que la UI pinta tal cual (#27).
+            Title: c.CategoryName,
+            Subtitle: $"{c.Provider} · {Transmision(c.Transmission)}{(c.AirConditioning ? " · A/C" : string.Empty)}",
+            CarCategory: c.CategoryName,
+            CarTransmission: Transmision(c.Transmission))).ToList();
 
         return Ok(new { offers = results });
     }
+
+    private static string Escalas(int escalas) => escalas switch
+    {
+        0 => "Directo",
+        1 => "1 escala",
+        _ => $"{escalas} escalas",
+    };
+
+    private static string Duracion(int minutos) => minutos % 60 == 0 ? $"{minutos / 60}h" : $"{minutos / 60}h {minutos % 60}m";
+
+    private static string Transmision(string transmision) => transmision.Trim().ToLowerInvariant() switch
+    {
+        "manual" => "Manual",
+        "automatic" => "Automático",
+        _ => transmision.Trim(),
+    };
 
     // ── 4. Checkout ────────────────────────────────────────────────
     // POST /api/travel/checkout { items:[{product,offerId,label,price,currency}], guest:{name,email} }
@@ -512,12 +544,14 @@ public sealed class TravelController : ControllerBase
     public sealed record FlightOfferDto(
         string OfferId, string Product, string FlightId, string Origin, string Destination, int Stops,
         int TotalDurationMinutes, string Cabin, string FamilyName, bool Refundable, bool BaggageIncluded,
-        decimal Price, string PriceFormatted, string Currency);
+        decimal Price, string PriceFormatted, string Currency,
+        string Title, string Subtitle);
 
     public sealed record CarOfferDto(
         string OfferId, string Product, string CategoryName, string SippCode, string Provider,
         string Transmission, bool AirConditioning, int Days, string PricePerDayFormatted,
-        decimal Price, string PriceFormatted, string Currency);
+        decimal Price, string PriceFormatted, string Currency,
+        string Title, string Subtitle, string CarCategory, string CarTransmission);
 
     public sealed record CheckoutResponse(
         string OrderRef, string PaymentSessionId, decimal Amount, string AmountFormatted, string Currency);
