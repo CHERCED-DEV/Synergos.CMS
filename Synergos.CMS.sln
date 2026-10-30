@@ -95,6 +95,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Propiedades", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Educacion", "backend\orquestadores\Synergos.Bff.Educacion\Synergos.Bff.Educacion.csproj", "{9F986C77-E25D-449C-83A4-90676445B6FF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Synergos.Bff.Gobierno", "backend\orquestadores\Synergos.Bff.Gobierno\Synergos.Bff.Gobierno.csproj", "{7A20B02F-CBF9-4323-9F19-C0C66D940024}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -573,6 +575,18 @@ Global
 		{9F986C77-E25D-449C-83A4-90676445B6FF}.Release|x64.Build.0 = Release|Any CPU
 		{9F986C77-E25D-449C-83A4-90676445B6FF}.Release|x86.ActiveCfg = Release|Any CPU
 		{9F986C77-E25D-449C-83A4-90676445B6FF}.Release|x86.Build.0 = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|x64.Build.0 = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Debug|x86.Build.0 = Debug|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|x64.ActiveCfg = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|x64.Build.0 = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|x86.ActiveCfg = Release|Any CPU
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -618,5 +632,6 @@ Global
 		{820CDB88-229D-494F-A470-978AC79FEE7A} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{F74F76FC-40DD-4EFA-A59E-EC7E05B62069} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 		{9F986C77-E25D-449C-83A4-90676445B6FF} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
+		{7A20B02F-CBF9-4323-9F19-C0C66D940024} = {C6AB9C32-6962-1894-C4C3-4B68A84C0CF7}
 	EndGlobalSection
 EndGlobal

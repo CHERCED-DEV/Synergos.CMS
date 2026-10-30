@@ -89,8 +89,12 @@ public sealed class ComposeStackTests
     /// distingue «los vi todos» de «creo que los vi todos».</para>
     /// </remarks>
     private static IReadOnlyDictionary<string, string> BloquesDeServicio()
+        => BloquesDeServicio(Path.Combine(RepoRoot(), "compose.prod.yml"));
+
+    /// <summary>Lo mismo sobre otro compose: el que genera <c>compose-gen</c> en un árbol sintético.</summary>
+    private static IReadOnlyDictionary<string, string> BloquesDeServicio(string compose)
     {
-        var lineas = File.ReadAllLines(Path.Combine(RepoRoot(), "compose.prod.yml"))
+        var lineas = File.ReadAllLines(compose)
             .Where(l => !l.TrimStart().StartsWith('#'))
             .ToList();
 
@@ -306,6 +310,163 @@ public sealed class ComposeStackTests
             try { if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true); }
             catch (IOException) { /* un temporal */ }
         }
+    }
+
+    /// <summary>
+    /// Un orquestador declarado cuyos flujos actúan sobre procesos lleva en el compose la variable de su catálogo y el
+    /// fichero montado del servidor —de sólo lectura y sin que compose cree la ruta—; los demás no llevan ninguno (009, NP-1).
+    /// </summary>
+    /// <remarks>
+    /// <para>Sin la variable, el núcleo no deja arrancar el flujo (<c>FlujosDeclarados</c>): el contenedor muere al arrancar
+    /// y <c>deploy-remoto.sh</c> espera seis minutos a que esté sano para ponerse rojo —lo midió el director al ensayar la
+    /// integración en master—. Con la variable y sin el montaje, apunta a una ruta que en el contenedor no existe. Y con el
+    /// montaje corto, un fichero que el despliegue no copió se vuelve un directorio vacío con su nombre.</para>
+    ///
+    /// <para>Se lee de los flujos aparte del generador (#14), con la condición con que el núcleo se niega a arrancar: un paso
+    /// que nombra un <c>proceso</c>. Que con ese entorno el orquestador arranca de verdad lo prueba
+    /// <c>ArranqueConElComposeTests</c>, lanzándolo.</para>
+    /// </remarks>
+    [Fact]
+    public void Todo_orquestador_que_actua_sobre_procesos_monta_su_catalogo_del_servidor()
+    {
+        var bloques = BloquesDeServicio();
+        var orquestadores = Proyectos.Directorios()
+            .Where(d => Path.GetFileName(d).StartsWith("Synergos.Bff.", StringComparison.Ordinal)
+                        && File.Exists(Path.Combine(d, "Program.cs")))
+            .ToList();
+        var conProcesos = orquestadores.Where(d => EsOrquestadorDeclarado(d) && ActuaSobreProcesos(d)).ToList();
+
+        // Red de seguridad: Gobierno arranca un proceso. Si esto no lo encuentra, el descubrimiento está roto y lo de abajo
+        // vigilaría el vacío.
+        Assert.Contains(conProcesos, d => Path.GetFileName(d) == "Synergos.Bff.Gobierno");
+
+        foreach (var dir in orquestadores)
+        {
+            var prefijo = Path.GetFileName(dir)["Synergos.Bff.".Length..];
+            var servicio = "bff-" + prefijo.ToLowerInvariant();
+            Assert.True(bloques.TryGetValue(servicio, out var bloque), $"compose.prod.yml no tiene {servicio}.");
+
+            var variable = Regex.Match(bloque!, $@"(?m)^\s+{Regex.Escape(prefijo)}__Procesos__Archivo:\s*(?<ruta>\S+)\s*$");
+            var catalogos = MontajesLargos(bloque!)
+                .Where(m => m.GetValueOrDefault("source") == "./provisionar.procesos.json")
+                .ToList();
+
+            if (!conProcesos.Contains(dir))
+            {
+                Assert.False(variable.Success || catalogos.Count > 0,
+                    $"{servicio} no actúa sobre procesos y compose.prod.yml le declara un catálogo: el generador lo reparte "
+                    + "por otra regla que la del núcleo.");
+                continue;
+            }
+
+            Assert.True(variable.Success,
+                $"{servicio} actúa sobre procesos y compose.prod.yml no le declara {prefijo}__Procesos__Archivo: el contenedor "
+                + "muere al arrancar y el despliegue espera seis minutos para ponerse rojo. Se regenera con "
+                + "`node tools/compose-gen.mjs`.");
+            var montaje = Assert.Single(catalogos);
+            Assert.Equal(variable.Groups["ruta"].Value, montaje.GetValueOrDefault("target"));
+            Assert.Equal("true", montaje.GetValueOrDefault("read_only"));
+            Assert.Equal("false", montaje.GetValueOrDefault("create_host_path"));
+        }
+    }
+
+    /// <summary>
+    /// El generador, sobre un árbol sintético: el declarado con un paso de procesos lleva su catálogo, el declarado sin
+    /// procesos y el tipado no.
+    /// </summary>
+    [Fact]
+    public void Un_orquestador_declarado_con_un_paso_de_procesos_lleva_su_catalogo_y_los_demas_no()
+    {
+        var raiz = Path.Combine(Path.GetTempPath(), "compose-procesos-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            ArbolSintetico(raiz);
+            var tramite = Directory.CreateDirectory(
+                Path.Combine(raiz, "backend", "orquestadores", "Synergos.Bff.Tramite", "flujos")).Parent!.FullName;
+            File.WriteAllText(Path.Combine(tramite, "Program.cs"),
+                "builder.AddOrquestadorDeclarado(new SagaVocabulary(\"tramite\", \"el trámite\"), typeof(Program).Assembly);\n");
+            File.WriteAllText(Path.Combine(tramite, "flujos", "tramite.radicacion.json"), """
+                {
+                  "clave": "tramite.radicacion",
+                  "pasos": {
+                    "cotizar": { "tipo": "pricing.cotizar" },
+                    "arrancar": { "tipo": "workflow.arrancar", "proceso": "tramite.v1" }
+                  }
+                }
+                """);
+
+            var (codigo, salida, error) = EjecutarNodeEn(raiz, Path.Combine(raiz, "tools", "compose-gen.mjs"));
+            Assert.True(codigo == 0, $"compose-gen salió con {codigo}:{Environment.NewLine}{error}{salida}");
+
+            var bloques = BloquesDeServicio(Path.Combine(raiz, "compose.prod.yml"));
+            Assert.Contains("Tramite__Procesos__Archivo: /etc/synergos/provisionar.procesos.json", bloques["bff-tramite"],
+                StringComparison.Ordinal);
+            var montaje = Assert.Single(MontajesLargos(bloques["bff-tramite"]));
+            Assert.Equal("./provisionar.procesos.json", montaje["source"]);
+            Assert.Equal("/etc/synergos/provisionar.procesos.json", montaje["target"]);
+            Assert.Equal("true", montaje["read_only"]);
+            Assert.Equal("false", montaje["create_host_path"]);
+
+            foreach (var otro in new[] { "bff-prueba", "bff-tipado" })
+            {
+                Assert.DoesNotContain("Procesos__Archivo", bloques[otro], StringComparison.Ordinal);
+                Assert.Empty(MontajesLargos(bloques[otro]));
+            }
+        }
+        finally
+        {
+            try { if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true); }
+            catch (IOException) { /* un temporal */ }
+        }
+    }
+
+    /// <summary>Si algún flujo del orquestador nombra un <c>proceso</c> en un paso: la condición del núcleo, leída aparte.</summary>
+    private static bool ActuaSobreProcesos(string dir)
+    {
+        var carpeta = Path.Combine(dir, "flujos");
+        return Directory.Exists(carpeta) && Directory.EnumerateFiles(carpeta, "*.json").Any(fichero =>
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(fichero));
+            return doc.RootElement.TryGetProperty("pasos", out var pasos)
+                   && pasos.EnumerateObject().Any(p => p.Value.TryGetProperty("proceso", out var proceso)
+                                                       && proceso.ValueKind == System.Text.Json.JsonValueKind.String
+                                                       && !string.IsNullOrWhiteSpace(proceso.GetString()));
+        });
+    }
+
+    /// <summary>Los montajes en sintaxis larga de un bloque: cada <c>- type: bind</c> con sus claves debajo, aplanadas.</summary>
+    private static List<Dictionary<string, string>> MontajesLargos(string bloque)
+    {
+        var montajes = new List<Dictionary<string, string>>();
+        Dictionary<string, string>? actual = null;
+        var sangriaDelElemento = -1;
+
+        foreach (var linea in bloque.Split('\n'))
+        {
+            var texto = linea.Trim();
+            if (texto.Length == 0) continue;
+
+            var sangria = linea.Length - linea.TrimStart().Length;
+            if (texto.StartsWith("- type: bind", StringComparison.Ordinal))
+            {
+                actual = new Dictionary<string, string>(StringComparer.Ordinal);
+                montajes.Add(actual);
+                sangriaDelElemento = sangria;
+                continue;
+            }
+
+            if (actual is null) continue;
+            if (sangria <= sangriaDelElemento)
+            {
+                actual = null;
+                continue;
+            }
+
+            var corte = texto.IndexOf(':', StringComparison.Ordinal);
+            if (corte > 0) actual[texto[..corte]] = texto[(corte + 1)..].Trim();
+        }
+
+        return montajes;
     }
 
     /// <summary>

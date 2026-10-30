@@ -143,20 +143,8 @@ function capacidadesDe(proyecto, disponibles) {
  * definiciones desplegaria sano y sin saber llegar a ninguna capacidad.
  */
 function capacidadesDeLosFlujos(proyecto, disponibles) {
-  const carpeta = join(RAIZ, rutaDe(proyecto), 'flujos');
-  const ficheros = existsSync(carpeta) ? readdirSync(carpeta).filter((f) => f.endsWith('.json')).sort() : [];
-  if (ficheros.length === 0) {
-    throw new Error(`compose-gen: ${proyecto} es un orquestador declarado y no tiene flujos/*.json`);
-  }
-
   const capacidades = new Set();
-  for (const fichero of ficheros) {
-    let flujo;
-    try {
-      flujo = JSON.parse(readFileSync(join(carpeta, fichero), 'utf8'));
-    } catch (e) {
-      throw new Error(`compose-gen: ${proyecto}/flujos/${fichero} no es JSON: ${e.message}`);
-    }
+  for (const flujo of flujosDe(proyecto)) {
     for (const paso of Object.values(flujo.pasos ?? {})) {
       for (const tipo of [paso.tipo, paso.reserva?.antes, paso.reserva?.despues]) {
         const prefijo = typeof tipo === 'string' ? tipo.split('.')[0].toLowerCase() : '';
@@ -165,6 +153,48 @@ function capacidadesDeLosFlujos(proyecto, disponibles) {
     }
   }
   return [...capacidades];
+}
+
+/** Los `flujos/*.json` de un orquestador declarado, leidos. Sin ninguno se lanza (ver arriba). */
+function flujosDe(proyecto) {
+  const carpeta = join(RAIZ, rutaDe(proyecto), 'flujos');
+  const ficheros = existsSync(carpeta) ? readdirSync(carpeta).filter((f) => f.endsWith('.json')).sort() : [];
+  if (ficheros.length === 0) {
+    throw new Error(`compose-gen: ${proyecto} es un orquestador declarado y no tiene flujos/*.json`);
+  }
+  return ficheros.map((fichero) => {
+    try {
+      return JSON.parse(readFileSync(join(carpeta, fichero), 'utf8'));
+    } catch (e) {
+      throw new Error(`compose-gen: ${proyecto}/flujos/${fichero} no es JSON: ${e.message}`);
+    }
+  });
+}
+
+/**
+ * El catalogo de procesos: lo publica `provisionar.sh` en Api.Workflow y lo lee
+ * al arrancar el orquestador cuyos flujos actuan sobre procesos (009, NP-1). Es
+ * UN fichero con dos lectores, y por eso llega como llegan el Caddyfile y los
+ * datos de `provisionar.sh`: con el despliegue, a /opt/synergos, desde el MISMO
+ * commit que las imagenes. Dentro de la imagen no podria ir sin tocar el
+ * Dockerfile comun —el contexto de un servicio no trae `tools/`—, y una copia
+ * en la carpeta del proyecto seria una segunda verdad que se desvia.
+ */
+const CATALOGO_EN_EL_SERVIDOR = './provisionar.procesos.json';
+const CATALOGO_EN_EL_CONTENEDOR = '/etc/synergos/provisionar.procesos.json';
+
+/**
+ * Si un orquestador DECLARADO actua sobre procesos: algun paso de sus flujos
+ * nombra un `proceso` (`workflow.arrancar` de Gobierno). Es la condicion con la
+ * que el nucleo se niega a arrancar sin `<Origen>:Procesos:Archivo`
+ * (FlujosDeclarados): sin la variable el contenedor muere al arrancar, y el
+ * despliegue espera seis minutos a que este sano y se pone rojo.
+ */
+function actuaSobreProcesos(proyecto) {
+  const programa = readFileSync(join(RAIZ, rutaDe(proyecto), 'Program.cs'), 'utf8');
+  if (!/\bAddOrquestadorDeclarado\s*\(/.test(programa)) return false;
+  return flujosDe(proyecto).some((flujo) => Object.values(flujo.pasos ?? {})
+    .some((paso) => typeof paso.proceso === 'string' && paso.proceso.trim() !== ''));
 }
 
 /**
@@ -283,6 +313,14 @@ function entornoExtra(proyecto, disponibles) {
       `      ${seccion}__Alerts__ToKind: \${SYNERGOS_ALERTS_TO_KIND:-${seccion.toLowerCase()}.guardia}`,
       `      ${seccion}__Alerts__ToId: \${SYNERGOS_ALERTS_TO_ID:-operaciones}`,
       `      ${seccion}__Alerts__Address: \${SYNERGOS_ALERTS_ADDRESS:-}`,
+      ...(actuaSobreProcesos(proyecto) ? [
+        '',
+        '      # El catalogo de procesos (009, NP-1). Un flujo con un paso de procesos NO',
+        '      # arranca sin el: es contra lo que se cruzan sus transiciones al arrancar.',
+        '      # Es el MISMO fichero que provisionar.sh publica en Api.Workflow; viene del',
+        '      # servidor y se monta abajo, en volumes.',
+        `      ${seccion}__Procesos__Archivo: ${CATALOGO_EN_EL_CONTENEDOR}`,
+      ] : []),
     ].join('\n');
   }
 
@@ -449,6 +487,20 @@ function bloqueServicio(proyecto, disponibles) {
   const nombre = nombreServicio(proyecto);
   const seccion = seccionConfig(proyecto);
 
+  // La sintaxis LARGA y `create_host_path: false`, al reves que el Caddyfile: con
+  // la corta, un fichero que el despliegue no copio se convierte en un DIRECTORIO
+  // vacio con su nombre, el orquestador lee una carpeta y muere, y la carpeta se
+  // queda ahi para el despliegue siguiente. Asi, compose se niega a arrancar y
+  // dice que falta.
+  const catalogo = proyecto.startsWith('Synergos.Bff.') && actuaSobreProcesos(proyecto) ? `
+      # El catalogo de procesos, del servidor y de solo lectura (ver arriba).
+      - type: bind
+        source: ${CATALOGO_EN_EL_SERVIDOR}
+        target: ${CATALOGO_EN_EL_CONTENEDOR}
+        read_only: true
+        bind:
+          create_host_path: false` : '';
+
   return `  ${nombre}:
     image: ${imagen(proyecto)}
     restart: unless-stopped
@@ -464,7 +516,7 @@ function bloqueServicio(proyecto, disponibles) {
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
       # comporta como recien instalada.
-      - ${nombre}-data:/app/data
+      - ${nombre}-data:/app/data${catalogo}
     deploy:
 ${comentarioDeReplicas(proyecto)}
       replicas: 1

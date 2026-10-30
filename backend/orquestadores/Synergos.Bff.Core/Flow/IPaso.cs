@@ -110,6 +110,17 @@ public interface IPaso
     bool UsaRol => false;
 
     /// <summary>
+    /// Los estados a los que puede llevar algo con el <c>estado</c> que declara su definición (núcleo, NS-1 de 013), o nulo si
+    /// no usa ese dato. Por defecto, nulo.
+    /// </summary>
+    /// <remarks>
+    /// Se cruza como la transición de un proceso, en los dos sentidos y contra la lista: un paso que lo usa sin declararlo, o
+    /// que declara uno que la capacidad no tiene, fallaría con la primera persona que actúa; uno que lo declara sin usarlo es
+    /// una regla que nadie cumple. La lista es la de la capacidad, y una prueba la cruza con ella.
+    /// </remarks>
+    IReadOnlyCollection<string>? EstadosAdmitidos => null;
+
+    /// <summary>
     /// Si lo que hace no se deshace (núcleo, lote 7): arrancar una instancia de un proceso o disparar una transición. Por
     /// defecto, no.
     /// </summary>

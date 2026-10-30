@@ -4,6 +4,7 @@ using Synergos.CMS.Interfaces;
 using Umbraco.Cms.Core.Dictionary;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.PublishedCache;
 using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Services.Catalog;
@@ -28,7 +29,7 @@ namespace Synergos.CMS.Web.Services.Catalog;
 public sealed class UmbracoTramiteCatalogSource : ICatalogSource<TramiteDetail>
 {
     internal const string Vertical = "Gov";
-    private const string TramitePageAlias = "tramitePage";
+    internal const string TramitePageAlias = "tramitePage";
     private const string SiteRootAlias = "siteRoot";
 
     /// <summary>
@@ -124,9 +125,7 @@ public sealed class UmbracoTramiteCatalogSource : ICatalogSource<TramiteDetail>
             return Array.Empty<IPublishedContent>();
         }
 
-        var brandKey = _settings.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
-            ? b.Trim()
-            : null;
+        var brandKey = MarcaDelPortal(_settings.CurrentValue);
 
         if (string.IsNullOrWhiteSpace(brandKey))
         {
@@ -139,10 +138,7 @@ public sealed class UmbracoTramiteCatalogSource : ICatalogSource<TramiteDetail>
             return Array.Empty<IPublishedContent>();
         }
 
-        var siteRoot = umbracoContext.Content.GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
-            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
-                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+        var siteRoot = BuscarPortal(umbracoContext.Content, brandKey);
 
         if (siteRoot is null)
         {
@@ -150,8 +146,32 @@ public sealed class UmbracoTramiteCatalogSource : ICatalogSource<TramiteDetail>
             return Array.Empty<IPublishedContent>();
         }
 
-        return siteRoot.DescendantsOfType(TramitePageAlias).ToList();
+        return TramitesDe(siteRoot).ToList();
     }
+
+    /// <summary>El <c>brandKey</c> del <c>siteRoot</c> del portal de trámites, o nulo si el despliegue no lo dice.</summary>
+    internal static string? MarcaDelPortal(CatalogSettings ajustes)
+        => ajustes.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
+            ? b.Trim()
+            : null;
+
+    /// <summary>
+    /// El <c>siteRoot</c> del portal, recorriendo la caché publicada desde sus raíces, como lo ve este catálogo.
+    /// </summary>
+    /// <remarks>
+    /// Lo comparten este catálogo y <see cref="PortalDeTramitesEnElContenido"/> (009-gobierno-tramite T034), por lo mismo
+    /// que en la academia: durante un import la caché puede tener un nodo por id sin que el recorrido desde las raíces lo
+    /// alcance todavía, y una comprobación por otro camino diría «lo veo» mientras el catálogo no lo ve.
+    /// </remarks>
+    internal static IPublishedContent? BuscarPortal(IPublishedContentCache cache, string marca)
+        => cache.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
+            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
+                && string.Equals(c.Value<string>("brandKey"), marca, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Los trámites del portal, por el mismo recorrido (ver <see cref="BuscarPortal"/>).</summary>
+    internal static IEnumerable<IPublishedContent> TramitesDe(IPublishedContent portal)
+        => portal.DescendantsOfType(TramitePageAlias);
 
     /// <summary>
     /// Los textos de los tres pasos, del Dictionary uSync con respaldo en es-CO.
@@ -213,7 +233,8 @@ public sealed class UmbracoTramiteCatalogSource : ICatalogSource<TramiteDetail>
         Fee: node.Value<decimal>("tramiteFee"),
         EstimatedDays: node.Value<int>("tramiteEstimatedDays"),
         RequiresAppointment: node.Value<bool>("tramiteRequiresAppointment"),
-        Sections: ReadSections(node));
+        Sections: ReadSections(node),
+        Clave: node.Key);
 
     /// <summary>
     /// Las secciones del formulario y sus preguntas, en el orden en que el editor las puso.

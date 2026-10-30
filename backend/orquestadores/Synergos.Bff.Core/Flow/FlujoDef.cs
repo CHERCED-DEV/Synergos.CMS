@@ -162,6 +162,8 @@ public sealed record ParaCadaDef(string Fuente, string Como, IReadOnlyList<strin
 /// <param name="Rol">Con qué rol actúa quien dispara: el que comprobó la puerta (009-P6 = A).</param>
 /// <param name="Valores">Los nombres del contexto que un paso de aviso manda, además de los suyos fijos, cada uno con el
 /// marcador del mismo nombre (núcleo, NM-2 de 010, NN-6 de 003, NR-3 de 008). Sin expresiones: un nombre, un marcador.</param>
+/// <param name="Estado">El estado fijo al que lleva algo un paso que lo mueve (núcleo, NS-1 de 013): el envío «en camino» o
+/// «entregado». Un dato, como la transición de un proceso, cruzado al arrancar con los estados que admite el paso.</param>
 public sealed record PasoDef(
     string Id,
     string Tipo,
@@ -181,7 +183,8 @@ public sealed record PasoDef(
     string? Transicion = null,
     IReadOnlyList<string>? Transiciones = null,
     string? Rol = null,
-    IReadOnlyList<string>? Valores = null)
+    IReadOnlyList<string>? Valores = null,
+    string? Estado = null)
 {
     /// <summary>
     /// Todo lo que el paso lee del contexto: sus <see cref="Lee"/> y los <see cref="Valores"/> que declara. Es lo que el
@@ -533,7 +536,7 @@ internal static class LectorDeFlujo
         SoloEstos(nodo, aqui,
             "tipo", "lee", "escribe", "llave", "llave_base", "reserva", "cierra_reserva", "motivo", "al_fallar",
             "omitir_si_cero", "plantilla", "proposito", "omitir_si_falta", "proceso", "transicion", "transiciones", "rol",
-            "valores");
+            "valores", "estado");
 
         var alFallar = Opcional(nodo, "al_fallar", aqui);
         if (alFallar is not null && alFallar is not (PasoDef.Seguir or PasoDef.Soltar))
@@ -571,7 +574,8 @@ internal static class LectorDeFlujo
             Opcional(nodo, "transicion", aqui),
             nodo.TryGetProperty("transiciones", out _) ? Textos(nodo, "transiciones", aqui) : null,
             Opcional(nodo, "rol", aqui),
-            nodo.TryGetProperty("valores", out _) ? Textos(nodo, "valores", aqui) : null);
+            nodo.TryGetProperty("valores", out _) ? Textos(nodo, "valores", aqui) : null,
+            Opcional(nodo, "estado", aqui));
     }
 
     /// <summary>Rechaza un nombre de propiedad repetido en CUALQUIER objeto del documento.</summary>

@@ -1850,13 +1850,20 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "camino",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Tus trámites, sin filas",
         "subheading": "Radica, paga la tasa y sigue tu expediente",
-        "apiBase": "/api/gov"
+        "apiBase": "/api/gov",
+        "camino": "directa"
       }
     },
     {
