@@ -69,6 +69,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// </remarks>
     public const string Ocupada = "flow.busy";
 
+    /// <summary>
+    /// El código con el que se rechaza continuar, por OTRA fase, una saga que quedó en duda (001-P10 = A): lo que falta
+    /// es repetir la fase en duda con la misma llave, o cancelarla.
+    /// </summary>
+    public const string EnDuda = "flow.fase_en_duda";
+
     private readonly SagaEngine<TSaga> _motor;
     private readonly IRegistroDePasos _pasos;
     private readonly FlujoDef _flujo;
@@ -143,7 +149,8 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     }
 
     /// <summary>Cómo terminó un paso o un bloque.</summary>
-    private readonly record struct Desenlace(PasoResultado Control, Rejection? Rechazo, string? Motivo, bool Soltado = false)
+    private readonly record struct Desenlace(
+        PasoResultado Control, Rejection? Rechazo, string? Motivo, bool Soltado = false, bool EnDuda = false)
     {
         public static Desenlace Sigue => new(PasoResultado.Continuar, null, null);
 
@@ -201,9 +208,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
         // la saga nace nueva. Si ya está escrita, otra llamada con la misma llave la abrió mientras
         // ésta esperaba su turno: abrirla otra vez pisaría lo que la otra dejó —quizá ya cerrado—, y
         // el reintento la resuelve con Abrir como cualquier llave usada.
-        if (abre && _motor.Find(sagaId) is not null) return Result.Rejected<TSaga>(SinTurno(fase, sagaId));
+        //
+        // Salvo la que quedó EN DUDA en esta misma fase (001-P10 = A): un paso con llave dio un rechazo transitorio y la
+        // saga sigue viva para repetirla. Se retoma con la entrada nueva y las MISMAS llaves de paso.
+        var existente = _motor.Find(sagaId);
+        var retoma = abre && existente is { Status: SagaStatus.Running } && string.Equals(_binding.FaseEnDuda(existente), fase, StringComparison.Ordinal);
+        if (abre && existente is not null && !retoma) return Result.Rejected<TSaga>(SinTurno(fase, sagaId));
 
-        var saga = abre ? null : _motor.Find(sagaId)
+        var saga = abre ? existente : existente
             ?? throw new InvalidOperationException($"La fase «{fase}» continúa la saga {sagaId} y no existe.");
 
         if (saga is not null && saga.Status != SagaStatus.Running)
@@ -212,7 +224,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                 $"La fase «{fase}» sólo continúa una saga en curso, y {sagaId} está {saga.Status}."));
         }
 
-        var ctx = saga is null ? Abrir(entrada) : Reconstruir(saga).CopiarDe(entrada);
+        // Otra fase no se intercala con la que quedó en duda: correrla sin ella cerraría lo que nunca se abrió del todo.
+        if (saga is not null && _binding.FaseEnDuda(saga) is { } enDuda && !string.Equals(enDuda, fase, StringComparison.Ordinal))
+        {
+            return Result.Rejected<TSaga>(Rejection.Conflict(EnDuda,
+                $"La saga {sagaId} quedó en duda en «{enDuda}»: repite «{enDuda}» con la misma llave, o cancélala, antes de «{fase}»."));
+        }
+
+        var ctx = abre ? Abrir(entrada) : Reconstruir(saga!).CopiarDe(entrada);
         var corrida = new Corrida(sagaId, Ref.Create(_flujo.Clave, sagaId), ctx, saga);
         var siembra = abre ? PrimerTramoQueReserva(definicion) : -1;
 
@@ -225,7 +244,12 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                 ? await BloqueAsync(bloque, corrida, ct)
                 : await PasoAsync(_flujo.Pasos[elemento.Paso!], corrida, null, null, null, ct);
 
-            if (desenlace.Rechazo is { } rechazo) return await FallarAsync(corrida, rechazo, desenlace.Motivo!, ct);
+            if (desenlace.Rechazo is { } rechazo)
+            {
+                return desenlace.EnDuda && corrida.Saga is not null
+                    ? DejarEnDuda(corrida, fase, rechazo)
+                    : await FallarAsync(corrida, rechazo, desenlace.Motivo!, ct);
+            }
             if (desenlace.Control == PasoResultado.SaltarFase) break;
         }
 
@@ -367,6 +391,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// </summary>
     public bool SeAnticipa => LoQueEscribeAntesDeReservar(_flujo.Fases[0]).Count == 0;
 
+    /// <summary>La fase en la que quedó en duda <paramref name="saga"/> (001-P10 = A), o nula.</summary>
+    public string? FaseEnDuda(TSaga saga) => _binding.FaseEnDuda(saga);
+
     /// <summary>Los pasos que corren antes del primer tramo que reserva y escriben en una capacidad.</summary>
     private List<string> LoQueEscribeAntesDeReservar(FaseDef fase)
         => fase.Pasos.Take(PrimerTramoQueReserva(fase))
@@ -390,6 +417,9 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
 
     private void Sembrar(Corrida corrida)
     {
+        // La fase que abre y se retoma (001-P10 = A) ya tiene su saga, con lo que reservó antes de quedar en duda.
+        if (corrida.Saga is not null) return;
+
         // Sin guardar: la guarda el primer paso que reserve, o el fallo que la deshaga. Es lo que
         // hacía el flujo imperativo, y guardarla acá añadiría una escritura que nadie leía.
         corrida.Saga = _binding.Crear(corrida.SagaId, corrida.Ctx, _reloj.GetUtcNow());
@@ -505,6 +535,13 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
                 return Desenlace.Sigue;
             }
 
+            // Transitorio en un paso con llave (001-P10 = A): «no se sabe; pregunta otra vez». No se suelta ni se deshace
+            // nada —quizá sí se hizo—: la saga queda viva en esta fase y repetirla con las mismas llaves lo resuelve.
+            if (rechazo.IsTransient && paso.Llave != LlaveRequerida.Ninguna && _binding.GuardaLaDuda)
+            {
+                return new Desenlace(PasoResultado.Abortar, rechazo, definicion.Motivo ?? $"falló el paso «{definicion.Id}»", EnDuda: true);
+            }
+
             // La confirmación parcial (NV-2): la definición declara que este cierre puede soltar su ítem, y el
             // dominio dice si ESTA saga lo admite —en un flujo genérico, la extensión del vertical (NV-13)—. La
             // definición no evalúa nada.
@@ -587,6 +624,10 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
             ?? throw new InvalidOperationException(
                 $"El paso «{definicion.Id}» declara una reserva y «{definicion.Tipo}» no dijo qué reservó.");
 
+        // Repetir la fase con las mismas llaves devuelve lo mismo que ya se reservó (001-P10 = A, o una caída a media
+        // fase): ya está en la saga con su compensación, y anotarlo otra vez lo desharía dos veces.
+        if (Ledger(corrida).Legs(definicion.Id).Any(l => string.Equals(l.HoldId, hecho.Id, StringComparison.Ordinal))) return;
+
         var saga = _binding.ConReserva(corrida.Saga!, definicion.Id, new HoldLeg(hecho.Id, hecho.CierreId ?? hecho.Id, hecho.Cantidad), item);
 
         Guardar(corrida, saga.WithCompensations(saga.Compensations
@@ -645,6 +686,14 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     private Result<TSaga> Terminar(Corrida corrida, string fase, bool ultima)
     {
         var saga = corrida.Saga!;
+
+        // La fase en duda salió entera: ya no hay duda que anotar (001-P10 = A).
+        if (_binding.FaseEnDuda(saga) is not null)
+        {
+            saga = _binding.ConFaseEnDuda(saga, null);
+            corrida.Saga = saga;
+            corrida.SinGuardar = true;
+        }
         if (!ultima)
         {
             // Una fase que siguió escribiendo después de su última reserva deja en el contexto algo que
@@ -690,6 +739,26 @@ public sealed class FlowRunner<TSaga> where TSaga : class, ISaga<TSaga>
     /// nada. Es la diferencia entre la tarjeta rechazada —tres butacas que soltar— y el precio que no
     /// se pudo cotizar, que no tocó el aforo de nadie.
     /// </remarks>
+    /// <summary>
+    /// Deja la saga viva y EN DUDA en <paramref name="fase"/> (001-P10 = A): un paso con llave dio un rechazo transitorio,
+    /// y no se sabe si se hizo. No se deshace nada; se anota el fallo y la fase, y vuelve el rechazo transitorio.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Quién la termina.</b> Quien repite la fase con la misma llave: las llaves de cada paso derivan de la saga, y
+    /// la capacidad contesta lo que ya hizo (el cobro en duda de #183 pregunta antes de autorizar otra vez). O quien la
+    /// cancela. Si nadie vuelve, el barrido la deshace pasado el plazo de abandono, como a cualquier saga viva.</para>
+    ///
+    /// <para><b>Sólo con llave.</b> Un paso sin llave que se repite no se sabe si duplica: ése sigue deshaciendo, como uno
+    /// que rechaza de verdad.</para>
+    /// </remarks>
+    private Result<TSaga> DejarEnDuda(Corrida corrida, string fase, Rejection rechazo)
+    {
+        var saga = corrida.Saga!;
+        _log.LogWarning("El flujo {Flujo} deja la saga {Saga} en duda en «{Fase}»: {Error}", _flujo.Clave, saga.Id, fase, rechazo);
+        Guardar(corrida, _binding.ConFaseEnDuda(_binding.ConError(saga, rechazo.ToString()), fase));
+        return Result.Rejected<TSaga>(rechazo);
+    }
+
     private async Task<Result<TSaga>> FallarAsync(Corrida corrida, Rejection rechazo, string motivo, CancellationToken ct)
     {
         if (corrida.Saga is not { } saga) return Result.Rejected<TSaga>(rechazo);

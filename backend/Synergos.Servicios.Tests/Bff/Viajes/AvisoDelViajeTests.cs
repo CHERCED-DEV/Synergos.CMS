@@ -81,7 +81,9 @@ public sealed class AvisoDelViajeTests
         var contexto = new FlowContext()
             .Set("viajero", Ref.Create("viajes.viajero", "u-1"))
             .Set("contacto", new Contacto("ana@ejemplo.co", "Ana", "https://sitio/viajes/?viaje=v-1", "Viajes de prueba"))
-            .Set("total", Money.Of(1_200_000m, "COP"));
+            .Set("total", Money.Of(1_200_000m, "COP"))
+            // La nota de un viaje parcial (historia 3): la escribe viajes.nota-del-cierre desde el itinerario.
+            .Set("nota", " No se pudo confirmar: Auto económico. Te devolvemos su parte: 200.000 COP.");
 
         await new PasoAvisar(puerto).EjecutarAsync(
             new EntradaDePaso("v-1", Ref.Create("viajes.reserva", "v-1"), definicion, contexto, null, null), CancellationToken.None);
@@ -96,6 +98,9 @@ public sealed class AvisoDelViajeTests
             .ToList();
         Assert.True(sinLeer.Count == 0, $"El paso manda {string.Join(", ", sinLeer.Select(k => "{" + k + "}"))} y la plantilla no lo usa.");
         Assert.Contains("https://sitio/viajes/?viaje=v-1", relleno.Value.Body, StringComparison.Ordinal);
+        Assert.Contains("No se pudo confirmar: Auto económico. Te devolvemos su parte: 200.000 COP.", relleno.Value.Body, StringComparison.Ordinal);
+        // Un viaje parcial no puede decir que todo quedó reservado.
+        Assert.DoesNotContain("cada parte quedó reservada", relleno.Value.Body, StringComparison.Ordinal);
     }
 
     /// <summary>La plantilla del fichero como la guarda la capacidad (el canal decide si el cuerpo es HTML).</summary>

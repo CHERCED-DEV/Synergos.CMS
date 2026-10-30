@@ -27,16 +27,19 @@ public interface IPublicadorDeOfertasDeCursos
 }
 
 /// <summary>
-/// Publica y retira la oferta de un curso en <c>Synergos.Bff.Educacion</c> (<c>POST v1/ofertas</c> y
-/// <c>POST v1/ofertas/{curso}/retirar</c>, 010-educacion-matricula). El molde de
-/// <c>PublicadorDeOfertasDeReservas</c>.
+/// Publica y retira la oferta de un curso en <c>Synergos.Bff.Educacion</c>: la oferta común del núcleo
+/// (<c>POST v1/ofertas</c> y <c>POST v1/ofertas/{pieza}/retirar</c>, 001-P11 A con N1) y, junto a ella, cómo se llaman el
+/// curso y sus planes (<c>POST v1/cursos/{curso}/nombres</c>). El molde de <c>PublicadorDeOfertasDeReservas</c>.
 /// </summary>
 /// <remarks>
-/// <para><b>Manda lo que el catálogo sirve y nada más</b>: el id del curso (el <c>courseSlug</c> con el catálogo en el
-/// contenido), su precio sin plan y el total de cada plan, con su moneda; y el título del curso y el nombre de cada plan,
-/// que dice el aviso de la matrícula (NM-2). Los precios los registra el orquestador; el
-/// CMS no habla con la capacidad de precios. Un total cero se publica explícito: es un curso gratis, no uno sin
-/// oferta.</para>
+/// <para><b>Manda lo que el catálogo sirve y nada más</b>: la pieza es el id del curso (el <c>courseSlug</c> con el
+/// catálogo en el contenido), con su precio sin plan y su moneda; cada plan es una variante con su total. Los precios los
+/// registra el orquestador; el CMS no habla con la capacidad de precios. Un total cero se publica explícito: es un curso
+/// gratis, no uno sin oferta.</para>
+///
+/// <para><b>Los nombres van aparte</b> (NM-3): la oferta común publica precios y no cómo se llaman, y el aviso de la
+/// matrícula dice el título del curso y el nombre del plan (NM-2). Una publicación sin sus nombres no está hecha:
+/// republicar repite las dos.</para>
 ///
 /// <para><b>Sólo los planes que la ficha ofrece</b> (<see cref="PlanesOfrecidos"/>): el plan en cuotas queda declarado
 /// en el catálogo y sin ofrecer (D-010-P1), y por la puerta no se puede abrir con él.</para>
@@ -80,13 +83,20 @@ public sealed class PublicadorDeOfertasDeCursos : IPublicadorDeOfertasDeCursos
     }
 
     /// <inheritdoc />
-    public Task<EstadoDeLaOfertaDeCurso> PublicarAsync(CourseDetail curso, CancellationToken cancellationToken = default)
+    public async Task<EstadoDeLaOfertaDeCurso> PublicarAsync(CourseDetail curso, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curso);
-        return EnviarAsync(curso.Course.Id, "publicar", () => new HttpRequestMessage(HttpMethod.Post, "v1/ofertas")
+        var oferta = await EnviarAsync(curso.Course.Id, "publicar", () => new HttpRequestMessage(HttpMethod.Post, "v1/ofertas")
         {
             Content = JsonContent.Create(Oferta(curso)),
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
+        if (oferta != EstadoDeLaOfertaDeCurso.Hecha) return oferta;
+
+        return await EnviarAsync(curso.Course.Id, "nombrar", () => new HttpRequestMessage(
+            HttpMethod.Post, $"v1/cursos/{Uri.EscapeDataString(curso.Course.Id)}/nombres")
+        {
+            Content = JsonContent.Create(Nombres(curso)),
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -137,14 +147,19 @@ public sealed class PublicadorDeOfertasDeCursos : IPublicadorDeOfertasDeCursos
         }
     }
 
-    /// <summary>El cuerpo de <c>PublishCourseOffer</c>, con los nombres del contrato del orquestador.</summary>
+    /// <summary>El cuerpo de <c>PublishDeclaredOffer</c>: el curso es la pieza y cada plan ofrecido una variante.</summary>
     private static object Oferta(CourseDetail c) => new
     {
-        curso = c.Course.Id,
+        pieza = c.Course.Id,
         precio = c.Course.Price,
         moneda = c.Course.Currency,
-        // Cómo se llaman, como los pinta la ficha: el aviso de la matrícula los dice (NM-2 con T091 del núcleo).
+        variantes = PlanesOfrecidos(c).Select(p => new { codigo = p.Code, total = p.Total }).ToList(),
+    };
+
+    /// <summary>El cuerpo de <c>PublishCourseNames</c>: cómo se llaman, como los pinta la ficha (NM-2; interino, NM-3).</summary>
+    private static object Nombres(CourseDetail c) => new
+    {
         nombre = c.Course.Title,
-        planes = PlanesOfrecidos(c).Select(p => new { codigo = p.Code, total = p.Total, nombre = p.Label }).ToList(),
+        planes = PlanesOfrecidos(c).Select(p => new { codigo = p.Code, nombre = p.Label }).ToList(),
     };
 }

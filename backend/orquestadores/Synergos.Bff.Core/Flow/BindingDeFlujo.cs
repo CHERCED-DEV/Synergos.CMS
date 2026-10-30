@@ -199,6 +199,21 @@ public sealed class BindingDeFlujo : IFlowBinding<SagaDeFlujo>
         return _extension is null ? saga : AlGuardar(_extension.ConItemSoltado(saga, ctx, reservante, soltada), ctx);
     }
 
+    /// <summary>La saga genérica guarda la fase en duda en su record (001-P10 = A).</summary>
+    public bool GuardaLaDuda => true;
+
+    public string? FaseEnDuda(SagaDeFlujo saga)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        return saga.FaseEnDuda;
+    }
+
+    public SagaDeFlujo ConFaseEnDuda(SagaDeFlujo saga, string? fase)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+        return saga with { FaseEnDuda = fase };
+    }
+
     public SagaDeFlujo ConError(SagaDeFlujo saga, string? falla)
     {
         ArgumentNullException.ThrowIfNull(saga);

@@ -72,27 +72,57 @@ public sealed class PublicadorDeOfertasDeCursosTests
         Content = new StringContent($$"""{"code":"{{codigo}}","detail":"no","transient":false}""", Encoding.UTF8, "application/problem+json"),
     };
 
+    /// <summary>
+    /// La oferta común del núcleo (001-P11 A con N1): el curso es la pieza, con su precio y su moneda, y cada plan que la
+    /// ficha ofrece es una variante con su total. Y después, cómo se llaman, para el aviso de la matrícula (NM-2; la
+    /// oferta común no los publica: NM-3).
+    /// </summary>
     [Fact]
-    public async Task Publicar_manda_el_curso_con_su_precio_su_moneda_y_el_total_de_cada_plan_que_la_ficha_ofrece()
+    public async Task Publicar_manda_la_pieza_con_su_precio_y_sus_variantes_y_despues_sus_nombres()
     {
         var orquestador = new OrquestadorFalso();
 
         var estado = await Publicador(orquestador).PublicarAsync(Curso());
 
         Assert.Equal(EstadoDeLaOfertaDeCurso.Hecha, estado);
-        var (ruta, llave, cuerpo) = Assert.Single(orquestador.Llamadas);
+        Assert.Equal(2, orquestador.Llamadas.Count);
+        var (ruta, llave, cuerpo) = orquestador.Llamadas[0];
         Assert.Equal("/v1/ofertas", ruta);
         Assert.False(string.IsNullOrWhiteSpace(llave));
         var o = JsonDocument.Parse(cuerpo).RootElement;
-        Assert.Equal("gestion-agil", o.GetProperty("curso").GetString());
+        Assert.Equal(["pieza", "precio", "moneda", "variantes"], o.EnumerateObject().Select(p => p.Name));
+        Assert.Equal("gestion-agil", o.GetProperty("pieza").GetString());
         Assert.Equal(320_000m, o.GetProperty("precio").GetDecimal());
         Assert.Equal("COP", o.GetProperty("moneda").GetString());
-        var plan = Assert.Single(o.GetProperty("planes").EnumerateArray());
-        Assert.Equal("full", plan.GetProperty("codigo").GetString());
-        Assert.Equal(320_000m, plan.GetProperty("total").GetDecimal());
-        // Cómo se llaman, para el aviso de la matrícula (NM-2): el título de la ficha y la etiqueta del plan.
-        Assert.Equal("Gestión ágil", o.GetProperty("nombre").GetString());
-        Assert.Equal("Pago de contado", plan.GetProperty("nombre").GetString());
+        var variante = Assert.Single(o.GetProperty("variantes").EnumerateArray());
+        Assert.Equal("full", variante.GetProperty("codigo").GetString());
+        Assert.Equal(320_000m, variante.GetProperty("total").GetDecimal());
+
+        var (rutaDeNombres, llaveDeNombres, nombres) = orquestador.Llamadas[1];
+        Assert.Equal("/v1/cursos/gestion-agil/nombres", rutaDeNombres);
+        Assert.False(string.IsNullOrWhiteSpace(llaveDeNombres));
+        var n = JsonDocument.Parse(nombres).RootElement;
+        Assert.Equal("Gestión ágil", n.GetProperty("nombre").GetString());
+        var plan = Assert.Single(n.GetProperty("planes").EnumerateArray());
+        Assert.Equal(("full", "Pago de contado"), (plan.GetProperty("codigo").GetString(), plan.GetProperty("nombre").GetString()));
+    }
+
+    [Fact]
+    public async Task Si_la_oferta_no_entra_no_manda_los_nombres_y_sin_nombres_la_publicacion_no_esta_hecha()
+    {
+        var rechazaLaOferta = new OrquestadorFalso { Responde = _ => Rechazo(HttpStatusCode.BadRequest, "educacion.oferta_invalida") };
+        var rechazaLosNombres = new OrquestadorFalso
+        {
+            Responde = r => r.RequestUri!.AbsolutePath.EndsWith("/nombres", StringComparison.Ordinal)
+                ? Rechazo(HttpStatusCode.BadRequest, "educacion.nombres_invalidos")
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") },
+        };
+
+        Assert.Equal(EstadoDeLaOfertaDeCurso.Fallida, await Publicador(rechazaLaOferta).PublicarAsync(Curso()));
+        Assert.Equal(EstadoDeLaOfertaDeCurso.Fallida, await Publicador(rechazaLosNombres).PublicarAsync(Curso()));
+
+        Assert.Equal(["/v1/ofertas"], rechazaLaOferta.Llamadas.Select(l => l.Ruta));
+        Assert.Equal(["/v1/ofertas", "/v1/cursos/gestion-agil/nombres"], rechazaLosNombres.Llamadas.Select(l => l.Ruta));
     }
 
     /// <summary>
@@ -108,8 +138,7 @@ public sealed class PublicadorDeOfertasDeCursosTests
 
         await Publicador(orquestador).PublicarAsync(curso);
 
-        var cuerpo = Assert.Single(orquestador.Llamadas).Cuerpo;
-        Assert.DoesNotContain("emi-3", cuerpo, StringComparison.Ordinal);
+        Assert.All(orquestador.Llamadas, l => Assert.DoesNotContain("emi-3", l.Cuerpo, StringComparison.Ordinal));
         Assert.Equal(["full"], PublicadorDeOfertasDeCursos.PlanesOfrecidos(curso).Select(p => p.Code));
     }
 
@@ -120,15 +149,15 @@ public sealed class PublicadorDeOfertasDeCursosTests
 
         await Publicador(orquestador).PublicarAsync(Curso("intro-ia", 0m));
 
-        var o = JsonDocument.Parse(Assert.Single(orquestador.Llamadas).Cuerpo).RootElement;
+        var o = JsonDocument.Parse(orquestador.Llamadas[0].Cuerpo).RootElement;
         Assert.Equal(0m, o.GetProperty("precio").GetDecimal());
-        var plan = Assert.Single(o.GetProperty("planes").EnumerateArray());
-        Assert.Equal("free", plan.GetProperty("codigo").GetString());
-        Assert.Equal(0m, plan.GetProperty("total").GetDecimal());
+        var variante = Assert.Single(o.GetProperty("variantes").EnumerateArray());
+        Assert.Equal("free", variante.GetProperty("codigo").GetString());
+        Assert.Equal(0m, variante.GetProperty("total").GetDecimal());
     }
 
     [Fact]
-    public async Task Republicar_es_otra_publicacion_con_su_propia_llave()
+    public async Task Republicar_es_otra_publicacion_con_sus_propias_llaves()
     {
         var orquestador = new OrquestadorFalso();
         var publicador = Publicador(orquestador);
@@ -136,7 +165,7 @@ public sealed class PublicadorDeOfertasDeCursosTests
         await publicador.PublicarAsync(Curso());
         await publicador.PublicarAsync(Curso());
 
-        Assert.Equal(2, orquestador.Llamadas.Select(l => l.Llave).Distinct().Count());
+        Assert.Equal(4, orquestador.Llamadas.Select(l => l.Llave).Distinct().Count());
     }
 
     [Fact]

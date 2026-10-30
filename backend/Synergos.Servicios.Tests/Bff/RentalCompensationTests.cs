@@ -159,7 +159,7 @@ public sealed class RentalCompensationTests : RentalLiquidacionBase
     public async Task Un_intento_deshecho_NO_se_proyecta_como_reservado()
     {
         var caps = FelizEstricto();
-        caps.Falla("POST /v1/payments", HttpStatusCode.PaymentRequired, "payments.declined");
+        caps.Falla("POST /v1/payments", HttpStatusCode.Conflict, "payments.payment_declined");
         var c = Imperativo(caps);
 
         Assert.False((await c.ReservarAsync()).Ok);

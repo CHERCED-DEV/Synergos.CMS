@@ -22,7 +22,7 @@ namespace Synergos.CMS.Tests.Bff.Educacion;
 public sealed class PlantillaDeLaMatriculaTests
 {
     private static PasoDef ElAvisoDeLaMatricula()
-        => FlujosDeclarados.Incrustado(typeof(OfertaDeCursoResponse).Assembly, "flujos/educacion.matricula.json").Pasos["avisar"];
+        => FlujosDeclarados.Incrustado(typeof(NombresDelCursoResponse).Assembly, "flujos/educacion.matricula.json").Pasos["avisar"];
 
     private static Template LaAprovisionada(string clave)
     {

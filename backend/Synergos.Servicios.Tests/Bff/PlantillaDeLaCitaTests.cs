@@ -38,8 +38,12 @@ public sealed class PlantillaDeLaCitaTests
     {
         var paso = ElAvisoDeLaCita();
         var plantilla = LaAprovisionada(paso.Plantilla!);
-        var valores = PasoAvisar.Valores("pta-cita-1", new Contacto("paciente@ejemplo.co", "Ana", "https://sitio/healthcare/?cita=x", "Clínica"),
-            Money.Of(50_000m, "COP"));
+        var valores = new Dictionary<string, string>(
+            PasoAvisar.Valores("pta-cita-1", new Contacto("paciente@ejemplo.co", "Ana", "https://sitio/healthcare/?cita=x", "Clínica"),
+                Money.Of(50_000m, "COP")),
+            StringComparer.Ordinal);
+        // Y los que declara la definición (NN-6, núcleo T091): lo que se cruza son los marcadores, no el texto.
+        foreach (var nombre in paso.Valores ?? []) valores[nombre] = $"<{nombre}>";
 
         var relleno = NotificationRules.Fill(plantilla, valores);
         Assert.True(relleno.IsOk, $"La plantilla «{plantilla.Key}» no se rellena con lo que manda el paso: {relleno.Rejection?.Message}");

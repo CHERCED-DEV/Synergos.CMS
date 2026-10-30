@@ -67,6 +67,10 @@ builder.Services.AddSingleton<TripFlow>();
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
 if (declarado)
 {
+    // La confirmación parcial por la puerta (historia 3, NV-13): el flujo genérico le pregunta a la extensión del vertical si
+    // suelta un ítem cuyo cierre falló, y ésta arma la devolución de su parte, que sabe deshacer el ejecutor común.
+    builder.Services.AddSingleton<IExtensionDelFlujo, ExtensionDeViajes>();
+    builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DevolverParteDelItem(sp.GetRequiredService<IDeshacerCobros>(), sp.GetRequiredService<TiposDeValor>()));
     builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, PasosDeViajes.Propios());
 
     // Los tipos del host más el itinerario del viaje, que la saga genérica guarda y la puerta devuelve.

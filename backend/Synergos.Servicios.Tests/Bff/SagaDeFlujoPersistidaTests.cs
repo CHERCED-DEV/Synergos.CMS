@@ -68,6 +68,27 @@ public sealed class SagaDeFlujoPersistidaTests
     }
 
     [Fact]
+    public void La_fase_en_duda_va_al_fichero_solo_si_la_hay_y_vuelve_al_leerlo()
+    {
+        // 001-P10 = A: la duda tiene que sobrevivir a un reinicio, porque es lo que deja retomar la fase con la misma
+        // llave. Sin duda no se escribe, y el fichero de las demás sagas no cambia de forma (la de arriba).
+        var raiz = Raiz();
+        try
+        {
+            var almacen = new FileSystemSagaStore<SagaDeFlujo>(Options.Create(new SagaStorageOptions { Root = raiz }));
+            almacen.Put(Poblada() with { FaseEnDuda = "abrir" });
+            var fichero = Directory.EnumerateFiles(Path.Combine(raiz, "sagas"), "*.json").Single();
+
+            Assert.EndsWith(",\"alertsSent\":0,\"faseEnDuda\":\"abrir\"}", File.ReadAllText(fichero), StringComparison.Ordinal);
+            Assert.Equal("abrir", new FileSystemSagaStore<SagaDeFlujo>(Options.Create(new SagaStorageOptions { Root = raiz })).Find("cita-1")!.FaseEnDuda);
+        }
+        finally
+        {
+            if (Directory.Exists(raiz)) Directory.Delete(raiz, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Una_saga_guardada_antes_de_anotar_el_cierre_se_lee_con_sus_reservas_sin_cerrar()
     {
         // Las sagas en vuelo y las completadas antes de NN-18 no traen «cerrada»: se leen igual, sin nada que recorrer.

@@ -134,7 +134,7 @@ public abstract class RentalReservaBase
     public async Task Sin_garantia_retenible_se_suelta_la_ventana_y_no_se_cobra()
     {
         var caps = FelizEstricto();
-        caps.Falla("POST /v1/payments", HttpStatusCode.PaymentRequired, "payments.declined");
+        caps.Falla("POST /v1/payments", HttpStatusCode.Conflict, "payments.payment_declined");
         var c = Nuevo(caps);
 
         var r = await c.ReservarAsync();
@@ -157,7 +157,7 @@ public abstract class RentalReservaBase
     public async Task Si_no_se_cobra_el_alquiler_la_garantia_se_ANULA()
     {
         var caps = FelizEstricto();
-        caps.Falla("POST /v1/payments/pg-ren/capture", HttpStatusCode.PaymentRequired, "payments.declined");
+        caps.Falla("POST /v1/payments/pg-ren/capture", HttpStatusCode.Conflict, "payments.payment_declined");
         var c = Nuevo(caps);
 
         var r = await c.ReservarAsync();
@@ -252,7 +252,7 @@ public abstract class RentalReservaBase
     public async Task Un_alquiler_deshecho_deja_volver_a_intentar_con_la_MISMA_llave()
     {
         var caps = FelizEstricto();
-        caps.Falla("POST /v1/payments", HttpStatusCode.PaymentRequired, "payments.declined");
+        caps.Falla("POST /v1/payments", HttpStatusCode.Conflict, "payments.payment_declined");
         var c = Nuevo(caps);
 
         var primero = await c.ReservarAsync();
