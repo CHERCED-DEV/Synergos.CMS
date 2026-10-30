@@ -1,0 +1,66 @@
+{
+  "clave": "gobierno.radicacion",
+  "entrada": ["ciudadano", "tramite", "notificacionElectronica", "versionDelTexto"],
+  "tipos": {
+    "ciudadano": { "de": "sujeto" },
+    "tramite": { "tipo": "ref", "kind": "gobierno.tramite" },
+    "notificacionElectronica": "booleano",
+    "versionDelTexto": "texto",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["tramite", "total", "expediente", "estado", "notificacionElectronica", "versionDelTexto"],
+  "efimera": { "cerrar": ["contacto"] },
+  "fases": {
+    "abrir": ["lineas", "cotizar", "desglose", "autorizar"],
+    "cerrar": ["capturar", "arrancar", "avisar"]
+  },
+  "pasos": {
+    "lineas": { "tipo": "forma.una-linea", "lee": ["tramite"], "escribe": ["aCotizar"] },
+    "cotizar": {
+      "tipo": "pricing.cotizar-sin-codigo",
+      "lee": ["aCotizar"],
+      "escribe": ["cotizacion"],
+      "motivo": "el trámite no se puede radicar en línea ahora"
+    },
+    "desglose": {
+      "tipo": "pricing.desglose",
+      "lee": ["cotizacion"],
+      "escribe": ["subtotal", "descuento", "impuesto", "total"]
+    },
+    "autorizar": {
+      "tipo": "payments.autorizar",
+      "lee": ["ciudadano", "total"],
+      "escribe": ["cobroId"],
+      "llave": "authorize",
+      "omitir_si_cero": "total",
+      "motivo": "la tasa no se pudo autorizar",
+      "reserva": {
+        "consumado_por": "capturar",
+        "antes": "payments.anular",
+        "despues": "payments.devolver",
+        "motivo": "radicación no completada"
+      }
+    },
+    "capturar": {
+      "tipo": "payments.capturar",
+      "lee": ["cobroId"],
+      "llave": "capture",
+      "cierra_reserva": "autorizar",
+      "motivo": "la tasa no se pudo cobrar"
+    },
+    "arrancar": {
+      "tipo": "workflow.arrancar",
+      "escribe": ["expediente", "estado"],
+      "llave": "arrancar",
+      "proceso": "gov.tramite.v2",
+      "motivo": "no se pudo crear el expediente"
+    },
+    "avisar": {
+      "tipo": "notifications.avisar",
+      "lee": ["ciudadano", "contacto", "total"],
+      "llave": "avisar",
+      "plantilla": "gobierno.tramite.radicado",
+      "al_fallar": "seguir"
+    }
+  }
+}

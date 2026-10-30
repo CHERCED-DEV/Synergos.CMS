@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Synergos.CMS.Application.Services.Impl;
 
 namespace Synergos.CMS.Tests.Gobierno;
@@ -55,30 +54,30 @@ public sealed class ProcesoDelTramiteTests
         => DelFichero().SingleOrDefault(d => d.Key == clave)
            ?? throw new Xunit.Sdk.XunitException($"El fichero de procesos no declara «{clave}».");
 
-    /// <summary>La v1 tal como la publica hoy el heredoc de provisionar.sh, con la clave en su valor por defecto.</summary>
-    private static Definicion DelHeredoc()
-    {
-        var guion = File.ReadAllText(Path.Combine(RepoRoot(), "tools", "provisionar.sh")).Replace("\r\n", "\n");
-        var m = Regex.Match(guion, @"DEF_GOB=\$\(cat <<JSON\n([\s\S]*?)\nJSON\n\)");
-        Assert.True(m.Success, "No se encontró el heredoc DEF_GOB en provisionar.sh: si la v1 ya sale del fichero, este test se retira con él.");
-        return JsonSerializer.Deserialize<Definicion>(m.Groups[1].Value.Replace("$GOB_DEFINITION", V1), Json)!;
-    }
-
     private static string Huella(Definicion d) => string.Join("|",
         d.Key, d.InitialState, string.Join(",", d.FinalStates),
         string.Join(";", d.Transitions.Select(t => $"{t.Name}:{t.From}>{t.To}[{string.Join(",", t.RequiredRoles)}]")));
 
     /// <summary>
-    /// Mientras el heredoc siga publicando la v1, el fichero la copia sin cambiarle nada.
+    /// La v1 ya está publicada, y una definición publicada no se reescribe: el fichero la conserva sin cambiarle nada.
     /// </summary>
     /// <remarks>
-    /// Son dos copias del mismo dato hasta que el despliegue copie el fichero (NP-1) y el guion publique desde él: si
-    /// divergieran, un servidor provisionado tendría una v1 distinta de la que el repositorio dice que existe.
+    /// <para>Antes se comparaba con el heredoc DEF_GOB de provisionar.sh, que era quien la publicaba. Desde NP-1 el guion
+    /// publica desde este fichero (lo prueba ProvisionWiringTests corriéndolo), así que la referencia es la v1 que ya salió:
+    /// cambiarla aquí no la cambiaría en Api.Workflow —contesta workflow.key_taken— y el orquestador cruzaría sus pasos
+    /// contra un proceso que no es el publicado.</para>
+    ///
+    /// <para>Es también lo que deja volver a una versión anterior con el catálogo de ahora (deploy-remoto.sh): las
+    /// definiciones se añaden, no se reescriben.</para>
     /// </remarks>
     [Fact]
-    public void La_v1_del_fichero_es_la_del_heredoc_sin_cambiar_nada()
+    public void La_v1_publicada_sigue_en_el_fichero_sin_cambiar_nada()
     {
-        Assert.Equal(Huella(DelHeredoc()), Huella(Clave(V1)));
+        Assert.Equal(
+            "gov.tramite|submitted|approved,rejected|approve:submitted>approved[funcionario];approve:in-review>approved[funcionario];"
+            + "approve:info-requested>approved[funcionario];reject:submitted>rejected[funcionario];"
+            + "request-info:submitted>info-requested[funcionario]",
+            Huella(Clave(V1)));
     }
 
     [Fact] // FR-005: los cinco estados de siempre, la inicial y las dos finales.

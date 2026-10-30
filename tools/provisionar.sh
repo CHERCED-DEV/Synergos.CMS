@@ -49,7 +49,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #
 #   ./provisionar.sh [--verificar] [--base <url>] [--manifiesto <fichero>]
-#                    [--plantillas <fichero>]
+#                    [--plantillas <fichero>] [--procesos <fichero>]
 #
 #   --verificar   no escribe nada: dice qué falta y sale 1 si falta algo.
 #
@@ -277,6 +277,49 @@ elif modo == 'comparar':
 PY
 }
 
+# ── El catálogo de procesos ──────────────────────────────────────────────────
+#
+# Las definiciones que Api.Workflow guarda como dato salen de UN fichero,
+# `provisionar.procesos.json` (009, NP-1): el mismo que bff-gobierno monta como
+# su catálogo y contra el que cruza sus pasos al arrancar. La v1 vivía en un
+# heredoc de este guion y la v2 sólo en el fichero, así que un servidor nuevo
+# quedaba con la v1 y el orquestador con la v2: la primera radicación por la
+# puerta habría salido `definition_not_found`.
+#
+# Una línea por definición: clave 0x1F cuerpo-del-POST, o `!` 0x1F de-dónde
+# 0x1F qué-pasa si la entrada no se puede publicar. El cuerpo, en ASCII y en una
+# línea, por lo mismo que el de una plantilla (ver arriba).
+procesos_py() {
+  "${PYTHON[@]}" - "$1" <<'PY'
+import json, re, sys
+sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+
+CAMPOS = ('key', 'initialState', 'finalStates', 'transitions')
+
+try:
+    entradas = json.load(open(sys.argv[1], encoding='utf-8'))
+except (OSError, ValueError) as e:
+    print('!\x1f%s\x1fno se puede leer como JSON (%s)' % (sys.argv[1], e))
+    sys.exit(0)
+
+vistas = set()
+for e in entradas:
+    if not isinstance(e, dict) or set(e) <= {'_'}:
+        continue
+    clave = e.get('key') if isinstance(e.get('key'), str) else ''
+    falta = [c for c in CAMPOS if not e.get(c)]
+    if falta:
+        print('!\x1f%s\x1ffaltan %s' % (clave or '?', ','.join(falta)))
+    elif not re.fullmatch(r'[A-Za-z0-9._-]+', clave):
+        print('!\x1f%s\x1fla clave no es valida' % clave)
+    elif clave in vistas:
+        print('!\x1f%s\x1festa dos veces' % clave)
+    else:
+        vistas.add(clave)
+        print('%s\x1f%s' % (clave, json.dumps({c: e[c] for c in CAMPOS}, ensure_ascii=True, separators=(',', ':'))))
+PY
+}
+
 # ── La autoprueba ────────────────────────────────────────────────────────────
 #
 # `--autoprueba` corre el lector sobre un manifiesto de mentira y comprueba que
@@ -385,21 +428,46 @@ JSON
   veredicto '{"items":[],"offset":0,"hasMore":false}' "AUSENTE"
   rm -f "$TMPP" "$PAG"
 
+  # ── El catálogo de procesos: el lector, sin red ─────────────────────────────
+  #
+  # Una entrada que es sólo comentario no cuenta; una sin transiciones y una clave
+  # repetida se dicen y no se publican; la buena sale entera, en una línea.
+  TMPC="$(mktemp)"
+  cat > "$TMPC" <<'JSON'
+[{"_":"un comentario"},
+ {"key":"p.uno","initialState":"a","finalStates":["b"],"transitions":[{"name":"ir","from":"a","to":"b","requiredRoles":["rol"]}]},
+ {"key":"p.dos","initialState":"a","finalStates":["b"]},
+ {"key":"p.uno","initialState":"a","finalStates":["b"],"transitions":[{"name":"ir","from":"a","to":"b"}]}]
+JSON
+  LEIDO="$(procesos_py "$TMPC" | tr '\037' '|')"
+  ESPERADO='p.uno|{"key":"p.uno","initialState":"a","finalStates":["b"],"transitions":[{"name":"ir","from":"a","to":"b","requiredRoles":["rol"]}]}
+!|p.dos|faltan transitions
+!|p.uno|esta dos veces'
+  [ "$LEIDO" = "$ESPERADO" ] || { echo "AUTOPRUEBA el catalogo de procesos se leyo asi:"; echo "$LEIDO"; echo "y se esperaba:"; echo "$ESPERADO"; fallos_prueba=1; }
+  printf '%s' '[{"key":' > "$TMPC"
+  # La ruta no se compara: en Git Bash, Python la recibe ya traducida a la de Windows.
+  case "$(procesos_py "$TMPC" | tr '\037' '|')" in
+    "!|"*"|no se puede leer como JSON"*) ;;
+    *) echo "AUTOPRUEBA un catalogo que no es JSON no se dice: el guion no publicaria ninguna definicion y no avisaria"; fallos_prueba=1 ;;
+  esac
+  rm -f "$TMPC"
+
   [ "$fallos_prueba" = "0" ] || exit 1
   echo "OK: el manifiesto se lee con los campos alineados, tambien sin capacity ni timeZoneId."
   echo "OK: la agenda de un recurso se lee entera y se compara sin depender del orden ni del formato."
   echo "OK: las plantillas se leen en ASCII y en una linea, y el comparador da cada veredicto."
+  echo "OK: el catalogo de procesos se lee entero y dice la entrada que no se puede publicar."
   exit 0
 fi
 
 VERIFICAR=0
 MANIFIESTO="$(dirname "$0")/provisionar.recursos.json"
 PLANTILLAS="$(dirname "$0")/provisionar.plantillas.json"
+PROCESOS="$(dirname "$0")/provisionar.procesos.json"
 WORKFLOW_URL="${SYNERGOS_WORKFLOW_URL:-http://api-workflow:8080}"
 BOOKING_URL="${SYNERGOS_BOOKING_URL:-http://api-booking:8080}"
 PRICING_URL="${SYNERGOS_PRICING_URL:-http://api-pricing:8080}"
 NOTIFICATIONS_URL="${SYNERGOS_NOTIFICATIONS_URL:-http://api-notifications:8080}"
-GOB_DEFINITION="${SYNERGOS_GOB_DEFINITION:-gov.tramite}"
 TRACKING_PREFIX="${SYNERGOS_TRACKING_PREFIX:-tracking}"
 
 while [ $# -gt 0 ]; do
@@ -407,6 +475,7 @@ while [ $# -gt 0 ]; do
     --verificar) VERIFICAR=1; shift ;;
     --manifiesto) MANIFIESTO="$2"; shift 2 ;;
     --plantillas) PLANTILLAS="$2"; shift 2 ;;
+    --procesos) PROCESOS="$2"; shift 2 ;;
     --base) WORKFLOW_URL="$2"; BOOKING_URL="$2"; PRICING_URL="$2"; NOTIFICATIONS_URL="$2"; shift 2 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
   esac
@@ -441,6 +510,16 @@ if [ ! -f "$PLANTILLAS" ]; then
   exit 1
 fi
 
+# Y el catálogo de procesos, por lo mismo y con un lector más: bff-gobierno lo
+# monta y no arranca sin él, así que un servidor sin el fichero tampoco tiene
+# orquestador (009, NP-1).
+if [ ! -f "$PROCESOS" ]; then
+  echo "✗ no existe el catálogo de procesos $PROCESOS." >&2
+  echo "  Ahí se declaran las definiciones que Api.Workflow guarda como dato —la del" >&2
+  echo "  trámite de Gobierno, v1 y v2—. Sin él no se decide ningún expediente." >&2
+  exit 1
+fi
+
 # Y el intérprete que lo lee, por la misma razón: sin él se publicaban las
 # definiciones y el paso 3 no leía nada.
 if ! elegir_python; then
@@ -469,22 +548,12 @@ pedir() {  # pedir GET|POST <url> [cuerpo] [llave-idem]
 }
 codigo() { printf '%s' "$1" | tail -n1; }
 
-# ── 1. La definición del trámite de Gobierno ─────────────────────────────────
+# ── 1. Las definiciones del trámite de Gobierno ──────────────────────────────
 #
-# Los ESTADOS son los slugs públicos del expediente, no nombres nuevos: es lo
-# que hace que traducir de vuelta sea una lectura y no una segunda tabla.
-# Copiado de `.env.example`, que es donde vivía.
-DEF_GOB=$(cat <<JSON
-{"key":"$GOB_DEFINITION","initialState":"submitted",
- "finalStates":["approved","rejected"],
- "transitions":[
-   {"name":"approve","from":"submitted","to":"approved","requiredRoles":["funcionario"]},
-   {"name":"approve","from":"in-review","to":"approved","requiredRoles":["funcionario"]},
-   {"name":"approve","from":"info-requested","to":"approved","requiredRoles":["funcionario"]},
-   {"name":"reject","from":"submitted","to":"rejected","requiredRoles":["funcionario"]},
-   {"name":"request-info","from":"submitted","to":"info-requested","requiredRoles":["funcionario"]}]}
-JSON
-)
+# Salen del catálogo de procesos (ver arriba): la v1 —que vivía aquí, en un
+# heredoc— y la v2, con las claves que el fichero declara. Los ESTADOS son los
+# slugs públicos del expediente, no nombres nuevos: es lo que hace que traducir
+# de vuelta sea una lectura y no una segunda tabla.
 
 # ── 2. Los CUATRO pipelines de seguimiento ───────────────────────────────────
 #
@@ -528,7 +597,13 @@ definicion() {  # definicion <clave> <json>
 }
 
 echo "── definiciones de proceso"
-definicion "$GOB_DEFINITION" "$DEF_GOB"
+while IFS=$'\x1f' read -r clave cuerpo motivo; do
+  if [ "$clave" = "!" ]; then
+    falla "catálogo de procesos, $cuerpo: $motivo"
+    continue
+  fi
+  definicion "$clave" "$cuerpo"
+done < <(procesos_py "$PROCESOS")
 definicion "$TRACKING_PREFIX.shop"    "$(pipeline_json "$TRACKING_PREFIX.shop"    paid preparing shipped delivered)"
 definicion "$TRACKING_PREFIX.travel"  "$(pipeline_json "$TRACKING_PREFIX.travel"  paid confirmed upcoming completed)"
 definicion "$TRACKING_PREFIX.events"  "$(pipeline_json "$TRACKING_PREFIX.events"  paid confirmed attended)"

@@ -8,6 +8,9 @@ namespace Synergos.CMS.Interfaces;
 /// <see cref="FeeMinor"/> (unidades menores de la moneda — COP no tiene centavos, así
 /// que coincide con el monto entero).
 /// </summary>
+/// <param name="Clave">La clave estable del nodo (<c>tramitePage</c>) con el catálogo en el contenido: la que identifica
+/// el trámite ante el orquestador de Gobierno —su oferta y la radicación por la puerta (009, T034)—, porque el slug y el
+/// nombre los cambia el editor. Nula en la siembra.</param>
 public sealed record TramiteSummary(
     string Id,
     string Slug,
@@ -18,7 +21,8 @@ public sealed record TramiteSummary(
     string Channel,
     int EstimatedDays,
     decimal FeeMinor,
-    string Currency);
+    string Currency,
+    string? Clave = null);
 
 /// <summary>
 /// Una opción de un campo <c>select</c>/<c>radio</c> del formulario dinámico — el par
@@ -115,7 +119,7 @@ public interface ITramiteCatalogProvider
     Task<IReadOnlyList<TramiteSummary>> SearchAsync(string? query, string? category, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Devuelve la ficha del trámite por id o slug, o null si no existe.
+    /// Devuelve la ficha del trámite por id, slug o clave del nodo, o null si no existe.
     /// </summary>
     Task<TramiteDetail?> GetAsync(string tramiteId, CancellationToken cancellationToken = default);
 }

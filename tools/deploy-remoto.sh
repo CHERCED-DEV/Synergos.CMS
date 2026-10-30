@@ -55,10 +55,19 @@ echo "── versión a poner:  $SHA"
 # (medido en el ensayo de `ed634d55`, el primero tras sumar `bff-reservas`).
 # Por eso cada versión que queda en pie guarda los suyos en `versiones/<sha>/`
 # (al final), y poner una que ya estuvo repone los de ella ANTES de bajar nada.
+#
+# Y lo que su compose MONTA del servidor es de la versión igual que el Caddyfile:
+# el catálogo de procesos que lee bff-gobierno (009, NP-1). Una versión anterior
+# a él no lo guardó, y entonces se queda el que hay — las definiciones sólo se
+# añaden, nunca se reescriben, así que el de ahora contiene el de antes.
+CATALOGO="provisionar.procesos.json"
 GUARDADOS="$DIR/versiones/$SHA"
 if [ -f "$GUARDADOS/compose.prod.yml" ] && [ -f "$GUARDADOS/Caddyfile" ]; then
   echo "── reponiendo el compose y el Caddyfile con que $SHA estuvo en pie"
   cp "$GUARDADOS/compose.prod.yml" "$GUARDADOS/Caddyfile" "$DIR/"
+  if [ -f "$GUARDADOS/$CATALOGO" ]; then
+    cp "$GUARDADOS/$CATALOGO" "$DIR/"
+  fi
 fi
 
 # ── Bajar las imágenes ANTES de parar nada ───────────────────────────────────
@@ -146,5 +155,8 @@ fi
 # una vuelta atrás futura (ver «Los ficheros de la versión», arriba).
 mkdir -p "$GUARDADOS"
 cp "$DIR/compose.prod.yml" "$DIR/Caddyfile" "$GUARDADOS/"
+if [ -f "$DIR/$CATALOGO" ]; then
+  cp "$DIR/$CATALOGO" "$GUARDADOS/"
+fi
 echo "$SHA" > tag.actual
 echo "✓ $SHA desplegado (el humo público decide si se queda)"

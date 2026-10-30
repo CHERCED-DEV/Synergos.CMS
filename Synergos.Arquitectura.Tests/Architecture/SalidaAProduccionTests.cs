@@ -297,8 +297,12 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("scp -i ~/.ssh/id_deploy", deploy, StringComparison.Ordinal);
 
         // La lista NO se repite: los ficheros de datos que sólo nombra el `scp` no aparecen escritos
-        // en el ensayo (los scripts sí pueden aparecer: el disparo `paths:` los nombra).
-        foreach (var fichero in new[] { "tools/provisionar.recursos.json", "tools/provisionar.plantillas.json" })
+        // en el ensayo (los scripts sí pueden aparecer: el disparo `paths:` los nombra). Se sacan de la
+        // propia lista, que ya trae tres (el catálogo de procesos, 009 NP-1): escritos acá, el cuarto
+        // habría quedado sin vigilar.
+        var datos = LoQueCopiaElDespliegue().Where(f => f.EndsWith(".json", StringComparison.Ordinal)).ToList();
+        Assert.True(datos.Count >= 3, $"Sólo se encontraron {datos.Count} ficheros de datos en el scp de deploy.yml: el descubrimiento está roto.");
+        foreach (var fichero in datos)
         {
             Assert.DoesNotContain(fichero, ensayo, StringComparison.Ordinal);
         }
@@ -330,6 +334,75 @@ public sealed class SalidaAProduccionTests
         // Y lo carga un navegador: el humo ve que las cabeceras están; esto, que no rompen nada.
         Assert.Contains("chromium", ensayo, StringComparison.Ordinal);
         Assert.Contains("'/umbraco'", ensayo, StringComparison.Ordinal);
+    }
+
+    /// <summary>La lista del <c>scp</c> de <c>deploy.yml</c>: lo que llega a <c>/opt/synergos</c>, aplanado.</summary>
+    private static IReadOnlyList<string> LoQueCopiaElDespliegue()
+    {
+        var lista = Regex.Match(Leer(".github", "workflows", "deploy.yml"),
+            @"scp -i ~/\.ssh/id_deploy[^\n]*\n(?<lista>.*?)""\$USUARIO@\$HOST:/opt/synergos/""", RegexOptions.Singleline);
+        Assert.True(lista.Success, "No se encontró la lista del `scp` de .github/workflows/deploy.yml.");
+
+        return lista.Groups["lista"].Value.Replace('\\', ' ')
+            .Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+    }
+
+    // ── Lo que el compose monta del servidor ────────────────────────────────
+
+    /// <summary>
+    /// Lo que el compose MONTA del servidor (<c>./X</c>) lo copia el despliegue, y cada versión lo guarda y lo repone como
+    /// guarda su compose (009, NP-1).
+    /// </summary>
+    /// <remarks>
+    /// <para>El <c>Caddyfile</c> lo hacía así desde el principio; el catálogo de procesos que monta <c>bff-gobierno</c> es el
+    /// segundo. Un fichero montado que el despliegue no copia deja al contenedor sin él, y el orquestador no arranca. Uno que
+    /// la versión no guarda hace que la vuelta atrás monte el de la versión nueva (ver
+    /// <c>Volver_a_una_version_repone_sus_ficheros_antes_de_bajar_sus_imagenes</c>).</para>
+    ///
+    /// <para>El nombre en <c>deploy-remoto.sh</c> puede ir literal o en una variable
+    /// (<c>CATALOGO="provisionar.procesos.json"</c>): se buscan las dos formas.</para>
+    /// </remarks>
+    [Fact]
+    public void Lo_que_el_compose_monta_del_servidor_lo_copia_el_despliegue_y_lo_guarda_cada_version()
+    {
+        var montados = Regex.Matches(Leer("compose.prod.yml"), @"(?m)^\s+(?:-\s+|source:\s*)\./(?<f>[^:\s]+)")
+            .Select(m => m.Groups["f"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        // Red de seguridad: los dos que hay. Si el descubrimiento se rompe, esto vigilaría el vacío.
+        Assert.Contains("Caddyfile", montados);
+        Assert.Contains("provisionar.procesos.json", montados);
+
+        var copiados = LoQueCopiaElDespliegue().Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        var remoto = Leer("tools", "deploy-remoto.sh");
+        var bajar = remoto.IndexOf("$COMPOSE pull", StringComparison.Ordinal);
+        var comprobar = remoto.IndexOf("NO están en $SHA", StringComparison.Ordinal);
+        Assert.True(bajar >= 0 && comprobar >= 0, "No se reconocen el `pull` y la comprobación de la etiqueta en tools/deploy-remoto.sh.");
+
+        foreach (var fichero in montados)
+        {
+            Assert.True(copiados.Contains(fichero),
+                $"compose.prod.yml monta ./{fichero} de /opt/synergos y el `scp` de deploy.yml no lo copia: en el servidor no "
+                + "existe, y el servicio que lo monta no arranca.");
+
+            var nombres = new List<string> { Regex.Escape(fichero) };
+            nombres.AddRange(Regex.Matches(remoto, $@"(?m)^(?<v>[A-Z_]+)=""{Regex.Escape(fichero)}""")
+                .Select(m => @"\$" + m.Groups["v"].Value));
+            var cualquiera = string.Join("|", nombres);
+
+            var repone = Regex.Match(remoto, $@"cp [^\n]*""\$GUARDADOS/(?:{cualquiera})""[^\n]*""\$DIR/""");
+            var guarda = Regex.Match(remoto, $@"cp [^\n]*""\$DIR/(?:{cualquiera})""[^\n]*""\$GUARDADOS/""");
+
+            Assert.True(repone.Success && repone.Index < bajar,
+                $"tools/deploy-remoto.sh no repone ./{fichero} de la versión que vuelve antes de bajar sus imágenes: la vuelta "
+                + "atrás montaría el de la versión nueva.");
+            Assert.True(guarda.Success && guarda.Index > comprobar,
+                $"tools/deploy-remoto.sh no guarda ./{fichero} con la versión que quedó en pie (después de comprobar su "
+                + "etiqueta): no habría a qué volver.");
+        }
     }
 
     // ── El borde ────────────────────────────────────────────────────────────

@@ -64,5 +64,12 @@
     "channel": "Email",
     "subject": "Tu matrícula en {nombreDelCurso} quedó activa ({numero})",
     "body": "<p>Hola {nombre}:</p><p>Tu matrícula <b>{numero}</b> en {sitio} quedó activa.</p><p>Curso: <b>{nombreDelCurso}</b><br>Plan: {nombreDelPlan}<br>Total: <b>{total}</b></p><p>El curso y su aula están en <a href=\"{enlace}\">{enlace}</a>; ábrelo con tu sesión para entrar.</p>"
+  },
+  {
+    "_": "El aviso de una radicación por la puerta (009-gobierno-tramite): lo manda el paso notifications.avisar al final de «cerrar» en gobierno.radicacion, al ciudadano de la sesión y a la dirección que pone la puerta, que nunca se guarda en la saga. Marcadores: los fijos del paso menos {numero} —{nombre}, {total}, {enlace} y {sitio}—; {numero} NO va porque es el de la saga y no el radicado, que acuña el CMS al guardar las respuestas (FR-016) y el orquestador no conoce: el correo remite a «Mis solicitudes» sin afirmar un número (FR-019). Con un trámite gratuito {total} dice «0 COP»: el texto no promete un cobro. PlantillaDeLaRadicacionTests lo cruza con lo que manda el paso.",
+    "key": "gobierno.tramite.radicado",
+    "channel": "Email",
+    "subject": "Tu solicitud quedó radicada",
+    "body": "<p>Hola {nombre}:</p><p>Recibimos tu solicitud en {sitio} y quedó radicada. Tasa: <b>{total}</b>.</p><p>El número de radicado y el estado de tu trámite están en «Mis solicitudes»: <a href=\"{enlace}\">{enlace}</a>. Ábrelo con tu sesión.</p>"
   }
 ]
