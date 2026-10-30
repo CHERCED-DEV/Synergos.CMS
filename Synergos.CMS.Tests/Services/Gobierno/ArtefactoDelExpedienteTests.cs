@@ -121,7 +121,7 @@ public sealed class ArtefactoDelExpedienteTests
         var completada = await artefacto.GuardarRespuestasAsync("rad-2", Ciudadano(Ana), Respuestas(), default);
         orquestador.Con("rad-1", Ana, "Compensated").Con("rad-2", Ana, "Completed");
 
-        await artefacto.ReconciliarAsync(e => e.Dueno == Ana, Ana, default);
+        await artefacto.ReconciliarAsync(e => e.Dueno == Ana, default);
 
         Assert.Null(await casos.DeLaRadicacionAsync("rad-1"));
         Assert.DoesNotContain(casos.ListCases(), c => c.Radicado == deshecha.Expediente!.Radicado);
@@ -150,8 +150,8 @@ public sealed class ArtefactoDelExpedienteTests
         var (artefacto, _) = Nuevo(orquestador, hayDestino: false);
 
         var r = await artefacto.GuardarRespuestasAsync("rad-1", Ciudadano(Ana), Respuestas(), default);
-        await artefacto.ReconciliarAsync(_ => true, null, default);
-        var alDia = await artefacto.AlDiaAsync("rad-1", null, default);
+        await artefacto.ReconciliarAsync(_ => true, default);
+        var alDia = await artefacto.AlDiaAsync("rad-1", default);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, r.Estado);
         Assert.Equal("gov.radicacion_no_disponible", r.Codigo);
@@ -184,7 +184,7 @@ public sealed class ArtefactoDelExpedienteTests
         orquestador.ConProceso("rad-1", "approved",
             ("take", "in-review", "gobierno.funcionario:f-1", "Lo reviso yo."), ("approve", "approved", "gobierno.funcionario:f-2", "Cumple."));
 
-        var alDia = await artefacto.AlDiaAsync("rad-1", null, default);
+        var alDia = await artefacto.AlDiaAsync("rad-1", default);
 
         Assert.True(alDia);
         var expediente = casos.FindCase(caso)!;
@@ -195,25 +195,6 @@ public sealed class ArtefactoDelExpedienteTests
         Assert.Equal(new string?[] { null }, orquestador.CarasDelExpediente);
     }
 
-    [Fact]
-    public async Task Con_la_cara_del_ciudadano_lee_con_su_sujeto_y_lo_ajeno_no_se_pone_al_dia()
-    {
-        var orquestador = new OrquestadorDeGobiernoFalso();
-        var (artefacto, casos) = Nuevo(orquestador);
-        var caso = await Confirmado(artefacto, casos, orquestador);
-        orquestador.ConProceso("rad-1", "in-review", ("take", "in-review", "gobierno.funcionario:f-1", null));
-
-        var deBeto = await artefacto.AlDiaAsync("rad-1", Beto, default);
-        var antes = casos.FindCase(caso)!.Status;
-        var deAna = await artefacto.AlDiaAsync("rad-1", Ana, default);
-
-        Assert.False(deBeto);
-        Assert.Equal(CaseStatus.Radicado, antes);
-        Assert.True(deAna);
-        Assert.Equal(CaseStatus.EnRevision, casos.FindCase(caso)!.Status);
-        Assert.Equal(new string?[] { $"gobierno.ciudadano:{Beto:n}", $"gobierno.ciudadano:{Ana:n}" }, orquestador.CarasDelExpediente);
-    }
-
     /// <summary>Sin respuesta del proceso queda lo último que se sabe: nada se borra ni se inventa.</summary>
     [Fact]
     public async Task Sin_respuesta_del_proceso_queda_lo_ultimo_que_se_sabe()
@@ -222,21 +203,21 @@ public sealed class ArtefactoDelExpedienteTests
         var (artefacto, casos) = Nuevo(orquestador);
         var caso = await Confirmado(artefacto, casos, orquestador);
         orquestador.ConProceso("rad-1", "in-review", ("take", "in-review", "gobierno.funcionario:f-1", null));
-        await artefacto.AlDiaAsync("rad-1", null, default);
+        await artefacto.AlDiaAsync("rad-1", default);
         orquestador.ProcesoCaido = true;
 
-        var alDia = await artefacto.AlDiaAsync("rad-1", null, default);
+        var alDia = await artefacto.AlDiaAsync("rad-1", default);
 
         Assert.False(alDia);
         Assert.Equal(CaseStatus.EnRevision, casos.FindCase(caso)!.Status);
     }
 
     /// <summary>
-    /// Una reconciliación pone al día lo confirmado que le toca, con la cara de quien lee: la bandeja de Ana no lee el
-    /// expediente de Beto.
+    /// Una reconciliación pone al día lo confirmado que le toca y nada más: la bandeja de Ana no lee el expediente de
+    /// Beto. La lectura no lleva sujeto: quién mira lo decide quien elige lo que toca.
     /// </summary>
     [Fact]
-    public async Task La_reconciliacion_pone_al_dia_lo_confirmado_que_le_toca_con_la_cara_de_quien_lee()
+    public async Task La_reconciliacion_pone_al_dia_lo_confirmado_que_le_toca()
     {
         var orquestador = new OrquestadorDeGobiernoFalso();
         var (artefacto, casos) = Nuevo(orquestador);
@@ -248,11 +229,13 @@ public sealed class ArtefactoDelExpedienteTests
         orquestador.ConProceso("rad-ana", "in-review", ("take", "in-review", "gobierno.funcionario:f-1", null));
         orquestador.ConProceso("rad-beto", "in-review", ("take", "in-review", "gobierno.funcionario:f-1", null));
 
-        await artefacto.ReconciliarAsync(e => e.Dueno == Ana, Ana, default);
+        await artefacto.ReconciliarAsync(e => e.Dueno == Ana, default);
 
         Assert.Equal(CaseStatus.EnRevision, casos.FindCase(deAna)!.Status);
         Assert.Equal(CaseStatus.Radicado, casos.FindCase(guardada.Expediente!.CaseId)!.Status);
-        Assert.Equal(new string?[] { $"gobierno.ciudadano:{Ana:n}" }, orquestador.CarasDelExpediente);
+        Assert.Equal(new string?[] { null }, orquestador.CarasDelExpediente);
+        Assert.Contains("GET /v1/expedientes/rad-ana", orquestador.Rutas);
+        Assert.DoesNotContain("GET /v1/expedientes/rad-beto", orquestador.Rutas);
     }
 
     /// <summary>

@@ -237,16 +237,9 @@ internal sealed class RadicacionReal : IDisposable
         return Enviar(peticion);
     }
 
-    /// <summary>
-    /// La lectura del expediente que pide el CMS: con el ciudadano, su cara (sólo su radicación); sin él, la del
-    /// funcionario, que el CMS pide después de comprobar el rol.
-    /// </summary>
-    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Expediente(string radicacion, string? ciudadano = null)
-    {
-        var peticion = new HttpRequestMessage(HttpMethod.Get, $"v1/expedientes/{radicacion}");
-        if (ciudadano is not null) peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(ciudadano));
-        return Enviar(peticion);
-    }
+    /// <summary>La lectura del expediente que pide el CMS, con la llave y sin sujeto: la guarda es el CMS.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Expediente(string radicacion)
+        => Enviar(new HttpRequestMessage(HttpMethod.Get, $"v1/expedientes/{radicacion}"));
 
     /// <summary>El expediente tal como está en la capacidad de procesos: su estado y su historia.</summary>
     public Task<JsonElement> Instancia(string expediente) => Leer("workflow", $"v1/instances/{expediente}");

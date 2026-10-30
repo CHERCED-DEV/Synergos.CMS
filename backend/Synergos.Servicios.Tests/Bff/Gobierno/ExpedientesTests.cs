@@ -5,7 +5,7 @@ namespace Synergos.CMS.Tests.Bff.Gobierno;
 
 /// <summary>
 /// La lectura del expediente (009-gobierno-tramite T040): el estado y la historia de la instancia en la capacidad de
-/// procesos real, por la radicación que la nombra, con la cara del ciudadano (sólo la suya) o la del funcionario.
+/// procesos real, por la radicación que la nombra. La pide sólo el CMS, que es la guarda de quién mira.
 /// </summary>
 public sealed class ExpedientesTests
 {
@@ -35,22 +35,20 @@ public sealed class ExpedientesTests
             historia);
     }
 
-    /// <summary>La cara del ciudadano: su radicación sí; la de otro y la que no existe, lo mismo («no existe»).</summary>
+    /// <summary>Lo que no es una radicación —un id que no existe, o la saga de un acto— no tiene expediente.</summary>
     [Fact]
-    public async Task Con_el_ciudadano_solo_su_radicacion_y_una_ajena_no_existe()
+    public async Task Lo_que_no_es_una_radicacion_no_tiene_expediente()
     {
         using var r = await new RadicacionReal().ConOferta();
         var (radicacion, _) = await r.Radicada();
+        var (_, toma) = await r.Tomar(radicacion);
 
-        var (suya, _) = await r.Expediente(radicacion, ciudadano: "c-1");
-        var (ajena, deOtro) = await r.Expediente(radicacion, ciudadano: "c-2");
-        var (ninguna, inexistente) = await r.Expediente("no-existe", ciudadano: "c-1");
+        var (ninguna, inexistente) = await r.Expediente("no-existe");
+        var (deUnActo, _) = await r.Expediente(toma.GetProperty("id").GetString()!);
 
-        Assert.Equal(HttpStatusCode.OK, suya);
-        Assert.Equal(HttpStatusCode.NotFound, ajena);
-        Assert.Equal("gobierno.expediente_no_encontrado", Codigo(deOtro));
         Assert.Equal(HttpStatusCode.NotFound, ninguna);
-        Assert.Equal(deOtro.GetProperty("detail").GetString(), inexistente.GetProperty("detail").GetString());
+        Assert.Equal("gobierno.expediente_no_encontrado", Codigo(inexistente));
+        Assert.Equal(HttpStatusCode.NotFound, deUnActo);
     }
 
     [Fact]

@@ -347,20 +347,21 @@ public sealed class GovController : ControllerBase
 
     /// <summary>
     /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura, y pone al día con su proceso lo
-    /// confirmado (T040): nunca falla hacia quien lee, y sin artefacto no hace nada.
+    /// confirmado que <paramref name="lasQueTocan"/> elige (T040): las del miembro en su bandeja, todas en la cola. Nunca
+    /// falla hacia quien lee, y sin artefacto no hace nada.
     /// </summary>
-    /// <param name="ciudadano">La cara del ciudadano dueño, o nula para la del funcionario.</param>
-    private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, Guid? ciudadano, CancellationToken cancellationToken)
-        => _artefacto?.ReconciliarAsync(lasQueTocan, ciudadano, cancellationToken) ?? Task.CompletedTask;
+    private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, CancellationToken cancellationToken)
+        => _artefacto?.ReconciliarAsync(lasQueTocan, cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>
     /// Pone al día con su proceso un expediente de la puerta antes de mostrarlo, y lo devuelve como quedó; si el
-    /// orquestador no contesta, lo último que se sabe y <c>alDia</c> en falso. Uno de la ruta directa pasa tal cual.
+    /// orquestador no contesta, lo último que se sabe y <c>alDia</c> en falso. Uno de la ruta directa pasa tal cual. Quien
+    /// llama ya comprobó que lo puede ver: el dueño o el personal.
     /// </summary>
-    private async Task<(CaseDetail Detail, bool AlDia)> AlDiaDeLaPuertaAsync(CaseDetail detail, Guid? ciudadano, CancellationToken cancellationToken)
+    private async Task<(CaseDetail Detail, bool AlDia)> AlDiaDeLaPuertaAsync(CaseDetail detail, CancellationToken cancellationToken)
     {
         if (detail.Camino != CaminoDelExpediente.Puerta || detail.Radicacion is not { } radicacion) return (detail, true);
-        if (_artefacto is null || !await _artefacto.AlDiaAsync(radicacion, ciudadano, cancellationToken)) return (detail, false);
+        if (_artefacto is null || !await _artefacto.AlDiaAsync(radicacion, cancellationToken)) return (detail, false);
         return (await _tracking.GetCaseAsync(detail.CaseId, cancellationToken) ?? detail, true);
     }
 
@@ -369,9 +370,8 @@ public sealed class GovController : ControllerBase
     /// acto va por la puerta —un acto directo movería otra, la del CMS, y separaría el portal del proceso—, con la llave
     /// de la intención que manda la consola, y después el expediente se pone al día con su proceso para contestar.
     /// </summary>
-    /// <param name="ciudadano">La cara con que se lee después: el dueño que subsana, o nula para la del funcionario.</param>
     private async Task<IActionResult> PorLaPuertaAsync(
-        CaseDetail detail, Guid? ciudadano, Func<ActosDeLaPuerta, string, string, Task<ActoDeLaPuerta>> acto,
+        CaseDetail detail, Func<ActosDeLaPuerta, string, string, Task<ActoDeLaPuerta>> acto,
         Func<CaseDetail, bool, Task<IActionResult>> responder, CancellationToken cancellationToken)
     {
         if (_actos is null || detail.Radicacion is not { } radicacion)
@@ -389,7 +389,7 @@ public sealed class GovController : ControllerBase
         var hecho = await acto(_actos, radicacion, llave);
         if (!hecho.Bien) return Problema(hecho.Estado, hecho.Codigo!, hecho.Mensaje ?? string.Empty, hecho.Transitorio, null);
 
-        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, ciudadano, cancellationToken);
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
         return await responder(alDia, alDiaConElProceso);
     }
 
@@ -439,7 +439,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, actorKey, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
         var items = await _tracking.ListForMemberAsync(actorKey, cancellationToken);
         return Ok(new ApplicationsResponse(items.Select(ToApplicationSummaryFromInbox).ToList()));
     }
@@ -452,7 +452,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, actorKey, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
         var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
@@ -462,7 +462,7 @@ public sealed class GovController : ControllerBase
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
 
-        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, actorKey, cancellationToken);
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
         return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
@@ -492,7 +492,7 @@ public sealed class GovController : ControllerBase
         if (foreign is not null) { return foreign; }
         if (detail.Camino == CaminoDelExpediente.Puerta)
         {
-            return await PorLaPuertaAsync(detail, actorKey,
+            return await PorLaPuertaAsync(detail,
                 (actos, radicacion, llave) => actos.SubsanarAsync(radicacion, request?.Note, llave, cancellationToken),
                 async (alDia, alDiaConElProceso) => Ok(new ApplicationDetailResponse(
                     await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
@@ -672,7 +672,7 @@ public sealed class GovController : ControllerBase
     {
         if (RequireOfficer() is { } denied) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(_ => true, null, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(_ => true, cancellationToken);
         var cases = await _tracking.GetQueueAsync(agency, status, cancellationToken);
         return Ok(new QueueResponse(cases.Select(ToQueueDto).ToList()));
     }
@@ -691,7 +691,7 @@ public sealed class GovController : ControllerBase
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
 
-        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, null, cancellationToken);
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
         return Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
@@ -717,7 +717,7 @@ public sealed class GovController : ControllerBase
         }
         if (detail.Camino == CaminoDelExpediente.Puerta)
         {
-            return await PorLaPuertaAsync(detail, null,
+            return await PorLaPuertaAsync(detail,
                 (actos, radicacion, llave) => actos.TomarAsync(radicacion, request?.Note, llave, cancellationToken),
                 async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
                 cancellationToken);
@@ -757,7 +757,7 @@ public sealed class GovController : ControllerBase
         }
         if (await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken) is { Camino: CaminoDelExpediente.Puerta } deLaPuerta)
         {
-            return await PorLaPuertaAsync(deLaPuerta, null,
+            return await PorLaPuertaAsync(deLaPuerta,
                 (actos, radicacion, llave) => actos.DecidirAsync(radicacion, request.Outcome.Trim(), request.Note ?? string.Empty, llave, cancellationToken),
                 async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
                 cancellationToken);

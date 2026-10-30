@@ -16,14 +16,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Synergos-Sujeto",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            },
-            "x-synergos-puerta": true
           }
         ],
         "responses": {

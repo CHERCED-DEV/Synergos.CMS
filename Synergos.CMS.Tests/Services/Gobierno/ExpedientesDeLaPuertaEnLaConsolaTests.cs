@@ -134,8 +134,12 @@ public sealed class ExpedientesDeLaPuertaEnLaConsolaTests
         Assert.Empty(dto.Actions);
     }
 
+    /// <summary>
+    /// La ciudadana ve su expediente al día y la subsanación que le toca; otra persona con sesión no lo ve, y por ella no
+    /// se lee nada del proceso: la guarda del dueño es la del CMS, antes de leer.
+    /// </summary>
     [Fact]
-    public async Task La_ciudadana_ve_su_expediente_al_dia_con_su_cara_y_la_subsanacion_que_le_toca()
+    public async Task La_ciudadana_ve_su_expediente_al_dia_y_la_subsanacion_que_le_toca_y_otra_persona_no()
     {
         var caso = await Confirmado(_artefacto, _casos, _orquestador);
         _orquestador.ConProceso("rad-1", "info-requested",
@@ -143,12 +147,16 @@ public sealed class ExpedientesDeLaPuertaEnLaConsolaTests
         LaCiudadana();
 
         var dto = ApplicationOf(await Sut().Application(caso, default));
+        var lecturas = _orquestador.CarasDelExpediente.Count;
+        _gate.CurrentMemberKey.Returns(Guid.Parse("9e1d2c3b-4a5f-4e6d-8c7b-1a2b3c4d5e6f"));
+        var ajena = await Sut().Application(caso, default);
 
         Assert.Equal("info-requested", dto.Status);
         Assert.Equal(["resubmit"], dto.Actions);
         Assert.Equal(("puerta", "rad-1"), (dto.FilingPath, dto.FilingId));
-        Assert.NotEmpty(_orquestador.CarasDelExpediente);
-        Assert.All(_orquestador.CarasDelExpediente, c => Assert.Equal($"gobierno.ciudadano:{Ana:n}", c));
+        Assert.IsNotType<OkObjectResult>(ajena);
+        Assert.Equal(lecturas, _orquestador.CarasDelExpediente.Count);
+        Assert.All(_orquestador.CarasDelExpediente, c => Assert.Null(c));
     }
 
     /// <summary>US6-1 y US6-2: «Mis solicitudes» y la cola muestran el estado del proceso, también lo que avanzó por la puerta.</summary>
