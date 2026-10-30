@@ -51,4 +51,12 @@ public sealed record OrderDto(string Id, string Status, MoneyDto Total);
 public sealed record PaymentDto(
     string Id, string Status, MoneyDto Amount, MoneyDto Refundable, MoneyDto? Refunded = null);
 
-public sealed record ShipmentDto(string Id, string Status);
+// A dónde va, con quién y por dónde va: lo lee el personal para despachar (013-seller-operaciones, T009). Aditivo y
+// opcional: crear un envío sigue leyendo sólo `Id` y `Status`.
+public sealed record ShipmentDto(
+    string Id, string Status, string? Carrier = null, ShipmentAddressDto? To = null, IReadOnlyList<ShipmentEventDto>? Events = null);
+
+public sealed record ShipmentAddressDto(
+    string? Line1, string? Line2, string? City, string? Region, string? PostalCode, string? Country, string? Contact);
+
+public sealed record ShipmentEventDto(string Status, string? Note, DateTimeOffset AtUtc);

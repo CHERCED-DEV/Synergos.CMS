@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Synergos.Bff.Core;
+using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Tienda.Contracts;
 using Synergos.Bff.Tienda.Domain;
 using Synergos.Core;
 using Synergos.Shared;
+using TiendaCapabilities = Synergos.Bff.Tienda.Clients.TiendaCapabilities;
 
 namespace Synergos.Bff.Tienda.Endpoints;
 
@@ -134,6 +137,50 @@ public static class TiendaEndpoints
             return TypedResults.Ok(new PageResponse<PendingCompensationResponse>(
                 todas.Skip(off).Take(lim).ToList(), todas.Count, off, off + lim < todas.Count));
         }).WithName("ListPurchaseCompensations");
+
+        return app;
+    }
+
+    /// <summary>El flujo cuyas compras lee <see cref="MapLecturaDelEnvio"/>.</summary>
+    public const string FlujoDeLaCompra = "tienda.compra";
+
+    /// <summary>Lo que contesta la lectura del envío por una compra que no es una completada con envío.</summary>
+    public const string CompraNoEncontrada = "tienda.compra_no_encontrada";
+
+    /// <summary>
+    /// La lectura del envío de una compra de la puerta (013-seller-operaciones, T009, R3): el interino de NS-2. Sólo con
+    /// el orquestador declarado, que es quien guarda las sagas de <see cref="FlujoDeLaCompra"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Sin marca de la puerta</b>: el navegador no la pide. La pide el CMS, con la llave compartida, después de
+    /// comprobar el rol del personal. La dirección sólo la guarda el envío (004, R-11), y quien despacha la necesita.</para>
+    ///
+    /// <para><b>Sólo de una compra completada con envío</b>: una en curso todavía no despachó, y una deshecha no tiene
+    /// nada que despachar. Las dos, una que no existe y una de otro flujo contestan lo mismo.</para>
+    ///
+    /// <para><b>No escribe nada.</b> Con NS-2 se vuelve una lectura del personal declarada en el flujo, y esta ruta se
+    /// conserva hasta que nadie la pida.</para>
+    /// </remarks>
+    public static IEndpointRouteBuilder MapLecturaDelEnvio(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/v1/envios/{compra}", async Task<Results<Ok<EnvioDeLaCompraResponse>, ProblemHttpResult>> (
+            string compra, ISagaStore<SagaDeFlujo> sagas, TiendaCapabilities caps, CancellationToken ct) =>
+        {
+            var saga = sagas.Find(compra);
+            if (saga is null || saga.Flujo != FlujoDeLaCompra || saga.Status != SagaStatus.Completed
+                || saga.Datos.GetValueOrDefault("envio") is not { Valor: { ValueKind: JsonValueKind.String } envio })
+            {
+                return Rejection.NotFound(CompraNoEncontrada, "No hay una compra completada y despachada con ese id.").ToProblem();
+            }
+
+            var leido = await caps.GetShipmentAsync(envio.GetString()!, ct);
+            return leido.Map(e => new EnvioDeLaCompraResponse(compra, new EnvioResponse(
+                e.Id,
+                e.To is { } a ? new DestinoDelEnvioResponse(a.Line1, a.Line2, a.City, a.Region, a.PostalCode, a.Country, a.Contact) : null,
+                e.Carrier,
+                e.Status,
+                (e.Events ?? []).Select(v => new EventoDelEnvioResponse(v.Status, v.Note, v.AtUtc)).ToList()))).ToHttp();
+        }).WithName("LeerEnvioDeLaCompra");
 
         return app;
     }

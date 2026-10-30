@@ -103,3 +103,28 @@ public sealed record ProductOfferResponse(string ProductId, IReadOnlyList<OfferV
         o.ProductId,
         o.Variants.Select(v => new OfferVariantResponse(v.VariantId, new MoneyDto(v.Price.Amount, v.Price.Currency), v.Stock)).ToList());
 }
+
+/// <summary>A dónde va un envío: lo que el comprador dio al cerrar, y que sólo guarda el envío.</summary>
+public sealed record DestinoDelEnvioResponse(
+    string? Line1, string? Line2, string? City, string? Region, string? PostalCode, string? Country, string? Contact);
+
+/// <summary>Un paso del envío, con su nota (la guía) y cuándo pasó.</summary>
+public sealed record EventoDelEnvioResponse(string Estado, string? Nota, DateTimeOffset Fecha);
+
+/// <summary>El envío de una compra, como lo lee el personal para despacharla.</summary>
+/// <param name="Id">El envío en la capacidad.</param>
+/// <param name="Destino">A dónde va; nulo si la capacidad no lo dice.</param>
+/// <param name="Transportadora">Con quién va: la del negocio del sitio al comprar.</param>
+/// <param name="Estado">El de la capacidad: <c>Ready</c>, <c>InTransit</c>, <c>Delivered</c>, <c>Failed</c> o
+/// <c>Returned</c>.</param>
+/// <param name="Eventos">Por dónde ha ido.</param>
+public sealed record EnvioResponse(
+    string Id, DestinoDelEnvioResponse? Destino, string? Transportadora, string Estado, IReadOnlyList<EventoDelEnvioResponse> Eventos);
+
+/// <summary>
+/// La lectura del envío de una compra de la puerta (013-seller-operaciones, T009), interino de NS-2: la pide el CMS para
+/// el personal, sin marca de la puerta.
+/// </summary>
+/// <param name="Compra">La compra: el id de su saga.</param>
+/// <param name="Envio">Su envío.</param>
+public sealed record EnvioDeLaCompraResponse(string Compra, EnvioResponse Envio);

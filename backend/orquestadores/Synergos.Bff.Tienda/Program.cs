@@ -86,6 +86,15 @@ app.MapTiendaEndpoints();
 // Las rutas del flujo las pone el host genérico; el cupón (recortar el código y frenar los que no sirven) se les
 // cuelga como filtro de un grupo sin prefijo —las rutas no cambian—, porque la línea no toca el mapeo del núcleo.
 if (declarado) app.MapGroup(string.Empty).AddEndpointFilter<CuponDeLaCompra>().MapFlujosDeclarados();
+
+// La lectura del envío que pide el CMS para el personal (013-seller-operaciones, interino de NS-2): lee las sagas del
+// flujo declarado, así que existe con él, y no lleva marca de la puerta. Va en su bloque y no en una línea
+// «if (declarado) app.…» porque no es del coste de declarar la compra (MetricaDeLaCompraDeTiendaTests): la medida de
+// 013 (SC-007) la cuenta atribuida a NS-2.
+if (declarado)
+{
+    app.MapLecturaDelEnvio();
+}
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

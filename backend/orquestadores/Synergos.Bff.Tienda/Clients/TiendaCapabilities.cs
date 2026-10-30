@@ -170,4 +170,7 @@ public sealed class TiendaCapabilities : CapabilityClients
             to = address,
             carrier,
         }, key, ct);
+
+    public Task<Result<ShipmentDto>> GetShipmentAsync(string shipmentId, CancellationToken ct)
+        => Get<ShipmentDto>(Fulfillment, $"v1/shipments/{shipmentId}", ct);
 }
