@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Synergos.Core;
 
 namespace Synergos.Bff.Core.Flow;
@@ -44,6 +45,9 @@ public sealed record ReservaDeFlujo(string HoldId, string CloseTargetId, int? Ca
 /// <param name="StartedAtUtc">Cuándo arrancó.</param>
 /// <param name="AlertedAtUtc">Cuándo se avisó a una persona de que algo quedó colgado.</param>
 /// <param name="AlertsSent">Cuántos avisos salieron.</param>
+/// <param name="FaseEnDuda">La fase que un rechazo TRANSITORIO de un paso con llave dejó a medias (001-P10 = A): la saga
+/// sigue viva, y repetir esa fase con la misma llave la retoma con las mismas llaves de paso. Nula si ninguna, y entonces
+/// no se escribe: el fichero de una saga sin duda no cambia de forma.</param>
 /// <remarks>
 /// <para><b>Por qué una saga genérica y no un record por flujo.</b> El record de cada dominio y su
 /// binding eran ~150 de las ~316 líneas de pegamento de Eventos (informe 81), y casi todo era copiar
@@ -64,8 +68,15 @@ public sealed record SagaDeFlujo(
     string? LastError,
     DateTimeOffset StartedAtUtc,
     DateTimeOffset? AlertedAtUtc = null,
-    int AlertsSent = 0) : ISaga<SagaDeFlujo>, IHoldLedger, ISagaConDueno
+    int AlertsSent = 0,
+    string? FaseEnDuda = null) : ISaga<SagaDeFlujo>, IHoldLedger, ISagaConDueno
 {
+    /// <summary>La fase en duda; sin ella no se escribe, y el fichero de una saga sin duda no cambia de forma.</summary>
+    /// <remarks>El atributo va aquí y no en la lista de parámetros: los gates que leen el record de saga
+    /// (<c>PropagacionDeIdentidadTests</c>) leen esa lista como «tipo nombre = valor».</remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FaseEnDuda { get; init; } = FaseEnDuda;
+
     public SagaDeFlujo WithStatus(SagaStatus status) => this with { Status = status };
 
     public SagaDeFlujo WithCompensations(IReadOnlyList<Compensation> compensations) => this with { Compensations = compensations };

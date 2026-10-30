@@ -90,9 +90,15 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
         var slot = _sagas.Abrir(llave, dueno);
         if (slot.Reusar is { } previa)
         {
-            return _esDelFlujo(previa)
-                ? Result.Ok(previa)
-                : Rejection.Conflict(LlaveDeOtroFlujo, $"La llave ya abrió otro flujo de este orquestador; «{_clave}» necesita otra.");
+            if (!_esDelFlujo(previa))
+            {
+                return Rejection.Conflict(LlaveDeOtroFlujo, $"La llave ya abrió otro flujo de este orquestador; «{_clave}» necesita otra.");
+            }
+
+            // La que quedó en duda al abrir (001-P10 = A) no abrió: repetir con su llave la retoma.
+            return previa.Status == SagaStatus.Running && string.Equals(_flujo.FaseEnDuda(previa), _abre, StringComparison.Ordinal)
+                ? await _flujo.EjecutarFaseAsync(_abre, previa.Id, entrada, ct)
+                : Result.Ok(previa);
         }
 
         return await _flujo.EjecutarFaseAsync(_abre, slot.Id, entrada, ct);
