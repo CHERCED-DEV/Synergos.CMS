@@ -66,7 +66,7 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton(sp => OfertaDeclarada.De(
             sp.GetRequiredService<IConfiguration>(), vocabulario, sp.GetRequiredService<IOfertaPort>(), sp.GetRequiredService<TimeProvider>()));
 
-        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas()));
+        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas(), new TipoEventosDeEnvio()));
         // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
         // de su original.
         // La zona del sitio, en la que un aviso escribe una hora (NM-2 de 010, NN-6 de 003): la del orquestador, o la de Bogotá.
@@ -100,6 +100,7 @@ public static class PasosComunes
             new PasoAvisar(puertos, zona), new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
             new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
+            new PasoSeguirEnvio(puertos), new PasoLeerEnvio(puertos),
             new PasoProcesoArrancar(puertos), new PasoProcesoDisparar(puertos), new PasoProcesoDispararElegida(puertos),
             new PasoProcesoLeer(puertos),
         ];
@@ -166,6 +167,69 @@ public sealed class TipoContacto : ITipoDeValor
 /// de 011). Lo que devuelve una lectura de disponibilidad; NO se guarda: una lista no es estado de una saga, y lo
 /// libre de hace un minuto no vale para nada.
 /// </summary>
+/// <summary>
+/// <c>eventos-de-envio</c>: el seguimiento de un envío (núcleo, NS-2 de 013), una lista de <c>{ estado, nota, instante }</c>.
+/// Lo devuelve una lectura; no se guarda en una saga.
+/// </summary>
+public sealed class TipoEventosDeEnvio : ITipoDeValor
+{
+    private static readonly string[] Campos = ["estado", "nota", "instante"];
+
+    public string Nombre => "eventos-de-envio";
+    public Type Clr => typeof(IReadOnlyList<EventoDeEnvio>);
+    public bool Guardable => false;
+
+    public object Leer(JsonElement valor, string donde)
+    {
+        if (valor.ValueKind != JsonValueKind.Array) throw new FormatException($"{donde}: tiene que ser una lista de eventos.");
+
+        var instante = new Instante();
+        var eventos = new List<EventoDeEnvio>();
+        var i = 0;
+        foreach (var e in valor.EnumerateArray())
+        {
+            var aqui = $"{donde}[{i++}]";
+            if (e.ValueKind != JsonValueKind.Object) throw new FormatException($"{aqui}: tiene que ser un objeto {{ estado, nota, instante }}.");
+            foreach (var p in e.EnumerateObject().Where(p => !Campos.Contains(p.Name, StringComparer.Ordinal)))
+            {
+                throw new FormatException($"{aqui}: trae «{p.Name}», y sólo admite estado, nota e instante.");
+            }
+            if (!e.TryGetProperty("estado", out var estado) || estado.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(estado.GetString()))
+            {
+                throw new FormatException($"{aqui}.estado: tiene que ser un texto.");
+            }
+            var nota = e.TryGetProperty("nota", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+            eventos.Add(new EventoDeEnvio(estado.GetString()!, nota,
+                (DateTimeOffset)instante.Leer(e.TryGetProperty("instante", out var en) ? en : default, $"{aqui}.instante")));
+        }
+        return eventos;
+    }
+
+    public JsonNode Escribir(object valor)
+    {
+        var instante = new Instante();
+        return new JsonArray(((IReadOnlyList<EventoDeEnvio>)valor)
+            .Select(e => (JsonNode)new JsonObject { ["estado"] = e.Estado, ["nota"] = e.Nota, ["instante"] = instante.Escribir(e.En) })
+            .ToArray());
+    }
+
+    public JsonObject Esquema() => new()
+    {
+        ["type"] = "array",
+        ["items"] = new JsonObject
+        {
+            ["type"] = "object",
+            ["required"] = new JsonArray("estado", "nota", "instante"),
+            ["properties"] = new JsonObject
+            {
+                ["estado"] = new JsonObject { ["type"] = "string" },
+                ["nota"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+                ["instante"] = new Instante().Esquema(),
+            },
+        },
+    };
+}
+
 public sealed class TipoFranjas : ITipoDeValor
 {
     private static readonly string[] Campos = ["inicio", "fin", "libres"];
