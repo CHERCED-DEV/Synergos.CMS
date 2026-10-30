@@ -178,6 +178,27 @@ public sealed class LibroDeComprasDeLaPuerta
         return todas.OrderByDescending(o => o.CreatedAt).ToList();
     }
 
+    /// <summary>
+    /// Las órdenes de la puerta todavía PENDIENTES de todos los miembros, las más recientes primero: las que la
+    /// conciliación de la tienda entera mira (013-seller-operaciones, T008). Cada una con su dueño.
+    /// </summary>
+    public async Task<IReadOnlyList<ShopOrder>> PendientesDeLaTiendaAsync(CancellationToken ct = default)
+    {
+        var pendientes = new List<ShopOrder>();
+        foreach (var json in await _store.ListAsync(ResourceType, ct).ConfigureAwait(false))
+        {
+            if (string.IsNullOrWhiteSpace(json)) continue;
+            PersistedOrder? orden;
+            try { orden = JsonSerializer.Deserialize<PersistedOrder>(json, Json); }
+            catch (JsonException) { continue; }
+            if (orden is { ViaGate: true, Status: OrderStatus.Pending, OwnerMemberKey: not null })
+            {
+                pendientes.Add(StubShopOrderService.ToOrder(orden));
+            }
+        }
+        return pendientes.OrderByDescending(o => o.CreatedAt).ToList();
+    }
+
     private PersistedOrder Nueva(CompraDeLaPuerta compra, OrderStatus estado) => new(
         OrderRef: compra.Id,
         OrderNumber: compra.Numero,

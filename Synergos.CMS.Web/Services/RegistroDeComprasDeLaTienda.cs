@@ -162,19 +162,53 @@ public sealed class RegistroDeComprasDeLaTienda
         if (NoDisponible() is not null || miembro == Guid.Empty) return;
         var pendientes = (await _libro.DelMiembroAsync(miembro, ct).ConfigureAwait(false))
             .Where(o => o.Status == OrderStatus.Pending).Take(TopeDeReconciliacion).ToList();
-        await ConTechoAsync(pendientes, async (o, t) =>
+        await ConTechoAsync(pendientes, async (o, t) => await ConciliarAsync(o, miembro, t).ConfigureAwait(false), ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// La conciliación de la tienda entera (013-seller-operaciones, T008, FR-004): la de <see cref="ReconciliarAsync"/>
+    /// sobre las compras de la puerta pendientes de TODOS los miembros, con el mismo techo. Corre al leer la bandeja
+    /// del personal.
+    /// </summary>
+    /// <remarks>
+    /// <b>Cada compra se lee con el sujeto de SU dueño</b>, nunca con el de quien abre la bandeja: el orquestador sólo
+    /// se la enseña a quien compró, y su 404 se toma como «no existe» y descarta la orden. Leerla con otro sujeto
+    /// cancelaría compras cobradas.
+    /// </remarks>
+    /// <returns>Cuántas pendientes quedaron sin mirar: las que pasan del techo, las que no alcanzó el presupuesto y
+    /// las que el orquestador no contestó.</returns>
+    public async Task<int> ReconciliarLaTiendaAsync(CancellationToken ct)
+    {
+        var pendientes = await _libro.PendientesDeLaTiendaAsync(ct).ConfigureAwait(false);
+        if (pendientes.Count == 0) return 0;
+        if (NoDisponible() is not null) return pendientes.Count;
+
+        var miradas = 0;
+        await ConTechoAsync(pendientes.Take(TopeDeReconciliacion).ToList(), async (o, t) =>
         {
-            var (compra, fallo) = await LeerAsync(o.OrderRef, miembro, t).ConfigureAwait(false);
-            if (compra is { Estado: "Completed" })
-            {
-                await _libro.ConfirmarAsync(await DelLibroAsync(compra, miembro, o.CustomerName, o.CustomerEmail, t).ConfigureAwait(false), t)
-                    .ConfigureAwait(false);
-            }
-            else if (compra is { Estado: "Compensated" } || fallo is { Codigo: "tienda.purchase_not_found" })
-            {
-                await _libro.DescartarAsync(o.OrderRef, miembro, t).ConfigureAwait(false);
-            }
+            if (await ConciliarAsync(o, o.OwnerMemberKey!.Value, t).ConfigureAwait(false)) Interlocked.Increment(ref miradas);
         }, ct).ConfigureAwait(false);
+        return pendientes.Count - Volatile.Read(ref miradas);
+    }
+
+    /// <summary>
+    /// Concilia una orden pendiente con lo que dice el orquestador: completada, se paga; deshecha o inexistente, se
+    /// descarta; en curso, se queda. Si el orquestador contestó por ella (la miró).
+    /// </summary>
+    private async Task<bool> ConciliarAsync(ShopOrder o, Guid miembro, CancellationToken t)
+    {
+        var (compra, fallo) = await LeerAsync(o.OrderRef, miembro, t).ConfigureAwait(false);
+        if (compra is { Estado: "Completed" })
+        {
+            await _libro.ConfirmarAsync(await DelLibroAsync(compra, miembro, o.CustomerName, o.CustomerEmail, t).ConfigureAwait(false), t)
+                .ConfigureAwait(false);
+        }
+        else if (compra is { Estado: "Compensated" } || fallo is { Codigo: "tienda.purchase_not_found" })
+        {
+            await _libro.DescartarAsync(o.OrderRef, miembro, t).ConfigureAwait(false);
+        }
+        return compra is not null || fallo is { Codigo: "tienda.purchase_not_found" };
     }
 
     private async Task ConTechoAsync(IReadOnlyList<ShopOrder> ordenes, Func<ShopOrder, CancellationToken, Task> una, CancellationToken ct)
