@@ -13,8 +13,9 @@ namespace Synergos.CMS.Tests.Bff.Gobierno;
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y ≤ 4
 /// ficheros. <b>Oferta</b> = publicar y retirar la tasa de un trámite: el código del vertical que la oferta genérica del
 /// núcleo (001-P11, lote 11) dejará listo para retirar. <b>Sin interinos</b>: la radicación usa sólo pasos comunes —los
-/// de procesos son del núcleo (lote 7)—, así que ninguna pieza propia espera una necesidad. Un fichero nuevo del
-/// orquestador que no esté en ninguna de las listas es rojo: no puede crecer sin decir de quién es.</para>
+/// de procesos son del núcleo (lote 7)—, así que ninguna pieza propia espera una necesidad. <b>Actos</b> = tomar y decidir
+/// por la puerta (T035): sólo definiciones, sin una línea de C#. Un fichero nuevo del orquestador que no esté en ninguna
+/// de las listas es rojo: no puede crecer sin decir de quién es.</para>
 /// </remarks>
 public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
 {
@@ -23,6 +24,8 @@ public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
 
     private static readonly string[] DeLaOferta =
         ["Domain/OfertaDeGobierno.cs", "Endpoints/OfertasEndpoints.cs", "Clients/CapacidadesDeLaOferta.cs", "Contracts/OfertaContracts.cs"];
+
+    private static readonly string[] DeLosActos = ["flujos/gobierno.toma.json", "flujos/gobierno.decision.json"];
 
     private static string Raiz() => Proyectos.Dir("Synergos.Bff.Gobierno");
 
@@ -43,7 +46,7 @@ public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(DeLaOferta).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(DeLaOferta).Concat(DeLosActos).Order(StringComparer.Ordinal), enDisco);
     }
 
     [Fact]
@@ -53,8 +56,10 @@ public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
         var oferta = Medir(DeLaOferta);
         var lineas = flujo.Sum(m => m.Lineas);
 
-        salida.WriteLine($"MEDIDA: flujo {lineas} líneas en {DelFlujo.Length} ficheros ({Detalle(flujo)}); oferta (001-P11) {oferta.Sum(m => m.Lineas)} ({Detalle(oferta)}).");
+        salida.WriteLine($"MEDIDA: flujo {lineas} líneas en {DelFlujo.Length} ficheros ({Detalle(flujo)}); oferta (001-P11) {oferta.Sum(m => m.Lineas)} ({Detalle(oferta)}); "
+            + $"actos {Medir(DeLosActos).Sum(m => m.Lineas)} líneas de C# en {DeLosActos.Length} definiciones.");
         Assert.True(lineas <= 60, $"El C# propio del flujo son {lineas} líneas ({Detalle(flujo)}) y la meta es ≤ 60.");
         Assert.True(DelFlujo.Length <= 4, $"Declarar el flujo tocó {DelFlujo.Length} ficheros ({string.Join(", ", DelFlujo)}) y la meta es ≤ 4.");
+        Assert.All(DeLosActos, f => Assert.EndsWith(".json", f, StringComparison.Ordinal));
     }
 }

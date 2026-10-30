@@ -1,0 +1,29 @@
+{
+  "clave": "gobierno.toma",
+  "posterior_a": "gobierno.radicacion",
+  "acceso": "personal",
+  "entrada": ["funcionario", "radicacion", "nota"],
+  "tipos": {
+    "funcionario": { "de": "sujeto" },
+    "radicacion": "texto",
+    "nota": "texto?",
+    "expediente": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["radicacion", "estado"],
+  "fases": {
+    "abrir": ["original", "tomar"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["radicacion"], "escribe": ["expediente"] },
+    "tomar": {
+      "tipo": "workflow.disparar",
+      "lee": ["expediente", "funcionario", "nota"],
+      "escribe": ["estado"],
+      "llave": "disparar",
+      "proceso": "gov.tramite.v2",
+      "transicion": "take",
+      "rol": "funcionario",
+      "motivo": "el expediente ya cambió"
+    }
+  }
+}

@@ -9,6 +9,7 @@
     "contacto": { "de": "contacto" }
   },
   "salida": ["tramite", "total", "expediente", "estado", "notificacionElectronica", "versionDelTexto"],
+  "para_lo_posterior": ["expediente"],
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["lineas", "cotizar", "desglose", "autorizar"],
