@@ -224,6 +224,19 @@ internal sealed class RadicacionReal : IDisposable
         string radicacion, string decision, string nota = "Revisado el expediente.", string llave = "decision-1", string funcionario = "f-1")
         => Actuar("gobierno.decision", new { radicacion, decision, nota }, llave, funcionario);
 
+    /// <summary>La subsanación: la pide el ciudadano dueño de la radicación, como miembro, no el personal.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Subsanar(
+        string radicacion, string ciudadano = "c-1", string llave = "subsanacion-1", string? nota = null)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/gobierno.subsanacion")
+        {
+            Content = JsonContent.Create(new { radicacion, nota }),
+        };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(ciudadano));
+        return Enviar(peticion);
+    }
+
     /// <summary>El expediente tal como está en la capacidad de procesos: su estado y su historia.</summary>
     public Task<JsonElement> Instancia(string expediente) => Leer("workflow", $"v1/instances/{expediente}");
 

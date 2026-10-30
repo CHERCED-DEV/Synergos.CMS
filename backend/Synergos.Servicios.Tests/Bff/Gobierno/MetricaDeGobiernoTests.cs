@@ -13,9 +13,9 @@ namespace Synergos.CMS.Tests.Bff.Gobierno;
 /// <para><b>Flujo</b> = el arranque, la definición, la configuración y el proyecto: la meta es ≤ 60 líneas de C# y ≤ 4
 /// ficheros. <b>Oferta</b> = publicar y retirar la tasa de un trámite: el código del vertical que la oferta genérica del
 /// núcleo (001-P11, lote 11) dejará listo para retirar. <b>Sin interinos</b>: la radicación usa sólo pasos comunes —los
-/// de procesos son del núcleo (lote 7)—, así que ninguna pieza propia espera una necesidad. <b>Actos</b> = tomar y decidir
-/// por la puerta (T035): sólo definiciones, sin una línea de C#. Un fichero nuevo del orquestador que no esté en ninguna
-/// de las listas es rojo: no puede crecer sin decir de quién es.</para>
+/// de procesos son del núcleo (lote 7)—, así que ninguna pieza propia espera una necesidad. <b>Actos</b> = tomar, decidir
+/// y subsanar por la puerta (T035, T038): sólo definiciones, sin una línea de C#. Un fichero nuevo del orquestador que no
+/// esté en ninguna de las listas es rojo: no puede crecer sin decir de quién es.</para>
 /// </remarks>
 public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
 {
@@ -25,7 +25,8 @@ public sealed class MetricaDeGobiernoTests(ITestOutputHelper salida)
     private static readonly string[] DeLaOferta =
         ["Domain/OfertaDeGobierno.cs", "Endpoints/OfertasEndpoints.cs", "Clients/CapacidadesDeLaOferta.cs", "Contracts/OfertaContracts.cs"];
 
-    private static readonly string[] DeLosActos = ["flujos/gobierno.toma.json", "flujos/gobierno.decision.json"];
+    private static readonly string[] DeLosActos =
+        ["flujos/gobierno.toma.json", "flujos/gobierno.decision.json", "flujos/gobierno.subsanacion.json"];
 
     private static string Raiz() => Proyectos.Dir("Synergos.Bff.Gobierno");
 

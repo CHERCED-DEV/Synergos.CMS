@@ -6,13 +6,14 @@ using Synergos.CMS.Tests.Bff.Reservas;
 namespace Synergos.CMS.Tests.Bff.Gobierno;
 
 /// <summary>
-/// Historia 4 de 009-gobierno-tramite (T035): tomar y decidir por la puerta. Cada acto es una operación posterior del
-/// personal sobre la radicación completada (núcleo, P6 y P8 del lote 6) que dispara la transición en la capacidad de
-/// procesos con los pasos comunes (lote 7). Contra procesos, precios, pagos y avisos reales.
+/// Historias 4 y 2 de 009-gobierno-tramite (T035, T038): tomar, decidir y subsanar por la puerta. Cada acto es una
+/// operación posterior sobre la radicación completada (núcleo, P6 y P8 del lote 6) que dispara la transición en la
+/// capacidad de procesos con los pasos comunes (lote 7). Contra procesos, precios, pagos y avisos reales.
 /// </summary>
 /// <remarks>
-/// La puerta del CMS es la guarda del rol (T037); aquí llega el sujeto que ella pone, el del funcionario, y el
-/// orquestador no le aplica la regla de dueño de la radicación.
+/// Tomar y decidir los pide el personal: la puerta del CMS es la guarda del rol (T037), aquí llega el sujeto que ella
+/// pone, el del funcionario, y el orquestador no le aplica la regla de dueño de la radicación. Subsanar lo pide el
+/// ciudadano como miembro, y sólo sobre una radicación suya.
 /// </remarks>
 public sealed class ActosTests
 {
@@ -194,6 +195,62 @@ public sealed class ActosTests
         Assert.True(aMedias == HttpStatusCode.Conflict, sinCerrar.ToString());
         Assert.Equal("flow.original_no_completada", Codigo(sinCerrar));
         Assert.Equal(antes, r.Disparos);
+    }
+
+    // ── La subsanación (T038): el ciudadano dueño, como miembro ─────────────
+
+    [Fact]
+    public async Task El_dueno_subsana_su_expediente_y_vuelve_a_revision_con_la_historia_a_su_nombre()
+    {
+        using var r = await new RadicacionReal().ConOferta();
+        var (radicacion, expediente) = await r.Radicada();
+        await r.Tomar(radicacion);
+        await r.Decidir(radicacion, "request-info", nota: "Falta el certificado de estratificación.");
+
+        var (estado, subsanada) = await r.Subsanar(radicacion, nota: "Adjunto el certificado.");
+
+        Assert.True(estado == HttpStatusCode.Created, subsanada.ToString());
+        Assert.Equal("in-review", Estado(subsanada));
+        var instancia = await r.Instancia(expediente);
+        Assert.Equal("in-review", EstadoDe(instancia));
+        var ultimo = Historia(instancia)[^1];
+        Assert.Equal(("resubmit", "info-requested"), (ultimo.GetProperty("transition").GetString(), ultimo.GetProperty("from").GetString()));
+        Assert.Equal(("gobierno.ciudadano", "c-1"), (ultimo.GetProperty("byKind").GetString(), ultimo.GetProperty("byId").GetString()));
+        Assert.Equal("Adjunto el certificado.", ultimo.GetProperty("note").GetString());
+    }
+
+    /// <summary>US2-4: el expediente de otra persona es para quien no es su dueño lo mismo que uno que no existe.</summary>
+    [Fact]
+    public async Task Un_expediente_ajeno_no_existe_para_quien_subsana_y_nada_cambia()
+    {
+        using var r = await new RadicacionReal().ConOferta();
+        var (radicacion, expediente) = await r.Radicada();
+        await r.Tomar(radicacion);
+        await r.Decidir(radicacion, "request-info");
+        var antes = r.Disparos;
+
+        var (estado, cuerpo) = await r.Subsanar(radicacion, ciudadano: "c-2");
+
+        Assert.True(estado == HttpStatusCode.NotFound, cuerpo.ToString());
+        Assert.Equal("flow.original_no_encontrada", Codigo(cuerpo));
+        Assert.Equal("info-requested", EstadoDe(await r.Instancia(expediente)));
+        Assert.Equal(antes, r.Disparos);
+    }
+
+    /// <summary>US2-3: fuera de «información solicitada» no hay subsanación, y la capacidad lo dice con su código.</summary>
+    [Fact]
+    public async Task Fuera_de_informacion_solicitada_subsanar_se_rechaza_sin_cambiar_nada()
+    {
+        using var r = await new RadicacionReal().ConOferta();
+        var (radicacion, expediente) = await r.Radicada();
+
+        var (estado, cuerpo) = await r.Subsanar(radicacion);
+
+        Assert.True(estado == HttpStatusCode.Conflict, cuerpo.ToString());
+        Assert.Equal("workflow.transition_not_allowed", Codigo(cuerpo));
+        var instancia = await r.Instancia(expediente);
+        Assert.Equal("submitted", EstadoDe(instancia));
+        Assert.Empty(Historia(instancia));
     }
 
     /// <summary>
