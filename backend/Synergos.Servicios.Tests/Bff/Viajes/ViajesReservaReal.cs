@@ -160,16 +160,36 @@ internal sealed class ViajesReservaReal : IDisposable
     public static string Sujeto(string id)
         => id.StartsWith("personal:", StringComparison.Ordinal) ? $"viajes.personal:{id["personal:".Length..]}" : $"viajes.viajero:{id}";
 
-    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(string llave = "viaje-1", string viajero = "u-1", object[]? items = null)
+    /// <summary>La política de confirmación del sitio por defecto (<c>Synergos:Features:TravelShell:ConfirmationPolicy</c>).</summary>
+    public const string TodoONada = "todo-o-nada";
+
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Abrir(
+        string llave = "viaje-1", string viajero = "u-1", object[]? items = null, string politica = TodoONada)
     {
         var peticion = new HttpRequestMessage(HttpMethod.Post, Flujo) { Content = JsonContent.Create(new { items = items ?? ItinerarioDePrueba() }) };
         peticion.Headers.Add("Idempotency-Key", llave);
+        ConNegocio(peticion, politica);
         return Enviar(peticion, viajero);
     }
 
     /// <summary>El total de un itinerario SIN apartar nada: la fase que abre, anticipada hasta el bloque que reserva.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cotizar(string viajero = "u-1", object[]? items = null)
-        => Enviar(new HttpRequestMessage(HttpMethod.Post, $"{Flujo}/cotizar") { Content = JsonContent.Create(new { items = items ?? ItinerarioDePrueba() }) }, viajero);
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"{Flujo}/cotizar") { Content = JsonContent.Create(new { items = items ?? ItinerarioDePrueba() }) };
+        ConNegocio(peticion, TodoONada);
+        return Enviar(peticion, viajero);
+    }
+
+    /// <summary>
+    /// La cabecera de negocio que pone la puerta al abrir (historia 3): la política de confirmación del sitio, siempre con
+    /// valor —la puerta exige el campo—.
+    /// </summary>
+    public static void ConNegocio(HttpRequestMessage peticion, string politica)
+    {
+        ArgumentNullException.ThrowIfNull(peticion);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Negocio, Base64Url.EncodeToString(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { confirmationPolicy = politica }))));
+    }
 
     /// <summary>Cerrar, con el contacto del aviso en la cabecera, como lo pone la puerta.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cerrar(string id, string viajero = "u-1")
