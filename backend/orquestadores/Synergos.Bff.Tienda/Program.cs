@@ -53,6 +53,10 @@ builder.Services.AddSingleton<PurchaseFlow>();
 // esto los deja en Pricing e Inventory, con los sujetos de las dos compras (la de la puerta y la de arriba).
 builder.Services.AddSingleton<OfertaDeTienda>();
 
+// Los pasos del despacho (013-seller-operaciones, interinos de NS-1) mueven el envío por el cliente de la tienda, que
+// vive en el contenedor: se conectan al arrancar.
+var envios = new EnviosDelDespacho();
+
 // La compra por la puerta (ADR 0140): flujos/tienda.compra.json sobre el host genérico, en sus propias
 // rutas (/v1/flujos/tienda.compra…), que sólo sirve el flujo declarado; /v1/purchases sigue siendo del
 // motor imperativo de arriba, que el CMS llama. Por eso el modo arranca en «declarado» (lote 2, matiz
@@ -60,7 +64,7 @@ builder.Services.AddSingleton<OfertaDeTienda>();
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
 if (declarado)
 {
-    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, new PasoRevisarLineas());
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, [new PasoRevisarLineas(), .. PasosDelDespacho.Propios(envios)]);
 
     // Interino de N-12: los tipos del host más las líneas del pedido (TipoLineasDePedido).
     builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoLineasDePedido()));
@@ -79,6 +83,7 @@ if (declarado)
 }
 
 var app = builder.Build();
+envios.Conectar(app.Services.GetRequiredService<TiendaCapabilities>());
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Tienda:ApiKey"]);

@@ -34,6 +34,12 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
 
     private static readonly string[] DeLaOferta = ["Domain/OfertaDeTienda.cs"];
 
+    /// <summary>
+    /// El despacho del personal (013-seller-operaciones): los pasos interinos de NS-1. No es del caso común de declarar la
+    /// compra: lo mide la SC-007 de 013, atribuido a NS-1.
+    /// </summary>
+    private static readonly string[] DelDespacho = ["Domain/PasosDelEnvio.cs"];
+
     private static readonly string[] DelMotorImperativo =
     [
         "Domain/PurchaseFlow.cs", "Domain/Saga.cs", "Domain/TiendaCompensationExecutor.cs", "Clients/TiendaCapabilities.cs",
@@ -80,7 +86,7 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
             .Order(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Equal(DelFlujo.Concat(DeDominio).Concat(DeLaDevolucion).Concat(Interinos).Concat(DeLaOferta).Concat(DelMotorImperativo).Order(StringComparer.Ordinal), enDisco);
+        Assert.Equal(DelFlujo.Concat(DeDominio).Concat(DeLaDevolucion).Concat(Interinos).Concat(DeLaOferta).Concat(DelDespacho).Concat(DelMotorImperativo).Order(StringComparer.Ordinal), enDisco);
     }
 
     [Fact]

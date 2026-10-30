@@ -9,7 +9,7 @@ namespace Synergos.CMS.Tests.Bff;
 
 /// <summary>
 /// Lo que <c>Bff.Tienda</c> manda y lee de la capacidad de envíos cabe en el contrato que la capacidad publica
-/// (013-seller-operaciones, T009; principio III): el gate consumidor → capacidad de
+/// (013-seller-operaciones, T009 y T014; principio III): el gate consumidor → capacidad de
 /// <see cref="ContratoConsumidorEventosTests"/>, para el despacho.
 /// </summary>
 /// <remarks>
@@ -32,6 +32,7 @@ public sealed class ContratoConsumidorTiendaTests
         ["ShipAsync"] = c => c.ShipAsync(
             Ref.Create("orders.pedido", "o-1"), new { line1 = "Calle 1 # 2-3", city = "Bogotá", country = "CO" }, "servientrega", Llave, Ct),
         ["GetShipmentAsync"] = c => c.GetShipmentAsync("shp-1", Ct),
+        ["TrackShipmentAsync"] = c => c.TrackShipmentAsync("shp-1", "InTransit", "GUIA-123", Ct),
     };
 
     private const string LaCompraEntera =
@@ -69,8 +70,8 @@ public sealed class ContratoConsumidorTiendaTests
         var declarados = DelCliente().Select(m => m.Name).Order(StringComparer.Ordinal).ToList();
         var clasificados = Recorrido.Keys.Concat(FueraDeEsteGate.Keys).Order(StringComparer.Ordinal).ToList();
 
-        Assert.True(declarados.Count >= 23,
-            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en TiendaCapabilities y son 23: el censo dejó de ver.");
+        Assert.True(declarados.Count >= 24,
+            $"Se descubrieron {declarados.Count} métodos Task<Result<T>> en TiendaCapabilities y son 24: el censo dejó de ver.");
         Assert.Empty(Recorrido.Keys.Intersect(FueraDeEsteGate.Keys));
         Assert.True(declarados.SequenceEqual(clasificados, StringComparer.Ordinal),
             "TiendaCapabilities y el censo de este gate no tienen los mismos métodos." +
