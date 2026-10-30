@@ -195,4 +195,19 @@ public static class TravelSubject
     /// precio en vez de cobrarlo mal.
     /// </summary>
     public static Ref NightOf(string productRef) => Ref.Create("viajes.tarifa-noche", productRef);
+
+    /// <summary>El sujeto con el que <c>Api.Pricing</c> cotiza UN DÍA de un auto (lote 13, 006-P9), por la misma razón.</summary>
+    public static Ref DayOf(string productRef) => Ref.Create("viajes.tarifa-dia", productRef);
+
+    /// <summary>
+    /// El sujeto con el que <c>Api.Pricing</c> cotiza UN TRAYECTO de un vuelo para UN ADULTO (lote 13, 006-P9): el catálogo
+    /// cobra por adulto y por tramo, y la ida y vuelta son dos tramos.
+    /// </summary>
+    public static Ref LegOf(string productRef) => Ref.Create("viajes.tarifa-trayecto", productRef);
+
+    /// <summary>
+    /// UN TRAYECTO para UN NIÑO: el catálogo lo cobra aparte (al 75 % del adulto), así que es su propia tarifa y no un factor
+    /// que la puerta aplique. Los infantes no pagan ni ocupan silla: no tienen tarifa.
+    /// </summary>
+    public static Ref ChildLegOf(string productRef) => Ref.Create("viajes.tarifa-trayecto-nino", productRef);
 }

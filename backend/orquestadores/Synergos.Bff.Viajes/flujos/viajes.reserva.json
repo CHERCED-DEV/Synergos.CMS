@@ -3,7 +3,18 @@
   "entrada": ["viajero", "items", "politica"],
   "tipos": {
     "viajero": { "de": "sujeto" },
-    "items": { "lista": { "producto": "texto", "etiqueta": "texto?", "ventana": "ventana", "porNoche": "booleano?" } },
+    "items": {
+      "lista": {
+        "producto": "texto",
+        "etiqueta": "texto?",
+        "ventana": "ventana",
+        "porNoche": "booleano?",
+        "porDia": "booleano?",
+        "tramos": "entero?",
+        "adultos": "entero?",
+        "ninos": "entero?"
+      }
+    },
     "politica": { "de": "negocio", "campo": "confirmationPolicy", "tipo": "texto?" },
     "contacto": { "de": "contacto" }
   },

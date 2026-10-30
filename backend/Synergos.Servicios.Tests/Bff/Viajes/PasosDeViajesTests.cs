@@ -58,9 +58,51 @@ public sealed class PasosDeViajesTests
         {
             (Ref.Create("viajes.tarifa", "SYN2200-ECOBAS"), 1),
             (Ref.Create("viajes.tarifa-noche", "STD/STD-FLEX"), 3),
-            // El auto de tres días sigue por producto: sólo el alojamiento va por noche (006-H2).
+            // Un auto sin su marca sigue por producto: la noche es sólo del alojamiento (006-H2).
             (Ref.Create("viajes.tarifa", "ECON"), 1),
         }, aCotizar);
+    }
+
+    [Fact] // happy: lote 13 (006-P9), como cobra el catálogo
+    public async Task El_auto_va_POR_DIA_y_el_vuelo_POR_TRAYECTO_por_adulto_y_por_nino()
+    {
+        var dia = new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero);
+        var salida = await Revisar(
+            Item("ECON", dia, dia.AddDays(3), "Económico").Set("porDia", (bool?)true),
+            Item("SYN2200-ECOBAS", dia, dia.AddDays(3), "BOG → CTG").Set("tramos", (int?)2).Set("adultos", (int?)2).Set("ninos", (int?)1),
+            Item("SYN2240-ECOBAS", dia, dia.AddDays(1)).Set("tramos", (int?)1));
+
+        var aCotizar = Assert.IsAssignableFrom<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(salida.Valores[0]);
+        Assert.Equal(new[]
+        {
+            (Ref.Create("viajes.tarifa-dia", "ECON"), 3),
+            // Ida y vuelta para dos adultos y un niño: 4 trayectos de adulto y 2 de niño.
+            (Ref.Create("viajes.tarifa-trayecto", "SYN2200-ECOBAS"), 4),
+            (Ref.Create("viajes.tarifa-trayecto-nino", "SYN2200-ECOBAS"), 2),
+            // Sólo ida y sin decir los adultos: uno.
+            (Ref.Create("viajes.tarifa-trayecto", "SYN2240-ECOBAS"), 1),
+        }, aCotizar);
+
+        var itinerario = Assert.IsAssignableFrom<IReadOnlyList<ParadaDelViaje>>(salida.Valores[1]);
+        Assert.Equal(ParadaDelViaje.PorDia, itinerario[0].Unidad);
+        Assert.Equal((ParadaDelViaje.PorTrayecto, 2, 2, 1), (itinerario[1].Unidad, itinerario[1].Tramos, itinerario[1].Adultos, itinerario[1].Ninos));
+        Assert.Equal((ParadaDelViaje.PorTrayecto, 1, 1, (int?)null), (itinerario[2].Unidad, itinerario[2].Tramos, itinerario[2].Adultos, itinerario[2].Ninos));
+    }
+
+    [Fact] // filter: la marca no pone el precio, y no se cuenta lo que no es de ese ítem
+    public async Task Un_item_se_cobra_de_UNA_sola_manera_y_los_pasajeros_solo_cuentan_en_un_vuelo()
+    {
+        async Task<string?> Codigo(FlowContext item) => (await Revisar(item)).Rechazo?.Code;
+        var dia = Dia;
+
+        Assert.Equal("viajes.bad_fare_mark", await Codigo(Item("ECON", dia, dia.AddDays(2)).Set("porDia", (bool?)true).Set("porNoche", (bool?)true)));
+        Assert.Equal("viajes.bad_fare_mark", await Codigo(Item("ECON", dia, dia.AddDays(2)).Set("porDia", (bool?)true).Set("tramos", (int?)1)));
+        Assert.Equal("viajes.bad_fare_mark", await Codigo(Item("ECON", dia, dia.AddDays(2)).Set("adultos", (int?)2)));
+        Assert.Equal("viajes.bad_fare_mark", await Codigo(Item("SYN2200-ECOBAS", dia, dia.AddDays(2)).Set("tramos", (int?)3)));
+        Assert.Equal("viajes.bad_passengers", await Codigo(Item("SYN2200-ECOBAS", dia, dia.AddDays(2)).Set("tramos", (int?)2).Set("adultos", (int?)0)));
+        Assert.Equal("viajes.bad_passengers", await Codigo(Item("SYN2200-ECOBAS", dia, dia.AddDays(2)).Set("tramos", (int?)2).Set("ninos", (int?)-1)));
+        Assert.Equal("viajes.bad_passengers", await Codigo(Item("SYN2200-ECOBAS", dia, dia.AddDays(2)).Set("tramos", (int?)2).Set("adultos", (int?)9).Set("ninos", (int?)1)));
+        Assert.Null(await Codigo(Item("SYN2200-ECOBAS", dia, dia.AddDays(2)).Set("tramos", (int?)2).Set("adultos", (int?)9)));
     }
 
     [Theory]
@@ -128,6 +170,9 @@ public sealed class PasosDeViajesTests
         [
             new("vuelo/AV-8020", "Bogotá → Cartagena", Dia, Dia.AddHours(2)),
             new("hotel/caribe/DBL", "Hotel Caribe — doble", Dia.AddHours(7), Dia.AddDays(2)),
+            // Cómo se cobra cada ítem (lote 13): un vuelo de ida y vuelta para dos adultos y un niño, y un auto por día.
+            new("SYN2200-ECOBAS", "BOG → CTG", Dia, Dia.AddDays(3), Unidad: ParadaDelViaje.PorTrayecto, Tramos: 2, Adultos: 2, Ninos: 1),
+            new("ECON", "Económico", Dia, Dia.AddDays(3), Unidad: ParadaDelViaje.PorDia),
         ];
 
         var json = JsonDocument.Parse(tipo.Escribir(itinerario).ToJsonString()).RootElement;
@@ -135,7 +180,10 @@ public sealed class PasosDeViajesTests
 
         Assert.Equal(itinerario, leido);
         Assert.True(tipo.Guardable);
+        // Lo de antes se escribe igual: sin unidad ni pasajeros.
+        Assert.False(json[0].TryGetProperty("unidad", out _));
         Assert.Throws<FormatException>(() => tipo.Leer(JsonDocument.Parse("""[{"producto":"x","etiqueta":"x","inicio":"2026-09-01T08:00:00+00:00","fin":"2026-09-01T09:00:00+00:00","precio":1}]""").RootElement, "itinerario"));
+        Assert.Throws<FormatException>(() => tipo.Leer(JsonDocument.Parse("""[{"producto":"x","etiqueta":"x","inicio":"2026-09-01T08:00:00+00:00","fin":"2026-09-01T09:00:00+00:00","unidad":"semana"}]""").RootElement, "itinerario"));
     }
 }
 
