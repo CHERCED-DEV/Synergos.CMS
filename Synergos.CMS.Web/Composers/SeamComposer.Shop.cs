@@ -149,6 +149,10 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IProductCatalogProvider>(),
             sp.GetRequiredService<ILogger<RegistroDeComprasDeLaTienda>>(),
             hayOrquestadorDeTienda));
+        // La bandeja del personal (013-seller-operaciones, R7): las órdenes de la tienda entera, de los dos caminos,
+        // del MISMO almacén, con su etapa del seguimiento y los actos que admiten.
+        services.AddSingleton(sp => new OrdenesDeLaTienda(sp.GetRequiredService<IJsonEntityStore>()));
+        services.AddSingleton<PedidosDeLaTienda>();
 
         // La OFERTA del catálogo (004-tienda-compra, R-9): lo que el catálogo muestra es lo que el orquestador
         // cobra y aparta. Diez segundos y no los treinta de comprar: quien espera es el editor que publica, y una
