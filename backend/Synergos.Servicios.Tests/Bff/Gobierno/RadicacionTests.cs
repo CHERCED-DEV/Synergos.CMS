@@ -213,13 +213,16 @@ public sealed class RadicacionTests
     }
 
     /// <summary>
-    /// Se cobró y el expediente no nació: con procesos caído DESPUÉS de capturar, la radicación se deshace y la tasa se
-    /// devuelve entera (<c>despues: payments.devolver</c>); no sale aviso ni la pantalla puede decir «no se te cobró».
+    /// Se cobró y el expediente no nació: con procesos caído DESPUÉS de capturar, la radicación no se deshace. Arrancar
+    /// lleva llave, y un paso con llave que no contesta deja la saga viva y en duda en esa fase (001-P10 = A, T094 del
+    /// núcleo): la puerta contesta el transitorio, la tasa sigue capturada y no sale aviso. Repetir cerrar con procesos
+    /// de vuelta la termina con el MISMO cobro: nada devuelto, un expediente y un aviso.
     /// </summary>
     [Fact]
-    public async Task Con_procesos_caido_tras_capturar_se_devuelve_la_tasa_entera()
+    public async Task Con_procesos_caido_tras_capturar_queda_en_duda_y_repetir_cerrar_la_termina_con_el_mismo_cobro()
     {
-        using var r = await new RadicacionReal(falla: p => RadicacionReal.Es(p, "POST", "^/v1/instances$") ? "caida" : null)
+        var caido = true;
+        using var r = await new RadicacionReal(falla: p => caido && RadicacionReal.Es(p, "POST", "^/v1/instances$") ? "caida" : null)
             .ConOferta();
         var (_, abierta) = await r.Abrir();
         var id = Id(abierta);
@@ -227,11 +230,56 @@ public sealed class RadicacionTests
         var (estado, _) = await r.Cerrar(id);
 
         Assert.True((int)estado >= 500, $"Una caída de procesos no es un rechazo del negocio: {(int)estado}.");
-        Assert.Equal(SagaStatus.Compensated, r.Sagas.Find(id)!.Status);
+        var enDuda = r.Sagas.Find(id)!;
+        Assert.Equal(SagaStatus.Running, enDuda.Status);
+        Assert.Equal("cerrar", enDuda.FaseEnDuda);
+        var capturado = await r.Cobro(id);
+        Assert.Equal("Captured", capturado.GetProperty("status").GetString());
+        Assert.Equal(0m, capturado.GetProperty("refunded").GetProperty("amount").GetDecimal());
+        Assert.Equal(0, await r.Expedientes(id));
+        Assert.Equal(0, (await r.Avisos()).GetArrayLength());
+
+        caido = false;
+        var (cerro, cerrada) = await r.Cerrar(id);
+
+        Assert.True(cerro == HttpStatusCode.OK, cerrada.ToString());
+        Assert.Equal("Completed", cerrada.GetProperty("estado").GetString());
+        Assert.Null(r.Sagas.Find(id)!.FaseEnDuda);
+        Assert.Equal(1, await r.Cobros(id));
+        var cobro = await r.Cobro(id);
+        Assert.Equal("Captured", cobro.GetProperty("status").GetString());
+        Assert.Equal(RadicacionReal.Tasa, cobro.GetProperty("amount").GetProperty("amount").GetDecimal());
+        Assert.Equal(0m, cobro.GetProperty("refunded").GetProperty("amount").GetDecimal());
+        Assert.Equal(1, await r.Expedientes(id));
+        Assert.Equal(1, (await r.Avisos()).GetArrayLength());
+    }
+
+    /// <summary>
+    /// Y si nadie vuelve, el barrido la deshace pasado el plazo de abandono, que cuenta desde que se ABRIÓ, y la tasa se
+    /// devuelve entera (<c>despues: payments.devolver</c>): 0 pesos retenidos, sin expediente ni aviso.
+    /// </summary>
+    [Fact]
+    public async Task Con_procesos_caido_tras_capturar_y_nadie_que_vuelva_el_barrido_devuelve_la_tasa_entera()
+    {
+        var reloj = new RelojFalso(DateTimeOffset.UtcNow);
+        using var r = await new RadicacionReal(reloj: reloj, falla: p => RadicacionReal.Es(p, "POST", "^/v1/instances$") ? "caida" : null)
+            .ConOferta();
+        var (_, abierta) = await r.Abrir();
+        var id = Id(abierta);
+        await r.Cerrar(id);
+
+        reloj.Avanzar(TimeSpan.FromMinutes(29));
+        await r.Barrer();
+        Assert.Equal("Running", (await r.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
+        Assert.Equal(0m, (await r.Cobro(id)).GetProperty("refunded").GetProperty("amount").GetDecimal());
+
+        reloj.Avanzar(TimeSpan.FromMinutes(2));
+        await r.Barrer();
+
+        Assert.Equal("Compensated", (await r.Consultar(id)).Cuerpo.GetProperty("estado").GetString());
         var cobro = await r.Cobro(id);
         Assert.Equal(RadicacionReal.Tasa, cobro.GetProperty("refunded").GetProperty("amount").GetDecimal());
         Assert.Equal(0m, cobro.GetProperty("refundable").GetProperty("amount").GetDecimal());
-        Assert.Equal(1, r.Cable.Veces("POST", "/refund$"));
         Assert.Equal(0, await r.Expedientes(id));
         Assert.Equal(0, (await r.Avisos()).GetArrayLength());
     }
