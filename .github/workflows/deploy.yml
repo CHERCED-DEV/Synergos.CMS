@@ -196,11 +196,16 @@ jobs:
           # el documento manda correr allí, con las exclusiones nombradas y
           # razonadas — una lista a mano se desincroniza el día que nadie mira,
           # y ésta ya se desincronizó dos veces.
+          #
+          # Y el catálogo de procesos (009, NP-1) tiene DOS lectores: provisionar.sh
+          # publica sus definiciones en Api.Workflow, y bff-gobierno lo monta desde
+          # aquí y no arranca sin él. Viaja con el commit que despliega, como el
+          # Caddyfile, para que los dos lean la misma versión.
           scp -i ~/.ssh/id_deploy -o BatchMode=yes \
             compose.prod.yml Caddyfile tools/deploy-remoto.sh \
             tools/respaldo.sh tools/enviar-respaldo.sh tools/restaurar.sh \
             tools/importar-schema.sh tools/provisionar.sh tools/provisionar-en-la-red.sh \
-            tools/provisionar.recursos.json tools/provisionar.plantillas.json \
+            tools/provisionar.recursos.json tools/provisionar.plantillas.json tools/provisionar.procesos.json \
             "$USUARIO@$HOST:/opt/synergos/"
 
           ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \

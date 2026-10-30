@@ -1104,11 +1104,24 @@ services:
       Gobierno__Alerts__ToKind: ${SYNERGOS_ALERTS_TO_KIND:-gobierno.guardia}
       Gobierno__Alerts__ToId: ${SYNERGOS_ALERTS_TO_ID:-operaciones}
       Gobierno__Alerts__Address: ${SYNERGOS_ALERTS_ADDRESS:-}
+
+      # El catalogo de procesos (009, NP-1). Un flujo con un paso de procesos NO
+      # arranca sin el: es contra lo que se cruzan sus transiciones al arrancar.
+      # Es el MISMO fichero que provisionar.sh publica en Api.Workflow; viene del
+      # servidor y se monta abajo, en volumes.
+      Gobierno__Procesos__Archivo: /etc/synergos/provisionar.procesos.json
     volumes:
       # SIN ESTO, CADA DESPLIEGUE BORRA LOS DATOS. No falla y no avisa: el
       # contenedor nuevo arranca con el directorio vacio y la capacidad se
       # comporta como recien instalada.
       - bff-gobierno-data:/app/data
+      # El catalogo de procesos, del servidor y de solo lectura (ver arriba).
+      - type: bind
+        source: ./provisionar.procesos.json
+        target: /etc/synergos/provisionar.procesos.json
+        read_only: true
+        bind:
+          create_host_path: false
     deploy:
       # UNA porque hoy no hace falta otra, NO porque no se pueda (#152).
       #
