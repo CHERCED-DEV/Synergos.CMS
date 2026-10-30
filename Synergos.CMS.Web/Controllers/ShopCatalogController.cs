@@ -806,7 +806,8 @@ public sealed class ShopCatalogController : ControllerBase
                     Date: s.ReachedAt,
                     Reached: s.Reached,
                     ReachedAt: s.ReachedAt,
-                    Note: s.Note))
+                    Note: s.Note,
+                    Description: s.Note))
                 .ToList() ?? new List<TrackingStageDto>()));
     }
 
@@ -1458,7 +1459,10 @@ public sealed class ShopCatalogController : ControllerBase
         DateTimeOffset? Date,
         bool Reached,
         DateTimeOffset? ReachedAt,
-        string? Note);
+        string? Note,
+        // `description` es lo que pinta el seguimiento del comprador (normalizeTracking): la nota de la etapa, que al
+        // enviar es la guía (013-seller-operaciones, R12). `note` se conserva.
+        string? Description = null);
 
     /// <summary>Timeline de la orden; stages vacías + currentStage null = tracking aún no iniciado (orden Pending).</summary>
     public sealed record TrackingResponse(

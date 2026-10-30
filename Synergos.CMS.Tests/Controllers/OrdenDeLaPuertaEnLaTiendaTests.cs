@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -49,6 +50,27 @@ public sealed class OrdenDeLaPuertaEnLaTiendaTests
         var seguimiento = Assert.IsType<ShopCatalogController.TrackingResponse>(
             Assert.IsType<OkObjectResult>(await t.Sut.OrderTracking(Compra, CancellationToken.None)).Value);
         Assert.Equal(StubOrderTrackingService.StagePaid, seguimiento.CurrentStage);
+    }
+
+    [Fact]
+    public async Task Enviada_por_el_personal_el_seguimiento_del_comprador_trae_la_guia_como_description()
+    {
+        var t = new Tienda(Ana);
+        await t.Libro.ConfirmarAsync(DeAna());
+
+        // Lo que deja el acto «enviar» del personal (013-seller-operaciones, T019): la etapa con la guía como nota.
+        await t.Seguimiento.AdvanceAsync(Compra, "shipped", "GUIA-123");
+        var seguimiento = Assert.IsType<OkObjectResult>(await t.Sut.OrderTracking(Compra, CancellationToken.None)).Value;
+
+        // Como lo serializa MVC, que es lo que lee el storefront (normalizeTracking lee «description»).
+        var etapas = JsonSerializer.SerializeToElement(
+            seguimiento, new JsonSerializerOptions(JsonSerializerDefaults.Web)).GetProperty("stages");
+        var enviada = etapas.EnumerateArray().Single(e => e.GetProperty("stage").GetString() == "shipped");
+        Assert.Equal("GUIA-123", enviada.GetProperty("description").GetString());
+        Assert.Equal("GUIA-123", enviada.GetProperty("note").GetString());
+        var pagada = etapas.EnumerateArray().Single(e => e.GetProperty("stage").GetString() == StubOrderTrackingService.StagePaid);
+        // Cada etapa dice como description su propia nota, la que tenga.
+        Assert.Equal(pagada.GetProperty("note").GetString(), pagada.GetProperty("description").GetString());
     }
 
     [Fact]
@@ -134,6 +156,7 @@ public sealed class OrdenDeLaPuertaEnLaTiendaTests
         {
             Almacen = almacen ?? new InMemoryJsonEntityStore();
             var seguimiento = new StubOrderTrackingService(null, null, Almacen, null);
+            Seguimiento = seguimiento;
             Libro = new LibroDeComprasDeLaPuerta(Almacen, seguimiento);
 
             var puerta = new PuertaSettings();
@@ -164,6 +187,7 @@ public sealed class OrdenDeLaPuertaEnLaTiendaTests
         }
 
         public IJsonEntityStore Almacen { get; }
+        public IOrderTrackingService Seguimiento { get; }
         public LibroDeComprasDeLaPuerta Libro { get; }
         public IShopOrderService Motor { get; }
         public IReturnService Devoluciones { get; }
