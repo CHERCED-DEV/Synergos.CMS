@@ -36,7 +36,7 @@
     "slotMinutes": 60
   },
   {
-    "_": "Viajes (lote 10, 006-H2 y H4): los productRef de las ofertas del hotel ({RoomTypeCode}/{RatePlanCode}, la regla de HttpHotelBookingService.ProductRef), cada uno con su recurso y su tarifa POR NOCHE (viajes.tarifa-noche), que la puerta multiplica por las noches. Los precios son los del catálogo de la base: FLEX la tarifa base, NREF el 90 %. Las dos tarifas de un tipo comparten las habitaciones de verdad, pero cada productRef es su propio recurso con el cupo del tipo. Vuelo y auto van por producto (viajes.tarifa) y se dan de alta como sus ofertas."
+    "_": "Viajes (lote 10, 006-H2 y H4): los productRef de las ofertas del hotel ({RoomTypeCode}/{RatePlanCode}, la regla de HttpHotelBookingService.ProductRef), cada uno con su recurso y su tarifa POR NOCHE (viajes.tarifa-noche), que la puerta multiplica por las noches. Los precios son los del catálogo de la base: FLEX la tarifa base, NREF el 90 %. Las dos tarifas de un tipo comparten las habitaciones de verdad, pero cada productRef es su propio recurso con el cupo del tipo. Vuelo y auto: el bloque del lote 13, más abajo."
   },
   {
     "tipo": "recurso",
@@ -148,6 +148,506 @@
     "subjectKind": "viajes.tarifa-noche",
     "subjectId": "FAM/FAM-NREF",
     "amount": 486000,
+    "currency": "COP"
+  },
+  {
+    "_": "Viajes (lote 13, 006-P9): los vuelos y autos del catálogo de la base, cada productRef con su recurso. El vuelo se cobra POR TRAYECTO y por pasajero (viajes.tarifa-trayecto el adulto, viajes.tarifa-trayecto-nino el niño; los infantes no pagan), que la puerta multiplica por los tramos (2 con vuelta) y los pasajeros; el auto POR DÍA (viajes.tarifa-dia), por los días de su periodo. Los precios son los del catálogo: el del adulto por tramo por el factor de la familia (Economy Flex 1,35; Business 2,6), el del niño al 75 %, redondeados como él. El cupo cuenta reservas, no sillas: un vuelo para dos aparta una."
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1010-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1010-ECOBAS",
+    "amount": 220000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1010-ECOBAS",
+    "amount": 165000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1010-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1010-ECOFLEX",
+    "amount": 297000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1010-ECOFLEX",
+    "amount": 222750,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1010-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1010-BUS",
+    "amount": 572000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1010-BUS",
+    "amount": 429000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1014-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1014-ECOBAS",
+    "amount": 260000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1014-ECOBAS",
+    "amount": 195000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1014-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1014-ECOFLEX",
+    "amount": 351000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1014-ECOFLEX",
+    "amount": 263250,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1014-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1014-BUS",
+    "amount": 676000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1014-BUS",
+    "amount": 507000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1090-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1090-ECOBAS",
+    "amount": 180000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1090-ECOBAS",
+    "amount": 135000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1090-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1090-ECOFLEX",
+    "amount": 243000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1090-ECOFLEX",
+    "amount": 182250,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN1090-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN1090-BUS",
+    "amount": 468000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN1090-BUS",
+    "amount": 351000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2200-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2200-ECOBAS",
+    "amount": 340000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2200-ECOBAS",
+    "amount": 255000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2200-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2200-ECOFLEX",
+    "amount": 459000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2200-ECOFLEX",
+    "amount": 344250,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2200-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2200-BUS",
+    "amount": 884000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2200-BUS",
+    "amount": 663000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2240-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2240-ECOBAS",
+    "amount": 270000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2240-ECOBAS",
+    "amount": 202500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2240-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2240-ECOFLEX",
+    "amount": 364500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2240-ECOFLEX",
+    "amount": 273375,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN2240-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN2240-BUS",
+    "amount": 702000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN2240-BUS",
+    "amount": 526500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8800-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8800-ECOBAS",
+    "amount": 1450000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8800-ECOBAS",
+    "amount": 1087500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8800-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8800-ECOFLEX",
+    "amount": 1957500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8800-ECOFLEX",
+    "amount": 1468125,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8800-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8800-BUS",
+    "amount": 3770000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8800-BUS",
+    "amount": 2827500,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8840-ECOBAS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8840-ECOBAS",
+    "amount": 1180000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8840-ECOBAS",
+    "amount": 885000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8840-ECOFLEX",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8840-ECOFLEX",
+    "amount": 1593000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8840-ECOFLEX",
+    "amount": 1194750,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SYN8840-BUS",
+    "capacity": 20,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto",
+    "subjectId": "SYN8840-BUS",
+    "amount": 3068000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-trayecto-nino",
+    "subjectId": "SYN8840-BUS",
+    "amount": 2301000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "ECON",
+    "capacity": 5,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-dia",
+    "subjectId": "ECON",
+    "amount": 95000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "COMP",
+    "capacity": 5,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-dia",
+    "subjectId": "COMP",
+    "amount": 130000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "SUV",
+    "capacity": 5,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-dia",
+    "subjectId": "SUV",
+    "amount": 210000,
+    "currency": "COP"
+  },
+  {
+    "tipo": "recurso",
+    "subjectKind": "viajes.producto",
+    "subjectId": "LUX",
+    "capacity": 5,
+    "timeZoneId": "America/Bogota"
+  },
+  {
+    "tipo": "precio",
+    "subjectKind": "viajes.tarifa-dia",
+    "subjectId": "LUX",
+    "amount": 340000,
     "currency": "COP"
   }
 ]
