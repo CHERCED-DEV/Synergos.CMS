@@ -218,6 +218,9 @@ public sealed partial class SeamComposer
         // Y la plata de una orden de la puerta vuelve por el orquestador (US 7): la devolución posterior del personal,
         // pedida por el reenvío de la puerta (núcleo P6 y P8 del lote 6).
         services.AddSingleton<DevolucionesDeLaPuerta>();
+        // Y el despacho del personal (013-seller-operaciones, US 2): enviar y entregar las compras de la puerta, por los
+        // flujos posteriores del orquestador y el mismo reenvío.
+        services.AddSingleton<DespachosDeLaPuerta>();
         services.AddSingleton<IShopOrderService>(sp => new OrdenesConLasDeLaPuerta(
             motor(sp),
             sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),
