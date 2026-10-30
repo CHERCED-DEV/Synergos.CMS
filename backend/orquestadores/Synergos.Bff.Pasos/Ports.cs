@@ -186,12 +186,26 @@ public interface IOrdersPort
 public sealed record DireccionDeEnvio(
     string Linea1, string? Linea2, string Ciudad, string? Region, string? CodigoPostal, string Pais, string? Contacto);
 
-/// <summary>Despachar en <c>Api.Fulfillment</c> (núcleo N2).</summary>
+/// <summary>Un evento del seguimiento de un envío: a qué estado pasó, con qué nota y cuándo.</summary>
+public sealed record EventoDeEnvio(string Estado, string? Nota, DateTimeOffset En);
+
+/// <summary>Un envío como lo lee quien despacha (núcleo, NS-2 de 013): a dónde va, con quién, en qué estado y cómo llegó ahí.</summary>
+public sealed record EnvioLeido(
+    string Id, DireccionDeEnvio Destino, string Transportadora, string? Guia, string Estado, IReadOnlyList<EventoDeEnvio> Eventos);
+
+/// <summary>Despachar, seguir y leer un envío en <c>Api.Fulfillment</c> (núcleo N2; NS-1 y NS-2 de 013).</summary>
 public interface IFulfillmentPort
 {
     /// <summary>Registra el envío de <paramref name="paraQue"/> y devuelve su identificador.</summary>
     Task<Result<string>> DespacharAsync(
         Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>Lleva el envío a <paramref name="estado"/>, con una nota opcional, y devuelve el estado en que quedó.</summary>
+    /// <remarks>Sin llave: la capacidad no la lee, y su idempotencia es el estado («ya estaba» es un rechazo propio).</remarks>
+    Task<Result<string>> SeguirAsync(string envio, string estado, string? nota, CancellationToken ct);
+
+    /// <summary>El envío: su destino, la transportadora, la guía, el estado y sus eventos.</summary>
+    Task<Result<EnvioLeido>> LeerAsync(string envio, CancellationToken ct);
 }
 
 /// <summary>Un paso de la historia de una instancia: qué transición, de dónde a dónde, quién actuó y cuándo.</summary>

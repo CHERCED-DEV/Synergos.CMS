@@ -33,7 +33,7 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// STORE, no de comportamiento.
 /// </para>
 /// </remarks>
-public sealed class StubApplicationService : IApplicationService
+public sealed class StubApplicationService : IApplicationService, IExpedientesDeLaPuerta
 {
     /// <summary>Etapa legible por estado (cara ciudadano/funcionario).</summary>
     private static readonly IReadOnlyDictionary<CaseStatus, string> StageLabels =
@@ -84,6 +84,18 @@ public sealed class StubApplicationService : IApplicationService
     private readonly ITransactionalNotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
     private int _radicadoSequence = SeedSequenceFloor;
+
+    /// <summary>
+    /// Los cerrojos de la radicación por la puerta: buscar el expediente de una radicación y escribirlo tienen que ser
+    /// una sola cosa, o dos guardados simultáneos acuñarían dos radicados para la misma. Estáticos y de número fijo,
+    /// como los del registro de entradas: el almacén es de una sola instancia, y compartir uno entre dos radicaciones
+    /// sólo las pone en fila.
+    /// </summary>
+    private static readonly SemaphoreSlim[] CerrojosDeLaPuerta =
+        Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    private static SemaphoreSlim CerrojoDe(string radicacion)
+        => CerrojosDeLaPuerta[(int)((uint)StringComparer.Ordinal.GetHashCode(radicacion.Trim()) % (uint)CerrojosDeLaPuerta.Length)];
 
     public StubApplicationService(
         ITramiteCatalogProvider catalog,
@@ -155,21 +167,7 @@ public sealed class StubApplicationService : IApplicationService
 
         var detail = await _catalog.GetAsync(tramiteId.Trim(), cancellationToken)
             ?? throw new ArgumentException($"Trámite '{tramiteId.Trim()}' no encontrado.", nameof(tramiteId));
-
-        // Formulario dinámico data-driven: exigir cada campo requerido de la definición
-        // (recorre todas las secciones del formulario seccionado).
-        foreach (var section in detail.FormDefinition.Sections)
-        {
-            foreach (var field in section.Fields)
-            {
-                if (field.Required
-                    && (!answers.TryGetValue(field.Id, out var value) || string.IsNullOrWhiteSpace(value)))
-                {
-                    throw new ArgumentException(
-                        $"El campo requerido '{field.Label}' ({field.Id}) está vacío.", nameof(answers));
-                }
-            }
-        }
+        ExigirRequeridas(detail, answers);
 
         var occurred = _now();
         var summary = detail.Summary;
@@ -339,6 +337,214 @@ public sealed class StubApplicationService : IApplicationService
             ActionPath: $"/gobierno/tramites/{state.Radicado}");
     }
 
+    /// <summary>
+    /// Exige cada pregunta obligatoria del formulario publicado (todas las secciones del formulario seccionado). La
+    /// ruta directa al radicar y la puerta al guardar las respuestas, con la misma regla y el mismo mensaje, que nombra
+    /// la que falta.
+    /// </summary>
+    private static void ExigirRequeridas(TramiteDetail detail, IReadOnlyDictionary<string, string> answers)
+    {
+        foreach (var section in detail.FormDefinition.Sections)
+        {
+            foreach (var field in section.Fields)
+            {
+                if (field.Required
+                    && (!answers.TryGetValue(field.Id, out var value) || string.IsNullOrWhiteSpace(value)))
+                {
+                    throw new ArgumentException(
+                        $"El campo requerido '{field.Label}' ({field.Id}) está vacío.", nameof(answers));
+                }
+            }
+        }
+    }
+
+    // ── La radicación por la puerta (009-gobierno-tramite T027) ─────────
+    //
+    // El orquestador de Gobierno cobra la tasa y hace nacer el expediente en el proceso; las respuestas, el contacto y
+    // el radicado son del CMS. Se guardan ANTES de cerrar —el artefacto ya comprobó que la radicación es del miembro y
+    // sigue en curso— y el expediente queda por confirmar hasta que la reconciliación ve la radicación completa:
+    // mientras tanto no está en ninguna bandeja (ListCases, Resolve). No se audita ni se avisa al guardar: el aviso es
+    // del orquestador, y el rastro del primer estado se escribe al confirmar, cuando el expediente existe.
+
+    /// <inheritdoc />
+    public async Task<ExpedienteDeLaPuerta?> GuardarAsync(RespuestasDeLaPuerta respuestas, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(respuestas);
+        if (string.IsNullOrWhiteSpace(respuestas.Radicacion))
+        {
+            throw new ArgumentException("La radicación es obligatoria.", nameof(respuestas));
+        }
+        var citizen = respuestas.Ciudadano;
+        if (citizen is null || string.IsNullOrWhiteSpace(citizen.Name) || string.IsNullOrWhiteSpace(citizen.Email))
+        {
+            throw new ArgumentException("El nombre y el email del solicitante son obligatorios.", nameof(respuestas));
+        }
+        var answers = respuestas.Respuestas ?? new Dictionary<string, string>();
+        var detail = await _catalog.GetAsync((respuestas.Tramite ?? string.Empty).Trim(), cancellationToken)
+            ?? throw new ArgumentException($"Trámite '{respuestas.Tramite}' no encontrado.", nameof(respuestas));
+        ExigirRequeridas(detail, answers);
+
+        // `with`, como al radicar: reconstruir por posición tiraría el MemberKey, que es el dueño.
+        var cleanCitizen = citizen with
+        {
+            Name = citizen.Name.Trim(),
+            Email = citizen.Email.Trim(),
+            DocumentId = citizen.DocumentId?.Trim(),
+            Phone = citizen.Phone?.Trim(),
+        };
+        var formData = new Dictionary<string, string>(answers, StringComparer.Ordinal);
+        var caseId = CaseIdDeLaRadicacion(respuestas.Radicacion);
+
+        var cerrojo = CerrojoDe(respuestas.Radicacion);
+        await cerrojo.WaitAsync(cancellationToken);
+        try
+        {
+            var previa = await LoadAsync(caseId, cancellationToken);
+            if (previa is not null && !PorConfirmar(previa))
+            {
+                return null;
+            }
+
+            CaseState state;
+            if (previa is not null)
+            {
+                // Repetir reemplaza mientras siga abierta: el ciudadano corrigió algo antes de pagar. El radicado se queda.
+                state = previa with { Citizen = cleanCitizen, FormData = formData, Consent = respuestas.Aceptacion };
+            }
+            else
+            {
+                var occurred = _now();
+                var summary = detail.Summary;
+                state = new CaseState(
+                    CaseId: caseId,
+                    Radicado: NextRadicado(occurred),
+                    TramiteId: summary.Id,
+                    TramiteName: summary.Name,
+                    Agency: summary.Agency,
+                    Citizen: cleanCitizen,
+                    FormData: formData,
+                    Documents: Array.Empty<CitizenDocumentRef>(),
+                    Status: CaseStatus.Radicado,
+                    Priority: CasePriority.Normal,
+                    SlaDays: summary.EstimatedDays,
+                    // La tasa que cotizó el servidor para esta radicación, no la de la ficha.
+                    FeeMinor: respuestas.Tasa,
+                    Currency: respuestas.Moneda,
+                    RadicadoAt: occurred,
+                    History: new[]
+                    {
+                        new HistoryEntry(CaseStatus.Radicado, occurred, cleanCitizen.Email, "Solicitud radicada en línea."),
+                    },
+                    Decision: null,
+                    Consent: respuestas.Aceptacion,
+                    Radicacion: respuestas.Radicacion,
+                    Camino: CaminoDelExpediente.Puerta);
+            }
+            await WriteAsync(state, cancellationToken);
+            return ExpedienteDe(state);
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ExpedienteDeLaPuerta?> DeLaRadicacionAsync(string radicacion, CancellationToken cancellationToken = default)
+        => string.IsNullOrWhiteSpace(radicacion)
+            ? null
+            : await LoadAsync(CaseIdDeLaRadicacion(radicacion), cancellationToken) is { Radicacion: not null } state ? ExpedienteDe(state) : null;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ExpedienteDeLaPuerta>> PorConfirmarAsync(CancellationToken cancellationToken = default)
+        => (await LoadAllAsync(cancellationToken))
+            .Where(PorConfirmar)
+            .OrderByDescending(s => s.RadicadoAt)
+            .Select(ExpedienteDe)
+            .ToList();
+
+    /// <inheritdoc />
+    public async Task ConfirmarAsync(string radicacion, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(radicacion)) return;
+
+        CaseState confirmado;
+        var cerrojo = CerrojoDe(radicacion);
+        await cerrojo.WaitAsync(cancellationToken);
+        try
+        {
+            var state = await LoadAsync(CaseIdDeLaRadicacion(radicacion), cancellationToken);
+            if (state is null || !PorConfirmar(state)) return;
+
+            // Completada en el orquestador quiere decir que la tasa se capturó (o que no había tasa) y que el expediente
+            // nació en el proceso: es lo que se sabe, y lo que se escribe.
+            confirmado = state with
+            {
+                ProcesoAlDia = _now(),
+                PaymentStatus = state.FeeMinor > 0m ? PaymentStatus.Captured.ToString() : state.PaymentStatus,
+            };
+            await WriteAsync(confirmado, cancellationToken);
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+
+        // El rastro forense del primer estado, ahora que el expediente existe (ADR 0037). Best-effort.
+        if (_audit is not null)
+        {
+            await BestEffort.RunAsync(() => _audit.WriteAsync(
+                    new AuditEvent(
+                        Id: confirmado.CaseId,
+                        OccurredAtUtc: confirmado.ProcesoAlDia!.Value.UtcDateTime,
+                        ActorEmail: confirmado.Citizen.Email,
+                        ActorName: confirmado.Citizen.Name,
+                        Action: "gov.case-radicado",
+                        Resource: confirmado.Radicado,
+                        Outcome: "success",
+                        Detail: $"Expediente radicado por la puerta para el trámite {confirmado.TramiteId} (tasa {confirmado.FeeMinor} {confirmado.Currency})."),
+                    cancellationToken), cancellationToken);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DescartarAsync(string radicacion, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(radicacion)) return false;
+
+        var cerrojo = CerrojoDe(radicacion);
+        await cerrojo.WaitAsync(cancellationToken);
+        try
+        {
+            var caseId = CaseIdDeLaRadicacion(radicacion);
+            var state = await LoadAsync(caseId, cancellationToken);
+            return state is not null && PorConfirmar(state)
+                && await _store.DeleteAsync(ResourceType, StoreKey(caseId), cancellationToken);
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
+    /// <summary>
+    /// Si el expediente nació por la puerta y su radicación todavía no se vio completa (<c>ProcesoAlDia</c> nulo). Uno
+    /// así no existe para las bandejas, la cola ni las decisiones.
+    /// </summary>
+    private static bool PorConfirmar(CaseState s)
+        => s.Camino == CaminoDelExpediente.Puerta && s.ProcesoAlDia is null;
+
+    /// <summary>
+    /// El id del expediente de una radicación: derivado de ella, así que buscarlo no recorre el almacén y dos guardados
+    /// de la misma radicación escriben el mismo expediente. La saga trae caracteres que un nombre de fichero no admite.
+    /// </summary>
+    private static string CaseIdDeLaRadicacion(string radicacion)
+        => "case_rad_" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(radicacion.Trim())))[..32].ToLowerInvariant();
+
+    private static ExpedienteDeLaPuerta ExpedienteDe(CaseState s)
+        => new(s.CaseId, s.Radicado, s.Radicacion!, s.Citizen.MemberKey, !PorConfirmar(s));
+
     // ── Superficie de composición (DIP) para tracking / workflow / documentos ──
     // El agregado es la fuente de verdad; los stubs hermanos leen/mutan por aquí
     // sin duplicar estado (mismo patrón StubEventTicketingService → Management).
@@ -353,11 +559,11 @@ public sealed class StubApplicationService : IApplicationService
         return state is null ? null : ToDetail(state, _now());
     }
 
-    /// <summary>Devuelve todos los expedientes (para armar las bandejas).</summary>
+    /// <summary>Devuelve todos los expedientes (para armar las bandejas); no los de la puerta por confirmar.</summary>
     public IReadOnlyList<CaseDetail> ListCases()
     {
         var now = _now();
-        return Block(LoadAllAsync()).Select(s => ToDetail(s, now)).ToList();
+        return Block(LoadAllAsync()).Where(s => !PorConfirmar(s)).Select(s => ToDetail(s, now)).ToList();
     }
 
     /// <summary>
@@ -368,7 +574,7 @@ public sealed class StubApplicationService : IApplicationService
     public IReadOnlyList<(CaseDetail Case, string Agency)> ListCasesWithAgency()
     {
         var now = _now();
-        return Block(LoadAllAsync()).Select(s => (ToDetail(s, now), s.Agency)).ToList();
+        return Block(LoadAllAsync()).Where(s => !PorConfirmar(s)).Select(s => (ToDetail(s, now), s.Agency)).ToList();
     }
 
     /// <summary>
@@ -478,6 +684,8 @@ public sealed class StubApplicationService : IApplicationService
 
     private static void Block(Task task) => task.GetAwaiter().GetResult();
 
+    // Un expediente de la puerta por confirmar no se resuelve: ni se lee, ni se decide, ni se le adjunta nada hasta que
+    // su radicación se completa (FR-018).
     private CaseState? Resolve(string caseIdOrRadicado)
     {
         if (string.IsNullOrWhiteSpace(caseIdOrRadicado))
@@ -488,10 +696,10 @@ public sealed class StubApplicationService : IApplicationService
         var byId = Block(LoadAsync(key));
         if (byId is not null)
         {
-            return byId;
+            return PorConfirmar(byId) ? null : byId;
         }
         return Block(LoadAllAsync()).FirstOrDefault(c =>
-            string.Equals(c.Radicado, key, StringComparison.OrdinalIgnoreCase));
+            !PorConfirmar(c) && string.Equals(c.Radicado, key, StringComparison.OrdinalIgnoreCase));
     }
 
     // ── Proyección estado → CaseDetail (timeline done/current/pending + SLA) ──
@@ -934,4 +1142,12 @@ internal sealed record CaseState(
     string? PaymentStatus = null,
     // Lo que contestó sobre la notificación electrónica de los actos (009, S-7). Null es «no
     // consta»: así se leen los expedientes guardados antes de que existiera el campo.
-    NotificationConsent? Consent = null);
+    NotificationConsent? Consent = null,
+    // La saga de la radicación por la puerta (009, T027): une este expediente con el del proceso.
+    // Null por la ruta directa.
+    string? Radicacion = null,
+    // Por dónde nació (CaminoDelExpediente). Null es la ruta directa: así se leen los anteriores.
+    string? Camino = null,
+    // Cuándo se vio por última vez el expediente en el proceso. Por la puerta, null es que la
+    // radicación todavía no se vio completa: el expediente no existe para las bandejas.
+    DateTimeOffset? ProcesoAlDia = null);

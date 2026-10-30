@@ -89,6 +89,8 @@ internal static class ContratoOpenApi
         new PiezaPublicada<Synergos.Bff.Educacion.Contracts.NombresDelCursoResponse>("Educacion"),
         new PiezaPublicada<Synergos.Bff.Propiedades.Domain.PasoValidarVisita>("Propiedades"),
         new PiezaPublicada<Synergos.Bff.Viajes.Contracts.TripResponse>("Viajes"),
+        new PiezaPublicada<Synergos.Bff.Gobierno.Contracts.OfertaDeTramiteResponse>("Gobierno",
+            ("gobierno:Procesos:Archivo", Path.Combine(Synergos.CMS.Tests.Architecture.Proyectos.Raiz(), "tools", "provisionar.procesos.json"))),
     ];
 
     /// <summary>La pieza por el nombre de su ensamblado, que es también el del fichero.</summary>
@@ -663,7 +665,10 @@ internal abstract class PiezaPublicada
 }
 
 /// <inheritdoc />
-internal sealed class PiezaPublicada<TMarcador>(string seccion) : PiezaPublicada
+/// <param name="seccion">La sección de configuración de la pieza (su almacén y su llave).</param>
+/// <param name="ajustes">Lo que la pieza necesita además para arrancar: Gobierno, su catálogo de procesos, que el host
+/// exige al arrancar un flujo que arranca procesos (núcleo, lote 7).</param>
+internal sealed class PiezaPublicada<TMarcador>(string seccion, params (string Clave, string Valor)[] ajustes) : PiezaPublicada
     where TMarcador : class
 {
     public override string Ensamblado { get; } = typeof(TMarcador).Assembly.GetName().Name!;
@@ -679,6 +684,7 @@ internal sealed class PiezaPublicada<TMarcador>(string seccion) : PiezaPublicada
             // nadie y el host cae a su almacén por defecto (#174).
             b.UseSetting($"{seccion}:Storage:Root", raiz);
             b.UseSetting($"{seccion}:ApiKey", Llave);
+            foreach (var (clave, valor) in ajustes) b.UseSetting(clave, valor);
             if (conContrato)
             {
                 b.ConfigureTestServices(s => s.AddOpenApi(ContratoOpenApi.Documento, ContratoOpenApi.Opciones(Ensamblado)));

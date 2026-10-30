@@ -42,6 +42,19 @@ public sealed class PasosDeCompraTests
             Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct)
             => Hacer("en-1", $"despachar {paraQue} {direccion.Ciudad} {transportadora} {llave.Value}");
 
+        public Task<Result<string>> SeguirAsync(string envio, string estado, string? nota, CancellationToken ct)
+            => Hacer(estado, $"seguir {envio} {estado} {nota ?? "-"}");
+
+        public EnvioLeido Envio { get; set; } = new(
+            "en-1", new DireccionDeEnvio("Calle 1 # 2-3", null, "Bogotá", null, null, "CO", null), "servientrega", null, "InTransit",
+            [new EventoDeEnvio("InTransit", "salió", new DateTimeOffset(2026, 10, 30, 9, 0, 0, TimeSpan.Zero))]);
+
+        Task<Result<EnvioLeido>> IFulfillmentPort.LeerAsync(string envio, CancellationToken ct)
+        {
+            Llamadas.Add($"leer {envio}");
+            return Task.FromResult(Rechaza is { } r ? Result.Rejected<EnvioLeido>(r) : Result.Ok(Envio));
+        }
+
         private Task<Result<string>> Hacer(string valor, string llamada)
         {
             Llamadas.Add(llamada);
@@ -130,6 +143,62 @@ public sealed class PasosDeCompraTests
         Assert.Equal("pd-1", salida.Reservado?.Id);
         Assert.Equal("pd-1", Assert.Single(salida.Valores));
         Assert.Equal("crear prueba.comprador:u-1 1 100000 COP compra-1|order", Assert.Single(puertos.Llamadas));
+    }
+
+    // ── Seguir y leer un envío (núcleo, NS-1 y NS-2 de 013) ────────────────
+
+    private static EntradaDePaso Seguir(string estado, params string[] lee)
+        => new("envio-1", Ref.Create("prueba.envio", "envio-1"),
+            new PasoDef("p", "fulfillment.seguir", lee, [], null, null, null, null, null, Estado: estado),
+            new FlowContext().Set("envio", "en-1").Set("nota", "salió en la ruta 3"), null, null);
+
+    [Fact]
+    public async Task Seguir_lleva_el_envio_al_estado_que_declara_la_definicion_con_su_nota_y_escribe_en_cual_quedo()
+    {
+        var puertos = new Puertos();
+
+        var conNota = await new PasoSeguirEnvio(puertos).EjecutarAsync(Seguir("InTransit", "envio", "nota"), CancellationToken.None);
+        var sinNota = await new PasoSeguirEnvio(puertos).EjecutarAsync(Seguir("Delivered", "envio"), CancellationToken.None);
+
+        Assert.Equal("InTransit", Assert.Single(conNota.Valores));
+        Assert.Equal("Delivered", Assert.Single(sinNota.Valores));
+        Assert.Equal(["seguir en-1 InTransit salió en la ruta 3", "seguir en-1 Delivered -"], puertos.Llamadas);
+    }
+
+    [Fact]
+    public async Task Seguir_a_un_estado_en_el_que_el_envio_ya_estaba_cuenta_como_hecho_y_otro_rechazo_sube()
+    {
+        var puertos = new Puertos { Rechaza = Rejection.Conflict("fulfillment.already_intransit", "ya estaba") };
+
+        var repetida = await new PasoSeguirEnvio(puertos).EjecutarAsync(Seguir("InTransit", "envio"), CancellationToken.None);
+
+        Assert.Null(repetida.Rechazo);
+        Assert.Equal("InTransit", Assert.Single(repetida.Valores));
+
+        puertos.Rechaza = Rejection.Conflict("fulfillment.already_delivered", "ya estaba entregado");
+        var otra = await new PasoSeguirEnvio(puertos).EjecutarAsync(Seguir("InTransit", "envio"), CancellationToken.None);
+        Assert.Equal("fulfillment.already_delivered", otra.Rechazo?.Code);
+
+        puertos.Rechaza = Rejection.Conflict("fulfillment.transition_not_allowed", "de Ready no se pasa a Delivered");
+        var noSe = await new PasoSeguirEnvio(puertos).EjecutarAsync(Seguir("Delivered", "envio"), CancellationToken.None);
+        Assert.Equal("fulfillment.transition_not_allowed", noSe.Rechazo?.Code);
+    }
+
+    [Fact]
+    public void Los_estados_del_paso_que_sigue_un_envio_son_los_de_la_capacidad()
+        => Assert.Equal(Enum.GetNames<Synergos.Api.Fulfillment.Domain.ShipmentStatus>(), PasoSeguirEnvio.EstadosDelEnvio);
+
+    [Fact]
+    public async Task Leer_un_envio_escribe_su_destino_la_transportadora_el_estado_y_sus_eventos_en_ese_orden()
+    {
+        var puertos = new Puertos();
+        var entrada = new EntradaDePaso("envio-1", Ref.Create("prueba.envio", "envio-1"),
+            new PasoDef("p", "fulfillment.leer", ["envio"], [], null, null, null, null, null), new FlowContext().Set("envio", "en-1"), null, null);
+
+        var salida = await new PasoLeerEnvio(puertos).EjecutarAsync(entrada, CancellationToken.None);
+
+        Assert.Equal(new object?[] { puertos.Envio.Destino, "servientrega", "InTransit", puertos.Envio.Eventos }, salida.Valores);
+        Assert.Equal(["leer en-1"], puertos.Llamadas);
     }
 
     [Fact]

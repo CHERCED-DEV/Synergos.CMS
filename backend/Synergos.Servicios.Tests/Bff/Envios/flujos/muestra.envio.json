@@ -1,0 +1,28 @@
+{
+  "clave": "muestra.envio",
+  "posterior_a": "muestra.despacho",
+  "acceso": "personal",
+  "entrada": ["personal", "despacho", "nota"],
+  "tipos": {
+    "personal": { "de": "sujeto" },
+    "despacho": "texto",
+    "nota": "texto?",
+    "envioId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["despacho", "estado"],
+  "lecturas": {
+    "detalle": { "entrada": ["despacho"], "pasos": ["original", "envio"], "salida": ["destino", "transportadora", "estado", "eventos"] }
+  },
+  "fases": { "abrir": ["original", "seguir"] },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["despacho"], "escribe": ["envioId"] },
+    "seguir": {
+      "tipo": "fulfillment.seguir",
+      "lee": ["envioId", "nota"],
+      "escribe": ["estado"],
+      "estado": "InTransit",
+      "motivo": "el envío no pudo salir"
+    },
+    "envio": { "tipo": "fulfillment.leer", "lee": ["envioId"], "escribe": ["destino", "transportadora", "estado", "eventos"] }
+  }
+}

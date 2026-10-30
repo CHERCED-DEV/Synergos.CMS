@@ -34,11 +34,12 @@ public static class EnLaPuertaExtensions
     /// (<c>FlowRunner.AnticiparAsync</c>), para que quien compra vea el total —con su descuento— antes
     /// de pagar (ADR 0140, el cupón). <c>listar</c> tampoco: son las sagas del dueño, «mis reservas»
     /// (núcleo, NB-6 de 011). <c>disponibilidad</c> es una lectura sin saga ni dueño, lo que se ve antes de abrir
-    /// (NB-3). <c>devolver</c> es la fase que abre una operación posterior al cierre (lote 6, N-6 de 004). La misma lista
+    /// (NB-3). <c>detalle</c> es la lectura sin saga que sólo pide el personal (NS-2 de 013). <c>devolver</c> es la fase que
+    /// abre una operación posterior al cierre (lote 6, N-6 de 004). La misma lista
     /// vive en la puerta del CMS y en el generador del UI.
     /// </remarks>
     public static readonly IReadOnlyList<string> Operaciones =
-        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "devolver", "disponibilidad", "listar"];
+        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "detalle", "devolver", "disponibilidad", "listar"];
 
     /// <summary>Una clave de flujo: <c>dominio.flujo</c>, en minúsculas. Es lo que va en la ruta de la puerta.</summary>
     public static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));

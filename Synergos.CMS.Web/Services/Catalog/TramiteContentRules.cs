@@ -20,6 +20,7 @@ public sealed record TramiteSectionContent(
     IReadOnlyList<TramiteFieldContent>? Fields = null);
 
 /// <summary>Lo que el editor escribió en un <c>tramitePage</c>, sin interpretar.</summary>
+/// <param name="Clave">La clave del nodo: la identidad del trámite ante el orquestador (009, T034).</param>
 public sealed record TramitePageContent(
     string? Slug,
     string? Name,
@@ -35,7 +36,8 @@ public sealed record TramitePageContent(
     decimal Fee = 0m,
     int EstimatedDays = 0,
     bool RequiresAppointment = false,
-    IReadOnlyList<TramiteSectionContent>? Sections = null);
+    IReadOnlyList<TramiteSectionContent>? Sections = null,
+    Guid? Clave = null);
 
 /// <summary>
 /// Los tres pasos del recorrido "qué pasa", resueltos del Dictionary uSync por el llamador.
@@ -214,7 +216,8 @@ public static class TramiteContentRules
             Channel: channel,
             EstimatedDays: estimatedDays,
             FeeMinor: fee,
-            Currency: currency);
+            Currency: currency,
+            Clave: content.Clave?.ToString());
 
         var detail = new TramiteDetail(
             Summary: summary,

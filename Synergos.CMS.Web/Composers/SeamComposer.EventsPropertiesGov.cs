@@ -5,6 +5,7 @@ using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Gobierno;
 using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
@@ -406,6 +407,45 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>(),
                 notifier: sp.GetRequiredService<ITransactionalNotifier>()));
         services.AddSingleton<IApplicationService>(sp => sp.GetRequiredService<StubApplicationService>());
+        services.AddSingleton<IExpedientesDeLaPuerta>(sp => sp.GetRequiredService<StubApplicationService>());
+
+        // La radicación por la puerta (009-gobierno-tramite T027): el artefacto que guarda las respuestas entre abrir y
+        // cerrar y reconcilia lo que quedó por confirmar. Hay destino sólo si el despliegue dice dónde vive el
+        // orquestador de Gobierno (Synergos:Gobierno:BaseUrl, la misma clave con la que la puerta lo encuentra); sin él,
+        // la ruta contesta «no disponible» y nada sale a la red.
+        var gobierno = builder.Config.GetSection("Synergos:Gobierno");
+        var hayOrquestadorDeGobierno = !string.IsNullOrWhiteSpace(gobierno["BaseUrl"]);
+        if (hayOrquestadorDeGobierno)
+        {
+            services.AddClienteDelArbolDeServicios(
+                ArtefactoDelExpediente.ClientName, DestinoDelArbol.De(gobierno, gobierno["BaseUrl"]!, 10));
+        }
+        services.AddSingleton(sp => new ArtefactoDelExpediente(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<IExpedientesDeLaPuerta>(),
+            sp.GetRequiredService<IOptionsMonitor<PuertaSettings>>(),
+            sp.GetRequiredService<ILogger<ArtefactoDelExpediente>>(),
+            hayOrquestadorDeGobierno));
+
+        // La OFERTA de cada trámite, al mismo orquestador (009-gobierno-tramite T034): sin destino, publicar un trámite no
+        // sale a la red. Diez segundos, porque quien espera es el editor que publica, y una oferta que no salió se repara
+        // republicando.
+        if (hayOrquestadorDeGobierno)
+        {
+            services.AddClienteDelArbolDeServicios(
+                PublicadorDeOfertasDeGobierno.ClientName, DestinoDelArbol.De(gobierno, gobierno["BaseUrl"]!, 10));
+        }
+        services.AddSingleton<IPublicadorDeOfertasDeGobierno>(sp => new PublicadorDeOfertasDeGobierno(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<PublicadorDeOfertasDeGobierno>>(),
+            hayOrquestadorDeGobierno));
+        services.AddSingleton<IPortalDeTramitesEnElContenido, PortalDeTramitesEnElContenido>();
+
+        // Se dispara al publicar y al retirar un tramitePage, NUNCA al arrancar (ADR 0013).
+        builder.AddNotificationAsyncHandler<ContentPublishedNotification, OfertaDeTramiteAlPublicar>();
+        builder.AddNotificationAsyncHandler<ContentUnpublishedNotification, OfertaDeTramiteAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentMovedToRecycleBinNotification, OfertaDeTramiteAlRetirar>();
+        builder.AddNotificationAsyncHandler<ContentDeletedNotification, OfertaDeTramiteAlRetirar>();
         // Contra qué avanza un expediente (HU #44). La sección se ENLAZA: sin esto el cliente
         // recibe un GobSettings recién construido y lo que no viaja por el HttpClient —la clave
         // de la definición y el Kind del expediente— se queda en su default en silencio.

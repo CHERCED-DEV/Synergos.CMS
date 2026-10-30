@@ -712,4 +712,25 @@ public sealed class GovControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result);
     }
+
+    /// <summary>
+    /// La ficha lleva la clave con que el trámite se radica por la puerta (009-gobierno-tramite T031): la del nodo con el
+    /// catálogo en el contenido —la misma con que el publicador ofrece su tasa—; en la siembra, sin clave, su id.
+    /// </summary>
+    [Theory]
+    [InlineData("1f0e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b", "1f0e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b")]
+    [InlineData(null, "certificado-residencia")]
+    public async Task La_ficha_lleva_la_clave_con_que_se_radica_por_la_puerta(string? clave, string esperada)
+    {
+        var detalle = new TramiteDetail(
+            new TramiteSummary("certificado-residencia", "certificado-residencia", "Certificado de residencia", "", "Identidad",
+                "Alcaldía", "en-linea", 2, 0m, "COP", clave),
+            "", [], [], [], "", new TramiteFormDefinition("form", "Formulario", []), false);
+        _catalog.GetAsync("certificado-residencia", Arg.Any<CancellationToken>()).Returns(detalle);
+
+        var result = await BuildSut().Service("certificado-residencia", default);
+
+        var dto = Assert.IsType<GovController.ServiceDetailResponse>(Assert.IsType<OkObjectResult>(result).Value).Service;
+        Assert.Equal(esperada, dto.Key);
+    }
 }

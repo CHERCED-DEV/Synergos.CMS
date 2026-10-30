@@ -82,13 +82,20 @@ public static class FlowValidator
     /// esas rutas llevan en la puerta (<c>listar</c>, NB-6, y las lecturas, NB-3: dos operaciones con un nombre).
     /// </summary>
     public static readonly IReadOnlyList<string> FasesReservadas =
-        ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones", "listar", "disponibilidad"];
+        ["cotizar", "cancelar", "consultar", "reintentar", "compensaciones", "listar", "disponibilidad", "detalle"];
 
     /// <summary>
     /// Los nombres que puede tener una lectura sin saga (núcleo, NB-3 de 011): son operaciones de la puerta, así que
     /// la lista es cerrada y la comparten el orquestador, la puerta del CMS y el generador del UI.
     /// </summary>
-    public static readonly IReadOnlyList<string> LecturasDeLaPuerta = ["disponibilidad"];
+    public static readonly IReadOnlyList<string> LecturasDeLaPuerta = ["disponibilidad", "detalle"];
+
+    /// <summary>
+    /// La lectura que sólo pide el personal (núcleo, NS-2 de 013, de la familia de NG-11 de 009): el detalle de algo que
+    /// hizo otra persona, leído sin su dueño. Sólo en un flujo del personal, porque la puerta comprueba su rol: en uno del
+    /// dueño, una lectura sin dueño leería lo de cualquiera.
+    /// </summary>
+    public const string LecturaDelPersonal = "detalle";
 
     /// <summary>
     /// Las lecturas sin saga (NB-3 de 011): lo que se ve antes de abrir, sin apartar ni cobrar nada, y sin dueño.
@@ -113,6 +120,11 @@ public static class FlowValidator
             if (!LecturasDeLaPuerta.Contains(lectura.Nombre, StringComparer.Ordinal))
             {
                 errores.Add($"{aqui} no es una lectura de la puerta ({string.Join(", ", LecturasDeLaPuerta)}): nadie podría pedirla.");
+            }
+            if (string.Equals(lectura.Nombre, LecturaDelPersonal, StringComparison.Ordinal) && !flujo.EsDePersonal)
+            {
+                errores.Add($"{aqui} la pide sólo el personal, y el flujo no es del personal («acceso»: «personal»): sin dueño y "
+                    + "sin rol, leería lo de cualquiera.");
             }
             if (contrato.Tipos is not { } tipos)
             {
@@ -811,6 +823,7 @@ public static class FlowValidator
             }
 
             RevisarDatosDeProceso(paso, registro.Para(paso.Tipo), errores);
+            RevisarEstado(paso, registro.Para(paso.Tipo), errores);
         }
 
         // Dos pasos con la misma llave son, para la capacidad, UNA llamada: la segunda devuelve lo que hizo la
@@ -837,6 +850,31 @@ public static class FlowValidator
     /// que no la usa haría creer que el flujo mueve un expediente. Una lista vacía no deja elegir nada, y un nombre
     /// repetido es una errata.
     /// </remarks>
+    /// <summary>
+    /// El <c>estado</c> fijo de un paso que mueve algo (núcleo, NS-1 de 013), cruzado en los dos sentidos y contra los estados
+    /// que admite el paso, que son los de la capacidad.
+    /// </summary>
+    private static void RevisarEstado(PasoDef paso, IPaso? tipo, List<string> errores)
+    {
+        if (tipo is null) return;
+        if (tipo.EstadosAdmitidos is { } admitidos)
+        {
+            if (paso.Estado is null)
+            {
+                errores.Add($"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que necesita «estado», y no lo declara.");
+            }
+            else if (!admitidos.Contains(paso.Estado, StringComparer.Ordinal))
+            {
+                errores.Add($"el paso «{paso.Id}» lleva a «{paso.Estado}», que no es un estado de «{paso.Tipo}» "
+                    + $"(son: {string.Join(", ", admitidos)}).");
+            }
+        }
+        else if (paso.Estado is not null)
+        {
+            errores.Add($"el paso «{paso.Id}» declara «estado» y «{paso.Tipo}» no lo usa: quien lo lea creerá que ese paso mueve algo.");
+        }
+    }
+
     private static void RevisarDatosDeProceso(PasoDef paso, IPaso? tipo, List<string> errores)
     {
         if (tipo is not null)

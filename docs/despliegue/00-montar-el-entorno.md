@@ -486,8 +486,10 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 | `tools/provisionar.sh` | **el servidor** | publica definiciones, la plantilla del aviso, recursos y precios; reconcilia |
 | `tools/provisionar-en-la-red.sh` | **el servidor** | corre `provisionar.sh` dentro de la red de Docker, que es donde resuelven los nombres de las capacidades |
 
-> **Los dos los COPIA el despliegue**, junto con los dos ficheros de datos de `provisionar.sh`:
-> `tools/provisionar.recursos.json` y `tools/provisionar.plantillas.json`. No es un
+> **Los dos los COPIA el despliegue**, junto con los tres ficheros de datos de `provisionar.sh`:
+> `tools/provisionar.recursos.json`, `tools/provisionar.plantillas.json` y
+> `tools/provisionar.procesos.json` —el catálogo de procesos, que además monta `bff-gobierno` y sin
+> el que no arranca (009, NP-1)—. No es un
 > detalle: los tres del respaldo vivían sólo en el repo y la máquina que había que proteger era la
 > única sin con qué (HU #31), y al escribir estos dos volvió a pasar igual — este documento decía
 > «corré esto en el servidor» y el servidor no los tenía (#114). Hoy hay gate, y lo que decide qué
@@ -692,7 +694,7 @@ fallan la primera vez que alguien intenta usar la función**. El script está en
 
 | | qué publica | de qué sirve |
 |---|---|---|
-| Gobierno | la definición del trámite en `Api.Workflow` | sin ella no se decide ningún expediente |
+| Gobierno | las definiciones del trámite (v1 y v2) en `Api.Workflow`, desde el catálogo `tools/provisionar.procesos.json` | sin ellas no se decide ni se radica por la puerta ningún expediente |
 | Seguimiento | las **cuatro** definiciones de pipeline | sin ellas no avanza ningún pedido |
 | Los cuatro orquestadores | la plantilla `bff.compensacion.colgada` en `Api.Notifications` | sin ella la guardia no se entera de una compensación que se rindió |
 | Salud · Propiedades · Viajes | los recursos de `Api.Booking` | sin ellos no se agenda ni se aparta |

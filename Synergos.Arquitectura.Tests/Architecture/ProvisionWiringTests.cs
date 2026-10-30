@@ -416,6 +416,69 @@ public sealed class ProvisionWiringTests
         Assert.Empty(capacidades.Publicadas);
     }
 
+    /// <summary>
+    /// Las definiciones del trámite salen del catálogo de procesos (009, NP-1): con la v2 sin publicar —un servidor
+    /// provisionado antes, cuando la v1 salía de un heredoc del guion— <c>--verificar</c> sale rojo y la nombra, y publicar
+    /// pone la v2 tal como la declara el fichero, con su llave, y nada más.
+    /// </summary>
+    /// <remarks>
+    /// <para>Antes, la v1 vivía en el guion y la v2 sólo en el fichero: un servidor nuevo quedaba con la v1 y
+    /// <c>bff-gobierno</c>, que monta el fichero como su catálogo, con la v2. La primera radicación por la puerta habría
+    /// salido <c>definition_not_found</c>. Mutación: volver a publicar la v1 desde el guion lo pone en rojo.</para>
+    /// </remarks>
+    [Fact]
+    public async Task Las_definiciones_salen_del_catalogo_y_la_v2_que_falta_se_publica_tal_cual()
+    {
+        await using var capacidades = await NotificationsDeMentira.Levantar();
+        capacidades.Definiciones = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "gov.tramite", "tracking.shop", "tracking.travel", "tracking.events", "tracking.academy",
+        };
+
+        // Sin plantillas (`[]`, que el guion admite para quien trae su propio fichero): lo que se mira son las
+        // definiciones, y cada plantilla es un intérprete de Python contra el plazo de dos minutos de cada corrida.
+        var sinPlantillas = Path.Combine(Path.GetTempPath(), "provisionar-sin-plantillas-" + Guid.NewGuid().ToString("n") + ".json");
+        await File.WriteAllTextAsync(sinPlantillas, "[]");
+        try
+        {
+            var plantillas = new[] { "--plantillas", sinPlantillas.Replace('\\', '/') };
+
+            var verificar = await Correr(capacidades.Url, ["--verificar", .. plantillas]);
+            Assert.True(verificar.Codigo != 0,
+                "provisionar.sh --verificar salió verde con Api.Workflow SIN la v2 del trámite." + Environment.NewLine + verificar.Salida);
+            Assert.Contains("FALTA  definición gov.tramite.v2", verificar.Salida, StringComparison.Ordinal);
+            Assert.Matches(@"(?m)^✓ definición gov\.tramite\r?$", verificar.Salida);
+            Assert.Empty(capacidades.DefinicionesPublicadas);
+
+            var publicar = await Correr(capacidades.Url, plantillas);
+            Assert.True(publicar.Codigo == 0, publicar.Salida);
+            var (llave, cuerpo) = Assert.Single(capacidades.DefinicionesPublicadas);
+            Assert.Equal("provisionar:def:gov.tramite.v2", llave);
+            Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(
+                    DelCatalogo("gov.tramite.v2"), System.Text.Json.Nodes.JsonNode.Parse(cuerpo.GetRawText())),
+                "Lo publicado no es la v2 que declara tools/provisionar.procesos.json: " + cuerpo.GetRawText());
+        }
+        finally
+        {
+            File.Delete(sinPlantillas);
+        }
+    }
+
+    /// <summary>Una definición del catálogo de procesos, con los campos que se publican.</summary>
+    private static System.Text.Json.Nodes.JsonObject DelCatalogo(string clave)
+    {
+        var catalogo = System.Text.Json.Nodes.JsonNode.Parse(
+            File.ReadAllText(Path.Combine(RepoRoot(), "tools", "provisionar.procesos.json")))!.AsArray();
+        var entrada = catalogo.OfType<System.Text.Json.Nodes.JsonObject>().Single(e => (string?)e["key"] == clave);
+
+        var publicada = new System.Text.Json.Nodes.JsonObject();
+        foreach (var campo in new[] { "key", "initialState", "finalStates", "transitions" })
+        {
+            publicada[campo] = entrada[campo]!.DeepClone();
+        }
+        return publicada;
+    }
+
     /// <summary>Las plantillas que declara <c>tools/provisionar.plantillas.json</c>, sin los comentarios.</summary>
     private static List<Dictionary<string, string>> Declaradas()
     {
@@ -532,6 +595,12 @@ public sealed class ProvisionWiringTests
         /// <summary>Lo que el guion escribió en la agenda: la ruta, la llave y el cuerpo.</summary>
         public List<(string Ruta, string Llave, JsonElement Cuerpo)> EscriturasDeAgenda { get; } = new();
 
+        /// <summary>Las definiciones de proceso que ya están; <c>null</c> = todas (no son el sujeto de la prueba).</summary>
+        public HashSet<string>? Definiciones { get; set; }
+
+        /// <summary>Lo que el guion publicó en <c>POST /v1/definitions</c>: la llave y el cuerpo.</summary>
+        public List<(string Llave, JsonElement Cuerpo)> DefinicionesPublicadas { get; } = new();
+
         public string Url => _app.Urls.Single();
 
         public static async Task<NotificationsDeMentira> Levantar(params Dictionary<string, string>[] plantillas)
@@ -542,7 +611,16 @@ public sealed class ProvisionWiringTests
             var app = builder.Build();
             var yo = new NotificationsDeMentira(app, plantillas.ToList());
 
-            app.MapGet("/v1/definitions/{clave}", (string clave) => Results.Ok(new { key = clave }));
+            app.MapGet("/v1/definitions/{clave}", (string clave) =>
+                yo.Definiciones is null || yo.Definiciones.Contains(clave) ? Results.Ok(new { key = clave }) : Results.NotFound());
+
+            app.MapPost("/v1/definitions", async (HttpRequest peticion) =>
+            {
+                var cuerpo = await JsonSerializer.DeserializeAsync<JsonElement>(peticion.Body);
+                yo.DefinicionesPublicadas.Add((peticion.Headers["Idempotency-Key"].ToString(), cuerpo));
+                yo.Definiciones?.Add(cuerpo.GetProperty("key").GetString()!);
+                return Results.Created("/v1/definitions/x", cuerpo);
+            });
 
             app.MapGet("/v1/templates", (int? offset) =>
             {

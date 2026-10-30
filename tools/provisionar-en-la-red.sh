@@ -42,8 +42,10 @@ docker network inspect "$RED" >/dev/null 2>&1 \
   || { echo "✗ no existe la red $RED: ¿está el stack en pie? (deploy-remoto.sh <sha>)" >&2; exit 1; }
 
 # Las que lee provisionar.sh, sólo si el .env las trae: sin ellas usa sus defaults.
+# SYNERGOS_GOB_DEFINITION ya no: las claves de Gobierno salen del catálogo de
+# procesos (009, NP-1), y la variable queda sólo para el CMS.
 PASAR=(--env SYNERGOS_API_KEY)
-for v in SYNERGOS_GOB_DEFINITION SYNERGOS_TRACKING_PREFIX; do
+for v in SYNERGOS_TRACKING_PREFIX; do
   [ -n "${!v:-}" ] && PASAR+=(--env "$v")
 done
 
