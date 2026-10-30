@@ -188,10 +188,20 @@ public sealed class TravelController : ControllerBase
             Currency: f.Currency,
             // ADR 0083: la UI exige title (sin él descarta la oferta) y lee subtitle top-level.
             Title: $"{o.Segments[0].Origin} → {o.Segments[^1].Destination}",
-            Subtitle: $"{o.FlightId} · {Escalas(o.Stops)} · {Duracion(o.TotalDurationMinutes)} · {f.FamilyName}"))).ToList();
+            Subtitle: $"{o.FlightId} · {Escalas(o.Stops)} · {Duracion(o.TotalDurationMinutes)} · {f.FamilyName}",
+            // La UI agrega un vuelo desde su tablero de familias: sin ninguna, no hay qué elegir. Cada oferta ES una
+            // tarifa, así que trae la suya, con su código como id (el productRef con que se reserva).
+            FareFamilies: [new FareFamilyDto(f.FareCode, f.FamilyName, f.TotalPrice, f.Currency, Ventajas(f))]))).ToList();
 
         return Ok(new { offers = results });
     }
+
+    private static IReadOnlyList<string> Ventajas(FlightFare tarifa) => new (bool Tiene, string Texto)[]
+    {
+        (tarifa.BaggageIncluded, "Equipaje incluido"),
+        (tarifa.ChangesAllowed, "Cambios permitidos"),
+        (tarifa.Refundable, "Reembolsable"),
+    }.Where(v => v.Tiene).Select(v => v.Texto).ToList();
 
     // ── 3. Search car ──────────────────────────────────────────────
     // GET /api/travel/search/car?pickupLocation=&dropoffLocation=&pickupDate=&dropoffDate=
@@ -545,7 +555,9 @@ public sealed class TravelController : ControllerBase
         string OfferId, string Product, string FlightId, string Origin, string Destination, int Stops,
         int TotalDurationMinutes, string Cabin, string FamilyName, bool Refundable, bool BaggageIncluded,
         decimal Price, string PriceFormatted, string Currency,
-        string Title, string Subtitle);
+        string Title, string Subtitle, IReadOnlyList<FareFamilyDto> FareFamilies);
+
+    public sealed record FareFamilyDto(string Id, string Label, decimal Amount, string Currency, IReadOnlyList<string> Perks);
 
     public sealed record CarOfferDto(
         string OfferId, string Product, string CategoryName, string SippCode, string Provider,

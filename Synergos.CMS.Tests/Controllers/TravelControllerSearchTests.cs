@@ -40,8 +40,8 @@ public sealed class TravelControllerSearchTests
         [new FlightSegment(id, "BOG", "CTG", new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 20, 13, 35, 0, TimeSpan.Zero), minutos)],
         tarifas, escalas, minutos);
 
-    private static FlightFare Tarifa(string codigo, string familia) =>
-        new(codigo, "economy", familia, 680_000m, "COP", false, false, false);
+    private static FlightFare Tarifa(string codigo, string familia, bool flexible = false) =>
+        new(codigo, "economy", familia, flexible ? 918_000m : 680_000m, "COP", flexible, flexible, flexible);
 
     private static CarOffer Auto(string codigo, string transmision, bool aire) =>
         new(codigo, "Económico", "ECMR", "SynRent", transmision, aire, 95_000m, 3, 285_000m, "COP");
@@ -64,6 +64,30 @@ public sealed class TravelControllerSearchTests
         Assert.Equal("SYN2290 · 2 escalas · 5h · Economy Básica", ofertas[2].GetProperty("subtitle").GetString());
         Assert.Equal("SYN2200-ECOBAS", ofertas[0].GetProperty("offerId").GetString());
         Assert.Equal("Economy Básica", ofertas[0].GetProperty("familyName").GetString());
+    }
+
+    [Fact] // happy: cada tarifa es su propia familia, con su código como id: el portal la elige y reserva con él
+    public async Task Cada_vuelo_trae_su_familia_tarifaria()
+    {
+        _flights.SearchAsync(Arg.Any<FlightSearchQuery>(), Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            Vuelo("SYN2200", 0, 95, Tarifa("SYN2200-ECOBAS", "Economy Básica"), Tarifa("SYN2200-ECOFLEX", "Economy Flex", flexible: true)),
+        });
+
+        var ofertas = Ofertas(await BuildSut().SearchFlight("BOG", "CTG", Ida, Vuelta));
+
+        var basica = Assert.Single(ofertas[0].GetProperty("fareFamilies").EnumerateArray());
+        Assert.Equal("SYN2200-ECOBAS", basica.GetProperty("id").GetString());
+        Assert.Equal("Economy Básica", basica.GetProperty("label").GetString());
+        Assert.Equal(680_000m, basica.GetProperty("amount").GetDecimal());
+        Assert.Equal("COP", basica.GetProperty("currency").GetString());
+        Assert.Empty(basica.GetProperty("perks").EnumerateArray());
+        var flex = Assert.Single(ofertas[1].GetProperty("fareFamilies").EnumerateArray());
+        Assert.Equal("SYN2200-ECOFLEX", flex.GetProperty("id").GetString());
+        Assert.Equal(918_000m, flex.GetProperty("amount").GetDecimal());
+        Assert.Equal(
+            new[] { "Equipaje incluido", "Cambios permitidos", "Reembolsable" },
+            flex.GetProperty("perks").EnumerateArray().Select(p => p.GetString()!));
     }
 
     [Fact] // happy: con los nombres del portal contesta autos, con title, subtitle y sus facetas en español
