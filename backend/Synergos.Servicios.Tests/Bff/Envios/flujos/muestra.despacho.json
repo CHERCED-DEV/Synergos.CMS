@@ -1,0 +1,22 @@
+{
+  "clave": "muestra.despacho",
+  "entrada": ["comprador", "pedido", "direccion", "transportadora"],
+  "tipos": {
+    "comprador": { "de": "sujeto" },
+    "pedido": "texto",
+    "direccion": "direccion",
+    "transportadora": { "de": "negocio", "campo": "carrier", "tipo": "texto" }
+  },
+  "salida": ["pedido"],
+  "para_lo_posterior": ["envioId"],
+  "fases": { "abrir": ["despachar"] },
+  "pasos": {
+    "despachar": {
+      "tipo": "fulfillment.despachar",
+      "lee": ["pedido", "direccion", "transportadora"],
+      "escribe": ["envioId"],
+      "llave": "dispatch",
+      "motivo": "no se pudo despachar"
+    }
+  }
+}

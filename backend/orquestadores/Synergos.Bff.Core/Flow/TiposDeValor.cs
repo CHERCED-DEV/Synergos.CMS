@@ -81,6 +81,34 @@ public sealed class TiposDeValor
     /// <summary>Los nombres registrados.</summary>
     public IReadOnlyCollection<string> Nombres => _tipos.Keys;
 
+    /// <summary>
+    /// Los tipos de TODOS los registros, sumados (núcleo, N-12 de 004 y NS-2 de 013): los del host y los que registra cada
+    /// vertical. Un vertical que registra su propio <see cref="TiposDeValor"/> lo SUMA, en vez de tapar los del host.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué.</b> El contenedor da el último registro, y un vertical que copió la lista del host a mano (Tienda,
+    /// Viajes) se quedaba sin todo tipo que el núcleo añadiera después: una lectura del personal que devuelve los eventos de
+    /// un envío no arrancaba en la Tienda.</para>
+    ///
+    /// <para><b>El mismo nombre se cuenta una vez</b> si es el mismo tipo de valor; si dos registros dicen distinto con el mismo
+    /// nombre, no arranca: no habría regla de cuál gana.</para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Si dos registros llaman igual a dos tipos de valor distintos.</exception>
+    public static TiposDeValor Sumados(IEnumerable<TiposDeValor> registros)
+    {
+        ArgumentNullException.ThrowIfNull(registros);
+        var tipos = new Dictionary<string, ITipoDeValor>(StringComparer.Ordinal);
+        foreach (var t in registros.SelectMany(r => r._tipos.Values))
+        {
+            if (!tipos.TryAdd(t.Nombre, t) && tipos[t.Nombre].GetType() != t.GetType())
+            {
+                throw new InvalidOperationException(
+                    $"Dos registros llaman «{t.Nombre}» a tipos de valor distintos ({tipos[t.Nombre].GetType().Name} y {t.GetType().Name}).");
+            }
+        }
+        return new TiposDeValor(tipos.Values);
+    }
+
     /// <summary>El tipo registrado cuyo valor es de <paramref name="clr"/>; <c>null</c> si ninguno.</summary>
     /// <remarks>Es como se sabe el tipo de lo que escribe un paso (<see cref="IPaso.TiposDeEscritura"/>).</remarks>
     public ITipoDeValor? PorClr(Type clr) => _tipos.Values.FirstOrDefault(t => t.Clr == clr);

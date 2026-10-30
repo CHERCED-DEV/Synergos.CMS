@@ -186,3 +186,74 @@ public sealed class PasoDespachar(IFulfillmentPort envios) : IPaso
         return envio.IsOk ? SalidaDePaso.Sigue(envio.Value) : SalidaDePaso.Rechaza(envio.Rejection!);
     }
 }
+
+/// <summary>
+/// <c>fulfillment.seguir</c> (núcleo, NS-1 de 013): lleva el envío al <c>estado</c> que declara la definición («en camino»,
+/// «entregado»), con una nota si la definición la nombra, y escribe el estado en que quedó.
+/// </summary>
+/// <remarks>
+/// <para><b>El estado es un dato del paso</b>, como la transición de un proceso (009-P3): una constante cruzada al arrancar
+/// con los estados de la capacidad, sin expresiones. Enviar y entregar son dos definiciones con el mismo paso.</para>
+///
+/// <para><b>Sin llave y repetible.</b> La capacidad no lee la llave: su idempotencia es el estado. Que el envío ya esté en
+/// ese estado (<c>fulfillment.already_…</c>) cuenta como hecho, así repetir la misma operación no choca (la lección de T052).
+/// Otro rechazo —un estado al que no se llega desde el actual, un envío ya cerrado— sube tal cual.</para>
+///
+/// <para><b>Sin vuelta</b>: un envío no retrocede, así que va al final, detrás de lo que se deshace.</para>
+/// </remarks>
+public sealed class PasoSeguirEnvio(IFulfillmentPort envios) : IPaso
+{
+    /// <summary>Los estados de un envío en <c>Api.Fulfillment</c>; una prueba los cruza con los de la capacidad.</summary>
+    public static readonly IReadOnlyCollection<string> EstadosDelEnvio = ["Ready", "InTransit", "Delivered", "Failed", "Returned"];
+
+    public string Tipo => "fulfillment.seguir";
+    public int Lecturas => 2;
+    public int LecturasOpcionales => 1;
+    public int Escrituras => 1;
+    public int EscriturasOpcionales => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool ActuaSinLlave => true;
+    public bool SinVuelta => true;
+    public IReadOnlyCollection<string>? EstadosAdmitidos => EstadosDelEnvio;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var estado = entrada.Paso.Estado!;
+        var nota = entrada.Paso.Lee.Count > 1 ? entrada.Lee<string?>(1) : null;
+        var hecho = await envios.SeguirAsync(entrada.Lee<string>(0), estado, nota, ct);
+        if (hecho.IsOk) return SalidaDePaso.Sigue(hecho.Value);
+        return string.Equals(hecho.Rejection!.Code, YaEstaba(estado), StringComparison.Ordinal)
+            ? SalidaDePaso.Sigue(estado)
+            : SalidaDePaso.Rechaza(hecho.Rejection!);
+    }
+
+    /// <summary>El código con que la capacidad dice que el envío ya estaba en <paramref name="estado"/>.</summary>
+    public static string YaEstaba(string estado) => $"fulfillment.already_{estado.ToLowerInvariant()}";
+}
+
+/// <summary>
+/// <c>fulfillment.leer</c> (núcleo, NS-2 de 013): lee el envío y escribe, en este orden, su destino, la transportadora, el
+/// estado y sus eventos. Una definición nombra los primeros que necesite.
+/// </summary>
+/// <remarks>No escribe en ninguna capacidad: cabe en una lectura sin saga, como el <c>detalle</c> que pide el personal.</remarks>
+public sealed class PasoLeerEnvio(IFulfillmentPort envios) : IPaso
+{
+    public string Tipo => "fulfillment.leer";
+    public int Lecturas => 1;
+    public int Escrituras => 4;
+    public int EscriturasOpcionales => 3;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura =>
+        [typeof(DireccionDeEnvio), typeof(string), typeof(string), typeof(IReadOnlyList<EventoDeEnvio>)];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var leido = await envios.LeerAsync(entrada.Lee<string>(0), ct);
+        return leido.IsOk
+            ? SalidaDePaso.Sigue(leido.Value.Destino, leido.Value.Transportadora, leido.Value.Estado, leido.Value.Eventos)
+            : SalidaDePaso.Rechaza(leido.Rejection!);
+    }
+}

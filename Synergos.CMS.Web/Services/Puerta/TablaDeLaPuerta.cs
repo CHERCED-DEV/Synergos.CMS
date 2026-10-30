@@ -75,10 +75,11 @@ public sealed class TablaDeLaPuerta
     /// descuento antes de pagar (ADR 0140, el cupón). <c>listar</c> son las sagas del dueño, «mis reservas»
     /// (núcleo, NB-6 de 011). <c>disponibilidad</c> es una lectura sin saga ni dueño: la única clase de operación
     /// que un flujo puede abrir a un invitado (NB-3). Lo cruza <c>PuertaGenericaTests</c> contra la lista del
-    /// orquestador. <c>devolver</c> es la fase que abre una operación posterior al cierre (lote 6, N-6 de 004).
+    /// orquestador. <c>detalle</c> es la lectura sin saga que sólo pide el personal: la puerta comprueba su rol (NS-2 de
+    /// 013). <c>devolver</c> es la fase que abre una operación posterior al cierre (lote 6, N-6 de 004).
     /// </remarks>
     public static readonly IReadOnlyList<string> Operaciones =
-        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "devolver", "disponibilidad", "listar"];
+        ["abrir", "cancelar", "cerrar", "consultar", "cotizar", "detalle", "devolver", "disponibilidad", "listar"];
 
     private static readonly Regex ClaveDeFlujo = new(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ParametroDeRuta = new(@"\{([^}]+)\}", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));

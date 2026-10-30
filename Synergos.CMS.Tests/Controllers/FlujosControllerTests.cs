@@ -902,6 +902,60 @@ public sealed class FlujosControllerTests : IDisposable
         Assert.Empty(_orquestador.Pedidos);
     }
 
+    /// <summary>
+    /// Un flujo del personal con su lectura <c>detalle</c> (núcleo, NS-2 de 013), como la publica el host genérico: con cuerpo,
+    /// SIN ninguna cabecera de la puerta y marcada del personal.
+    /// </summary>
+    private static TablaDeLaPuerta DelPersonalConDetalle()
+    {
+        var doc = ContratoDeLaCompra();
+        doc["paths"]!["/v1/flujos/eventos.compra/detalle"] = new JsonObject
+        {
+            ["post"] = new JsonObject
+            {
+                ["operationId"] = "EventosCompraDetalle",
+                ["requestBody"] = new JsonObject
+                {
+                    ["content"] = new JsonObject { ["application/json"] = new JsonObject { ["schema"] = new JsonObject { ["type"] = "object" } } },
+                },
+                [TablaDeLaPuerta.MarcaDelFlujo] = new JsonObject { ["flujo"] = Flujo, ["operacion"] = "detalle" },
+            },
+        };
+        foreach (var ruta in doc["paths"]!.AsObject())
+        {
+            foreach (var metodo in ruta.Value!.AsObject())
+            {
+                if (metodo.Value![TablaDeLaPuerta.MarcaDelFlujo] is JsonObject marca) marca["acceso"] = TablaDeLaPuerta.AccesoDelPersonal;
+            }
+        }
+        return TablaDeLaPuerta.De([("Synergos.Bff.Eventos.json", doc.ToJsonString())]);
+    }
+
+    [Fact]
+    public async Task El_detalle_del_personal_pasa_con_el_rol_y_sin_sujeto_y_sin_el_rol_no_sale_nada()
+    {
+        _ajustes.Flujos[Flujo] = Personal("vendedor");
+        _miembro.HasAnyRole(Arg.Any<string?>()).Returns(true);
+
+        var conRol = await Pedir("POST", "detalle", cuerpo: """{"compra":"c-1"}""", tabla: DelPersonalConDetalle());
+
+        Assert.Equal(200, conRol.Estado);
+        _miembro.Received().HasAnyRole("vendedor");
+        var (metodo, ruta, cabeceras, _) = Assert.Single(_orquestador.Pedidos);
+        Assert.Equal(("POST", "/v1/flujos/eventos.compra/detalle"), (metodo, ruta));
+        Assert.False(cabeceras.ContainsKey(LoQuePoneLaPuerta.CabeceraDelSujeto), "Una lectura no lleva sujeto, tampoco la del personal.");
+
+        _orquestador.Pedidos.Clear();
+        _miembro.HasAnyRole(Arg.Any<string?>()).Returns(false);
+        var sinRol = await Pedir("POST", "detalle", cuerpo: """{"compra":"c-1"}""", tabla: DelPersonalConDetalle());
+        Sesion(null);
+        var sinSesion = await Pedir("POST", "detalle", cuerpo: """{"compra":"c-1"}""", tabla: DelPersonalConDetalle());
+
+        Assert.Equal((403, "puerta.personal_requerido"), (sinRol.Estado, sinRol.Codigo));
+        Assert.Equal((401, "puerta.sesion_requerida"), (sinSesion.Estado, sinSesion.Codigo));
+        Assert.Empty(_orquestador.Pedidos);
+    }
+
     [Fact]
     public void El_acceso_del_personal_se_cruza_con_el_contrato_en_los_dos_sentidos()
     {

@@ -359,6 +359,25 @@ public sealed class PuertosHttp : CapabilityClients,
         Ref paraQue, DireccionDeEnvio direccion, string transportadora, IdempotencyKey llave, CancellationToken ct)
         => (await DespacharEnvioAsync(paraQue, direccion, transportadora, llave, ct)).Map(s => s.Id);
 
+    /// <summary>Lleva el envío a otro estado (NS-1 de 013): <c>TrackShipment</c>, sin llave.</summary>
+    public Task<Result<EnvioSeguidoDto>> SeguirEnvioAsync(string envio, string estado, string? nota, CancellationToken ct)
+        => Post<EnvioSeguidoDto>(Fulfillment, $"v1/shipments/{Uri.EscapeDataString(envio)}/track", new { status = estado, note = nota }, null, ct);
+
+    async Task<Result<string>> IFulfillmentPort.SeguirAsync(string envio, string estado, string? nota, CancellationToken ct)
+        => (await SeguirEnvioAsync(envio, estado, nota, ct)).Map(e => e.Status);
+
+    /// <summary>El envío entero (NS-2 de 013): <c>GetShipment</c>.</summary>
+    public Task<Result<EnvioCompletoDto>> LeerEnvioAsync(string envio, CancellationToken ct)
+        => Get<EnvioCompletoDto>(Fulfillment, $"v1/shipments/{Uri.EscapeDataString(envio)}", ct);
+
+    async Task<Result<EnvioLeido>> IFulfillmentPort.LeerAsync(string envio, CancellationToken ct)
+        => (await LeerEnvioAsync(envio, ct)).Map(e => new EnvioLeido(
+            e.Id,
+            new DireccionDeEnvio(e.To.Line1 ?? string.Empty, e.To.Line2, e.To.City ?? string.Empty, e.To.Region, e.To.PostalCode,
+                e.To.Country ?? string.Empty, e.To.Contact),
+            e.Carrier, e.TrackingCode, e.Status,
+            e.Events.Select(v => new EventoDeEnvio(v.Status, v.Note, v.AtUtc)).ToList()));
+
     // ── Workflow ────────────────────────────────────────────────────────────
 
     public Task<Result<InstanciaDto>> ArrancarInstanciaAsync(string proceso, Ref sujeto, IdempotencyKey llave, CancellationToken ct)
@@ -421,3 +440,8 @@ public sealed record PedidoDto(string Id);
 public sealed record PasoDeHistoriaDto(string Transition, string From, string To, string ByKind, string ById, string? Note, DateTimeOffset AtUtc);
 public sealed record InstanciaDto(string Id, string DefinitionKey, string State, IReadOnlyList<PasoDeHistoriaDto> History);
 public sealed record EnvioDto(string Id);
+public sealed record EnvioSeguidoDto(string Id, string Status);
+public sealed record DireccionDto(string? Line1, string? Line2, string? City, string? Region, string? PostalCode, string? Country, string? Contact);
+public sealed record EventoDeEnvioDto(string Status, string? Note, DateTimeOffset AtUtc);
+public sealed record EnvioCompletoDto(
+    string Id, DireccionDto To, string Carrier, string? TrackingCode, string Status, IReadOnlyList<EventoDeEnvioDto> Events);
