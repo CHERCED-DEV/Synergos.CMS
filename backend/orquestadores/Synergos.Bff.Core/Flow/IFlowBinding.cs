@@ -163,6 +163,22 @@ public interface IFlowBinding<TSaga> where TSaga : class, ISaga<TSaga>
     TSaga ConItemSoltado(TSaga saga, string reservante, HoldLeg soltada, FlowContext ctx) => ConItemSoltado(saga, reservante, soltada);
 
     /// <summary>
+    /// Si la saga sabe guardar la fase que un rechazo transitorio de un paso con llave dejó a medias (001-P10 = A). Por
+    /// defecto, no: el intérprete la deshace como siempre.
+    /// </summary>
+    /// <remarks>
+    /// Sin dónde anotarla, repetir la fase que abre con la misma llave devolvería la saga a medias como si hubiera
+    /// abierto. Una saga tipada que quiera lo mismo guarda la fase en su record y contesta las tres.
+    /// </remarks>
+    bool GuardaLaDuda => false;
+
+    /// <summary>La fase que quedó en duda en esta saga, o nula.</summary>
+    string? FaseEnDuda(TSaga saga) => null;
+
+    /// <summary>La saga con la fase en duda anotada, o borrada con nulo.</summary>
+    TSaga ConFaseEnDuda(TSaga saga, string? fase) => saga;
+
+    /// <summary>
     /// Si un vertical extiende este flujo genérico (NV-13), los tipos de compensación que su extensión puede armar al
     /// soltar un ítem; nulo si nadie lo extiende. El validador cruza con esto <c>al_fallar: soltar</c>.
     /// </summary>

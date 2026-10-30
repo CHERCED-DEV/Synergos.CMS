@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Synergos.Bff.Core;
 using Synergos.Bff.Viajes.Domain;
 using Synergos.Core;
@@ -252,7 +253,7 @@ public abstract class OraculoDelViaje
         => new(2026, mes, dia, hora, 0, 0, TimeSpan.Zero);
 
     private protected static CapacidadesFalsas Feliz() => new CapacidadesFalsas()
-        .Ok("POST /v1/quotes", """{"subtotal":{"amount":1200000,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":1200000,"currency":"COP"}}""")
+        .Cuando("POST /v1/quotes", Cotizacion)
         // Tres recursos, uno por producto. La capacidad los devuelve por sujeto.
         .Secuencia("GET /v1/resources/por-sujeto",
             """{"id":"rec-vuelo","subjectKind":"viajes.producto","subjectId":"vuelo/AV-8020/2026-09-01","capacity":180}""",
@@ -268,6 +269,23 @@ public abstract class OraculoDelViaje
         .Ok("POST /v1/payments/pg1/refund", """{"id":"pg1","status":"Captured","amount":{"amount":1200000,"currency":"COP"},"refundable":{"amount":0,"currency":"COP"}}""")
         .Ok("GET /v1/payments/pg1", """{"id":"pg1","status":"Captured","amount":{"amount":1200000,"currency":"COP"},"refundable":{"amount":1200000,"currency":"COP"}}""")
         .Ok("POST /v1/deliveries", """{"id":"d1","status":"Sent"}""");
+
+    /// <summary>
+    /// <c>Api.Pricing</c> como la de verdad: el total del guion (1.200.000) y el precio unitario de CADA línea que se pidió,
+    /// 400.000. El declarado guarda el precio de cada ítem para la parcial (historia 3) y rechaza una cotización sin él.
+    /// </summary>
+    private static HttpResponseMessage Cotizacion(HttpRequestMessage pedido)
+    {
+        using var cuerpo = JsonDocument.Parse(pedido.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        var lineas = cuerpo.RootElement.GetProperty("lines").EnumerateArray().Select(l =>
+            $$$"""{"subjectKind":"{{{l.GetProperty("subjectKind").GetString()}}}","subjectId":"{{{l.GetProperty("subjectId").GetString()}}}","unitPrice":{"amount":400000,"currency":"COP"}}""");
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                $$$"""{"subtotal":{"amount":1200000,"currency":"COP"},"tax":{"amount":0,"currency":"COP"},"total":{"amount":1200000,"currency":"COP"},"lines":[{{{string.Join(",", lineas)}}}]}""",
+                Encoding.UTF8, "application/json"),
+        };
+    }
 
     /// <summary>El guion feliz, con <c>Api.Booking</c> comportándose como la de verdad.</summary>
     private protected static CapacidadesFalsas FelizEstricto()

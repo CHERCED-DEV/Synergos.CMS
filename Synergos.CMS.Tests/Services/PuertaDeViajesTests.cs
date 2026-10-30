@@ -36,6 +36,9 @@ public sealed class PuertaDeViajesTests
         Assert.Equal("/viajes/?viaje={id}", reserva.Aviso?.Ruta);
         // La ruta del sitio donde se reservó (D-006-AVISO): la del asistente, si el sitio la declara.
         Assert.Equal(("BookingWizard", "AvisoRuta"), (reserva.Aviso?.Seccion, reserva.Aviso?.Campo));
+        // La política de confirmación del sitio (historia 3): la puerta la manda al abrir y al cotizar.
+        Assert.Equal("TravelShell", reserva.Negocio?.Seccion);
+        Assert.Equal(new[] { "ConfirmationPolicy" }, reserva.Negocio?.Campos);
 
         // Sólo esta entrada: las demás las vigila su propia línea.
         var sola = new PuertaSettings
@@ -48,8 +51,30 @@ public sealed class PuertaDeViajesTests
 
     /// <summary>Las secciones de negocio de Viajes, como las registra el arranque.</summary>
     private static readonly SeccionesDelSitio SeccionesDeViajes = new(
-        [new SeccionDeNegocioRegistrada("BookingWizard", typeof(NegocioDeBookingWizard), _ => new NegocioDeBookingWizard("/api/booking"))],
+        [
+            new SeccionDeNegocioRegistrada("BookingWizard", typeof(NegocioDeBookingWizard), _ => new NegocioDeBookingWizard("/api/booking")),
+            new SeccionDeNegocioRegistrada("TravelShell", typeof(NegocioDeTravelShell), _ => new NegocioDeTravelShell("/api/travel")),
+        ],
         new ServiceCollection().BuildServiceProvider());
+
+    /// <summary>
+    /// Lo que la puerta pone en la cabecera de negocio de <c>viajes.reserva</c> se llama como lo lee el flujo
+    /// (<c>"campo": "confirmationPolicy"</c> en <c>viajes.reserva.json</c>), y siempre trae valor: el orquestador no acepta
+    /// el campo nulo.
+    /// </summary>
+    [Theory]
+    [InlineData(PoliticaDeConfirmacion.TodoONada)]
+    [InlineData(PoliticaDeConfirmacion.Parcial)]
+    public void La_cabecera_de_negocio_lleva_la_politica_con_el_nombre_que_lee_el_flujo(string politica)
+    {
+        var negocio = new NegocioDeTravelShell("/api/travel", ConfirmationPolicy: politica);
+
+        var cabecera = LoQuePoneLaPuerta.Negocio(negocio, Ajustes().Flujos[Flujo].Negocio!.Campos);
+
+        var base64 = cabecera.Replace('-', '+').Replace('_', '/');
+        var json = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(base64.PadRight(base64.Length + ((4 - (base64.Length % 4)) % 4), '='))).RootElement;
+        Assert.Equal(politica, json.GetProperty("confirmationPolicy").GetString());
+    }
 
     [Fact]
     public void El_sujeto_de_la_puerta_es_quien_viaja_para_los_clientes_de_viajes()

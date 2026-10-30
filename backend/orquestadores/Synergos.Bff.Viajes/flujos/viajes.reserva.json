@@ -1,9 +1,10 @@
 {
   "clave": "viajes.reserva",
-  "entrada": ["viajero", "items"],
+  "entrada": ["viajero", "items", "politica"],
   "tipos": {
     "viajero": { "de": "sujeto" },
     "items": { "lista": { "producto": "texto", "etiqueta": "texto?", "ventana": "ventana", "porNoche": "booleano?" } },
+    "politica": { "de": "negocio", "campo": "confirmationPolicy", "tipo": "texto?" },
     "contacto": { "de": "contacto" }
   },
   "salida": ["itinerario", "subtotal", "descuento", "impuesto", "total", "vence"],
@@ -14,6 +15,7 @@
       "revisar",
       "cotizar",
       "desglose",
+      "precios",
       { "para_cada": "items", "como": "item", "pasos": ["recurso", "hallar", "apartar"] },
       "vence",
       "autorizar"
@@ -21,6 +23,7 @@
     "cerrar": [
       "capturar",
       { "para_cada": "reservas:apartar", "como": "hold", "pasos": ["confirmar"] },
+      "nota",
       "avisar"
     ]
   },
@@ -28,6 +31,7 @@
     "revisar": { "tipo": "viajes.revisar-itinerario", "lee": ["items"], "escribe": ["aCotizar", "itinerario"] },
     "cotizar": { "tipo": "pricing.cotizar-sin-codigo", "lee": ["aCotizar"], "escribe": ["cotizacion"] },
     "desglose": { "tipo": "pricing.desglose", "lee": ["cotizacion"], "escribe": ["subtotal", "descuento", "impuesto", "total"] },
+    "precios": { "tipo": "viajes.precio-del-item", "lee": ["itinerario", "aCotizar", "cotizacion"], "escribe": ["itinerario"] },
     "recurso": { "tipo": "viajes.sujeto-del-producto", "lee": ["item.producto"], "escribe": ["item.recursoSujeto"] },
     "hallar": {
       "tipo": "booking.hallar",
@@ -76,11 +80,14 @@
       "escribe": ["hold.reservaId"],
       "llave_base": "confirm",
       "cierra_reserva": "apartar",
+      "al_fallar": "soltar",
       "motivo": "un ítem no se pudo confirmar tras cobrar"
     },
+    "nota": { "tipo": "viajes.nota-del-cierre", "lee": ["itinerario"], "escribe": ["nota"] },
     "avisar": {
       "tipo": "notifications.avisar",
       "lee": ["viajero", "contacto", "total"],
+      "valores": ["nota"],
       "llave": "avisar",
       "plantilla": "viajes.reserva.confirmada",
       "al_fallar": "seguir"

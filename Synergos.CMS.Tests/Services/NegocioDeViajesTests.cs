@@ -127,6 +127,40 @@ public sealed class NegocioDeViajesTests
         Assert.Contains("tiene que ser una ruta del sitio", error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// La política de confirmación del sitio (historia 3): «todo-o-nada» por defecto; un sitio puede declarar «parcial»; un
+    /// sitio sin valor hereda la base, porque la puerta no puede mandar el campo vacío.
+    /// </summary>
+    [Fact]
+    public void La_politica_de_confirmacion_es_todo_o_nada_por_defecto_y_la_de_cada_sitio_si_la_declara()
+    {
+        Assert.Equal(PoliticaDeConfirmacion.TodoONada, new TravelShellFeatureSettings().Para(null).ConfirmationPolicy);
+
+        var portal = Seccion<TravelShellFeatureSettings>(new()
+        {
+            [$"Sitios:{Bogota}:ConfirmationPolicy"] = " Parcial ",
+            [$"Sitios:{Medellin}:ConfirmationPolicy"] = "",
+        });
+        Assert.Equal(PoliticaDeConfirmacion.Parcial, portal.Para(Bogota).ConfirmationPolicy);
+        Assert.Equal(PoliticaDeConfirmacion.TodoONada, portal.Para(Medellin).ConfirmationPolicy);
+
+        var todos = Seccion<TravelShellFeatureSettings>(new() { ["ConfirmationPolicy"] = "PARCIAL" });
+        Assert.Equal(PoliticaDeConfirmacion.Parcial, todos.Para(null).ConfirmationPolicy);
+    }
+
+    [Theory]
+    [InlineData("ConfirmationPolicy", "parcialmente")]
+    [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:ConfirmationPolicy", "todo")]
+    public void Una_politica_mal_escrita_no_deja_arrancar_y_dice_las_dos(string clave, string valor)
+    {
+        using var sp = Proveedor<TravelShellFeatureSettings, NegocioDeTravelShell>(TravelShellFeatureSettings.Seccion, clave, valor);
+
+        var error = Assert.Throws<OptionsValidationException>(() => sp.GetRequiredService<IStartupValidator>().Validate());
+
+        Assert.Contains("ConfirmationPolicy", error.Message, StringComparison.Ordinal);
+        Assert.Contains("«todo-o-nada» o «parcial»", error.Message, StringComparison.Ordinal);
+    }
+
     // ── Ayudantes ────────────────────────────────────────────────────────────────────────────
 
     private static TSeccion Seccion<TSeccion>(Dictionary<string, string?> claves)

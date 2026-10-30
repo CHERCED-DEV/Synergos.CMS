@@ -1,14 +1,21 @@
 using Synergos.Bff.Core.Flow;
+using Synergos.Bff.Pasos;
 using Synergos.Core;
 
 namespace Synergos.Bff.Viajes.Domain;
 
 /// <summary>Un ítem del viaje como lo guarda y lo devuelve el flujo de la puerta: qué, cómo se llama y su periodo.</summary>
 /// <remarks>
-/// Sin identificadores de ninguna capacidad y sin precio: el viaje se cotiza entero (lo que costaría un ítem suelto no lo
-/// sabe nadie), y el apartado o la reserva de cada ítem son de <c>Api.Booking</c>.
+/// <para>Sin identificadores de ninguna capacidad: el apartado o la reserva de cada ítem son de <c>Api.Booking</c>.</para>
+///
+/// <para><b>Lo de la confirmación parcial</b> (historia 3, NV-13): <paramref name="Precio"/> es lo que cotizó el servidor
+/// por ese ítem (su tarifa por su cantidad), y sólo sirve para repartir el total si el ítem no se cumple;
+/// <paramref name="NoCumplido"/> y <paramref name="Devuelto"/> los escribe la extensión del flujo al soltarlo: qué no se
+/// pudo confirmar y cuánto de lo cobrado le corresponde. Lo dice el servidor, no la pantalla.</para>
 /// </remarks>
-public sealed record ParadaDelViaje(string Producto, string Etiqueta, DateTimeOffset Inicio, DateTimeOffset Fin);
+public sealed record ParadaDelViaje(
+    string Producto, string Etiqueta, DateTimeOffset Inicio, DateTimeOffset Fin,
+    Money? Precio = null, bool NoCumplido = false, Money? Devuelto = null);
 
 /// <summary>
 /// Los pasos propios de la reserva por la puerta (<c>flujos/viajes.reserva.json</c>, línea 006): la regla del itinerario
@@ -17,7 +24,11 @@ public sealed record ParadaDelViaje(string Producto, string Etiqueta, DateTimeOf
 public static class PasosDeViajes
 {
     /// <summary>Los pasos propios, para sumarlos a los comunes en el registro del orquestador.</summary>
-    public static IPaso[] Propios() => [new PasoRevisarItinerario(), new PasoSujetoDelProducto(), new PasoVence(), new PasoMenosRetencion()];
+    public static IPaso[] Propios() =>
+    [
+        new PasoRevisarItinerario(), new PasoPrecioDelItem(), new PasoSujetoDelProducto(), new PasoVence(),
+        new PasoMenosRetencion(), new PasoNotaDelCierre(),
+    ];
 }
 
 /// <summary>
@@ -89,6 +100,93 @@ public sealed class PasoRevisarItinerario : IPaso
 
     /// <summary>Las noches de una estadía: los días que cubre su ventana, al menos una.</summary>
     public static int Noches(TimeWindow ventana) => Math.Max(1, (int)Math.Ceiling((ventana.End - ventana.Start).TotalDays));
+}
+
+/// <summary>
+/// <c>viajes.precio-del-item</c>: lee el itinerario, lo que se cotizó (una línea por ítem, en su orden) y la cotización;
+/// escribe el itinerario con el precio de cada ítem: su tarifa por su cantidad, como la cotizó <c>Api.Pricing</c>.
+/// </summary>
+/// <remarks>
+/// <para><b>Para qué</b> (historia 3): si un ítem no se puede confirmar y el sitio admite la parcial, la parte de lo cobrado
+/// que le toca sale del precio que cotizó el SERVIDOR, no de la pantalla ni de un reparto a partes iguales.</para>
+///
+/// <para><b>Se cruza por sujeto</b>, como <see cref="PasoPreciosPorLinea"/>: la respuesta no promete el orden. Una línea sin
+/// precio se rechaza con su mismo código, antes de apartar nada: sin el precio de un ítem no se sabría qué devolver.</para>
+/// </remarks>
+public sealed class PasoPrecioDelItem : IPaso
+{
+    public string Tipo => "viajes.precio-del-item";
+    public int Lecturas => 3;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(IReadOnlyList<ParadaDelViaje>)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        var itinerario = entrada.Lee<IReadOnlyList<ParadaDelViaje>>(0);
+        var lineas = entrada.Lee<IReadOnlyList<(Ref Sujeto, int Cantidad)>>(1);
+        var precios = new Dictionary<Ref, Money>();
+        foreach (var (sujeto, unitario) in entrada.Lee<QuoteView>(2).Lineas) precios.TryAdd(sujeto, unitario);
+
+        if (lineas.Count != itinerario.Count)
+        {
+            throw new InvalidOperationException($"El itinerario tiene {itinerario.Count} ítems y se cotizaron {lineas.Count} líneas.");
+        }
+
+        var conPrecio = new List<ParadaDelViaje>(itinerario.Count);
+        for (var i = 0; i < itinerario.Count; i++)
+        {
+            var (sujeto, cantidad) = lineas[i];
+            if (!precios.TryGetValue(sujeto, out var unitario))
+            {
+                return Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(PasoPreciosPorLinea.SinPrecioDeLinea,
+                    $"La cotización no trae precio para {sujeto}: no se sabría qué parte del viaje es «{itinerario[i].Etiqueta}».")));
+            }
+            conPrecio.Add(itinerario[i] with { Precio = Money.Of(unitario.Amount * cantidad, unitario.Currency) });
+        }
+
+        return Task.FromResult(SalidaDePaso.Sigue((IReadOnlyList<ParadaDelViaje>)conPrecio));
+    }
+}
+
+/// <summary>
+/// <c>viajes.nota-del-cierre</c>: lee el itinerario al cerrar y escribe la nota del aviso: vacía si todo se confirmó; si no,
+/// qué no se pudo confirmar y cuánto se devuelve, como lo escribió la extensión del flujo.
+/// </summary>
+/// <remarks>
+/// El correo de un viaje parcial no puede decir que «cada parte quedó reservada». La plantilla lleva <c>{nota}</c> y el
+/// texto sale del itinerario que guarda la saga, el mismo que ve quien viaja en «Mis viajes».
+/// </remarks>
+public sealed class PasoNotaDelCierre : IPaso
+{
+    public string Tipo => "viajes.nota-del-cierre";
+    public int Lecturas => 1;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+
+    public Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        return Task.FromResult(SalidaDePaso.Sigue(Nota(entrada.Lee<IReadOnlyList<ParadaDelViaje>>(0))));
+    }
+
+    /// <summary>La nota de un itinerario: vacía sin ítems no cumplidos.</summary>
+    public static string Nota(IReadOnlyList<ParadaDelViaje> itinerario)
+    {
+        ArgumentNullException.ThrowIfNull(itinerario);
+        var caidos = itinerario.Where(p => p.NoCumplido).ToList();
+        if (caidos.Count == 0) return string.Empty;
+
+        var nombres = string.Join(", ", caidos.Select(p => p.Etiqueta));
+        var devuelto = caidos.Where(p => p.Devuelto is { Amount: > 0m }).Select(p => p.Devuelto!.Value).ToList();
+        var texto = $" No se pudo confirmar: {nombres}.";
+        if (devuelto.Count == 0) return texto;
+
+        var suma = Money.Of(devuelto.Sum(m => m.Amount), devuelto[0].Currency);
+        return $"{texto} Te devolvemos su parte: {PasoAvisar.Escribir(suma, TimeZoneInfo.Utc)}.";
+    }
 }
 
 /// <summary>
