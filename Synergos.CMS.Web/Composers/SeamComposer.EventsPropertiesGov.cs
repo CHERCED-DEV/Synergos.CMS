@@ -427,6 +427,10 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<ILogger<ArtefactoDelExpediente>>(),
             hayOrquestadorDeGobierno));
 
+        // Los actos sobre un expediente de la puerta (009-gobierno-tramite T039): tomar, decidir y subsanar van a sus flujos
+        // posteriores por el reenvío de la puerta, con los controles de la puerta. Sin destino, la puerta no los abre.
+        services.AddSingleton<ActosDeLaPuerta>();
+
         // La OFERTA de cada trámite, al mismo orquestador (009-gobierno-tramite T034): sin destino, publicar un trámite no
         // sale a la red. Diez segundos, porque quien espera es el editor que publica, y una oferta que no salió se repara
         // republicando.

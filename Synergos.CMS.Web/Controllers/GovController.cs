@@ -75,9 +75,12 @@ public sealed class GovController : ControllerBase
     private readonly IGovActNotificationService _notifications;
     private readonly IAuditTrailWriter _audit;
     private readonly ArtefactoDelExpediente? _artefacto;
+    private readonly ActosDeLaPuerta? _actos;
 
     /// <param name="artefacto">Lo que el CMS guarda de una radicación por la puerta (009, T027). Nulo en las pruebas
     /// que no la usan: la ruta contesta que la radicación por la puerta no está abierta.</param>
+    /// <param name="actos">Los actos sobre un expediente de la puerta (009, T039). Nulo en las pruebas que no los usan:
+    /// un acto sobre uno de la puerta contesta que no está abierto.</param>
     public GovController(
         ITramiteCatalogProvider catalog,
         IApplicationService applications,
@@ -89,7 +92,8 @@ public sealed class GovController : ControllerBase
         IMemberAccessGate gate,
         IGovActNotificationService notifications,
         IAuditTrailWriter audit,
-        ArtefactoDelExpediente? artefacto = null)
+        ArtefactoDelExpediente? artefacto = null,
+        ActosDeLaPuerta? actos = null)
     {
         _catalog = catalog;
         _applications = applications;
@@ -102,6 +106,7 @@ public sealed class GovController : ControllerBase
         _notifications = notifications;
         _audit = audit;
         _artefacto = artefacto;
+        _actos = actos;
     }
 
     /// <summary>
@@ -360,13 +365,36 @@ public sealed class GovController : ControllerBase
     }
 
     /// <summary>
-    /// Un expediente de la puerta se lleva por la puerta: su proceso es la instancia que arrancó el orquestador, y un
-    /// acto por la ruta directa movería otra (la del CMS) y separaría lo que ve el portal de lo que dice el proceso.
+    /// Un acto sobre un expediente de la puerta (T039): su proceso es la instancia que arrancó el orquestador, así que el
+    /// acto va por la puerta —un acto directo movería otra, la del CMS, y separaría el portal del proceso—, con la llave
+    /// de la intención que manda la consola, y después el expediente se pone al día con su proceso para contestar.
     /// </summary>
-    private IActionResult? DenyIfDeLaPuerta(CaseDetail detail)
-        => detail.Camino == CaminoDelExpediente.Puerta
-            ? Conflict(new { error = "Este expediente se lleva por la puerta: el acto va por allí.", code = "gov.expediente_de_la_puerta" })
-            : null;
+    /// <param name="ciudadano">La cara con que se lee después: el dueño que subsana, o nula para la del funcionario.</param>
+    private async Task<IActionResult> PorLaPuertaAsync(
+        CaseDetail detail, Guid? ciudadano, Func<ActosDeLaPuerta, string, string, Task<ActoDeLaPuerta>> acto,
+        Func<CaseDetail, bool, Task<IActionResult>> responder, CancellationToken cancellationToken)
+    {
+        if (_actos is null || detail.Radicacion is not { } radicacion)
+        {
+            return Problema(StatusCodes.Status503ServiceUnavailable, "puerta.flujo_no_disponible",
+                "Los actos de los expedientes de la puerta no están abiertos en este sitio.", true, null);
+        }
+        var llave = HttpContext?.Request.Headers[LlaveDeLaIntencion].ToString().Trim() ?? string.Empty;
+        if (llave.Length == 0 || llave.Length > LoQuePoneLaPuerta.LargoMaximoDeLaLlaveDelNavegador)
+        {
+            return Problema(StatusCodes.Status400BadRequest, "puerta.llave_requerida",
+                $"Un acto por la puerta lleva la llave de su intención ({LlaveDeLaIntencion}, hasta {LoQuePoneLaPuerta.LargoMaximoDeLaLlaveDelNavegador}).", false, null);
+        }
+
+        var hecho = await acto(_actos, radicacion, llave);
+        if (!hecho.Bien) return Problema(hecho.Estado, hecho.Codigo!, hecho.Mensaje ?? string.Empty, hecho.Transitorio, null);
+
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, ciudadano, cancellationToken);
+        return await responder(alDia, alDiaConElProceso);
+    }
+
+    /// <summary>La cabecera con la llave de la intención de un acto, la misma que la puerta.</summary>
+    private const string LlaveDeLaIntencion = "Idempotency-Key";
 
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
@@ -462,7 +490,14 @@ public sealed class GovController : ControllerBase
 
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
-        if (DenyIfDeLaPuerta(detail) is { } porLaPuerta) { return porLaPuerta; }
+        if (detail.Camino == CaminoDelExpediente.Puerta)
+        {
+            return await PorLaPuertaAsync(detail, actorKey,
+                (actos, radicacion, llave) => actos.SubsanarAsync(radicacion, request?.Note, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new ApplicationDetailResponse(
+                    await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
+        }
 
         CaseDetail updated;
         try
@@ -680,7 +715,13 @@ public sealed class GovController : ControllerBase
         {
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
-        if (DenyIfDeLaPuerta(detail) is { } porLaPuerta) { return porLaPuerta; }
+        if (detail.Camino == CaminoDelExpediente.Puerta)
+        {
+            return await PorLaPuertaAsync(detail, null,
+                (actos, radicacion, llave) => actos.TomarAsync(radicacion, request?.Note, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
+        }
 
         CaseDetail updated;
         try
@@ -714,10 +755,12 @@ public sealed class GovController : ControllerBase
         {
             return BadRequest(new { error = "caseId y outcome (approve | reject | request-info) son requeridos." });
         }
-        if (await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken) is { } target
-            && DenyIfDeLaPuerta(target) is { } porLaPuerta)
+        if (await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken) is { Camino: CaminoDelExpediente.Puerta } deLaPuerta)
         {
-            return porLaPuerta;
+            return await PorLaPuertaAsync(deLaPuerta, null,
+                (actos, radicacion, llave) => actos.DecidirAsync(radicacion, request.Outcome.Trim(), request.Note ?? string.Empty, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
         }
 
         CaseDetail updated;

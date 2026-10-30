@@ -263,7 +263,13 @@ public sealed class ArtefactoDelExpedienteTests
     internal sealed class OrquestadorDeGobiernoFalso : IHttpClientFactory
     {
         private readonly Dictionary<string, (Guid Dueno, string Json)> _radicaciones = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> _procesos = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (string Estado, List<object> Historia)> _procesos = new(StringComparer.Ordinal);
+
+        /// <summary>Los actos que llegaron por la puerta (T039): el flujo, el sujeto, la llave y el cuerpo.</summary>
+        public List<(string Flujo, string? Sujeto, string? Llave, string Cuerpo)> Actos { get; } = [];
+
+        /// <summary>El código con que la capacidad rechaza el próximo acto (409); nulo, lo hace.</summary>
+        public string? ActoRechaza { get; set; }
 
         public int Pedidos { get; private set; }
 
@@ -280,26 +286,27 @@ public sealed class ArtefactoDelExpedienteTests
         /// <summary>El expediente de una radicación en su proceso: el estado y la historia, con el seudónimo de quien actuó.</summary>
         public OrquestadorDeGobiernoFalso ConProceso(string id, string estado, params (string Transicion, string Hacia, string Quien, string? Nota)[] historia)
         {
-            var desde = "submitted";
-            _procesos[id] = JsonSerializer.Serialize(new
-            {
-                radicacion = id,
-                expediente = "inst-" + id,
-                proceso = "gov.tramite.v2",
-                estado,
-                historia = historia.Select((h, i) =>
-                {
-                    var paso = new
-                    {
-                        transicion = h.Transicion, desde, hacia = h.Hacia, porKind = h.Quien.Split(':')[0], porId = h.Quien.Split(':')[1],
-                        nota = h.Nota, en = DateTimeOffset.UtcNow.AddMinutes(i),
-                    };
-                    desde = h.Hacia;
-                    return paso;
-                }).ToList(),
-            });
+            _procesos[id] = ("submitted", []);
+            foreach (var paso in historia) Disparar(id, paso.Transicion, paso.Hacia, paso.Quien, paso.Nota);
+            _procesos[id] = (estado, _procesos[id].Historia);
             return this;
         }
+
+        private void Disparar(string id, string transicion, string hacia, string quien, string? nota)
+        {
+            var (desde, historia) = _procesos[id];
+            historia.Add(new
+            {
+                transicion, desde, hacia, porKind = quien.Split(':')[0], porId = quien.Split(':')[1], nota,
+                en = DateTimeOffset.UtcNow.AddMinutes(historia.Count),
+            });
+            _procesos[id] = (hacia, historia);
+        }
+
+        private string Proceso(string id) => JsonSerializer.Serialize(new
+        {
+            radicacion = id, expediente = "inst-" + id, proceso = "gov.tramite.v2", estado = _procesos[id].Estado, historia = _procesos[id].Historia,
+        });
 
         public OrquestadorDeGobiernoFalso Con(string id, Guid dueno, string estado, bool? acepta = true)
         {
@@ -332,6 +339,10 @@ public sealed class ArtefactoDelExpedienteTests
                 o.Pedidos++;
                 o.Rutas.Add($"{r.Method.Method} {r.RequestUri!.AbsolutePath}");
                 if (r.RequestUri.AbsolutePath.StartsWith("/v1/expedientes/", StringComparison.Ordinal)) return Task.FromResult(Expediente(r));
+                if (r.Method == HttpMethod.Post && r.RequestUri.AbsolutePath.StartsWith("/v1/flujos/gobierno.", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(Acto(r, r.RequestUri.AbsolutePath["/v1/flujos/".Length..]));
+                }
                 if (!r.Headers.TryGetValues("X-Synergos-Sujeto", out var s))
                 {
                     return Task.FromResult(Problema(HttpStatusCode.BadRequest, "gobierno.sujeto_requerido"));
@@ -356,9 +367,47 @@ public sealed class ArtefactoDelExpedienteTests
                 {
                     return Problema(HttpStatusCode.NotFound, "gobierno.expediente_no_encontrado");
                 }
-                return o._procesos.TryGetValue(id, out var json)
-                    ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") }
+                return o._procesos.ContainsKey(id)
+                    ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(o.Proceso(id), Encoding.UTF8, "application/json") }
                     : Problema(HttpStatusCode.Conflict, "gobierno.expediente_sin_proceso");
+            }
+
+            /// <summary>Un acto por la puerta: lo anota, y lo hace en el proceso —o lo rechaza con el código guionado—.</summary>
+            private HttpResponseMessage Acto(HttpRequestMessage r, string flujo)
+            {
+                var cuerpo = r.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                var sujeto = r.Headers.TryGetValues("X-Synergos-Sujeto", out var s) ? s.Single() : null;
+                o.Actos.Add((flujo, sujeto, r.Headers.TryGetValues("Idempotency-Key", out var k) ? k.Single() : null, cuerpo));
+                if (o.ActoRechaza is { } codigo)
+                {
+                    o.ActoRechaza = null;
+                    return Problema(HttpStatusCode.Conflict, codigo);
+                }
+
+                using var pedido = JsonDocument.Parse(cuerpo);
+                var radicacion = pedido.RootElement.GetProperty("radicacion").GetString()!;
+                var (transicion, hacia) = flujo switch
+                {
+                    "gobierno.toma" => ("take", "in-review"),
+                    "gobierno.subsanacion" => ("resubmit", "in-review"),
+                    _ => pedido.RootElement.GetProperty("decision").GetString() switch
+                    {
+                        "approve" => ("approve", "approved"),
+                        "reject" => ("reject", "rejected"),
+                        _ => ("request-info", "info-requested"),
+                    },
+                };
+                if (!o._procesos.ContainsKey(radicacion)) o._procesos[radicacion] = ("submitted", []);
+                o.Disparar(radicacion, transicion, hacia, sujeto!,
+                    pedido.RootElement.TryGetProperty("nota", out var nota) && nota.ValueKind == JsonValueKind.String ? nota.GetString() : null);
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new
+                    {
+                        id = $"acto-{o.Actos.Count}", flujo, numero = $"ACTO{o.Actos.Count:D4}", estado = "Completed",
+                        datos = new { radicacion, estado = hacia }, compensacionesPendientes = 0, error = (string?)null, deshaciendo = false,
+                    }), Encoding.UTF8, "application/json"),
+                };
             }
 
             private static HttpResponseMessage Problema(HttpStatusCode estado, string codigo)
