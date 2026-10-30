@@ -39,6 +39,12 @@ public sealed record ResultadoDelExpediente(
 /// si termina deshecha, sus respuestas se borran. Reconciliar corre en la ruta de lectura, con techo (la regla de la
 /// F3): como mucho <see cref="TopeDeReconciliacion"/> expedientes y <see cref="PresupuestoDeReconciliacion"/> en total;
 /// lo que falte se mira en la próxima lectura.</para>
+///
+/// <para><b>Uno confirmado se pone al día con su proceso</b> en la misma lectura (T040): el estado, la historia y la
+/// resolución son los de la capacidad de procesos, que lee el orquestador (<c>GET /v1/expedientes/{radicacion}</c>), y
+/// la proyección del CMS los copia —el proceso manda, FR-028—. Con la cara del ciudadano la lectura lleva su sujeto (sólo
+/// lo suyo); con la del funcionario, ninguno: el CMS ya comprobó el rol. Si el orquestador no contesta, queda lo último
+/// que se sabe y quien lee lo ve marcado.</para>
 /// </remarks>
 public sealed class ArtefactoDelExpediente
 {
@@ -132,13 +138,16 @@ public sealed class ArtefactoDelExpediente
 
     /// <summary>
     /// Confirma los expedientes por confirmar que <paramref name="lasQueTocan"/> elige y cuya radicación el orquestador
-    /// completó, y borra los de las que terminaron deshechas. Nunca falla hacia quien lee.
+    /// completó, borra los de las que terminaron deshechas, y pone al día con su proceso los confirmados que elige. Nunca
+    /// falla hacia quien lee.
     /// </summary>
+    /// <param name="ciudadano">La cara con que se lee el proceso: el miembro dueño, o nula para la del funcionario.</param>
     /// <remarks>
     /// Una radicación que el orquestador no tiene para su dueño (404) tampoco se completará: se borra igual. Una que se
-    /// rindió con la tasa cobrada sin devolver (<c>CompensationFailed</c>) se queda: es de una persona.
+    /// rindió con la tasa cobrada sin devolver (<c>CompensationFailed</c>) se queda: es de una persona. De los confirmados
+    /// van primero los que hace más que no se miran, así que el techo los recorre todos en lecturas sucesivas.
     /// </remarks>
-    public async Task ReconciliarAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, CancellationToken ct)
+    public async Task ReconciliarAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, Guid? ciudadano, CancellationToken ct)
     {
         if (NoDisponible() is not null) return;
 
@@ -163,11 +172,73 @@ public sealed class ArtefactoDelExpediente
                     await _expedientes.ConfirmarAsync(expediente.Radicacion, presupuesto.Token).ConfigureAwait(false);
                 }
             }
+
+            var confirmados = (await _expedientes.ConfirmadosAsync(presupuesto.Token).ConfigureAwait(false))
+                .Where(e => lasQueTocan(e) && (ciudadano is null || e.Dueno == ciudadano))
+                .Take(TopeDeReconciliacion)
+                .ToList();
+            foreach (var expediente in confirmados)
+            {
+                await PonerAlDiaAsync(expediente.Radicacion, ciudadano, presupuesto.Token).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             _log.LogWarning("La reconciliación de radicaciones de la puerta llegó a su techo de {Techo}: lo que falta se mira en la próxima.", _presupuesto);
         }
+    }
+
+    /// <summary>
+    /// Pone al día con su proceso el expediente de una radicación, con el mismo techo; dice si quedó al día. Si no, quien
+    /// lee ve lo último que se sabe, marcado, y ninguna acción.
+    /// </summary>
+    /// <param name="ciudadano">La cara con que se lee: el miembro dueño, o nula para la del funcionario.</param>
+    public async Task<bool> AlDiaAsync(string radicacion, Guid? ciudadano, CancellationToken ct)
+    {
+        if (NoDisponible() is not null) return false;
+
+        using var presupuesto = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        presupuesto.CancelAfter(_presupuesto);
+        try
+        {
+            return await PonerAlDiaAsync(radicacion, ciudadano, presupuesto.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Lee el expediente del proceso por el orquestador y lo copia en la proyección; dice si pudo.</summary>
+    private async Task<bool> PonerAlDiaAsync(string radicacion, Guid? ciudadano, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(radicacion) || Puerta.ReenvioDeLaPuerta.EsSegmentoDePunto(radicacion)) return false;
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"v1/expedientes/{Uri.EscapeDataString(radicacion)}");
+        if (ciudadano is { } miembro) req.Headers.TryAddWithoutValidation(Cabecera, $"{Kind}:{miembro:n}");
+        ExpedienteLeido? leido;
+        try
+        {
+            using var res = await _clientes.CreateClient(ClientName).SendAsync(req, ct).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
+                _log.LogWarning("Gobierno contestó {Estado} ({Codigo}) al leer un expediente de la puerta.", (int)res.StatusCode, rechazo?.Codigo ?? "-");
+                return false;
+            }
+            leido = await res.Content.ReadFromJsonAsync<ExpedienteLeido>(Json, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException && !ct.IsCancellationRequested)
+        {
+            _log.LogWarning("Gobierno no respondió al leer un expediente de la puerta: {Motivo}", ex.Message);
+            return false;
+        }
+        if (leido is null || string.IsNullOrWhiteSpace(leido.Estado)) return false;
+
+        await _expedientes.AlDiaConElProcesoAsync(radicacion, new ProcesoDelExpediente(leido.Estado,
+            (leido.Historia ?? []).Select(p => new PasoDelProceso(p.Transicion, p.Hacia, $"{p.PorKind}:{p.PorId}", p.Nota, p.En)).ToList()), ct)
+            .ConfigureAwait(false);
+        return true;
     }
 
     private ResultadoDelExpediente? NoDisponible()
@@ -222,4 +293,10 @@ public sealed class ArtefactoDelExpediente
     internal sealed record TramiteLeido(string Kind, string Id);
 
     internal sealed record DineroLeido(decimal Amount, string Currency);
+
+    // Lo que lee del expediente (ExpedienteDeGobiernoResponse, de la lectura fuera de la puerta).
+
+    internal sealed record ExpedienteLeido(string Radicacion, string Estado, IReadOnlyList<PasoLeido>? Historia);
+
+    internal sealed record PasoLeido(string Transicion, string Hacia, string PorKind, string PorId, string? Nota, DateTimeOffset En);
 }

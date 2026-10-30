@@ -48,6 +48,38 @@ public sealed class ConsumidorCmsDeBffGobiernoTests
         => LoQueLeeEstaEn(typeof(ArtefactoDelExpediente.RadicacionLeida), Esquema("GobiernoRadicacionRespuesta"), "GobiernoRadicacionRespuesta");
 
     /// <summary>
+    /// Poner al día un expediente de la puerta (T040) lee <c>ReadTramiteCase</c>, fuera de la puerta, con el sujeto del
+    /// ciudadano que el contrato declara opcional (sin él, la cara del funcionario).
+    /// </summary>
+    [Fact]
+    public async Task Poner_al_dia_un_expediente_lee_ReadTramiteCase_con_el_sujeto_opcional()
+    {
+        var orquestador = new ArtefactoDelExpedienteTests.OrquestadorDeGobiernoFalso();
+        var (artefacto, _) = ArtefactoDelExpedienteTests.Nuevo(orquestador);
+
+        await artefacto.AlDiaAsync("rad-1", ArtefactoDelExpedienteTests.Ana, default);
+
+        Assert.Equal("GET /v1/expedientes/rad-1", Assert.Single(orquestador.Rutas));
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/expedientes/{radicacion}").GetProperty("get");
+        Assert.Equal("ReadTramiteCase", op.GetProperty("operationId").GetString());
+        Assert.False(op.TryGetProperty("x-synergos-flujo", out _));
+        var sujeto = Assert.Single(op.GetProperty("parameters").EnumerateArray(),
+            p => p.GetProperty("in").GetString() == "header" && p.GetProperty("name").GetString() == "X-Synergos-Sujeto");
+        Assert.False(sujeto.TryGetProperty("required", out var requerida) && requerida.GetBoolean());
+        Assert.EndsWith("/ExpedienteDeGobiernoResponse",
+            op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json")
+                .GetProperty("schema").GetProperty("$ref").GetString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>Lo que lee del expediente y de cada paso de su historia (una lista: se cruza aparte).</summary>
+    [Fact]
+    public void Cada_campo_que_lee_el_artefacto_lo_publica_la_respuesta_del_expediente()
+    {
+        LoQueLeeEstaEn(typeof(ArtefactoDelExpediente.ExpedienteLeido), Esquema("ExpedienteDeGobiernoResponse"), "ExpedienteDeGobiernoResponse");
+        LoQueLeeEstaEn(typeof(ArtefactoDelExpediente.PasoLeido), Esquema("PasoDelExpedienteResponse"), "PasoDelExpedienteResponse");
+    }
+
+    /// <summary>
     /// Lo que manda el publicador al publicar un trámite cabe en <c>PublishTramiteOffer</c> (T034): un campo renombrado
     /// —<c>tramiteId</c> por <c>tramite</c>— lo rechazaría el orquestador y el trámite no se radicaría por la puerta.
     /// </summary>

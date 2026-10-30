@@ -5,6 +5,104 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/expedientes/{radicacion}": {
+      "get": {
+        "operationId": "ReadTramiteCase",
+        "parameters": [
+          {
+            "name": "radicacion",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Synergos-Sujeto",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "x-synergos-puerta": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpedienteDeGobiernoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/flujos/compensaciones": {
       "get": {
         "operationId": "FlujosCompensaciones",
@@ -2629,6 +2727,36 @@
           }
         }
       },
+      "ExpedienteDeGobiernoResponse": {
+        "required": [
+          "radicacion",
+          "expediente",
+          "proceso",
+          "estado",
+          "historia"
+        ],
+        "type": "object",
+        "properties": {
+          "radicacion": {
+            "type": "string"
+          },
+          "expediente": {
+            "type": "string"
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "historia": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasoDelExpedienteResponse"
+            }
+          }
+        }
+      },
       "GobiernoDecisionEntrada": {
         "required": [
           "radicacion",
@@ -3289,6 +3417,45 @@
           },
           "hasMore": {
             "type": "boolean"
+          }
+        }
+      },
+      "PasoDelExpedienteResponse": {
+        "required": [
+          "transicion",
+          "desde",
+          "hacia",
+          "porKind",
+          "porId",
+          "nota",
+          "en"
+        ],
+        "type": "object",
+        "properties": {
+          "transicion": {
+            "type": "string"
+          },
+          "desde": {
+            "type": "string"
+          },
+          "hacia": {
+            "type": "string"
+          },
+          "porKind": {
+            "type": "string"
+          },
+          "porId": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "en": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

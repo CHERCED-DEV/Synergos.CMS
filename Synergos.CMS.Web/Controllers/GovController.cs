@@ -341,11 +341,32 @@ public sealed class GovController : ControllerBase
     }
 
     /// <summary>
-    /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura: nunca falla hacia quien lee, y
-    /// sin artefacto no hace nada.
+    /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura, y pone al día con su proceso lo
+    /// confirmado (T040): nunca falla hacia quien lee, y sin artefacto no hace nada.
     /// </summary>
-    private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, CancellationToken cancellationToken)
-        => _artefacto?.ReconciliarAsync(lasQueTocan, cancellationToken) ?? Task.CompletedTask;
+    /// <param name="ciudadano">La cara del ciudadano dueño, o nula para la del funcionario.</param>
+    private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, Guid? ciudadano, CancellationToken cancellationToken)
+        => _artefacto?.ReconciliarAsync(lasQueTocan, ciudadano, cancellationToken) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Pone al día con su proceso un expediente de la puerta antes de mostrarlo, y lo devuelve como quedó; si el
+    /// orquestador no contesta, lo último que se sabe y <c>alDia</c> en falso. Uno de la ruta directa pasa tal cual.
+    /// </summary>
+    private async Task<(CaseDetail Detail, bool AlDia)> AlDiaDeLaPuertaAsync(CaseDetail detail, Guid? ciudadano, CancellationToken cancellationToken)
+    {
+        if (detail.Camino != CaminoDelExpediente.Puerta || detail.Radicacion is not { } radicacion) return (detail, true);
+        if (_artefacto is null || !await _artefacto.AlDiaAsync(radicacion, ciudadano, cancellationToken)) return (detail, false);
+        return (await _tracking.GetCaseAsync(detail.CaseId, cancellationToken) ?? detail, true);
+    }
+
+    /// <summary>
+    /// Un expediente de la puerta se lleva por la puerta: su proceso es la instancia que arrancó el orquestador, y un
+    /// acto por la ruta directa movería otra (la del CMS) y separaría lo que ve el portal de lo que dice el proceso.
+    /// </summary>
+    private IActionResult? DenyIfDeLaPuerta(CaseDetail detail)
+        => detail.Camino == CaminoDelExpediente.Puerta
+            ? Conflict(new { error = "Este expediente se lleva por la puerta: el acto va por allí.", code = "gov.expediente_de_la_puerta" })
+            : null;
 
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
@@ -390,7 +411,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, actorKey, cancellationToken);
         var items = await _tracking.ListForMemberAsync(actorKey, cancellationToken);
         return Ok(new ApplicationsResponse(items.Select(ToApplicationSummaryFromInbox).ToList()));
     }
@@ -403,7 +424,7 @@ public sealed class GovController : ControllerBase
         var (denied, actorKey) = RequireMember();
         if (denied is not null) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(e => e.Dueno == actorKey, actorKey, cancellationToken);
         var detail = await _tracking.GetCaseAsync(id ?? string.Empty, cancellationToken);
         if (detail is null)
         {
@@ -413,7 +434,8 @@ public sealed class GovController : ControllerBase
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
 
-        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(detail, cancellationToken)));
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, actorKey, cancellationToken);
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
     // ── 6 bis. Subsanar (el ciudadano dueño) ────────────────────────────
@@ -440,6 +462,7 @@ public sealed class GovController : ControllerBase
 
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
+        if (DenyIfDeLaPuerta(detail) is { } porLaPuerta) { return porLaPuerta; }
 
         CaseDetail updated;
         try
@@ -457,14 +480,15 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(updated, cancellationToken)));
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     /// <summary>El expediente hacia su dueño: la lectura y lo que devuelve subsanar son lo mismo.</summary>
-    private async Task<ApplicationDetailDto> ToApplicationDetailDtoAsync(CaseDetail detail, CancellationToken cancellationToken)
+    /// <param name="alDia">Si el expediente de la puerta se pudo poner al día con su proceso; en uno directo no cuenta.</param>
+    private async Task<ApplicationDetailDto> ToApplicationDetailDtoAsync(CaseDetail detail, bool alDia, CancellationToken cancellationToken)
     {
         var messages = await LoadMessagesAsync(detail, cancellationToken);
-        var (actions, stale) = await AccionesAsync(detail.CaseId, CaseRoles.Ciudadano, cancellationToken);
+        var (actions, stale) = await AccionesAsync(detail, CaseRoles.Ciudadano, alDia, cancellationToken);
         return new ApplicationDetailDto(
             Id: detail.CaseId,
             Reference: detail.Radicado,
@@ -479,7 +503,9 @@ public sealed class GovController : ControllerBase
             Actions: actions,
             FeeMinor: ToFeeMinor(detail.FeeMinor, detail.Currency),
             FeeStatus: ToFeeStatusSlug(detail.FeeStatus),
-            Stale: stale);
+            Stale: stale,
+            FilingPath: detail.Camino ?? CaminoDelExpediente.Directa,
+            FilingId: detail.Radicacion);
     }
 
     // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
@@ -611,7 +637,7 @@ public sealed class GovController : ControllerBase
     {
         if (RequireOfficer() is { } denied) { return denied; }
 
-        await ReconciliarDeLaPuertaAsync(_ => true, cancellationToken);
+        await ReconciliarDeLaPuertaAsync(_ => true, null, cancellationToken);
         var cases = await _tracking.GetQueueAsync(agency, status, cancellationToken);
         return Ok(new QueueResponse(cases.Select(ToQueueDto).ToList()));
     }
@@ -630,7 +656,8 @@ public sealed class GovController : ControllerBase
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(detail, cancellationToken)));
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, null, cancellationToken);
+        return Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
     // ── 9 bis. Tomar el expediente (funcionario) ────────────────────────
@@ -653,6 +680,7 @@ public sealed class GovController : ControllerBase
         {
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
+        if (DenyIfDeLaPuerta(detail) is { } porLaPuerta) { return porLaPuerta; }
 
         CaseDetail updated;
         try
@@ -670,7 +698,7 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     // ── 10. Decisión del funcionario (máquina de estados auditada) ──────
@@ -685,6 +713,11 @@ public sealed class GovController : ControllerBase
         if (request is null || string.IsNullOrWhiteSpace(request.CaseId) || string.IsNullOrWhiteSpace(request.Outcome))
         {
             return BadRequest(new { error = "caseId y outcome (approve | reject | request-info) son requeridos." });
+        }
+        if (await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken) is { } target
+            && DenyIfDeLaPuerta(target) is { } porLaPuerta)
+        {
+            return porLaPuerta;
         }
 
         CaseDetail updated;
@@ -703,7 +736,7 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     // ══════════════════════ ACTOS NOTIFICADOS (HU #62) ══════════════════════
@@ -1007,14 +1040,14 @@ public sealed class GovController : ControllerBase
     // El detalle del funcionario muestra las respuestas con su ETIQUETA humana (no el
     // fieldId), resolviéndolas contra la definición del formulario del trámite. Si el
     // trámite ya no existe en el catálogo, cae al fieldId como etiqueta.
-    private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, CancellationToken cancellationToken)
+    private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, bool alDia, CancellationToken cancellationToken)
     {
         var labels = await ResolveFieldLabelsAsync(c.TramiteId, cancellationToken);
         // Lo que el funcionario necesita ver del expediente no es que se notificó, es si el
         // ciudadano ABRIÓ — y con qué se afirmó que era él. Es lo único que la entidad puede
         // sostener el día que alguien recurre tarde.
         var notificaciones = await _notifications.GetForCaseAsync(c.CaseId, cancellationToken);
-        var (actions, stale) = await AccionesAsync(c.CaseId, CaseRoles.Funcionario, cancellationToken);
+        var (actions, stale) = await AccionesAsync(c, CaseRoles.Funcionario, alDia, cancellationToken);
         return new CaseDto(
             Application: new CaseApplicationDto(
                 Id: c.CaseId,
@@ -1025,7 +1058,9 @@ public sealed class GovController : ControllerBase
                 SubmittedAt: c.RadicadoAt,
                 CurrentStage: c.CurrentStage,
                 FeeMinor: ToFeeMinor(c.FeeMinor, c.Currency),
-                FeeStatus: ToFeeStatusSlug(c.FeeStatus)),
+                FeeStatus: ToFeeStatusSlug(c.FeeStatus),
+                FilingPath: c.Camino ?? CaminoDelExpediente.Directa,
+                FilingId: c.Radicacion),
             Answers: c.FormData
                 .Select(kv => new AnswerDto(labels.GetValueOrDefault(kv.Key, kv.Key), kv.Value))
                 .ToList(),
@@ -1045,17 +1080,28 @@ public sealed class GovController : ControllerBase
     /// <c>stale</c> si no se pudo consultar.
     /// </summary>
     /// <remarks>
-    /// La consola y el portal pintan sólo esto, en vez de la lista fija que ofrecía tres acciones
+    /// <para>La consola y el portal pintan sólo esto, en vez de la lista fija que ofrecía tres acciones
     /// que la capacidad rechazaba. Con la capacidad de procesos caída no se ofrece nada de una
     /// tabla local (FR-012), y <c>stale</c> lo DICE: lo que se ve es lo último que el CMS sabe y
-    /// no hay acciones ahora. Sin esa marca, «sin botones» se leería como «no hay nada que hacer».
+    /// no hay acciones ahora. Sin esa marca, «sin botones» se leería como «no hay nada que hacer».</para>
+    ///
+    /// <para><b>Un expediente de la puerta</b> sigue la v2 que arrancó el orquestador (T040): sus acciones son las de esa
+    /// tabla —la del motor en proceso, que el gate cruza con la v2 publicada— desde el estado que acaba de decir el
+    /// proceso, o ninguna y <c>stale</c> si el orquestador no contestó (US6-4).</para>
     /// </remarks>
+    /// <param name="alDia">Si el expediente de la puerta se pudo poner al día con su proceso.</param>
     private async Task<(IReadOnlyList<string> Actions, bool Stale)> AccionesAsync(
-        string caseId, string role, CancellationToken cancellationToken)
+        CaseDetail c, string role, bool alDia, CancellationToken cancellationToken)
     {
+        if (c.Camino == CaminoDelExpediente.Puerta)
+        {
+            return alDia
+                ? (AccionesDelExpediente.Calcular(StubCaseWorkflowService.Proceso, StubCaseWorkflowService.EstadosFinales, GovStatusSlugs.ToSlug(c.Status), role), false)
+                : (Array.Empty<string>(), true);
+        }
         try
         {
-            return ((await _workflow.ActionsAsync(caseId, role, cancellationToken)).ToList(), false);
+            return ((await _workflow.ActionsAsync(c.CaseId, role, cancellationToken)).ToList(), false);
         }
         catch (InvalidOperationException)
         {
@@ -1335,7 +1381,9 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<string> Actions,
         long FeeMinor = 0,
         string? FeeStatus = null,
-        bool Stale = false);
+        bool Stale = false,
+        string FilingPath = CaminoDelExpediente.Directa,
+        string? FilingId = null);
 
     public sealed record ApplicationDetailResponse(ApplicationDetailDto Application);
 
@@ -1364,7 +1412,9 @@ public sealed class GovController : ControllerBase
         DateTimeOffset SubmittedAt,
         string CurrentStage,
         long FeeMinor = 0,
-        string? FeeStatus = null);
+        string? FeeStatus = null,
+        string FilingPath = CaminoDelExpediente.Directa,
+        string? FilingId = null);
 
     public sealed record AnswerDto(string Label, string Value);
 
