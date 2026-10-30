@@ -35,10 +35,10 @@ public sealed class MetricaDeLaCompraDeTiendaTests(ITestOutputHelper salida)
     private static readonly string[] DeLaOferta = ["Domain/OfertaDeTienda.cs"];
 
     /// <summary>
-    /// El despacho del personal (013-seller-operaciones): los pasos interinos de NS-1. No es del caso común de declarar la
-    /// compra: lo mide la SC-007 de 013, atribuido a NS-1.
+    /// El despacho del personal (013-seller-operaciones): sus dos flujos posteriores y los pasos interinos de NS-1. No es del
+    /// caso común de declarar la compra: lo mide la SC-007 de 013, con los pasos atribuidos a NS-1.
     /// </summary>
-    private static readonly string[] DelDespacho = ["Domain/PasosDelEnvio.cs"];
+    private static readonly string[] DelDespacho = ["Domain/PasosDelEnvio.cs", "flujos/tienda.envio.json", "flujos/tienda.entrega.json"];
 
     private static readonly string[] DelMotorImperativo =
     [

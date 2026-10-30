@@ -223,6 +223,25 @@ internal sealed class CompraDeTiendaReal : IDisposable
         return Enviar(peticion);
     }
 
+    /// <summary>
+    /// Marcar enviado el pedido de una compra (013-seller-operaciones, US 2): el flujo posterior <c>tienda.envio</c>, del
+    /// personal, como lo abre la puerta del CMS desde la consola; la guía, si va, es la nota del envío.
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> EnviarElPedido(string compra, string? guia, string llave, string personal = "staff-1")
+        => DelPersonal("tienda.envio", new { compra, guia }, llave, personal);
+
+    /// <summary>Marcar entregado el pedido de una compra: el flujo posterior <c>tienda.entrega</c>, del personal.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> EntregarElPedido(string compra, string llave, string personal = "staff-1")
+        => DelPersonal("tienda.entrega", new { compra }, llave, personal);
+
+    private Task<(HttpStatusCode Estado, JsonElement Cuerpo)> DelPersonal(string flujo, object cuerpo, string llave, string personal)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/{flujo}") { Content = JsonContent.Create(cuerpo) };
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, $"tienda.personal:{personal}");
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion);
+    }
+
     /// <summary>Un monto en el cuerpo, como lo lee el tipo <c>dinero</c>.</summary>
     public static object Pesos(decimal monto, string moneda = "COP") => new { amount = monto, currency = moneda };
 

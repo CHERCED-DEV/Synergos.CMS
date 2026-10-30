@@ -1,0 +1,25 @@
+{
+  "clave": "tienda.envio",
+  "posterior_a": "tienda.compra",
+  "acceso": "personal",
+  "entrada": ["personal", "compra", "guia"],
+  "tipos": {
+    "personal": { "de": "sujeto" },
+    "compra": "texto",
+    "guia": "texto?",
+    "envio": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["compra", "estadoDelEnvio"],
+  "fases": {
+    "abrir": ["original", "en-camino"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["compra"], "escribe": ["envio"] },
+    "en-camino": {
+      "tipo": "tienda.envio-en-camino",
+      "lee": ["envio", "guia"],
+      "escribe": ["estadoDelEnvio"],
+      "motivo": "no se pudo marcar el envío en camino"
+    }
+  }
+}
