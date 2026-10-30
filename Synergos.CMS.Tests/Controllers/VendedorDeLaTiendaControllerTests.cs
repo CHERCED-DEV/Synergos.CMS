@@ -12,6 +12,7 @@ using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Catalog;
 using Synergos.CMS.Web.Services.Puerta;
 
 namespace Synergos.CMS.Tests.Controllers;
@@ -109,10 +110,32 @@ public sealed class VendedorDeLaTiendaControllerTests
             motor.GetOrderAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(c => ordenes.UnaAsync(c.ArgAt<string>(0)));
             Devoluciones = new StubReturnService(motor, null, () => Reloj, Almacen);
 
+            // El catálogo: el mismo seam que GET search, con los productos que diga cada prueba.
+            Catalogo = Substitute.For<IProductCatalogProvider>();
+            Catalogo.SearchAsync(Arg.Any<ProductQuery>(), Arg.Any<CancellationToken>()).Returns(c =>
+            {
+                var q = c.Arg<ProductQuery>();
+                return new ProductSearchResult(Productos.Skip(q.Skip).Take(q.Take).ToList(), [], Productos.Count);
+            });
+            var enElContenido = Substitute.For<ITiendaEnElContenido>();
+            enElContenido.SkusReservables().Returns(_ => Reservables);
+            Precios = precios;
+            Gate = gate;
+
             Controlador = new VendedorDeLaTiendaController(
                 new PedidosDeLaTienda(ordenes, Seguimiento, puerta), registro, despachos, Seguimiento, auditoria, Devoluciones,
-                ordenes, gate, precios, tienda);
+                ordenes, Catalogo, enElContenido, gate, precios, tienda);
         }
+
+        public IProductCatalogProvider Catalogo { get; }
+        public IPriceFormatter Precios { get; }
+        public IMemberAccessGate Gate { get; }
+
+        /// <summary>Los productos del catálogo, en su orden.</summary>
+        public List<CatalogProductSummary> Productos { get; } = [];
+
+        /// <summary>Los SKU de las fichas reservables de la tienda.</summary>
+        public HashSet<string> Reservables { get; } = new(StringComparer.Ordinal);
 
         public StubReturnService Devoluciones { get; }
 
@@ -612,5 +635,68 @@ public sealed class VendedorDeLaTiendaControllerTests
         Assert.IsType<UnauthorizedObjectResult>(await new Tienda(sesion: false).Controlador.Devoluciones());
         Assert.Equal(403, Assert.IsType<StatusCodeResult>(await new Tienda(roles: "editor").Controlador.Devoluciones()).StatusCode);
         Assert.Equal(0, Cuerpo(await new Tienda().Controlador.Devoluciones()).GetProperty("devoluciones").GetArrayLength());
+    }
+    // ── Las publicaciones (T026) ─────────────────────────────────────────────────────────────
+
+    private static CatalogProductSummary Producto(string id, string nombre, decimal precio, int existencias)
+        => new(id, nombre, precio, "COP", "Marca", "Hogar", null, 4.5, 3, existencias);
+
+    [Fact]
+    public async Task Las_publicaciones_dicen_lo_mismo_que_la_busqueda_del_comprador()
+    {
+        var t = new Tienda();
+        t.Productos.AddRange([Producto("taza", "Taza de cerámica", 27_000m, 12), Producto("funda", "Funda de silicona", 15_000m, 3)]);
+        var busqueda = new ShopCatalogController(
+            t.Catalogo, Substitute.For<IShopOrderService>(), t.Precios, Substitute.For<IUserCollection>(), t.Seguimiento,
+            t.Devoluciones, Substitute.For<IMessagingService>(), t.Gate, Substitute.For<IShopQuery>(),
+            Substitute.For<ICatalogSocialProof>(), null, Options.Create(new ListadosSettings()));
+
+        var delComprador = Cuerpo(await busqueda.Search(null, null, null, null, null, null, null, default)).GetProperty("products");
+        var delPersonal = Cuerpo(await t.Controlador.Publicaciones()).GetProperty("publicaciones");
+
+        Assert.Equal(
+            delComprador.EnumerateArray().Select(p => (p.GetProperty("id").GetString(), p.GetProperty("title").GetString(),
+                p.GetProperty("priceFormatted").GetString(), p.GetProperty("stock").GetInt32())),
+            delPersonal.EnumerateArray().Select(p => (p.GetProperty("id").GetString(), p.GetProperty("titulo").GetString(),
+                p.GetProperty("precioFormatted").GetString(), p.GetProperty("existencias").GetInt32())));
+    }
+
+    [Fact]
+    public async Task Cada_publicacion_dice_si_esta_a_la_venta_agotada_o_es_reservable()
+    {
+        var t = new Tienda();
+        t.Productos.AddRange([Producto("taza", "Taza", 27_000m, 12), Producto("funda", "Funda", 15_000m, 0), Producto("asesoria", "Asesoría", 80_000m, 0)]);
+        t.Reservables.Add("asesoria");
+
+        var cuerpo = Cuerpo(await t.Controlador.Publicaciones());
+
+        Assert.Equal(["publicaciones", "pagina", "porPagina", "total"], Claves(cuerpo));
+        var lista = cuerpo.GetProperty("publicaciones");
+        Assert.Equal(["id", "sku", "titulo", "precio", "precioFormatted", "moneda", "existencias", "estado"], Claves(lista[0]));
+        Assert.Equal(["a-la-venta", "agotada", "reservable"], lista.EnumerateArray().Select(p => p.GetProperty("estado").GetString()!).ToArray());
+        Assert.Equal(("taza", "$ 27.000", 12), (lista[0].GetProperty("sku").GetString(), lista[0].GetProperty("precioFormatted").GetString(),
+            lista[0].GetProperty("existencias").GetInt32()));
+    }
+
+    [Fact]
+    public async Task Las_publicaciones_van_de_a_50_y_sin_productos_la_lista_es_vacia()
+    {
+        var t = new Tienda();
+        Assert.Equal(0, Cuerpo(await t.Controlador.Publicaciones()).GetProperty("publicaciones").GetArrayLength());
+
+        t.Productos.AddRange(Enumerable.Range(1, 51).Select(i => Producto($"p-{i}", $"Producto {i}", 1_000m, 1)));
+        var segunda = Cuerpo(await t.Controlador.Publicaciones(pagina: 2));
+
+        Assert.Equal((2, 50, 51, 1),
+            (segunda.GetProperty("pagina").GetInt32(), segunda.GetProperty("porPagina").GetInt32(), segunda.GetProperty("total").GetInt32(),
+             segunda.GetProperty("publicaciones").GetArrayLength()));
+        Assert.Equal("p-51", segunda.GetProperty("publicaciones")[0].GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task Las_publicaciones_tienen_la_guarda_del_personal()
+    {
+        Assert.IsType<UnauthorizedObjectResult>(await new Tienda(sesion: false).Controlador.Publicaciones());
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(await new Tienda(roles: "editor").Controlador.Publicaciones()).StatusCode);
     }
 }

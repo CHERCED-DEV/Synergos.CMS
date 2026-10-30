@@ -4,6 +4,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -49,8 +50,13 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
     private readonly DespachosDeLaPuerta _despachos;
     private readonly IOrderTrackingService _seguimiento;
     private readonly IAuditTrailWriter _auditoria;
+    /// <summary>Cuántas publicaciones trae una página.</summary>
+    public const int PublicacionesPorPagina = 50;
+
     private readonly IReturnService _devoluciones;
     private readonly OrdenesDeLaTienda _ordenes;
+    private readonly IProductCatalogProvider _catalogo;
+    private readonly ITiendaEnElContenido _tiendaEnElContenido;
     private readonly IMemberAccessGate _gate;
     private readonly IPriceFormatter _precios;
     private readonly IOptionsMonitor<TiendaSettings>? _tienda;
@@ -58,7 +64,8 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
     public VendedorDeLaTiendaController(
         PedidosDeLaTienda pedidos, RegistroDeComprasDeLaTienda registro, DespachosDeLaPuerta despachos,
         IOrderTrackingService seguimiento, IAuditTrailWriter auditoria, IReturnService devoluciones, OrdenesDeLaTienda ordenes,
-        IMemberAccessGate gate, IPriceFormatter precios, IOptionsMonitor<TiendaSettings>? tienda = null)
+        IProductCatalogProvider catalogo, ITiendaEnElContenido tiendaEnElContenido, IMemberAccessGate gate, IPriceFormatter precios,
+        IOptionsMonitor<TiendaSettings>? tienda = null)
     {
         _pedidos = pedidos;
         _registro = registro;
@@ -67,6 +74,8 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         _auditoria = auditoria;
         _devoluciones = devoluciones;
         _ordenes = ordenes;
+        _catalogo = catalogo;
+        _tiendaEnElContenido = tiendaEnElContenido;
         _gate = gate;
         _precios = precios;
         _tienda = tienda;
@@ -180,6 +189,28 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
         }).ToList()));
     }
 
+    /// <summary>
+    /// Las publicaciones de la tienda (T026, R8): las fichas como las ve el comprador —el mismo
+    /// <see cref="IProductCatalogProvider"/> que <c>GET search</c>—, de a <see cref="PublicacionesPorPagina"/>, con su estado:
+    /// a la venta, agotada (sin existencias) o reservable (un servicio por cita, que no se vende en el carrito, FR-026 de
+    /// 004). No publica ni edita: eso es del backoffice (S-1).
+    /// </summary>
+    [HttpGet("products")]
+    public async Task<IActionResult> Publicaciones([FromQuery] int pagina = 1, CancellationToken ct = default)
+    {
+        if (RequirePersonal() is { } denegado) return denegado;
+
+        pagina = Math.Max(1, pagina);
+        var desde = (int)Math.Min((long)(pagina - 1) * PublicacionesPorPagina, int.MaxValue);
+        var resultado = await _catalogo.SearchAsync(new ProductQuery(Skip: desde, Take: PublicacionesPorPagina), ct);
+        var reservables = _tiendaEnElContenido.SkusReservables();
+        return Ok(new PublicacionesDto(
+            resultado.Products.Select(p => new PublicacionDto(
+                p.Id, p.Id, p.Name, p.Price, _precios.Format(p.Price, p.Currency), p.Currency, p.Stock,
+                reservables.Contains(p.Id) ? "reservable" : p.Stock > 0 ? "a-la-venta" : "agotada")).ToList(),
+            pagina, PublicacionesPorPagina, resultado.Total));
+    }
+
     /// <summary>Un rechazo del despacho, con su código: lo transitorio es 503, y lo demás 409 (o la guarda de la puerta).</summary>
     private ObjectResult Rechazo(DespachoDeLaPuerta despacho) => StatusCode(
         despacho.Transitorio
@@ -266,6 +297,16 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
 
     /// <summary>La cola de devoluciones de la tienda, en su orden.</summary>
     public sealed record DevolucionesDto(IReadOnlyList<DevolucionDto> Devoluciones);
+
+    /// <summary>
+    /// Una publicación de la tienda, como la ve el comprador. <c>estado</c>: <c>a-la-venta</c>, <c>agotada</c> o
+    /// <c>reservable</c>.
+    /// </summary>
+    public sealed record PublicacionDto(
+        string Id, string Sku, string Titulo, decimal Precio, string PrecioFormatted, string Moneda, int Existencias, string Estado);
+
+    /// <summary>Una página de las publicaciones de la tienda.</summary>
+    public sealed record PublicacionesDto(IReadOnlyList<PublicacionDto> Publicaciones, int Pagina, int PorPagina, int Total);
 
     /// <summary>El cuerpo del acto: <c>preparar</c>, <c>enviar</c> o <c>entregar</c>, y la guía, sólo al enviar.</summary>
     public sealed record ActoDelPedidoDto(string? Acto, string? Guia);
