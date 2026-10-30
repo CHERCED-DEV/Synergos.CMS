@@ -60,7 +60,7 @@ public sealed class VendedorDeLaTiendaControllerTests
         /// <summary>Lo que el controlador asentó en la auditoría.</summary>
         public List<AuditEvent> Asientos { get; } = [];
 
-        public Tienda(bool sesion = true, string? roles = "admin", List<string>? rolesDelPersonal = null)
+        public Tienda(bool sesion = true, string? roles = "admin", List<string>? rolesDelPersonal = null, string zona = "America/Bogota")
         {
             Seguimiento = new StubOrderTrackingService(null, () => T0, Almacen, "tracking-shop");
             Libro = new LibroDeComprasDeLaPuerta(Almacen, Seguimiento, null, () => T0);
@@ -124,7 +124,14 @@ public sealed class VendedorDeLaTiendaControllerTests
 
             Controlador = new VendedorDeLaTiendaController(
                 new PedidosDeLaTienda(ordenes, Seguimiento, puerta), registro, despachos, Seguimiento, auditoria, Devoluciones,
-                ordenes, Catalogo, enElContenido, gate, precios, tienda);
+                ordenes, Catalogo, enElContenido, gate, precios, tienda, new RelojDeLaTienda(this),
+                Options.Create(new ListadosSettings { ZonaHoraria = zona }), Options.Create(new CartSettings()));
+        }
+
+        /// <summary>El reloj del controlador: el mismo que el de las devoluciones.</summary>
+        private sealed class RelojDeLaTienda(Tienda tienda) : TimeProvider
+        {
+            public override DateTimeOffset GetUtcNow() => tienda.Reloj;
         }
 
         public IProductCatalogProvider Catalogo { get; }
@@ -698,5 +705,69 @@ public sealed class VendedorDeLaTiendaControllerTests
     {
         Assert.IsType<UnauthorizedObjectResult>(await new Tienda(sesion: false).Controlador.Publicaciones());
         Assert.Equal(403, Assert.IsType<StatusCodeResult>(await new Tienda(roles: "editor").Controlador.Publicaciones()).StatusCode);
+    }
+    // ── El panel (T028) ──────────────────────────────────────────────────────────────────────
+
+    private static Dictionary<string, JsonElement> Indicadores(JsonElement resumen)
+        => resumen.GetProperty("indicadores").EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!, i => i);
+
+    [Fact]
+    public async Task El_panel_cuenta_lo_vendido_lo_devuelto_y_lo_que_espera_sin_restar_las_devoluciones()
+    {
+        var t = new Tienda();
+        // Octubre: dos pagadas (54.000 y 35.000); una de septiembre y una pendiente no cuentan.
+        await t.Directa("dir-1", T0.AddDays(-5), Bogota);
+        await t.Directa("dir-sep", new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero), Bogota);
+        await t.DeLaPuerta("pta-1");
+        await t.DeLaPuerta("pta-pendiente", pagada: false);
+        // Devuelto en octubre: los 54.000 de dir-1, reembolsados; vendido NO los resta.
+        var reembolsada = await t.Devoluciones.RequestAsync("dir-1", "p-1", "Llegó rota");
+        foreach (var paso in new[] { ShopReturnStatus.Approved, ShopReturnStatus.Received, ShopReturnStatus.Refunded })
+        {
+            await t.Devoluciones.AdvanceAsync(reembolsada.RmaId, paso);
+        }
+        // Por atender: una pedida y una recibida.
+        await t.Devoluciones.RequestAsync("pta-1", "p-2", "No era la talla");
+        var recibida = await t.Devoluciones.RequestAsync("dir-sep", "p-1", "Se rompió");
+        await t.Devoluciones.AdvanceAsync(recibida.RmaId, ShopReturnStatus.Approved);
+        await t.Devoluciones.AdvanceAsync(recibida.RmaId, ShopReturnStatus.Received);
+        // Por despachar: las pagadas en «paid» o «preparing»; dir-sep ya salió.
+        await t.Seguimiento.AdvanceAsync("dir-sep", "shipped");
+
+        var cuerpo = Cuerpo(await t.Controlador.Resumen());
+
+        Assert.Equal(["periodo", "indicadores"], Claves(cuerpo));
+        var periodo = cuerpo.GetProperty("periodo");
+        Assert.Equal(("2026-10-01", "2026-10-31", "America/Bogota"),
+            (periodo.GetProperty("desde").GetString(), periodo.GetProperty("hasta").GetString(), periodo.GetProperty("zona").GetString()));
+        var indicadores = Indicadores(cuerpo);
+        Assert.Equal(["vendido", "devuelto", "por-despachar", "por-atender"], indicadores.Keys.ToArray());
+        Assert.Equal((89_000m, "$ 89.000", "currency"),
+            (indicadores["vendido"].GetProperty("valor").GetDecimal(), indicadores["vendido"].GetProperty("valorFormatted").GetString(),
+             indicadores["vendido"].GetProperty("unidad").GetString()));
+        Assert.Equal((54_000m, "$ 54.000"),
+            (indicadores["devuelto"].GetProperty("valor").GetDecimal(), indicadores["devuelto"].GetProperty("valorFormatted").GetString()));
+        Assert.Equal((2m, "count"), (indicadores["por-despachar"].GetProperty("valor").GetDecimal(), indicadores["por-despachar"].GetProperty("unidad").GetString()));
+        Assert.Equal(2m, indicadores["por-atender"].GetProperty("valor").GetDecimal());
+    }
+
+    [Fact]
+    public async Task El_mes_es_el_de_la_hora_del_sitio_y_no_el_de_UTC()
+    {
+        // Las 23:30 UTC del 30 de septiembre son la 01:30 del 1 de octubre en Madrid: es de octubre.
+        var t = new Tienda(zona: "Europe/Madrid");
+        await t.Directa("dir-borde", new DateTimeOffset(2026, 9, 30, 23, 30, 0, TimeSpan.Zero), Bogota);
+
+        var cuerpo = Cuerpo(await t.Controlador.Resumen());
+
+        Assert.Equal(54_000m, Indicadores(cuerpo)["vendido"].GetProperty("valor").GetDecimal());
+        Assert.Equal("Europe/Madrid", cuerpo.GetProperty("periodo").GetProperty("zona").GetString());
+    }
+
+    [Fact]
+    public async Task El_panel_tiene_la_guarda_del_personal()
+    {
+        Assert.IsType<UnauthorizedObjectResult>(await new Tienda(sesion: false).Controlador.Resumen());
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(await new Tienda(roles: "editor").Controlador.Resumen()).StatusCode);
     }
 }

@@ -60,13 +60,24 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
     private readonly IMemberAccessGate _gate;
     private readonly IPriceFormatter _precios;
     private readonly IOptionsMonitor<TiendaSettings>? _tienda;
+    private readonly TimeProvider _reloj;
+
+    /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>), la del mes del panel. Sin ella, UTC.</summary>
+    private readonly TimeZoneInfo _zona;
+
+    /// <summary>La moneda de la tienda (<c>Synergos:Cart:Currency</c>), la de las sumas del panel.</summary>
+    private readonly string _moneda;
 
     public VendedorDeLaTiendaController(
         PedidosDeLaTienda pedidos, RegistroDeComprasDeLaTienda registro, DespachosDeLaPuerta despachos,
         IOrderTrackingService seguimiento, IAuditTrailWriter auditoria, IReturnService devoluciones, OrdenesDeLaTienda ordenes,
         IProductCatalogProvider catalogo, ITiendaEnElContenido tiendaEnElContenido, IMemberAccessGate gate, IPriceFormatter precios,
-        IOptionsMonitor<TiendaSettings>? tienda = null)
+        IOptionsMonitor<TiendaSettings>? tienda = null, TimeProvider? reloj = null, IOptions<ListadosSettings>? listados = null,
+        IOptions<CartSettings>? carrito = null)
     {
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
+        _moneda = (carrito?.Value ?? new CartSettings()).Currency;
         _pedidos = pedidos;
         _registro = registro;
         _despachos = despachos;
@@ -211,6 +222,53 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
             pagina, PublicacionesPorPagina, resultado.Total));
     }
 
+    /// <summary>
+    /// El panel del personal (T028, R9): lo vendido y lo devuelto en el mes en curso —en la hora del sitio—, y lo que
+    /// espera a alguien: los pedidos por despachar y las devoluciones por atender.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Vendido</b> suma los totales de los pedidos pagados del mes, sin restar las devoluciones: lo devuelto va
+    /// aparte. <b>Devuelto</b> suma lo reembolsado en el mes. <b>Por despachar</b>: los pagados en «paid» y «preparing».
+    /// <b>Por atender</b>: las devoluciones pedidas y las recibidas.</para>
+    ///
+    /// <para><b>Un indicador sin fuente no viene</b>: no hay reputación, y las preguntas sin responder no tienen una fuente
+    /// medida (anotado en la bitácora de 013). Las sumas son en la moneda de la tienda; lo que esté en otra no se
+    /// suma.</para>
+    /// </remarks>
+    [HttpGet("summary")]
+    public async Task<IActionResult> Resumen(CancellationToken ct = default)
+    {
+        if (RequirePersonal() is { } denegado) return denegado;
+
+        var ahora = TimeZoneInfo.ConvertTime(_reloj.GetUtcNow(), _zona);
+        bool EnElMes(DateTimeOffset instante)
+        {
+            var local = TimeZoneInfo.ConvertTime(instante, _zona);
+            return local.Year == ahora.Year && local.Month == ahora.Month;
+        }
+
+        var vendido = (await _ordenes.TodasAsync(ct))
+            .Where(o => o.Status == OrderStatus.Paid && EnElMes(o.CreatedAt) && string.Equals(o.Currency, _moneda, StringComparison.OrdinalIgnoreCase))
+            .Sum(o => o.Total);
+        var casos = await _devoluciones.GetForStoreAsync(ct);
+        var devuelto = casos
+            .Where(c => c.Status == ShopReturnStatus.Refunded && EnElMes(c.UpdatedAt) && string.Equals(c.Currency, _moneda, StringComparison.OrdinalIgnoreCase))
+            .Sum(c => c.RefundAmount);
+        var cuentas = (await _pedidos.BandejaAsync(null, 1, ct)).Cuentas;
+        var porDespachar = cuentas.GetValueOrDefault("paid") + cuentas.GetValueOrDefault("preparing");
+        var porAtender = casos.Count(c => c.Status is ShopReturnStatus.Requested or ShopReturnStatus.Received);
+
+        var primero = new DateOnly(ahora.Year, ahora.Month, 1);
+        return Ok(new ResumenDto(
+            new PeriodoDto(primero, primero.AddMonths(1).AddDays(-1), _zona.Id),
+            [
+                new IndicadorDto("vendido", vendido, _precios.Format(vendido, _moneda), "currency"),
+                new IndicadorDto("devuelto", devuelto, _precios.Format(devuelto, _moneda), "currency"),
+                new IndicadorDto("por-despachar", porDespachar, null, "count"),
+                new IndicadorDto("por-atender", porAtender, null, "count"),
+            ]));
+    }
+
     /// <summary>Un rechazo del despacho, con su código: lo transitorio es 503, y lo demás 409 (o la guarda de la puerta).</summary>
     private ObjectResult Rechazo(DespachoDeLaPuerta despacho) => StatusCode(
         despacho.Transitorio
@@ -307,6 +365,18 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
 
     /// <summary>Una página de las publicaciones de la tienda.</summary>
     public sealed record PublicacionesDto(IReadOnlyList<PublicacionDto> Publicaciones, int Pagina, int PorPagina, int Total);
+
+    /// <summary>El mes del panel, en la zona del sitio.</summary>
+    public sealed record PeriodoDto(DateOnly Desde, DateOnly Hasta, string Zona);
+
+    /// <summary>
+    /// Un indicador del panel. El rótulo lo pone la consola por <c>id</c> (su diccionario); <c>valorFormatted</c> sólo en los
+    /// de plata. <c>unidad</c>: <c>currency</c> o <c>count</c>.
+    /// </summary>
+    public sealed record IndicadorDto(string Id, decimal Valor, string? ValorFormatted, string Unidad);
+
+    /// <summary>El panel del personal.</summary>
+    public sealed record ResumenDto(PeriodoDto Periodo, IReadOnlyList<IndicadorDto> Indicadores);
 
     /// <summary>El cuerpo del acto: <c>preparar</c>, <c>enviar</c> o <c>entregar</c>, y la guía, sólo al enviar.</summary>
     public sealed record ActoDelPedidoDto(string? Acto, string? Guia);
