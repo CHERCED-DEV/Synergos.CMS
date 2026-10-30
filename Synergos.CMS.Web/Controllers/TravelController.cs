@@ -188,7 +188,9 @@ public sealed class TravelController : ControllerBase
             Currency: f.Currency,
             // ADR 0083: la UI exige title (sin él descarta la oferta) y lee subtitle top-level.
             Title: $"{o.Segments[0].Origin} → {o.Segments[^1].Destination}",
-            Subtitle: $"{o.FlightId} · {Escalas(o.Stops)} · {Duracion(o.TotalDurationMinutes)} · {f.FamilyName}",
+            // La familia va como chip y no en el subtítulo: la línea del carrito ya la suma al agregar.
+            Subtitle: $"{o.FlightId} · {Escalas(o.Stops)} · {Duracion(o.TotalDurationMinutes)}",
+            Badges: [f.FamilyName],
             // La UI agrega un vuelo desde su tablero de familias: sin ninguna, no hay qué elegir. Cada oferta ES una
             // tarifa, así que trae la suya, con su código como id (el productRef con que se reserva).
             FareFamilies: [new FareFamilyDto(f.FareCode, f.FamilyName, f.TotalPrice, f.Currency, Ventajas(f))]))).ToList();
@@ -555,7 +557,7 @@ public sealed class TravelController : ControllerBase
         string OfferId, string Product, string FlightId, string Origin, string Destination, int Stops,
         int TotalDurationMinutes, string Cabin, string FamilyName, bool Refundable, bool BaggageIncluded,
         decimal Price, string PriceFormatted, string Currency,
-        string Title, string Subtitle, IReadOnlyList<FareFamilyDto> FareFamilies);
+        string Title, string Subtitle, IReadOnlyList<string> Badges, IReadOnlyList<FareFamilyDto> FareFamilies);
 
     public sealed record FareFamilyDto(string Id, string Label, decimal Amount, string Currency, IReadOnlyList<string> Perks);
 

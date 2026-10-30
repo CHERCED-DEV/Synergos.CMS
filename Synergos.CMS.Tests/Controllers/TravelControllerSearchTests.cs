@@ -59,9 +59,11 @@ public sealed class TravelControllerSearchTests
         var ofertas = Ofertas(await BuildSut().SearchFlight("BOG", "CTG", Ida, Vuelta));
 
         Assert.Equal("BOG → CTG", ofertas[0].GetProperty("title").GetString());
-        Assert.Equal("SYN2200 · Directo · 1h 35m · Economy Básica", ofertas[0].GetProperty("subtitle").GetString());
-        Assert.Equal("SYN2240 · 1 escala · 3h 55m · Economy Básica", ofertas[1].GetProperty("subtitle").GetString());
-        Assert.Equal("SYN2290 · 2 escalas · 5h · Economy Básica", ofertas[2].GetProperty("subtitle").GetString());
+        Assert.Equal("SYN2200 · Directo · 1h 35m", ofertas[0].GetProperty("subtitle").GetString());
+        Assert.Equal("SYN2240 · 1 escala · 3h 55m", ofertas[1].GetProperty("subtitle").GetString());
+        Assert.Equal("SYN2290 · 2 escalas · 5h", ofertas[2].GetProperty("subtitle").GetString());
+        // La familia, como chip: distingue las filas de un mismo vuelo sin repetirse en la línea del carrito.
+        Assert.Equal("Economy Básica", Assert.Single(ofertas[0].GetProperty("badges").EnumerateArray()).GetString());
         Assert.Equal("SYN2200-ECOBAS", ofertas[0].GetProperty("offerId").GetString());
         Assert.Equal("Economy Básica", ofertas[0].GetProperty("familyName").GetString());
     }
