@@ -16,6 +16,18 @@ public sealed record ResultadoDelRegistro(int Estado, string? Codigo = null, str
 /// <summary>Una compra de la puerta del miembro, todavía sin pagar en su orden, con el estado que dice el orquestador.</summary>
 public sealed record CompraPendienteDeLaTienda(string Id, string Numero, decimal Total, string Moneda, string Estado);
 
+/// <summary>A dónde va el envío de una compra de la puerta: lo que el comprador dio al cerrar, y que sólo guarda el envío.</summary>
+public sealed record DestinoDelEnvio(
+    string? Line1, string? Line2, string? City, string? Region, string? PostalCode, string? Country, string? Contact);
+
+/// <summary>Un paso del envío: su estado, su nota (la guía) y cuándo pasó.</summary>
+public sealed record EventoDelEnvio(string Estado, string? Nota, DateTimeOffset Fecha);
+
+/// <summary>El envío de una compra de la puerta, como lo lee el personal para despacharla (013-seller-operaciones, T010).</summary>
+/// <param name="Estado">El de la capacidad: <c>Ready</c>, <c>InTransit</c>, <c>Delivered</c>, <c>Failed</c> o <c>Returned</c>.</param>
+public sealed record EnvioDeLaTienda(
+    string Id, DestinoDelEnvio? Destino, string? Transportadora, string Estado, IReadOnlyList<EventoDelEnvio> Eventos);
+
 /// <summary>
 /// El registro del comprador de la tienda (004-tienda-compra, decisión 004-P2, molde <see cref="ArtefactoDeEventos"/>):
 /// lee la compra de la puerta al orquestador, con el sujeto del miembro de la sesión, y la anota en el libro de
@@ -193,6 +205,47 @@ public sealed class RegistroDeComprasDeLaTienda
     }
 
     /// <summary>
+    /// El envío de una compra de la puerta (013-seller-operaciones, T010): a dónde va, con quién y por dónde ha ido. Lo
+    /// lee del orquestador (<c>GET /v1/envios/{compra}</c>, el interino de NS-2) con el cliente del registro y sin sujeto:
+    /// la ruta no tiene dueño, y el rol del personal lo comprueba quien llama.
+    /// </summary>
+    /// <returns>El envío, o el motivo: 404 <c>tienda.compra_no_encontrada</c> si no hay una compra completada y despachada;
+    /// transitorio si el orquestador o la capacidad de envíos no contestan.</returns>
+    public async Task<(EnvioDeLaTienda? Envio, ResultadoDelRegistro? Fallo)> EnvioAsync(string compra, CancellationToken ct)
+    {
+        if (NoDisponible() is { } cerrado) return (null, cerrado);
+        if (string.IsNullOrWhiteSpace(compra) || Puerta.ReenvioDeLaPuerta.EsSegmentoDePunto(compra)) return (null, SinEnvio());
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"v1/envios/{Uri.EscapeDataString(compra)}");
+        try
+        {
+            using var res = await _clientes.CreateClient(ClientName).SendAsync(req, ct).ConfigureAwait(false);
+            if (res.IsSuccessStatusCode)
+            {
+                var leido = await res.Content.ReadFromJsonAsync<EnvioLeido>(Json, ct).ConfigureAwait(false);
+                return leido?.Envio is null ? (null, Invalida()) : (leido.Envio, null);
+            }
+            if (res.StatusCode == HttpStatusCode.NotFound) return (null, SinEnvio());
+
+            var rechazo = await RechazoDelArbolDeServicios.LeerAsync(res, Json, ct).ConfigureAwait(false);
+            _log.LogWarning("La tienda contestó {Estado} ({Codigo}) al leer el envío de una compra.", (int)res.StatusCode, rechazo?.Codigo ?? "-");
+            return (null, rechazo is { EsTransitorio: true }
+                ? new ResultadoDelRegistro(StatusCodes.Status503ServiceUnavailable, rechazo.Codigo ?? "tienda.envio_no_disponible",
+                    "El envío no se pudo leer ahora.", Transitorio: true)
+                : Invalida());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException && !ct.IsCancellationRequested)
+        {
+            _log.LogWarning("La tienda no respondió al leer el envío de una compra: {Motivo}", ex.Message);
+            return (null, new ResultadoDelRegistro(StatusCodes.Status503ServiceUnavailable, "tienda.orquestador_no_disponible",
+                "El orquestador de la tienda no está disponible.", Transitorio: true));
+        }
+    }
+
+    private static ResultadoDelRegistro SinEnvio()
+        => new(StatusCodes.Status404NotFound, "tienda.compra_no_encontrada", "La compra no tiene un envío que leer.");
+
+    /// <summary>
     /// Concilia una orden pendiente con lo que dice el orquestador: completada, se paga; deshecha o inexistente, se
     /// descarta; en curso, se queda. Si el orquestador contestó por ella (la miró).
     /// </summary>
@@ -312,4 +365,7 @@ public sealed class RegistroDeComprasDeLaTienda
     internal sealed record SujetoLeido(string Kind, string Id);
 
     internal sealed record DineroLeido(decimal Amount, string Currency);
+
+    /// <summary>Lo que el registro lee de <c>EnvioDeLaCompraResponse</c> (<c>LeerEnvioDeLaCompra</c>).</summary>
+    internal sealed record EnvioLeido(string Compra, EnvioDeLaTienda Envio);
 }

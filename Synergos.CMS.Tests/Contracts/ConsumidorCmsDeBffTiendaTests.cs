@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Synergos.CMS.Tests.Services;
@@ -69,6 +70,48 @@ public sealed class ConsumidorCmsDeBffTiendaTests
         Assert.True(llave!.Length <= Cabecera(op).GetProperty("schema").GetProperty("maxLength").GetInt32());
         Assert.False(op.TryGetProperty("requestBody", out _));
         Assert.Equal("", cuerpo);
+    }
+
+    /// <summary>
+    /// Lo que el registro lee del envío de una compra (013-seller-operaciones, T010) existe en la respuesta de
+    /// <c>LeerEnvioDeLaCompra</c>: un campo renombrado en el orquestador —<c>destino</c> por <c>destination</c>— se
+    /// quedaría en nulo en silencio y el personal despacharía sin saber a dónde.
+    /// </summary>
+    [Fact]
+    public void Lo_que_lee_el_registro_del_envio_existe_en_LeerEnvioDeLaCompra()
+    {
+        var op = Raiz.GetProperty("paths").GetProperty("/v1/envios/{compra}").GetProperty("get");
+        Assert.Equal("LeerEnvioDeLaCompra", op.GetProperty("operationId").GetString());
+
+        var malas = new List<string>();
+        Lee(typeof(RegistroDeComprasDeLaTienda.EnvioLeido),
+            op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema"), "$", malas);
+
+        Assert.True(malas.Count == 0, "El registro lee campos que el contrato no publica: " + string.Join(" | ", malas));
+    }
+
+    /// <summary>
+    /// Cada propiedad de <paramref name="tipo"/> existe en <paramref name="esquema"/>, y por dentro de sus registros, con
+    /// el nombre con que viaja: el de <c>JsonPropertyName</c> si lo tiene.
+    /// </summary>
+    private static void Lee(Type tipo, JsonElement esquema, string donde, List<string> malas)
+    {
+        var propiedades = Resolver(esquema).GetProperty("properties");
+        foreach (var p in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var nombre = p.GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()?.Name
+                         ?? JsonNamingPolicy.CamelCase.ConvertName(p.Name);
+            if (!propiedades.TryGetProperty(nombre, out var sub))
+            {
+                malas.Add($"{donde}.{nombre}");
+                continue;
+            }
+            var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+            var (dentro, esq) = t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
+                ? (t.GetGenericArguments()[0], Resolver(sub).GetProperty("items"))
+                : (t, sub);
+            if (dentro.IsClass && dentro.Namespace == typeof(RegistroDeComprasDeLaTienda).Namespace) Lee(dentro, esq, $"{donde}.{nombre}", malas);
+        }
     }
 
     private static JsonElement Cabecera(JsonElement op) => op.GetProperty("parameters").EnumerateArray()

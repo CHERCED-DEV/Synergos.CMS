@@ -319,6 +319,61 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
         Assert.Empty(orquestador.Pedidos);
     }
 
+    // ── El envío de una compra, para el personal (013-seller-operaciones, T010) ─────────────
+
+    /// <summary>Un envío como lo contesta <c>LeerEnvioDeLaCompra</c> (<c>EnvioDeLaCompraResponse</c>).</summary>
+    private const string EnvioDelOrquestador = """
+        {"compra":"pta-compra-1","envio":{"id":"shp_1",
+         "destino":{"line1":"Calle 1 # 2-3","line2":"Apto 4","city":"Bogotá","region":"Cundinamarca","postalCode":"110111","country":"CO","contact":"Ana"},
+         "transportadora":"servientrega","estado":"InTransit",
+         "eventos":[{"estado":"Ready","nota":null,"fecha":"2026-10-25T14:02:11+00:00"},
+                    {"estado":"InTransit","nota":"GUIA-778","fecha":"2026-10-26T09:00:00+00:00"}]}}
+        """;
+
+    [Fact]
+    public async Task El_envio_de_una_compra_se_lee_del_orquestador_sin_sujeto_con_destino_transportadora_y_eventos()
+    {
+        var orquestador = new OrquestadorFalso().ConEnvio(Compra, EnvioDelOrquestador);
+        var (registro, _) = Registro(orquestador);
+
+        var (envio, fallo) = await registro.EnvioAsync(Compra, CancellationToken.None);
+
+        Assert.Null(fallo);
+        Assert.Equal(("shp_1", "servientrega", "InTransit"), (envio!.Id, envio.Transportadora, envio.Estado));
+        Assert.Equal(new DestinoDelEnvio("Calle 1 # 2-3", "Apto 4", "Bogotá", "Cundinamarca", "110111", "CO", "Ana"), envio.Destino);
+        Assert.Equal(["Ready", "InTransit"], envio.Eventos.Select(e => e.Estado).ToArray());
+        Assert.Equal("GUIA-778", envio.Eventos[1].Nota);
+        // Sin sujeto: la ruta no tiene dueño, y el rol del personal lo comprueba quien llama.
+        Assert.Equal($"GET /v1/envios/{Compra} ", Assert.Single(orquestador.Pedidos));
+    }
+
+    [Fact]
+    public async Task Sin_envio_que_leer_es_un_404_y_con_el_orquestador_o_los_envios_caidos_es_transitorio()
+    {
+        var orquestador = new OrquestadorFalso().ConEnvio("pta-caida",
+            """{"code":"guion.caida","detail":"Fulfillment no contesta","transient":true}""", HttpStatusCode.ServiceUnavailable);
+        var (registro, _) = Registro(orquestador);
+
+        var (_, sinEnvio) = await registro.EnvioAsync("pta-sin-envio", CancellationToken.None);
+        var (_, caida) = await registro.EnvioAsync("pta-caida", CancellationToken.None);
+
+        Assert.Equal((404, "tienda.compra_no_encontrada"), (sinEnvio!.Estado, sinEnvio.Codigo));
+        Assert.Equal((503, "guion.caida", true), (caida!.Estado, caida.Codigo, caida.Transitorio));
+    }
+
+    [Fact]
+    public async Task Sin_destino_la_lectura_del_envio_contesta_503_y_no_sale_a_la_red()
+    {
+        var orquestador = new OrquestadorFalso().ConEnvio(Compra, EnvioDelOrquestador);
+        var (registro, _) = Registro(orquestador, hayDestino: false);
+
+        var (envio, fallo) = await registro.EnvioAsync(Compra, CancellationToken.None);
+
+        Assert.Null(envio);
+        Assert.Equal(503, fallo!.Estado);
+        Assert.Empty(orquestador.Pedidos);
+    }
+
     // ── Lo que lee el registro existe en el contrato publicado ─────────────────────────────
 
     /// <summary>
@@ -420,6 +475,15 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
             return this;
         }
 
+        private readonly Dictionary<string, (HttpStatusCode Estado, string Cuerpo)> _envios = new(StringComparer.Ordinal);
+
+        /// <summary>La lectura del envío de una compra (013, T009): sin sujeto, porque la ruta no tiene dueño.</summary>
+        public OrquestadorFalso ConEnvio(string compra, string cuerpo, HttpStatusCode estado = HttpStatusCode.OK)
+        {
+            _envios[compra] = (estado, cuerpo);
+            return this;
+        }
+
         public HttpClient CreateClient(string name) => new(new Manejador(this)) { BaseAddress = new Uri("http://tienda.local/") };
 
         private sealed class Manejador(OrquestadorFalso o) : HttpMessageHandler
@@ -429,6 +493,13 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
                 var sujeto = r.Headers.TryGetValues("X-Synergos-Sujeto", out var v) ? v.Single() : "";
                 lock (o.Pedidos) o.Pedidos.Add($"{r.Method} {r.RequestUri!.AbsolutePath} {sujeto}");
                 if (o.Retraso > TimeSpan.Zero) await Task.Delay(o.Retraso, ct);
+                if (r.RequestUri.AbsolutePath.StartsWith("/v1/envios/", StringComparison.Ordinal))
+                {
+                    var deLaCompra = Uri.UnescapeDataString(r.RequestUri.AbsolutePath["/v1/envios/".Length..]);
+                    return o._envios.TryGetValue(deLaCompra, out var envio)
+                        ? new HttpResponseMessage(envio.Estado) { Content = new StringContent(envio.Cuerpo, Encoding.UTF8, "application/json") }
+                        : new HttpResponseMessage(HttpStatusCode.NotFound);
+                }
                 var id = Uri.UnescapeDataString(r.RequestUri!.AbsolutePath.Split('/').Last());
                 if (!o._estados.TryGetValue(id, out var compra) || sujeto != $"tienda.comprador:{compra.Dueno:n}")
                 {
