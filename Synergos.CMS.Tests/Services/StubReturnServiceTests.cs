@@ -395,4 +395,90 @@ public class StubReturnServiceTests
 
         Assert.Equal(ShopReturnBlock.None, await h.Returns.CanRequestAsync(order.OrderRef, LineLaptop));
     }
+
+    // ── La cola de la tienda (013-seller-operaciones, T023) ──────────────────────────────────
+
+    /// <summary>Lleva un caso al estado pedido por su camino de verdad (la máquina no se salta).</summary>
+    private static async Task Llevar(Harness h, string rmaId, ShopReturnStatus estado)
+    {
+        ShopReturnStatus[] camino = estado switch
+        {
+            ShopReturnStatus.Approved => [ShopReturnStatus.Approved],
+            ShopReturnStatus.Received => [ShopReturnStatus.Approved, ShopReturnStatus.Received],
+            ShopReturnStatus.Refunded => [ShopReturnStatus.Approved, ShopReturnStatus.Received, ShopReturnStatus.Refunded],
+            ShopReturnStatus.Rejected => [ShopReturnStatus.Rejected],
+            _ => [],
+        };
+        foreach (var paso in camino) await h.Returns.AdvanceAsync(rmaId, paso);
+    }
+
+    [Fact] // empty: una tienda sin devoluciones tiene la cola vacía
+    public async Task GetForStore_NoReturns_ReturnsEmpty()
+    {
+        var h = new Harness();
+        await h.PaidOrderAsync();
+
+        Assert.Empty(await h.Returns.GetForStoreAsync());
+    }
+
+    [Fact] // happy: la cola es de la tienda entera, no de una orden
+    public async Task GetForStore_ListsTheCasesOfEveryOrder()
+    {
+        var h = new Harness();
+        var una = await h.PaidOrderAsync();
+        var otra = await h.PaidOrderAsync();
+        var r1 = await h.Returns.RequestAsync(una.OrderRef, LineLaptop, "Llegó dañado");
+        var r2 = await h.Returns.RequestAsync(otra.OrderRef, LineHeadphones, "No era el color");
+
+        var cola = await h.Returns.GetForStoreAsync();
+
+        Assert.Equal(new[] { r1.RmaId, r2.RmaId }.Order(StringComparer.Ordinal), cola.Select(c => c.RmaId).Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { una.OrderRef, otra.OrderRef }.Order(StringComparer.Ordinal), cola.Select(c => c.OrderRef).Order(StringComparer.Ordinal));
+    }
+
+    [Fact] // orden: lo que más espera, primero; por estado y, dentro de cada uno, de la más antigua a la más reciente
+    public async Task GetForStore_OrdersByWhatWaitsMost()
+    {
+        var ahora = new DateTimeOffset(2026, 10, 20, 9, 0, 0, TimeSpan.Zero);
+        var h = new Harness(() => ahora);
+        var pedidas = new List<(string Rma, ShopReturnStatus Estado)>();
+        foreach (var estado in new[]
+                 {
+                     ShopReturnStatus.Refunded, ShopReturnStatus.Requested, ShopReturnStatus.Approved,
+                     ShopReturnStatus.Received, ShopReturnStatus.Requested, ShopReturnStatus.Rejected,
+                 })
+        {
+            var orden = await h.PaidOrderAsync();
+            var caso = await h.Returns.RequestAsync(orden.OrderRef, LineLaptop, "Motivo");
+            pedidas.Add((caso.RmaId, estado));
+            ahora = ahora.AddMinutes(5);
+        }
+        foreach (var (rma, estado) in pedidas) await Llevar(h, rma, estado);
+
+        var cola = await h.Returns.GetForStoreAsync();
+
+        // Pedidas (la de las 9:05 antes que la de las 9:20), recibida, aprobada, reembolsada y rechazada.
+        Assert.Equal(
+            new[] { pedidas[1].Rma, pedidas[4].Rma, pedidas[3].Rma, pedidas[2].Rma, pedidas[0].Rma, pedidas[5].Rma },
+            cola.Select(c => c.RmaId));
+        Assert.Equal(
+            [ShopReturnStatus.Requested, ShopReturnStatus.Requested, ShopReturnStatus.Received, ShopReturnStatus.Approved,
+             ShopReturnStatus.Refunded, ShopReturnStatus.Rejected],
+            cola.Select(c => c.Status));
+    }
+
+    [Fact] // idempotent: leer la cola dos veces da lo mismo y no escribe nada
+    public async Task GetForStore_IsIdempotentAndDoesNotWrite()
+    {
+        var h = new Harness();
+        var orden = await h.PaidOrderAsync();
+        await h.Returns.RequestAsync(orden.OrderRef, LineLaptop, "Llegó dañado");
+        var asientos = h.Audit.Events.Count;
+
+        var primera = await h.Returns.GetForStoreAsync();
+        var segunda = await h.Returns.GetForStoreAsync();
+
+        Assert.Equal(primera, segunda);
+        Assert.Equal(asientos, h.Audit.Events.Count);
+    }
 }

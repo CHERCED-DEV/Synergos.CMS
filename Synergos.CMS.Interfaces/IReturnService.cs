@@ -117,6 +117,13 @@ public interface IReturnService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Todas las devoluciones de la tienda, en el orden de la cola del personal (013-seller-operaciones, T023): lo que
+    /// más espera, primero. Por estado —pedidas, recibidas, aprobadas, y después reembolsadas y rechazadas—, y dentro de
+    /// cada uno de la más antigua a la más reciente. La guarda del personal la pone quien llama.
+    /// </summary>
+    Task<IReadOnlyList<ShopReturnCase>> GetForStoreAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Devuelve los RMAs de una orden, del más reciente al más antiguo.
     /// Lista vacía si la orden no tiene devoluciones (o el ref viene vacío).
     /// </summary>
