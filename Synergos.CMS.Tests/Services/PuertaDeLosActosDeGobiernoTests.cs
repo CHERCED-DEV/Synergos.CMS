@@ -71,11 +71,11 @@ public sealed class PuertaDeLosActosDeGobiernoTests : IDisposable
 
     /// <summary>
     /// Con el rol, la toma sale con la persona del funcionario —la que nombrará la historia del expediente— y una llave
-    /// reemitida por la puerta: el doble clic de esa persona es la misma llave, y la misma del navegador en otra persona
-    /// es otra (no cae en el acto de otro).
+    /// reemitida por la puerta atada al flujo (001-P12 A, T096): el doble clic de esa persona es la misma llave, y la
+    /// misma del navegador en otra persona del personal también, así que cae en el mismo acto y no abre otro.
     /// </summary>
     [Fact]
-    public async Task Con_el_rol_la_toma_sale_al_orquestador_con_la_persona_del_funcionario_y_una_llave_suya()
+    public async Task Con_el_rol_la_toma_sale_al_orquestador_con_la_persona_del_funcionario_y_la_llave_del_flujo()
     {
         const string Cuerpo = """{"radicacion":"rad-1","nota":"Lo reviso yo."}""";
         var otra = Guid.Parse("7d8e9f00-1a2b-4c3d-9e4f-5a6b7c8d9e0f");
@@ -93,7 +93,8 @@ public sealed class PuertaDeLosActosDeGobiernoTests : IDisposable
         var llaves = _orquestador.Pedidos.Select(p => p.Cabeceras["Idempotency-Key"]).ToList();
         Assert.StartsWith(LoQuePoneLaPuerta.PrefijoDeLaLlave, llaves[0], StringComparison.Ordinal);
         Assert.Equal(llaves[0], llaves[1]);
-        Assert.NotEqual(llaves[0], llaves[2]);
+        Assert.Equal(llaves[0], llaves[2]);
+        Assert.Equal($"gobierno.funcionario:{otra:n}", _orquestador.Pedidos[2].Cabeceras["X-Synergos-Sujeto"]);
     }
 
     [Fact]
