@@ -82,21 +82,23 @@ public sealed class DespachoDeTiendaTests
     }
 
     [Fact]
-    public async Task Otra_persona_con_la_misma_llave_tiene_su_propia_saga_y_no_suma_otro_evento()
+    public async Task Otra_persona_con_la_misma_llave_cae_en_la_misma_saga_y_no_suma_otro_evento()
     {
         using var t = new CompraDeTiendaReal();
         var (compra, envio) = await Completada(t);
         var (_, primera) = await t.EnviarElPedido(compra, "GUIA-123", "enviar-1", personal: "staff-1");
 
-        // La llave es de su dueño (ADR 0140 F3): la de otra persona no se reutiliza. Lo que la hace inocua es el paso,
-        // que cuenta como hecho lo que ya estaba.
+        // La saga de un flujo del personal es del flujo (001-P12 A, T096): la misma llave en otra persona del personal
+        // cae en la misma saga y no vuelve a mover el envío. Quien la abrió queda como su dueña: el rastro.
         var (estado, otra) = await t.EnviarElPedido(compra, "GUIA-123", "enviar-1", personal: "staff-2");
 
-        Assert.True(estado == HttpStatusCode.Created, otra.ToString());
-        Assert.NotEqual(primera.GetProperty("id").GetString(), otra.GetProperty("id").GetString());
+        Assert.True(estado is HttpStatusCode.OK or HttpStatusCode.Created, otra.ToString());
+        var id = primera.GetProperty("id").GetString()!;
+        Assert.Equal(id, otra.GetProperty("id").GetString());
         Assert.Equal("InTransit", EstadoDelEnvio(otra));
-        Assert.Equal(2, t.Veces(Seguir(envio)));
+        Assert.Equal(1, t.Veces(Seguir(envio)));
         Assert.Equal([("Ready", null), ("InTransit", "GUIA-123")], (await ElEnvio(t, envio)).Eventos);
+        Assert.Equal(Ref.Create("tienda.personal", "staff-1"), t.Sagas.Find(id)!.Dueno);
     }
 
     [Fact]
