@@ -75,6 +75,10 @@ const PARES = [
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs'] },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
+    // La consola del vendedor (013-seller-operaciones, T025): mueve las devoluciones por `return/{id}/advance` de
+    // ShopCatalogController. Sus rutas del personal (VendedorDeLaTiendaController, `api/shop/seller`) no ligan todavía:
+    // este gate lee la plantilla del [HttpPost] sin el [Route] de la clase (anotado para el núcleo en la bitácora de 013).
+    { app: 'seller', controllers: ['ShopCatalogController.cs', 'VendedorDeLaTiendaController.cs'] },
 ];
 
 /** El ÚNICO lector de fuentes del gate: todo sale en LF, venga como venga del disco (#170). */

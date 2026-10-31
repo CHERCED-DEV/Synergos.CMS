@@ -120,6 +120,10 @@ public sealed partial class SeamComposer
         // Encenderlo sin el BFF arriba degrada —no se puede comprar, y lo dice— pero la tienda
         // sigue sirviendo catálogo y fichas.
         services.Configure<TiendaSettings>(builder.Config.GetSection("Synergos:Tienda"));
+        // Quién es personal de la tienda (013-seller-operaciones, T002): un rol en blanco no deja arrancar. Va aparte
+        // del Configure de arriba, que es lo que ModosDelComposeTests reconoce para encontrar la sección del Mode.
+        services.AddOptions<TiendaSettings>().ValidateOnStart();
+        services.AddSingleton<IValidateOptions<TiendaSettings>, ValidadorDeLaTienda>();
 
         // El registro de las compras de la PUERTA (004-tienda-compra, US 6): las anota en el mismo almacén
         // de órdenes para que «Mis compras», el seguimiento, la devolución y las reseñas las vean, con el
@@ -145,6 +149,10 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IProductCatalogProvider>(),
             sp.GetRequiredService<ILogger<RegistroDeComprasDeLaTienda>>(),
             hayOrquestadorDeTienda));
+        // La bandeja del personal (013-seller-operaciones, R7): las órdenes de la tienda entera, de los dos caminos,
+        // del MISMO almacén, con su etapa del seguimiento y los actos que admiten.
+        services.AddSingleton(sp => new OrdenesDeLaTienda(sp.GetRequiredService<IJsonEntityStore>()));
+        services.AddSingleton<PedidosDeLaTienda>();
 
         // La OFERTA del catálogo (004-tienda-compra, R-9): lo que el catálogo muestra es lo que el orquestador
         // cobra y aparta. Diez segundos y no los treinta de comprar: quien espera es el editor que publica, y una
@@ -210,6 +218,9 @@ public sealed partial class SeamComposer
         // Y la plata de una orden de la puerta vuelve por el orquestador (US 7): la devolución posterior del personal,
         // pedida por el reenvío de la puerta (núcleo P6 y P8 del lote 6).
         services.AddSingleton<DevolucionesDeLaPuerta>();
+        // Y el despacho del personal (013-seller-operaciones, US 2): enviar y entregar las compras de la puerta, por los
+        // flujos posteriores del orquestador y el mismo reenvío.
+        services.AddSingleton<DespachosDeLaPuerta>();
         services.AddSingleton<IShopOrderService>(sp => new OrdenesConLasDeLaPuerta(
             motor(sp),
             sp.GetRequiredService<LibroDeComprasDeLaPuerta>(),

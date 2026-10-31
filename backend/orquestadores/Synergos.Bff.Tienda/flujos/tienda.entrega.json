@@ -1,0 +1,25 @@
+{
+  "clave": "tienda.entrega",
+  "posterior_a": "tienda.compra",
+  "acceso": "personal",
+  "entrada": ["personal", "compra"],
+  "tipos": {
+    "personal": { "de": "sujeto" },
+    "compra": "texto",
+    "envio": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["compra", "estadoDelEnvio"],
+  "fases": {
+    "abrir": ["original", "entregado"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["compra"], "escribe": ["envio"] },
+    "entregado": {
+      "tipo": "fulfillment.seguir",
+      "lee": ["envio"],
+      "escribe": ["estadoDelEnvio"],
+      "estado": "Delivered",
+      "motivo": "no se pudo marcar el envío entregado"
+    }
+  }
+}

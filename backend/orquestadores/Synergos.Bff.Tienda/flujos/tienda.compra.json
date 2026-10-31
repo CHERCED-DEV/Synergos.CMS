@@ -10,7 +10,7 @@
     "contacto": { "de": "contacto" }
   },
   "salida": ["lineasDelPedido", "subtotal", "descuento", "impuesto", "total", "pedido", "envio", "cobroId"],
-  "para_lo_posterior": ["cobroId"],
+  "para_lo_posterior": ["cobroId", "envio"],
   "efimera": { "cerrar": ["direccion", "contacto"] },
   "fases": {
     "abrir": [

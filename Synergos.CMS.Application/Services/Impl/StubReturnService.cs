@@ -294,6 +294,30 @@ public sealed class StubReturnService : IReturnService, IDisposable
         return advanced;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ShopReturnCase>> GetForStoreAsync(CancellationToken cancellationToken = default)
+    {
+        var all = await LoadAllAsync(cancellationToken).ConfigureAwait(false);
+        return all
+            .OrderBy(c => LugarEnLaCola(c.Status))
+            .ThenBy(c => c.RequestedAt)
+            .ThenBy(c => c.RmaId, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// El lugar de cada estado en la cola del personal: lo que pide algo, primero —aprobar o rechazar, reembolsar lo
+    /// recibido, recibir lo aprobado—, y lo cerrado al final.
+    /// </summary>
+    private static int LugarEnLaCola(ShopReturnStatus estado) => estado switch
+    {
+        ShopReturnStatus.Requested => 0,
+        ShopReturnStatus.Received => 1,
+        ShopReturnStatus.Approved => 2,
+        ShopReturnStatus.Refunded => 3,
+        _ => 4,
+    };
+
     public async Task<IReadOnlyList<ShopReturnCase>> GetForOrderAsync(
         string orderRef,
         CancellationToken cancellationToken = default)

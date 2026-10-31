@@ -79,6 +79,8 @@ const PARES = [
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     { app: 'blogs', controllers: ['BlogsController.cs'] },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
+    // La consola del vendedor (013-seller-operaciones, T012): la bandeja y el detalle salen de las rutas del personal.
+    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'] },
 ];
 
 /**

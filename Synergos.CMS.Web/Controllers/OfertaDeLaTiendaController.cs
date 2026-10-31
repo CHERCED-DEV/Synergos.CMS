@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Catalog;
 
@@ -33,18 +35,23 @@ public sealed class OfertaDeLaTiendaController : ControllerBase
     private readonly ITiendaEnElContenido _tienda;
     private readonly ILogger<OfertaDeLaTiendaController> _log;
 
+    /// <summary>Quién es personal de la tienda (<c>Synergos:Tienda:RolesDelPersonal</c>). Sin ella, <c>admin</c>.</summary>
+    private readonly IOptionsMonitor<TiendaSettings>? _ajustes;
+
     public OfertaDeLaTiendaController(
         IProductCatalogProvider catalogo,
         ITiendaOfferPublisher ofertas,
         IMemberAccessGate gate,
         ITiendaEnElContenido tienda,
-        ILogger<OfertaDeLaTiendaController> log)
+        ILogger<OfertaDeLaTiendaController> log,
+        IOptionsMonitor<TiendaSettings>? ajustes = null)
     {
         _catalogo = catalogo;
         _ofertas = ofertas;
         _gate = gate;
         _tienda = tienda;
         _log = log;
+        _ajustes = ajustes;
     }
 
     [HttpPost("republicar")]
@@ -54,7 +61,7 @@ public sealed class OfertaDeLaTiendaController : ControllerBase
         {
             return Unauthorized(new { error = "Inicie sesión como personal de la tienda." });
         }
-        if (!_gate.HasAnyRole("admin"))
+        if (!_gate.HasAnyRole(_ajustes?.CurrentValue.PersonalCsv() ?? TiendaSettings.RolPorDefecto))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Republicar la oferta es del personal de la tienda." });
         }

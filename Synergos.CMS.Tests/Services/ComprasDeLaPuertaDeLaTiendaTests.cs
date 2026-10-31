@@ -235,6 +235,90 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
         await motor.DidNotReceive().RefundAsync(Compra, Arg.Any<decimal>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    // ── La tienda entera: la conciliación que corre al leer la bandeja (013-seller-operaciones, T008) ──
+
+    [Fact]
+    public async Task La_tienda_entera_lee_cada_pendiente_con_el_sujeto_de_SU_dueno_y_la_completada_queda_pagada()
+    {
+        var orquestador = new OrquestadorFalso().Contesta("pta-ana", "Completed").Contesta("pta-beto", "Completed", Beto);
+        var (registro, libro) = Registro(orquestador);
+        await libro.AnotarPendienteAsync(Puerta(Ana, "pta-ana"));
+        await libro.AnotarPendienteAsync(Puerta(Beto, "pta-beto"));
+
+        var sinMirar = await registro.ReconciliarLaTiendaAsync(CancellationToken.None);
+
+        Assert.Equal(0, sinMirar);
+        Assert.Equal(OrderStatus.Paid, (await libro.LeerAsync("pta-ana"))!.Status);
+        Assert.Equal(OrderStatus.Paid, (await libro.LeerAsync("pta-beto"))!.Status);
+        Assert.Contains($"GET /v1/flujos/tienda.compra/pta-beto tienda.comprador:{Beto:n}", orquestador.Pedidos);
+        Assert.Empty(await libro.PendientesDeLaTiendaAsync());
+    }
+
+    [Fact]
+    public async Task La_deshecha_se_descarta_la_que_sigue_en_curso_se_queda_y_lo_pagado_no_se_mira()
+    {
+        var orquestador = new OrquestadorFalso().Contesta("pta-deshecha", "Compensated").Contesta("pta-en-curso", "Running")
+            .Contesta(Compra, "Completed");
+        var (registro, libro) = Registro(orquestador);
+        await libro.AnotarPendienteAsync(Puerta(Ana, "pta-deshecha"));
+        await libro.AnotarPendienteAsync(Puerta(Ana, "pta-en-curso"));
+        await libro.ConfirmarAsync(Puerta(Ana));
+
+        var sinMirar = await registro.ReconciliarLaTiendaAsync(CancellationToken.None);
+
+        Assert.Equal(0, sinMirar);
+        Assert.Equal(OrderStatus.Cancelled, (await libro.LeerAsync("pta-deshecha"))!.Status);
+        Assert.Equal(OrderStatus.Pending, (await libro.LeerAsync("pta-en-curso"))!.Status);
+        Assert.DoesNotContain(orquestador.Pedidos, p => p.Contains(Compra, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Con_doce_pendientes_mira_diez_y_dice_que_dos_quedaron_sin_mirar()
+    {
+        var orquestador = new OrquestadorFalso();
+        var (registro, libro) = Registro(orquestador);
+        for (var i = 0; i < 12; i++)
+        {
+            orquestador.Contesta($"pta-{i:00}", "Running");
+            await libro.AnotarPendienteAsync(Puerta(Ana, $"pta-{i:00}"));
+        }
+
+        var sinMirar = await registro.ReconciliarLaTiendaAsync(CancellationToken.None);
+
+        Assert.Equal(2, sinMirar);
+        Assert.Equal(RegistroDeComprasDeLaTienda.TopeDeReconciliacion, orquestador.Pedidos.Count);
+    }
+
+    [Fact]
+    public async Task Lo_que_no_alcanza_el_presupuesto_cuenta_como_sin_mirar_y_la_bandeja_no_espera()
+    {
+        var orquestador = new OrquestadorFalso { Retraso = TimeSpan.FromSeconds(30) };
+        var (registro, libro) = Registro(orquestador, presupuesto: TimeSpan.FromMilliseconds(200));
+        for (var i = 0; i < 3; i++)
+        {
+            orquestador.Contesta($"pta-{i}", "Completed");
+            await libro.AnotarPendienteAsync(Puerta(Ana, $"pta-{i}"));
+        }
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var sinMirar = await registro.ReconciliarLaTiendaAsync(CancellationToken.None);
+
+        Assert.True(reloj.Elapsed < TimeSpan.FromSeconds(20), $"esperó {reloj.Elapsed}");
+        Assert.Equal(3, sinMirar);
+        Assert.Equal(3, (await libro.PendientesDeLaTiendaAsync()).Count);
+    }
+
+    [Fact]
+    public async Task Sin_destino_no_sale_a_la_red_y_todas_las_pendientes_quedan_sin_mirar()
+    {
+        var orquestador = new OrquestadorFalso().Contesta(Compra, "Completed");
+        var (registro, libro) = Registro(orquestador, hayDestino: false);
+        await libro.AnotarPendienteAsync(Puerta(Ana));
+
+        Assert.Equal(1, await registro.ReconciliarLaTiendaAsync(CancellationToken.None));
+        Assert.Empty(orquestador.Pedidos);
+    }
+
     // ── Lo que lee el registro existe en el contrato publicado ─────────────────────────────
 
     /// <summary>
@@ -304,7 +388,7 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
     // ── Los dobles ───────────────────────────────────────────────────────────────────────────
 
     private static (RegistroDeComprasDeLaTienda Registro, LibroDeComprasDeLaPuerta Libro) Registro(
-        OrquestadorFalso orquestador, bool hayDestino = true, IJsonEntityStore? almacen = null)
+        OrquestadorFalso orquestador, bool hayDestino = true, IJsonEntityStore? almacen = null, TimeSpan? presupuesto = null)
     {
         var libro = new LibroDeComprasDeLaPuerta(almacen ?? new InMemoryJsonEntityStore());
         var puerta = new PuertaSettings();
@@ -313,20 +397,26 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
         monitor.CurrentValue.Returns(puerta);
         var registro = new RegistroDeComprasDeLaTienda(
             orquestador, libro, monitor, Substitute.For<IProductCatalogProvider>(),
-            NullLogger<RegistroDeComprasDeLaTienda>.Instance, hayDestino);
+            NullLogger<RegistroDeComprasDeLaTienda>.Instance, hayDestino, presupuesto);
         return (registro, libro);
     }
 
-    /// <summary>El orquestador: contesta cada compra con su estado, como la ve su dueño (Ana); a otro, 404.</summary>
+    /// <summary>
+    /// El orquestador: contesta cada compra con su estado, como la ve su dueño (Ana, salvo que se diga otro); a
+    /// cualquier otro sujeto, 404. Puede tardar en contestar.
+    /// </summary>
     private sealed class OrquestadorFalso : IHttpClientFactory
     {
-        private readonly Dictionary<string, string> _estados = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (string Estado, Guid Dueno)> _estados = new(StringComparer.Ordinal);
 
         public List<string> Pedidos { get; } = [];
 
-        public OrquestadorFalso Contesta(string id, string estado)
+        /// <summary>Cuánto tarda cada lectura en contestar.</summary>
+        public TimeSpan Retraso { get; set; } = TimeSpan.Zero;
+
+        public OrquestadorFalso Contesta(string id, string estado, Guid? dueno = null)
         {
-            _estados[id] = estado;
+            _estados[id] = (estado, dueno ?? Ana);
             return this;
         }
 
@@ -334,22 +424,24 @@ public sealed class ComprasDeLaPuertaDeLaTiendaTests
 
         private sealed class Manejador(OrquestadorFalso o) : HttpMessageHandler
         {
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
             {
                 var sujeto = r.Headers.TryGetValues("X-Synergos-Sujeto", out var v) ? v.Single() : "";
-                o.Pedidos.Add($"{r.Method} {r.RequestUri!.AbsolutePath} {sujeto}");
-                var id = Uri.UnescapeDataString(r.RequestUri.AbsolutePath.Split('/').Last());
-                if (!o._estados.TryGetValue(id, out var estado) || sujeto != $"tienda.comprador:{Ana:n}")
+                lock (o.Pedidos) o.Pedidos.Add($"{r.Method} {r.RequestUri!.AbsolutePath} {sujeto}");
+                if (o.Retraso > TimeSpan.Zero) await Task.Delay(o.Retraso, ct);
+                var id = Uri.UnescapeDataString(r.RequestUri!.AbsolutePath.Split('/').Last());
+                if (!o._estados.TryGetValue(id, out var compra) || sujeto != $"tienda.comprador:{compra.Dueno:n}")
                 {
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+                    return new HttpResponseMessage(HttpStatusCode.NotFound);
                 }
+                var estado = compra.Estado;
                 var json = $$$"""
                 {"id":"{{{id}}}","flujo":"tienda.compra","numero":"COMPRA01","estado":"{{{estado}}}","compensacionesPendientes":0,"error":null,"deshaciendo":false,
                  "datos":{"total":{"amount":75000,"currency":"COP"},
                           "lineasDelPedido":[{"sujeto":{"kind":"tienda.producto","id":"p-1"},"cantidad":2,"precioUnitario":{"amount":20000,"currency":"COP"}},
                                              {"sujeto":{"kind":"tienda.producto","id":"p-2:azul"},"cantidad":1,"precioUnitario":{"amount":35000,"currency":"COP"}}]}}
                 """;
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
             }
         }
     }
