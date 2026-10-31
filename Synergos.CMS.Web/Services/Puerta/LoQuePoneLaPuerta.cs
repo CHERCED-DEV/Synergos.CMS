@@ -45,6 +45,9 @@ public static class LoQuePoneLaPuerta
     /// </remarks>
     public const int LargoDeLaLlave = 44;
 
+    /// <summary>A quién se ata la llave del navegador en una operación del personal: al personal del flujo, no a la persona.</summary>
+    public const string DuenoDeLaLlaveDelPersonal = "personal";
+
     /// <summary>El largo más grande de la llave que manda el navegador.</summary>
     public const int LargoMaximoDeLaLlaveDelNavegador = 128;
 
@@ -72,6 +75,10 @@ public static class LoQuePoneLaPuerta
     /// <para><b>Atada al sujeto</b>: la llave del navegador es suya, y con ella reenviada tal cual,
     /// quien conociera la de otro abriría la MISMA saga. Con el sujeto dentro, la misma llave de dos
     /// personas son dos llaves; el reintento de una misma persona sigue siendo el mismo.</para>
+    ///
+    /// <para><b>Salvo en una operación del personal</b> (NS-3 de 013), que se ata a
+    /// <see cref="DuenoDeLaLlaveDelPersonal"/>: lo que hace el personal es del flujo y no de la persona, y
+    /// otra persona del personal que reintenta lo mismo tiene que llegar a la misma saga.</para>
     ///
     /// <para>No hace falta HMAC: la llave del navegador es aleatoria y quién es dueño de la saga lo
     /// comprueba el orquestador aparte.</para>

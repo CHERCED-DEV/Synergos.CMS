@@ -175,7 +175,8 @@ public sealed class FlujosController : ControllerBase
             }
             else
             {
-                cabeceras[LoQuePoneLaPuerta.CabeceraDeLaLlave] = LoQuePoneLaPuerta.LlaveReemitida(sujeto, op.Flujo, llave);
+                var deQuien = op.Personal ? LoQuePoneLaPuerta.DuenoDeLaLlaveDelPersonal : sujeto;
+                cabeceras[LoQuePoneLaPuerta.CabeceraDeLaLlave] = LoQuePoneLaPuerta.LlaveReemitida(deQuien, op.Flujo, llave);
             }
         }
 

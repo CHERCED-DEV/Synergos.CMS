@@ -42,6 +42,11 @@ public sealed record ReglasDeLaFachada(
 ///   llegado después.</item>
 ///   <item>Cancelar y consultar sólo para el dueño; reintentar lo rendido y ver lo pendiente son de
 ///   operación.</item>
+///   <item><b>En un flujo del personal la saga es del FLUJO</b> (NS-3 de 013, 001-P12): la puerta ya
+///   comprobó el rol (P8), así que la misma llave lleva a la misma saga sea quien sea la persona —un corte
+///   que deja la respuesta en el aire y otra persona que reintenta no devuelve la plata dos veces—, y
+///   cualquiera del personal la consulta, la continúa o la deshace. Quien la abrió queda como su dueña: el
+///   rastro. «Listar» sigue siendo «las que abrí yo».</item>
 /// </list>
 ///
 /// <para><b>Varios flujos en un orquestador comparten almacén</b> si comparten tipo de saga (la genérica):
@@ -59,6 +64,7 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
     private readonly Func<TSaga, bool> _esDelFlujo;
     private readonly string _clave;
     private readonly string _abre;
+    private readonly bool _delPersonal;
 
     /// <param name="sagas">La máquina de sagas.</param>
     /// <param name="flujo">El intérprete del flujo, ya validado.</param>
@@ -76,7 +82,14 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
         _esDelFlujo = esDelFlujo ?? (_ => true);
         _clave = definicion.Clave;
         _abre = definicion.Fases[0].Nombre;
+        _delPersonal = definicion.EsDePersonal;
     }
+
+    /// <summary>
+    /// A quién mira la regla de dueño: a quien pide, salvo en un flujo del personal, cuya saga es del flujo (NS-3 de
+    /// 013): nadie, porque la puerta ya comprobó el rol.
+    /// </summary>
+    private Ref? Regla(Ref? dueno) => _delPersonal ? null : dueno;
 
     /// <summary>
     /// Abre la saga de <paramref name="llave"/> para <paramref name="dueno"/>: la misma si ya existe y es
@@ -87,7 +100,7 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
         // La saga existe ANTES de tocar nada: si el proceso se cae después del primer paso, lo que se
         // hizo queda escrito con su identificador, y como las llaves derivan de él, repetir la llamada
         // no duplica nada. Quién decide si una llave usada es «esto ya pasó» vive en el motor (#41).
-        var slot = _sagas.Abrir(llave, dueno);
+        var slot = _sagas.Abrir(llave, Regla(dueno));
         if (slot.Reusar is { } previa)
         {
             if (!_esDelFlujo(previa))
@@ -105,7 +118,7 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
     }
 
     /// <summary>Si abrir con esta llave devolvería una saga de <paramref name="dueno"/> que ya existe, sin escribir nada.</summary>
-    public bool DevolveriaLaMisma(string llave, Ref dueno) => _sagas.Abrir(llave, dueno).Reusar is { } s && _esDelFlujo(s);
+    public bool DevolveriaLaMisma(string llave, Ref dueno) => _sagas.Abrir(llave, Regla(dueno)).Reusar is { } s && _esDelFlujo(s);
 
     /// <summary>
     /// Ejecuta una fase que continúa la saga.
@@ -117,6 +130,7 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
     /// <param name="ct">Cancelación.</param>
     public async Task<Result<TSaga>> ContinuarAsync(string fase, string sagaId, Ref? dueno, FlowContext entrada, CancellationToken ct)
     {
+        dueno = Regla(dueno);
         var saga = dueno is null ? _sagas.Find(sagaId) : _sagas.FindDe(sagaId, dueno);
         if (saga is null || !_esDelFlujo(saga)) return _reglas.NoExiste(sagaId);
         if (saga.Status == SagaStatus.Completed) return Result.Ok(saga);   // idempotente
@@ -133,15 +147,16 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
         return r;
     }
 
-    /// <summary>Deshace la saga; con <paramref name="dueno"/>, sólo si es suya.</summary>
+    /// <summary>Deshace la saga; con <paramref name="dueno"/>, sólo si es suya (en un flujo del personal, la del flujo).</summary>
     public Task<Result<TSaga>> CancelarAsync(string sagaId, Ref? dueno, CancellationToken ct)
-        => dueno is not null && (_sagas.FindDe(sagaId, dueno) is not { } suya || !_esDelFlujo(suya))
+        => Regla(dueno) is { } suyo && (_sagas.FindDe(sagaId, suyo) is not { } suya || !_esDelFlujo(suya))
             ? Task.FromResult<Result<TSaga>>(_reglas.NoExiste(sagaId))
             : _sagas.CompensateAsync(sagaId, _reglas.MotivoDeCancelar, ct);
 
-    /// <summary>La saga; con <paramref name="dueno"/>, sólo si es suya. La de otro flujo no existe.</summary>
+    /// <summary>La saga; con <paramref name="dueno"/>, sólo si es suya (en un flujo del personal, la del flujo). La de otro
+    /// flujo no existe.</summary>
     public Result<TSaga> Consultar(string sagaId, Ref? dueno)
-        => (dueno is null ? _sagas.Find(sagaId) : _sagas.FindDe(sagaId, dueno)) is { } s && _esDelFlujo(s)
+        => (Regla(dueno) is { } suyo ? _sagas.FindDe(sagaId, suyo) : _sagas.Find(sagaId)) is { } s && _esDelFlujo(s)
             ? Result.Ok(s)
             : _reglas.NoExiste(sagaId);
 
@@ -150,8 +165,9 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
     /// más nueva a la más vieja y por página (núcleo, NB-6 de 011 y NN-7 de 005): «mis reservas».
     /// </summary>
     /// <remarks>
-    /// Sólo del dueño, como consultar: no hay forma de pedir las de otro. Las de otro flujo del mismo orquestador
-    /// no salen, aunque compartan almacén.
+    /// Sólo del dueño: no hay forma de pedir las de otro. En un flujo del personal también: son «las que abrí yo»,
+    /// aunque cualquiera del personal consulte cada una. Las de otro flujo del mismo orquestador no salen, aunque
+    /// compartan almacén.
     /// </remarks>
     public (IReadOnlyList<TSaga> Items, int Total) Listar(Ref dueno, SagaStatus? estado, int offset, int limit)
     {
