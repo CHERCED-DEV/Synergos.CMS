@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Synergos.CMS.Tests.Services;
@@ -69,6 +70,59 @@ public sealed class ConsumidorCmsDeBffTiendaTests
         Assert.True(llave!.Length <= Cabecera(op).GetProperty("schema").GetProperty("maxLength").GetInt32());
         Assert.False(op.TryGetProperty("requestBody", out _));
         Assert.Equal("", cuerpo);
+    }
+
+    /// <summary>
+    /// Lo que el despacho manda y lee del envío de una compra (013-seller-operaciones, NS-2) existe en la lectura
+    /// <c>detalle</c> de <c>tienda.envio</c>: del personal, sin sujeto ni llave, con la compra en el cuerpo; y un campo
+    /// renombrado en el orquestador —<c>destino</c> por <c>destination</c>— se quedaría en nulo en silencio y el personal
+    /// despacharía sin saber a dónde.
+    /// </summary>
+    [Fact]
+    public void Lo_que_manda_y_lee_el_despacho_del_envio_existe_en_la_lectura_detalle()
+    {
+        var op = Raiz.GetProperty("paths")
+            .GetProperty($"/v1/flujos/{DespachosDeLaPuerta.FlujoDelEnvio}/{DespachosDeLaPuerta.Lectura}").GetProperty("post");
+        var marca = op.GetProperty("x-synergos-flujo");
+        Assert.Equal((DespachosDeLaPuerta.FlujoDelEnvio, DespachosDeLaPuerta.Lectura, "personal"),
+            (marca.GetProperty("flujo").GetString(), marca.GetProperty("operacion").GetString(), marca.GetProperty("acceso").GetString()));
+        var cabeceras = op.TryGetProperty("parameters", out var p)
+            ? p.EnumerateArray().Where(c => c.GetProperty("in").GetString() == "header").Select(c => c.GetProperty("name").GetString()).ToList()
+            : [];
+        Assert.DoesNotContain("X-Synergos-Sujeto", cabeceras);
+        Assert.DoesNotContain("Idempotency-Key", cabeceras);
+
+        var malas = new List<string>();
+        using var enviado = JsonDocument.Parse("""{"compra":"pta-compra-1"}""");
+        Cabe(enviado.RootElement, op.GetProperty("requestBody").GetProperty("content").GetProperty("application/json").GetProperty("schema"), "$", malas);
+        Lee(typeof(DespachosDeLaPuerta.DetalleLeido),
+            op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema"), "$", malas);
+
+        Assert.True(malas.Count == 0, "El despacho manda o lee campos que el contrato no publica: " + string.Join(" | ", malas));
+    }
+
+    /// <summary>
+    /// Cada propiedad de <paramref name="tipo"/> existe en <paramref name="esquema"/>, y por dentro de sus registros, con
+    /// el nombre con que viaja: el de <c>JsonPropertyName</c> si lo tiene.
+    /// </summary>
+    private static void Lee(Type tipo, JsonElement esquema, string donde, List<string> malas)
+    {
+        var propiedades = Resolver(esquema).GetProperty("properties");
+        foreach (var p in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var nombre = p.GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>()?.Name
+                         ?? JsonNamingPolicy.CamelCase.ConvertName(p.Name);
+            if (!propiedades.TryGetProperty(nombre, out var sub))
+            {
+                malas.Add($"{donde}.{nombre}");
+                continue;
+            }
+            var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+            var (dentro, esq) = t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
+                ? (t.GetGenericArguments()[0], Resolver(sub).GetProperty("items"))
+                : (t, sub);
+            if (dentro.IsClass && dentro.Namespace == typeof(RegistroDeComprasDeLaTienda).Namespace) Lee(dentro, esq, $"{donde}.{nombre}", malas);
+        }
     }
 
     private static JsonElement Cabecera(JsonElement op) => op.GetProperty("parameters").EnumerateArray()

@@ -76,6 +76,9 @@ public sealed class ShopCatalogController : ControllerBase
     /// <summary>La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>). Sin ella, UTC.</summary>
     private readonly TimeZoneInfo _zona;
 
+    /// <summary>Quién es personal de la tienda (<c>Synergos:Tienda:RolesDelPersonal</c>). Sin ella, <c>admin</c>.</summary>
+    private readonly IOptionsMonitor<TiendaSettings>? _tienda;
+
     public ShopCatalogController(
         IProductCatalogProvider catalog,
         IShopOrderService orders,
@@ -88,10 +91,12 @@ public sealed class ShopCatalogController : ControllerBase
         IShopQuery shopQuery,
         ICatalogSocialProof socialProof,
         TimeProvider? reloj = null,
-        IOptions<ListadosSettings>? listados = null)
+        IOptions<ListadosSettings>? listados = null,
+        IOptionsMonitor<TiendaSettings>? tienda = null)
     {
         _reloj = reloj ?? TimeProvider.System;
         _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
+        _tienda = tienda;
         _socialProof = socialProof;
         _catalog = catalog;
         _orders = orders;
@@ -103,6 +108,9 @@ public sealed class ShopCatalogController : ControllerBase
         _gate = gate;
         _shopQuery = shopQuery;
     }
+
+    /// <summary>Los roles del personal de la tienda, como los pide <see cref="IMemberAccessGate.HasAnyRole"/>.</summary>
+    private string Personal => _tienda?.CurrentValue.PersonalCsv() ?? TiendaSettings.RolPorDefecto;
 
     // ── T2 (doc 25) — identidad de confianza-servidor ──────────────
     // La identidad del comprador SIEMPRE se deriva de la sesión (cookie → gate),
@@ -162,11 +170,10 @@ public sealed class ShopCatalogController : ControllerBase
     /// <see cref="DenyIfForeignMember"/>); de ahí en adelante decide la tienda.
     /// </summary>
     /// <remarks>
-    /// Gatea con <c>admin</c> porque es el único rol de staff que hoy existe
-    /// sembrado y el que este mismo controller ya usa como override de
-    /// ownership. Un rol propio de vendedor (y hacerlo configurable, como
-    /// <c>SearchSettings.AnalyticsAdminRolesCsv</c>) es decisión de producto y
-    /// entra con el rediseño del motor de pagos — no se inventa acá.
+    /// Gatea con los roles del personal que declara el despliegue (<c>Synergos:Tienda:RolesDelPersonal</c>,
+    /// <c>admin</c> por defecto): la decisión de producto que esto esperaba la tomó el arquitecto en el lote 12
+    /// (013-P1 = A, una tienda operada por su personal). Es el mismo valor que el override de ownership de
+    /// abajo y que las entradas de la puerta de los flujos del personal.
     /// </remarks>
     private IActionResult? RequireShopStaff()
     {
@@ -174,7 +181,7 @@ public sealed class ShopCatalogController : ControllerBase
         {
             return Unauthorized(new { error = "Se requiere iniciar sesión." });
         }
-        if (!_gate.HasAnyRole("admin"))
+        if (!_gate.HasAnyRole(Personal))
         {
             // 403 directo y no Forbid(), por lo mismo que DenyIfForeignMember.
             return StatusCode(StatusCodes.Status403Forbidden);
@@ -187,7 +194,7 @@ public sealed class ShopCatalogController : ControllerBase
         if (order.OwnerMemberKey is Guid owner
             && _gate.IsAuthenticated
             && _gate.CurrentMemberKey != owner
-            && !_gate.HasAnyRole("admin"))
+            && !_gate.HasAnyRole(Personal))
         {
             // StatusCode(403) directo, NO Forbid(): con auth de members Forbid()
             // redirige al login (302); un API quiere el 403 limpio (molde
@@ -799,7 +806,8 @@ public sealed class ShopCatalogController : ControllerBase
                     Date: s.ReachedAt,
                     Reached: s.Reached,
                     ReachedAt: s.ReachedAt,
-                    Note: s.Note))
+                    Note: s.Note,
+                    Description: s.Note))
                 .ToList() ?? new List<TrackingStageDto>()));
     }
 
@@ -1112,7 +1120,8 @@ public sealed class ShopCatalogController : ControllerBase
         Status: MapReturnStatusToUi(c.Status),
         RequestedAt: c.RequestedAt,
         UpdatedAt: c.UpdatedAt,
-        Note: c.Note);
+        Note: c.Note,
+        Estado: c.Status.ToString());
 
     // Vocabulario del estado del RMA al que lee la UI (ES). El ciclo interno
     // (Requested→Approved/Received→Refunded, o Rejected terminal) se colapsa a 3.
@@ -1451,7 +1460,10 @@ public sealed class ShopCatalogController : ControllerBase
         DateTimeOffset? Date,
         bool Reached,
         DateTimeOffset? ReachedAt,
-        string? Note);
+        string? Note,
+        // `description` es lo que pinta el seguimiento del comprador (normalizeTracking): la nota de la etapa, que al
+        // enviar es la guía (013-seller-operaciones, R12). `note` se conserva.
+        string? Description = null);
 
     /// <summary>Timeline de la orden; stages vacías + currentStage null = tracking aún no iniciado (orden Pending).</summary>
     public sealed record TrackingResponse(
@@ -1483,7 +1495,10 @@ public sealed class ShopCatalogController : ControllerBase
         string Status,
         DateTimeOffset RequestedAt,
         DateTimeOffset UpdatedAt,
-        string? Note);
+        string? Note,
+        // `estado` es el EXACTO (Requested, Approved, Received, Refunded, Rejected): lo que el personal necesita para
+        // saber qué sigue (013-seller-operaciones, T024). `status` sigue siendo el rótulo del comprador.
+        string? Estado = null);
 
     public sealed record ReturnsResponse(IReadOnlyList<ReturnDto> Returns);
 

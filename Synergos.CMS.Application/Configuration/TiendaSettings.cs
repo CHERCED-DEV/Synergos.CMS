@@ -51,4 +51,28 @@ public sealed class TiendaSettings
     /// hay que haberle dado tiempo a existir.
     /// </remarks>
     public int TimeoutSeconds { get; init; } = 30;
+
+    /// <summary>El rol de personal que ya existía antes de poder declararlo: el de la consola de devoluciones.</summary>
+    public const string RolPorDefecto = "admin";
+
+    /// <summary>
+    /// Quién es personal de la tienda: los roles de miembro que atienden la consola del vendedor, las devoluciones y
+    /// la oferta (013-seller-operaciones, lote 12: P1 = A). Sin declararlos, <see cref="RolPorDefecto"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Una sola declaración.</b> La leen las guardas del CMS y la cruzan las entradas de la puerta de los
+    /// flujos del personal de la tienda (<c>RolesDelPersonalDeLaTiendaTests</c>): un rol que valiera en una y no en
+    /// la otra dejaría a alguien atender por una ruta y no por la otra.</para>
+    ///
+    /// <para><b>Vacía es «sin declarar», no «nadie».</b> La configuración no distingue una lista vacía de una que
+    /// falta, así que no hay forma de declarar una tienda sin personal. Un rol en blanco sí es un error, y el CMS no
+    /// arranca (<c>ValidadorDeLaTienda</c>).</para>
+    /// </remarks>
+    public List<string> RolesDelPersonal { get; init; } = [];
+
+    /// <summary>Los roles que valen: los declarados o, sin declarar, <see cref="RolPorDefecto"/>.</summary>
+    public IReadOnlyList<string> Personal() => RolesDelPersonal.Count > 0 ? RolesDelPersonal : [RolPorDefecto];
+
+    /// <summary>Los roles como los pide <c>IMemberAccessGate.HasAnyRole</c>: separados por comas.</summary>
+    public string PersonalCsv() => string.Join(',', Personal());
 }
