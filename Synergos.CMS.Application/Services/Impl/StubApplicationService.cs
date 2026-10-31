@@ -527,6 +527,50 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
         }
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ExpedienteDeLaPuerta>> ConfirmadosAsync(CancellationToken cancellationToken = default)
+        => (await LoadAllAsync(cancellationToken))
+            .Where(s => s.Camino == CaminoDelExpediente.Puerta && s.ProcesoAlDia is not null)
+            .OrderBy(s => s.ProcesoAlDia)
+            .Select(ExpedienteDe)
+            .ToList();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// La historia es la radicación —el primer hito, del CMS: el proceso nace sin historia— y después la del proceso, paso
+    /// a paso, con el seudónimo de quien actuó. La resolución es la última aprobación o rechazo del proceso: como en la
+    /// ruta directa, sólo lo terminal deja resolución.
+    /// </remarks>
+    public async Task AlDiaConElProcesoAsync(string radicacion, ProcesoDelExpediente proceso, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(proceso);
+        if (string.IsNullOrWhiteSpace(radicacion) || !GovStatusSlugs.TryParse(proceso.Estado, out var estado)) return;
+
+        var cerrojo = CerrojoDe(radicacion);
+        await cerrojo.WaitAsync(cancellationToken);
+        try
+        {
+            var state = await LoadAsync(CaseIdDeLaRadicacion(radicacion), cancellationToken);
+            if (state is null || PorConfirmar(state)) return;
+
+            var pasos = proceso.Historia
+                .Select(p => GovStatusSlugs.TryParse(p.Hacia, out var hacia) ? new HistoryEntry(hacia, p.En, p.Quien, p.Nota ?? string.Empty) : null)
+                .OfType<HistoryEntry>();
+            var resolucion = proceso.Historia.LastOrDefault(p => p.Transicion is "approve" or "reject");
+            await WriteAsync(state with
+            {
+                Status = estado,
+                History = [.. state.History.Take(1), .. pasos],
+                Decision = resolucion is null ? null : new CaseDecision(resolucion.Transicion, resolucion.Nota ?? string.Empty, resolucion.En, resolucion.Quien),
+                ProcesoAlDia = _now(),
+            }, cancellationToken);
+        }
+        finally
+        {
+            cerrojo.Release();
+        }
+    }
+
     /// <summary>
     /// Si el expediente nació por la puerta y su radicación todavía no se vio completa (<c>ProcesoAlDia</c> nulo). Uno
     /// así no existe para las bandejas, la cola ni las decisiones.
@@ -724,7 +768,9 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
         // El estado del cobro de la tasa, que el agregado guardaba desde la ADR 0116
         // fase 5 y la proyección no declaraba: se escribía y no lo leía nadie (#116).
         FeeStatus: s.PaymentStatus,
-        NotificationConsent: s.Consent);
+        NotificationConsent: s.Consent,
+        Camino: s.Camino,
+        Radicacion: s.Radicacion);
 
     /// <summary>
     /// Días HÁBILES restantes del término. Terminal ⇒ 0.

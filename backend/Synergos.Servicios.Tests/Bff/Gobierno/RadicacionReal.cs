@@ -189,6 +189,64 @@ internal sealed class RadicacionReal : IDisposable
         return Enviar(peticion);
     }
 
+    /// <summary>Radica de punta a punta (abrir y cerrar): la radicación completada y el expediente que nació en procesos.</summary>
+    public async Task<(string Radicacion, string Expediente)> Radicada(string llave = "radicacion-1", string ciudadano = "c-1")
+    {
+        var (abrio, abierta) = await Abrir(llave, ciudadano);
+        Assert.True(abrio == HttpStatusCode.Created, $"No se abrió: {(int)abrio} {abierta}");
+        var id = abierta.GetProperty("id").GetString()!;
+        var (cerro, cerrada) = await Cerrar(id, ciudadano);
+        Assert.True(cerro == HttpStatusCode.OK, $"No se cerró: {(int)cerro} {cerrada}");
+        return (id, cerrada.GetProperty("datos").GetProperty("expediente").GetString()!);
+    }
+
+    // ── Lo que hace el funcionario, por la puerta ───────────────────────────
+
+    /// <summary>El sujeto que pone la puerta en un acto del personal: la persona del funcionario, no el dueño.</summary>
+    public static string Funcionario(string id) => $"gobierno.funcionario:{id}";
+
+    /// <summary>Un acto del personal: abre el flujo posterior a la radicación con su llave y la persona que actúa.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Actuar(
+        string flujo, object cuerpo, string llave, string funcionario = "f-1", string? correlacion = null)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/{flujo}") { Content = JsonContent.Create(cuerpo) };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Funcionario(funcionario));
+        if (correlacion is not null) peticion.Headers.TryAddWithoutValidation(Correlation.HeaderName, correlacion);
+        return Enviar(peticion);
+    }
+
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Tomar(
+        string radicacion, string llave = "toma-1", string funcionario = "f-1", string? nota = null, string? correlacion = null)
+        => Actuar("gobierno.toma", new { radicacion, nota }, llave, funcionario, correlacion);
+
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Decidir(
+        string radicacion, string decision, string nota = "Revisado el expediente.", string llave = "decision-1", string funcionario = "f-1")
+        => Actuar("gobierno.decision", new { radicacion, decision, nota }, llave, funcionario);
+
+    /// <summary>La subsanación: la pide el ciudadano dueño de la radicación, como miembro, no el personal.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Subsanar(
+        string radicacion, string ciudadano = "c-1", string llave = "subsanacion-1", string? nota = null)
+    {
+        var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/flujos/gobierno.subsanacion")
+        {
+            Content = JsonContent.Create(new { radicacion, nota }),
+        };
+        peticion.Headers.Add("Idempotency-Key", llave);
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Sujeto, Sujeto(ciudadano));
+        return Enviar(peticion);
+    }
+
+    /// <summary>La lectura del expediente que pide el CMS, con la llave y sin sujeto: la guarda es el CMS.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Expediente(string radicacion)
+        => Enviar(new HttpRequestMessage(HttpMethod.Get, $"v1/expedientes/{radicacion}"));
+
+    /// <summary>El expediente tal como está en la capacidad de procesos: su estado y su historia.</summary>
+    public Task<JsonElement> Instancia(string expediente) => Leer("workflow", $"v1/instances/{expediente}");
+
+    /// <summary>Cuántas transiciones se pidieron a la capacidad de procesos.</summary>
+    public int Disparos => Cable.Veces("POST", "^/v1/instances/[^/]+/fire$");
+
     /// <summary>Una vuelta del barrido de abandono, como la da el proceso cada minuto.</summary>
     public Task Barrer()
         => Servicios.GetServices<IHostedService>().OfType<CompensationSweeper<SagaDeFlujo>>().Single()

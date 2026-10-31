@@ -1,0 +1,30 @@
+{
+  "clave": "gobierno.decision",
+  "posterior_a": "gobierno.radicacion",
+  "acceso": "personal",
+  "entrada": ["funcionario", "radicacion", "decision", "nota"],
+  "tipos": {
+    "funcionario": { "de": "sujeto" },
+    "radicacion": "texto",
+    "decision": "texto",
+    "nota": "texto",
+    "expediente": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["radicacion", "decision", "estado"],
+  "fases": {
+    "abrir": ["original", "decidir"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["radicacion"], "escribe": ["expediente"] },
+    "decidir": {
+      "tipo": "workflow.disparar-elegida",
+      "lee": ["expediente", "funcionario", "decision", "nota"],
+      "escribe": ["estado"],
+      "llave": "disparar",
+      "proceso": "gov.tramite.v2",
+      "transiciones": ["approve", "reject", "request-info"],
+      "rol": "funcionario",
+      "motivo": "el expediente ya cambió"
+    }
+  }
+}

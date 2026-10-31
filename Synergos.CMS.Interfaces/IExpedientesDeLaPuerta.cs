@@ -26,6 +26,16 @@ public sealed record RespuestasDeLaPuerta(
 /// muestra en ninguna bandeja: la tasa puede no cobrarse y el expediente no nacer (FR-018).</param>
 public sealed record ExpedienteDeLaPuerta(string CaseId, string Radicado, string Radicacion, Guid? Dueno, bool Confirmado);
 
+/// <summary>Un paso de la historia del proceso de un expediente (009-gobierno-tramite T040).</summary>
+/// <param name="Transicion">La transición que se disparó (<c>take</c>, <c>approve</c>…).</param>
+/// <param name="Hacia">El estado al que llevó, en slug público.</param>
+/// <param name="Quien">La persona que actuó, por su seudónimo (<c>gobierno.funcionario:…</c>): FR-022.</param>
+public sealed record PasoDelProceso(string Transicion, string Hacia, string Quien, string? Nota, DateTimeOffset En);
+
+/// <summary>El expediente tal como lo lleva su proceso, que es la fuente de verdad (FR-028): dónde está y cómo llegó.</summary>
+/// <param name="Estado">El estado, en slug público.</param>
+public sealed record ProcesoDelExpediente(string Estado, IReadOnlyList<PasoDelProceso> Historia);
+
 /// <summary>
 /// El agregado del expediente visto desde la radicación por la puerta (009-gobierno-tramite T027): lo que guarda el
 /// artefacto antes de cerrar y lo que la reconciliación confirma o descarta después.
@@ -62,6 +72,19 @@ public interface IExpedientesDeLaPuerta
     /// borró.
     /// </summary>
     Task<bool> DescartarAsync(string radicacion, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Los expedientes nacidos por la puerta que ya existen, primero los que hace más que no se ponen al día con su
+    /// proceso: una reconciliación con techo los recorre todos en lecturas sucesivas.
+    /// </summary>
+    Task<IReadOnlyList<ExpedienteDeLaPuerta>> ConfirmadosAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pone el expediente al día con su proceso (T040): el estado, la historia y la resolución salen del proceso, que es
+    /// el que manda, y queda anotado cuándo se miró. Sobre uno por confirmar, o un estado que no es del trámite, no hace
+    /// nada.
+    /// </summary>
+    Task AlDiaConElProcesoAsync(string radicacion, ProcesoDelExpediente proceso, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Por dónde nació un expediente (<c>Camino</c> del agregado): nulo es la ruta directa.</summary>

@@ -92,7 +92,9 @@ public sealed record CaseDetail(
     IReadOnlyList<CaseTimelineEntry> Timeline,
     CaseDecision? Decision,
     string? FeeStatus = null,
-    NotificationConsent? NotificationConsent = null);
+    NotificationConsent? NotificationConsent = null,
+    string? Camino = null,
+    string? Radicacion = null);
 
 /// <summary>
 /// Ítem de la bandeja (cola) — la forma compacta del expediente para listar. El

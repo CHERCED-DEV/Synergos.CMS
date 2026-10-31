@@ -4,8 +4,9 @@
     sin render que lleva la radicación a la puerta cuando el sitio declara ese camino. La CLAVE la pone el servidor, no el
     bundle, y es la de GovResolutor.FlujoDeLaRadicacion; CoordinadorDelFlujoEnLasVistasTests la cruza con la tabla de la
     puerta y con Synergos:Puerta:Flujos. Con el camino «directa» (el de por defecto) el elemento no le pide nada. Los
-    actos del funcionario y la subsanación (fase C) se anidarán aquí, un coordinador por flujo. El style en línea es para
-    antes de que el bundle defina la etiqueta.
+    actos del funcionario y la subsanación (fase C) no se anidan aquí: la regla de las vistas sólo deja un flujo dentro
+    de su original, y la consola los pide a sus rutas del CMS, que los lleva a la puerta (ActosDeLaPuerta). El style en
+    línea es para antes de que el bundle defina la etiqueta.
 *@
 <synergos-flujo flujo="gobierno.radicacion" style="display:contents">
     @await Html.PartialAsync("SynHost/Gov", Model.Content)

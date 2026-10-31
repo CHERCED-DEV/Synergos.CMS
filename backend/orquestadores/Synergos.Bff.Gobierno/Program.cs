@@ -10,7 +10,8 @@ using Synergos.Shared;
 // publicó la entidad (flujos/gobierno.radicacion.json) y, después, los actos sobre el expediente, como flujos
 // declarados del caso común sobre los pasos de procesos del núcleo (workflow.*). No referencia ninguna capacidad.
 //
-// Lo que NO es del caso común queda aparte y atribuido: la oferta de los trámites (P12, NB-8), como Reservas.
+// Lo que NO es del caso común queda aparte y atribuido: la oferta de los trámites (P12, NB-8), como Reservas, y la
+// lectura del expediente para el CMS (NG-11, NG-8).
 //
 // ANTES DE DESPLEGAR: los destinos de pricing, payments, workflow y notifications
 // (Gobierno__Capabilities__<cap>__BaseUrl/ApiKey), Gobierno:ApiKey, Gobierno:Alerts, la plantilla
@@ -29,6 +30,7 @@ app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Gobierno:ApiKey"]);
 app.MapFlujosDeclarados();
 app.MapOfertas();
+app.MapExpedientes();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

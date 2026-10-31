@@ -1820,6 +1820,7 @@
         "Gov.Tramite.Error.NotAvailable",
         "Gov.Tramite.Error.NotFound",
         "Gov.Tramite.Error.Payment",
+        "Gov.Tramite.Error.Unfinished",
         "Gov.Tramite.Notify.NeedsConsent",
         "Gov.Tramite.Resubmit.Done",
         "Gov.Tramite.Resubmit.Failed",

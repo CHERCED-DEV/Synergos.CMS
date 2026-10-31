@@ -1,0 +1,28 @@
+{
+  "clave": "gobierno.subsanacion",
+  "posterior_a": "gobierno.radicacion",
+  "entrada": ["ciudadano", "radicacion", "nota"],
+  "tipos": {
+    "ciudadano": { "de": "sujeto" },
+    "radicacion": "texto",
+    "nota": "texto?",
+    "expediente": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["radicacion", "estado"],
+  "fases": {
+    "abrir": ["original", "subsanar"]
+  },
+  "pasos": {
+    "original": { "tipo": "flow.leer-original", "lee": ["radicacion"], "escribe": ["expediente"] },
+    "subsanar": {
+      "tipo": "workflow.disparar",
+      "lee": ["expediente", "ciudadano", "nota"],
+      "escribe": ["estado"],
+      "llave": "disparar",
+      "proceso": "gov.tramite.v2",
+      "transicion": "resubmit",
+      "rol": "ciudadano",
+      "motivo": "el expediente no espera una subsanación"
+    }
+  }
+}

@@ -75,9 +75,12 @@ public sealed class GovController : ControllerBase
     private readonly IGovActNotificationService _notifications;
     private readonly IAuditTrailWriter _audit;
     private readonly ArtefactoDelExpediente? _artefacto;
+    private readonly ActosDeLaPuerta? _actos;
 
     /// <param name="artefacto">Lo que el CMS guarda de una radicación por la puerta (009, T027). Nulo en las pruebas
     /// que no la usan: la ruta contesta que la radicación por la puerta no está abierta.</param>
+    /// <param name="actos">Los actos sobre un expediente de la puerta (009, T039). Nulo en las pruebas que no los usan:
+    /// un acto sobre uno de la puerta contesta que no está abierto.</param>
     public GovController(
         ITramiteCatalogProvider catalog,
         IApplicationService applications,
@@ -89,7 +92,8 @@ public sealed class GovController : ControllerBase
         IMemberAccessGate gate,
         IGovActNotificationService notifications,
         IAuditTrailWriter audit,
-        ArtefactoDelExpediente? artefacto = null)
+        ArtefactoDelExpediente? artefacto = null,
+        ActosDeLaPuerta? actos = null)
     {
         _catalog = catalog;
         _applications = applications;
@@ -102,6 +106,7 @@ public sealed class GovController : ControllerBase
         _notifications = notifications;
         _audit = audit;
         _artefacto = artefacto;
+        _actos = actos;
     }
 
     /// <summary>
@@ -341,11 +346,55 @@ public sealed class GovController : ControllerBase
     }
 
     /// <summary>
-    /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura: nunca falla hacia quien lee, y
-    /// sin artefacto no hace nada.
+    /// Confirma o borra lo que quedó por confirmar de la puerta antes de una lectura, y pone al día con su proceso lo
+    /// confirmado que <paramref name="lasQueTocan"/> elige (T040): las del miembro en su bandeja, todas en la cola. Nunca
+    /// falla hacia quien lee, y sin artefacto no hace nada.
     /// </summary>
     private Task ReconciliarDeLaPuertaAsync(Func<ExpedienteDeLaPuerta, bool> lasQueTocan, CancellationToken cancellationToken)
         => _artefacto?.ReconciliarAsync(lasQueTocan, cancellationToken) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Pone al día con su proceso un expediente de la puerta antes de mostrarlo, y lo devuelve como quedó; si el
+    /// orquestador no contesta, lo último que se sabe y <c>alDia</c> en falso. Uno de la ruta directa pasa tal cual. Quien
+    /// llama ya comprobó que lo puede ver: el dueño o el personal.
+    /// </summary>
+    private async Task<(CaseDetail Detail, bool AlDia)> AlDiaDeLaPuertaAsync(CaseDetail detail, CancellationToken cancellationToken)
+    {
+        if (detail.Camino != CaminoDelExpediente.Puerta || detail.Radicacion is not { } radicacion) return (detail, true);
+        if (_artefacto is null || !await _artefacto.AlDiaAsync(radicacion, cancellationToken)) return (detail, false);
+        return (await _tracking.GetCaseAsync(detail.CaseId, cancellationToken) ?? detail, true);
+    }
+
+    /// <summary>
+    /// Un acto sobre un expediente de la puerta (T039): su proceso es la instancia que arrancó el orquestador, así que el
+    /// acto va por la puerta —un acto directo movería otra, la del CMS, y separaría el portal del proceso—, con la llave
+    /// de la intención que manda la consola, y después el expediente se pone al día con su proceso para contestar.
+    /// </summary>
+    private async Task<IActionResult> PorLaPuertaAsync(
+        CaseDetail detail, Func<ActosDeLaPuerta, string, string, Task<ActoDeLaPuerta>> acto,
+        Func<CaseDetail, bool, Task<IActionResult>> responder, CancellationToken cancellationToken)
+    {
+        if (_actos is null || detail.Radicacion is not { } radicacion)
+        {
+            return Problema(StatusCodes.Status503ServiceUnavailable, "puerta.flujo_no_disponible",
+                "Los actos de los expedientes de la puerta no están abiertos en este sitio.", true, null);
+        }
+        var llave = HttpContext?.Request.Headers[LlaveDeLaIntencion].ToString().Trim() ?? string.Empty;
+        if (llave.Length == 0 || llave.Length > LoQuePoneLaPuerta.LargoMaximoDeLaLlaveDelNavegador)
+        {
+            return Problema(StatusCodes.Status400BadRequest, "puerta.llave_requerida",
+                $"Un acto por la puerta lleva la llave de su intención ({LlaveDeLaIntencion}, hasta {LoQuePoneLaPuerta.LargoMaximoDeLaLlaveDelNavegador}).", false, null);
+        }
+
+        var hecho = await acto(_actos, radicacion, llave);
+        if (!hecho.Bien) return Problema(hecho.Estado, hecho.Codigo!, hecho.Mensaje ?? string.Empty, hecho.Transitorio, null);
+
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
+        return await responder(alDia, alDiaConElProceso);
+    }
+
+    /// <summary>La cabecera con la llave de la intención de un acto, la misma que la puerta.</summary>
+    private const string LlaveDeLaIntencion = "Idempotency-Key";
 
     private static readonly JsonSerializerOptions LecturaWeb = new(JsonSerializerDefaults.Web);
 
@@ -413,7 +462,8 @@ public sealed class GovController : ControllerBase
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
 
-        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(detail, cancellationToken)));
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
     // ── 6 bis. Subsanar (el ciudadano dueño) ────────────────────────────
@@ -440,6 +490,14 @@ public sealed class GovController : ControllerBase
 
         var foreign = DenyIfForeignCase(detail, actorKey);
         if (foreign is not null) { return foreign; }
+        if (detail.Camino == CaminoDelExpediente.Puerta)
+        {
+            return await PorLaPuertaAsync(detail,
+                (actos, radicacion, llave) => actos.SubsanarAsync(radicacion, request?.Note, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new ApplicationDetailResponse(
+                    await ToApplicationDetailDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
+        }
 
         CaseDetail updated;
         try
@@ -457,14 +515,15 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(updated, cancellationToken)));
+        return Ok(new ApplicationDetailResponse(await ToApplicationDetailDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     /// <summary>El expediente hacia su dueño: la lectura y lo que devuelve subsanar son lo mismo.</summary>
-    private async Task<ApplicationDetailDto> ToApplicationDetailDtoAsync(CaseDetail detail, CancellationToken cancellationToken)
+    /// <param name="alDia">Si el expediente de la puerta se pudo poner al día con su proceso; en uno directo no cuenta.</param>
+    private async Task<ApplicationDetailDto> ToApplicationDetailDtoAsync(CaseDetail detail, bool alDia, CancellationToken cancellationToken)
     {
         var messages = await LoadMessagesAsync(detail, cancellationToken);
-        var (actions, stale) = await AccionesAsync(detail.CaseId, CaseRoles.Ciudadano, cancellationToken);
+        var (actions, stale) = await AccionesAsync(detail, CaseRoles.Ciudadano, alDia, cancellationToken);
         return new ApplicationDetailDto(
             Id: detail.CaseId,
             Reference: detail.Radicado,
@@ -479,7 +538,9 @@ public sealed class GovController : ControllerBase
             Actions: actions,
             FeeMinor: ToFeeMinor(detail.FeeMinor, detail.Currency),
             FeeStatus: ToFeeStatusSlug(detail.FeeStatus),
-            Stale: stale);
+            Stale: stale,
+            FilingPath: detail.Camino ?? CaminoDelExpediente.Directa,
+            FilingId: detail.Radicacion);
     }
 
     // ── 7. Adjuntar un documento al expediente (T6 — bytes de verdad) ───
@@ -630,7 +691,8 @@ public sealed class GovController : ControllerBase
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(detail, cancellationToken)));
+        var (alDia, alDiaConElProceso) = await AlDiaDeLaPuertaAsync(detail, cancellationToken);
+        return Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken)));
     }
 
     // ── 9 bis. Tomar el expediente (funcionario) ────────────────────────
@@ -653,6 +715,13 @@ public sealed class GovController : ControllerBase
         {
             return NotFound(new { error = $"Expediente '{id}' no encontrado." });
         }
+        if (detail.Camino == CaminoDelExpediente.Puerta)
+        {
+            return await PorLaPuertaAsync(detail,
+                (actos, radicacion, llave) => actos.TomarAsync(radicacion, request?.Note, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
+        }
 
         CaseDetail updated;
         try
@@ -670,7 +739,7 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     // ── 10. Decisión del funcionario (máquina de estados auditada) ──────
@@ -685,6 +754,13 @@ public sealed class GovController : ControllerBase
         if (request is null || string.IsNullOrWhiteSpace(request.CaseId) || string.IsNullOrWhiteSpace(request.Outcome))
         {
             return BadRequest(new { error = "caseId y outcome (approve | reject | request-info) son requeridos." });
+        }
+        if (await _tracking.GetCaseAsync(request.CaseId.Trim(), cancellationToken) is { Camino: CaminoDelExpediente.Puerta } deLaPuerta)
+        {
+            return await PorLaPuertaAsync(deLaPuerta,
+                (actos, radicacion, llave) => actos.DecidirAsync(radicacion, request.Outcome.Trim(), request.Note ?? string.Empty, llave, cancellationToken),
+                async (alDia, alDiaConElProceso) => Ok(new CaseResponse(await ToCaseDtoAsync(alDia, alDiaConElProceso, cancellationToken))),
+                cancellationToken);
         }
 
         CaseDetail updated;
@@ -703,7 +779,7 @@ public sealed class GovController : ControllerBase
             return Conflict(new { error = ex.Motivo() });
         }
 
-        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, cancellationToken)));
+        return Ok(new CaseResponse(await ToCaseDtoAsync(updated, alDia: true, cancellationToken)));
     }
 
     // ══════════════════════ ACTOS NOTIFICADOS (HU #62) ══════════════════════
@@ -1007,14 +1083,14 @@ public sealed class GovController : ControllerBase
     // El detalle del funcionario muestra las respuestas con su ETIQUETA humana (no el
     // fieldId), resolviéndolas contra la definición del formulario del trámite. Si el
     // trámite ya no existe en el catálogo, cae al fieldId como etiqueta.
-    private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, CancellationToken cancellationToken)
+    private async Task<CaseDto> ToCaseDtoAsync(CaseDetail c, bool alDia, CancellationToken cancellationToken)
     {
         var labels = await ResolveFieldLabelsAsync(c.TramiteId, cancellationToken);
         // Lo que el funcionario necesita ver del expediente no es que se notificó, es si el
         // ciudadano ABRIÓ — y con qué se afirmó que era él. Es lo único que la entidad puede
         // sostener el día que alguien recurre tarde.
         var notificaciones = await _notifications.GetForCaseAsync(c.CaseId, cancellationToken);
-        var (actions, stale) = await AccionesAsync(c.CaseId, CaseRoles.Funcionario, cancellationToken);
+        var (actions, stale) = await AccionesAsync(c, CaseRoles.Funcionario, alDia, cancellationToken);
         return new CaseDto(
             Application: new CaseApplicationDto(
                 Id: c.CaseId,
@@ -1025,7 +1101,9 @@ public sealed class GovController : ControllerBase
                 SubmittedAt: c.RadicadoAt,
                 CurrentStage: c.CurrentStage,
                 FeeMinor: ToFeeMinor(c.FeeMinor, c.Currency),
-                FeeStatus: ToFeeStatusSlug(c.FeeStatus)),
+                FeeStatus: ToFeeStatusSlug(c.FeeStatus),
+                FilingPath: c.Camino ?? CaminoDelExpediente.Directa,
+                FilingId: c.Radicacion),
             Answers: c.FormData
                 .Select(kv => new AnswerDto(labels.GetValueOrDefault(kv.Key, kv.Key), kv.Value))
                 .ToList(),
@@ -1045,17 +1123,28 @@ public sealed class GovController : ControllerBase
     /// <c>stale</c> si no se pudo consultar.
     /// </summary>
     /// <remarks>
-    /// La consola y el portal pintan sólo esto, en vez de la lista fija que ofrecía tres acciones
+    /// <para>La consola y el portal pintan sólo esto, en vez de la lista fija que ofrecía tres acciones
     /// que la capacidad rechazaba. Con la capacidad de procesos caída no se ofrece nada de una
     /// tabla local (FR-012), y <c>stale</c> lo DICE: lo que se ve es lo último que el CMS sabe y
-    /// no hay acciones ahora. Sin esa marca, «sin botones» se leería como «no hay nada que hacer».
+    /// no hay acciones ahora. Sin esa marca, «sin botones» se leería como «no hay nada que hacer».</para>
+    ///
+    /// <para><b>Un expediente de la puerta</b> sigue la v2 que arrancó el orquestador (T040): sus acciones son las de esa
+    /// tabla —la del motor en proceso, que el gate cruza con la v2 publicada— desde el estado que acaba de decir el
+    /// proceso, o ninguna y <c>stale</c> si el orquestador no contestó (US6-4).</para>
     /// </remarks>
+    /// <param name="alDia">Si el expediente de la puerta se pudo poner al día con su proceso.</param>
     private async Task<(IReadOnlyList<string> Actions, bool Stale)> AccionesAsync(
-        string caseId, string role, CancellationToken cancellationToken)
+        CaseDetail c, string role, bool alDia, CancellationToken cancellationToken)
     {
+        if (c.Camino == CaminoDelExpediente.Puerta)
+        {
+            return alDia
+                ? (AccionesDelExpediente.Calcular(StubCaseWorkflowService.Proceso, StubCaseWorkflowService.EstadosFinales, GovStatusSlugs.ToSlug(c.Status), role), false)
+                : (Array.Empty<string>(), true);
+        }
         try
         {
-            return ((await _workflow.ActionsAsync(caseId, role, cancellationToken)).ToList(), false);
+            return ((await _workflow.ActionsAsync(c.CaseId, role, cancellationToken)).ToList(), false);
         }
         catch (InvalidOperationException)
         {
@@ -1335,7 +1424,9 @@ public sealed class GovController : ControllerBase
         IReadOnlyList<string> Actions,
         long FeeMinor = 0,
         string? FeeStatus = null,
-        bool Stale = false);
+        bool Stale = false,
+        string FilingPath = CaminoDelExpediente.Directa,
+        string? FilingId = null);
 
     public sealed record ApplicationDetailResponse(ApplicationDetailDto Application);
 
@@ -1364,7 +1455,9 @@ public sealed class GovController : ControllerBase
         DateTimeOffset SubmittedAt,
         string CurrentStage,
         long FeeMinor = 0,
-        string? FeeStatus = null);
+        string? FeeStatus = null,
+        string FilingPath = CaminoDelExpediente.Directa,
+        string? FilingId = null);
 
     public sealed record AnswerDto(string Label, string Value);
 
