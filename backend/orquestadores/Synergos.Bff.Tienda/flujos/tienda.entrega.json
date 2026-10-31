@@ -15,9 +15,10 @@
   "pasos": {
     "original": { "tipo": "flow.leer-original", "lee": ["compra"], "escribe": ["envio"] },
     "entregado": {
-      "tipo": "tienda.envio-entregado",
+      "tipo": "fulfillment.seguir",
       "lee": ["envio"],
       "escribe": ["estadoDelEnvio"],
+      "estado": "Delivered",
       "motivo": "no se pudo marcar el envío entregado"
     }
   }

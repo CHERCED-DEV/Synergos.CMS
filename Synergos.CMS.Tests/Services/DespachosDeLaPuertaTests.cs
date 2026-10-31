@@ -14,7 +14,7 @@ namespace Synergos.CMS.Tests.Services;
 /// <summary>
 /// El despacho en el CMS (013-seller-operaciones, T018; US 2): enviar o entregar una compra de la PUERTA abre el flujo
 /// posterior del orquestador —<c>tienda.envio</c> o <c>tienda.entrega</c>, del personal— por el reenvío de la puerta, con
-/// el molde de <see cref="DevolucionesDeLaPuertaTests"/>.
+/// el molde de <see cref="DevolucionesDeLaPuertaTests"/>; y su envío se lee con la lectura <c>detalle</c> (NS-2).
 /// </summary>
 public sealed class DespachosDeLaPuertaTests
 {
@@ -137,6 +137,76 @@ public sealed class DespachosDeLaPuertaTests
 
         Assert.Equal(("fulfillment.unreachable", true), (r1.Codigo, r1.Transitorio));
         Assert.Equal(("tienda.despacho_en_curso", true, null), (r2.Codigo, r2.Transitorio, r2.EstadoDelEnvio));
+    }
+
+    // ── La lectura del envío (NS-2 de 013): «detalle», sin saga ─────────────────────────────
+
+    /// <summary>La lectura como la contesta el host genérico: <c>LecturaDeFlujo</c> con los <c>datos</c> que declara.</summary>
+    private const string DetalleDelOrquestador = """
+        {"flujo":"tienda.envio","datos":{
+         "destino":{"linea1":"Calle 1 # 2-3","linea2":"Apto 4","ciudad":"Bogotá","region":"Cundinamarca","codigoPostal":"110111","pais":"CO","contacto":"Ana"},
+         "transportadora":"servientrega","estadoDelEnvio":"InTransit",
+         "eventos":[{"estado":"Ready","nota":null,"instante":"2026-10-25T14:02:11Z"},
+                    {"estado":"InTransit","nota":"GUIA-778","instante":"2026-10-26T09:00:00Z"}]}}
+        """;
+
+    [Fact]
+    public async Task El_detalle_va_por_la_puerta_sin_sujeto_ni_llave_y_cuenta_el_envio()
+    {
+        var orquestador = new Orquestador { Responde = _ => Orquestador.Json(HttpStatusCode.OK, DetalleDelOrquestador) };
+
+        var (envio, fallo) = await Pieza(orquestador, Personal(Rosa)).DetalleAsync(Compra, CancellationToken.None);
+
+        Assert.Null(fallo);
+        Assert.Equal(new DestinoDelEnvio("Calle 1 # 2-3", "Apto 4", "Bogotá", "Cundinamarca", "110111", "CO", "Ana"), envio!.Destino);
+        Assert.Equal(("servientrega", "InTransit"), (envio.Transportadora, envio.Estado));
+        Assert.Equal(
+            [new EventoDelEnvio("Ready", null, new DateTimeOffset(2026, 10, 25, 14, 2, 11, TimeSpan.Zero)),
+             new EventoDelEnvio("InTransit", "GUIA-778", new DateTimeOffset(2026, 10, 26, 9, 0, 0, TimeSpan.Zero))],
+            envio.Eventos);
+        var (metodo, ruta, cabeceras, cuerpo) = Assert.Single(orquestador.Pedidos);
+        Assert.Equal(("POST", "/v1/flujos/tienda.envio/detalle"), (metodo, ruta));
+        Assert.False(cabeceras.ContainsKey("X-Synergos-Sujeto"), "Una lectura no lleva sujeto, tampoco la del personal.");
+        Assert.False(cabeceras.ContainsKey("Idempotency-Key"), "Una lectura no abre saga: no lleva llave.");
+        using var json = JsonDocument.Parse(cuerpo);
+        Assert.Equal(Compra, json.RootElement.GetProperty("compra").GetString());
+    }
+
+    [Fact]
+    public async Task El_detalle_sin_el_rol_sin_sesion_o_sin_el_despacho_abierto_no_sale()
+    {
+        var orquestador = new Orquestador { Responde = _ => Orquestador.Json(HttpStatusCode.OK, DetalleDelOrquestador) };
+
+        var (_, sinRol) = await Pieza(orquestador, Miembro(Ana)).DetalleAsync(Compra, CancellationToken.None);
+        var (_, sinSesion) = await Pieza(orquestador, Miembro(null)).DetalleAsync(Compra, CancellationToken.None);
+        var (_, sinDestino) = await Pieza(orquestador, Personal(Rosa), conDestino: false).DetalleAsync(Compra, CancellationToken.None);
+
+        Assert.Equal(("puerta.personal_requerido", "puerta.sesion_requerida", DespachosDeLaPuerta.NoDisponible),
+            (sinRol!.Codigo, sinSesion!.Codigo, sinDestino!.Codigo));
+        Assert.Empty(orquestador.Pedidos);
+    }
+
+    [Fact]
+    public async Task El_detalle_de_una_compra_sin_envio_trae_el_codigo_del_orquestador_y_una_caida_es_transitoria()
+    {
+        static Orquestador Contesta(HttpStatusCode estado, string json) => new()
+        {
+            Responde = _ => Orquestador.Json(estado, json, estado == HttpStatusCode.OK ? "application/json" : "application/problem+json"),
+        };
+
+        var (_, sinCompra) = await Pieza(Contesta(HttpStatusCode.NotFound,
+            """{"code":"flow.original_no_encontrada","detail":"No existe.","transient":false}"""), Personal(Rosa)).DetalleAsync(Compra, CancellationToken.None);
+        var (_, enCurso) = await Pieza(Contesta(HttpStatusCode.Conflict,
+            """{"code":"flow.original_no_completada","detail":"Sigue en curso.","transient":false}"""), Personal(Rosa)).DetalleAsync(Compra, CancellationToken.None);
+        var (_, caida) = await Pieza(Contesta(HttpStatusCode.ServiceUnavailable,
+            """{"code":"fulfillment.unreachable","detail":"fulfillment no respondió.","transient":true}"""), Personal(Rosa)).DetalleAsync(Compra, CancellationToken.None);
+        var (_, sinEstado) = await Pieza(Contesta(HttpStatusCode.OK,
+            """{"flujo":"tienda.envio","datos":{"transportadora":"servientrega"}}"""), Personal(Rosa)).DetalleAsync(Compra, CancellationToken.None);
+
+        Assert.Equal((DespachosDeLaPuerta.CompraNoEncontrada, false), (sinCompra!.Codigo, sinCompra.Transitorio));
+        Assert.Equal((DespachosDeLaPuerta.CompraNoCompletada, false), (enCurso!.Codigo, enCurso.Transitorio));
+        Assert.Equal(("fulfillment.unreachable", true), (caida!.Codigo, caida.Transitorio));
+        Assert.Equal("tienda.respuesta_invalida", sinEstado!.Codigo);
     }
 
     [Theory]

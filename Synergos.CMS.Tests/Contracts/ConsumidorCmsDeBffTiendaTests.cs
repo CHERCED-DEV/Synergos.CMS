@@ -73,21 +73,32 @@ public sealed class ConsumidorCmsDeBffTiendaTests
     }
 
     /// <summary>
-    /// Lo que el registro lee del envío de una compra (013-seller-operaciones, T010) existe en la respuesta de
-    /// <c>LeerEnvioDeLaCompra</c>: un campo renombrado en el orquestador —<c>destino</c> por <c>destination</c>— se
-    /// quedaría en nulo en silencio y el personal despacharía sin saber a dónde.
+    /// Lo que el despacho manda y lee del envío de una compra (013-seller-operaciones, NS-2) existe en la lectura
+    /// <c>detalle</c> de <c>tienda.envio</c>: del personal, sin sujeto ni llave, con la compra en el cuerpo; y un campo
+    /// renombrado en el orquestador —<c>destino</c> por <c>destination</c>— se quedaría en nulo en silencio y el personal
+    /// despacharía sin saber a dónde.
     /// </summary>
     [Fact]
-    public void Lo_que_lee_el_registro_del_envio_existe_en_LeerEnvioDeLaCompra()
+    public void Lo_que_manda_y_lee_el_despacho_del_envio_existe_en_la_lectura_detalle()
     {
-        var op = Raiz.GetProperty("paths").GetProperty("/v1/envios/{compra}").GetProperty("get");
-        Assert.Equal("LeerEnvioDeLaCompra", op.GetProperty("operationId").GetString());
+        var op = Raiz.GetProperty("paths")
+            .GetProperty($"/v1/flujos/{DespachosDeLaPuerta.FlujoDelEnvio}/{DespachosDeLaPuerta.Lectura}").GetProperty("post");
+        var marca = op.GetProperty("x-synergos-flujo");
+        Assert.Equal((DespachosDeLaPuerta.FlujoDelEnvio, DespachosDeLaPuerta.Lectura, "personal"),
+            (marca.GetProperty("flujo").GetString(), marca.GetProperty("operacion").GetString(), marca.GetProperty("acceso").GetString()));
+        var cabeceras = op.TryGetProperty("parameters", out var p)
+            ? p.EnumerateArray().Where(c => c.GetProperty("in").GetString() == "header").Select(c => c.GetProperty("name").GetString()).ToList()
+            : [];
+        Assert.DoesNotContain("X-Synergos-Sujeto", cabeceras);
+        Assert.DoesNotContain("Idempotency-Key", cabeceras);
 
         var malas = new List<string>();
-        Lee(typeof(RegistroDeComprasDeLaTienda.EnvioLeido),
+        using var enviado = JsonDocument.Parse("""{"compra":"pta-compra-1"}""");
+        Cabe(enviado.RootElement, op.GetProperty("requestBody").GetProperty("content").GetProperty("application/json").GetProperty("schema"), "$", malas);
+        Lee(typeof(DespachosDeLaPuerta.DetalleLeido),
             op.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema"), "$", malas);
 
-        Assert.True(malas.Count == 0, "El registro lee campos que el contrato no publica: " + string.Join(" | ", malas));
+        Assert.True(malas.Count == 0, "El despacho manda o lee campos que el contrato no publica: " + string.Join(" | ", malas));
     }
 
     /// <summary>

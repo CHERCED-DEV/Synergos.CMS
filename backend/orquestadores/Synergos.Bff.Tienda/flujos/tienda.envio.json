@@ -10,16 +10,21 @@
     "envio": { "tipo": "texto", "de": "original" }
   },
   "salida": ["compra", "estadoDelEnvio"],
+  "lecturas": {
+    "detalle": { "entrada": ["compra"], "pasos": ["original", "leer"], "salida": ["destino", "transportadora", "estadoDelEnvio", "eventos"] }
+  },
   "fases": {
     "abrir": ["original", "en-camino"]
   },
   "pasos": {
     "original": { "tipo": "flow.leer-original", "lee": ["compra"], "escribe": ["envio"] },
     "en-camino": {
-      "tipo": "tienda.envio-en-camino",
+      "tipo": "fulfillment.seguir",
       "lee": ["envio", "guia"],
       "escribe": ["estadoDelEnvio"],
+      "estado": "InTransit",
       "motivo": "no se pudo marcar el envío en camino"
-    }
+    },
+    "leer": { "tipo": "fulfillment.leer", "lee": ["envio"], "escribe": ["destino", "transportadora", "estadoDelEnvio", "eventos"] }
   }
 }

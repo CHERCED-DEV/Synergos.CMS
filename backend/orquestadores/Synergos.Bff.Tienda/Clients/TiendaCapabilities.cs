@@ -170,11 +170,4 @@ public sealed class TiendaCapabilities : CapabilityClients
             to = address,
             carrier,
         }, key, ct);
-
-    public Task<Result<ShipmentDto>> GetShipmentAsync(string shipmentId, CancellationToken ct)
-        => Get<ShipmentDto>(Fulfillment, $"v1/shipments/{shipmentId}", ct);
-
-    /// <summary>Mueve el envío a <paramref name="status"/> con su nota. Sin llave: su idempotencia es el estado.</summary>
-    public Task<Result<ShipmentDto>> TrackShipmentAsync(string shipmentId, string status, string? note, CancellationToken ct)
-        => Post<ShipmentDto>(Fulfillment, $"v1/shipments/{shipmentId}/track", new { status, note }, null, ct);
 }

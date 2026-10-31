@@ -53,10 +53,6 @@ builder.Services.AddSingleton<PurchaseFlow>();
 // esto los deja en Pricing e Inventory, con los sujetos de las dos compras (la de la puerta y la de arriba).
 builder.Services.AddSingleton<OfertaDeTienda>();
 
-// Los pasos del despacho (013-seller-operaciones, interinos de NS-1) mueven el envío por el cliente de la tienda, que
-// vive en el contenedor: se conectan al arrancar.
-var envios = new EnviosDelDespacho();
-
 // La compra por la puerta (ADR 0140): flujos/tienda.compra.json sobre el host genérico, en sus propias
 // rutas (/v1/flujos/tienda.compra…), que sólo sirve el flujo declarado; /v1/purchases sigue siendo del
 // motor imperativo de arriba, que el CMS llama. Por eso el modo arranca en «declarado» (lote 2, matiz
@@ -64,7 +60,7 @@ var envios = new EnviosDelDespacho();
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
 if (declarado)
 {
-    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, [new PasoRevisarLineas(), .. PasosDelDespacho.Propios(envios)]);
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, [new PasoRevisarLineas()]);
 
     // Interino de N-12: los tipos del host más las líneas del pedido (TipoLineasDePedido).
     builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoLineasDePedido()));
@@ -83,7 +79,6 @@ if (declarado)
 }
 
 var app = builder.Build();
-envios.Conectar(app.Services.GetRequiredService<TiendaCapabilities>());
 
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Tienda:ApiKey"]);
@@ -91,15 +86,6 @@ app.MapTiendaEndpoints();
 // Las rutas del flujo las pone el host genérico; el cupón (recortar el código y frenar los que no sirven) se les
 // cuelga como filtro de un grupo sin prefijo —las rutas no cambian—, porque la línea no toca el mapeo del núcleo.
 if (declarado) app.MapGroup(string.Empty).AddEndpointFilter<CuponDeLaCompra>().MapFlujosDeclarados();
-
-// La lectura del envío que pide el CMS para el personal (013-seller-operaciones, interino de NS-2): lee las sagas del
-// flujo declarado, así que existe con él, y no lleva marca de la puerta. Va en su bloque y no en una línea
-// «if (declarado) app.…» porque no es del coste de declarar la compra (MetricaDeLaCompraDeTiendaTests): la medida de
-// 013 (SC-007) la cuenta atribuida a NS-2.
-if (declarado)
-{
-    app.MapLecturaDelEnvio();
-}
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

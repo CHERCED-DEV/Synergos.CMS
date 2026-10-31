@@ -8,7 +8,8 @@ namespace Synergos.CMS.Tests.Bff;
 /// <summary>
 /// El despacho del personal (013-seller-operaciones, T015; US 2): los flujos posteriores <c>tienda.envio</c> y
 /// <c>tienda.entrega</c> leen el envío de la compra con <c>flow.leer-original</c> y lo mueven en la capacidad de envíos
-/// con los pasos interinos de NS-1, contra el orquestador y las capacidades reales del arnés (quickstart §2).
+/// con el paso del núcleo (<c>fulfillment.seguir</c>, NS-1), y la lectura <c>detalle</c> lo cuenta con
+/// <c>fulfillment.leer</c> (NS-2), contra el orquestador y las capacidades reales del arnés (quickstart §2).
 /// </summary>
 /// <remarks>
 /// Lo que se mira es lo que la capacidad dice del envío —su estado y sus eventos—, no sólo lo que contestó el flujo; y
@@ -174,6 +175,46 @@ public sealed class DespachoDeTiendaTests
         Assert.True(estado is HttpStatusCode.OK or HttpStatusCode.Created, enviado.ToString());
         Assert.Equal("InTransit", EstadoDelEnvio(enviado));
         Assert.Equal([("Ready", null), ("InTransit", "GUIA-123")], (await ElEnvio(t, envio)).Eventos);
+    }
+
+    [Fact]
+    public async Task El_detalle_dice_a_donde_va_con_quien_y_en_que_estado_sin_abrir_una_saga()
+    {
+        using var t = new CompraDeTiendaReal();
+        var (compra, _) = await Completada(t);
+        await t.EnviarElPedido(compra, "GUIA-123", "enviar-1");
+        var sagas = Path.Combine(t.Raiz, "flujos", "sagas");
+        var antes = Directory.GetFiles(sagas).Length;
+
+        var (estado, detalle) = await t.DetalleDelPedido(compra);
+
+        Assert.True(estado == HttpStatusCode.OK, detalle.ToString());
+        var datos = detalle.GetProperty("datos");
+        var destino = datos.GetProperty("destino");
+        Assert.Equal(("Calle 1 # 2-3", "Bogotá", "CO"),
+            (destino.GetProperty("linea1").GetString(), destino.GetProperty("ciudad").GetString(), destino.GetProperty("pais").GetString()));
+        Assert.Equal("servientrega", datos.GetProperty("transportadora").GetString());
+        Assert.Equal("InTransit", datos.GetProperty("estadoDelEnvio").GetString());
+        Assert.Equal([("Ready", null), ("InTransit", "GUIA-123")], datos.GetProperty("eventos").EnumerateArray()
+            .Select(e => (e.GetProperty("estado").GetString(),
+                e.TryGetProperty("nota", out var nota) && nota.ValueKind == JsonValueKind.String ? nota.GetString() : null))
+            .ToList());
+        Assert.Equal(antes, Directory.GetFiles(sagas).Length);
+    }
+
+    [Fact]
+    public async Task El_detalle_de_una_compra_en_curso_o_que_no_existe_no_lee_ningun_envio()
+    {
+        using var t = new CompraDeTiendaReal();
+        var (_, abierta) = await t.Abrir(llave: "en-curso");
+        var enCurso = abierta.GetProperty("id").GetString()!;
+
+        var (estado1, r1) = await t.DetalleDelPedido(enCurso);
+        var (estado2, r2) = await t.DetalleDelPedido("no-existe");
+
+        Assert.Equal((HttpStatusCode.Conflict, PasoLeerOriginal.NoCompletada), (estado1, r1.GetProperty("code").GetString()));
+        Assert.Equal((HttpStatusCode.NotFound, PasoLeerOriginal.NoEncontrada), (estado2, r2.GetProperty("code").GetString()));
+        Assert.DoesNotContain(t.Llamadas, l => l.StartsWith("GET /v1/shipments/", StringComparison.Ordinal));
     }
 
     [Fact]

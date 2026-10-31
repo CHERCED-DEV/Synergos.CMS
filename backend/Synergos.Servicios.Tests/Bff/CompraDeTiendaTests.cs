@@ -234,6 +234,13 @@ internal sealed class CompraDeTiendaReal : IDisposable
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> EntregarElPedido(string compra, string llave, string personal = "staff-1")
         => DelPersonal("tienda.entrega", new { compra }, llave, personal);
 
+    /// <summary>
+    /// El envío de una compra (NS-2): la lectura <c>detalle</c> de <c>tienda.envio</c>, sin saga, sin llave y sin sujeto
+    /// —el rol lo comprueba la puerta del CMS—, como la pide la ficha del pedido en la consola.
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> DetalleDelPedido(string compra)
+        => Enviar(new HttpRequestMessage(HttpMethod.Post, "v1/flujos/tienda.envio/detalle") { Content = JsonContent.Create(new { compra }) });
+
     private Task<(HttpStatusCode Estado, JsonElement Cuerpo)> DelPersonal(string flujo, object cuerpo, string llave, string personal)
     {
         var peticion = new HttpRequestMessage(HttpMethod.Post, $"v1/flujos/{flujo}") { Content = JsonContent.Create(cuerpo) };

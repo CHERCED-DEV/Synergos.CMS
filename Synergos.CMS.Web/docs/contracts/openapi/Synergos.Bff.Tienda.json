@@ -43,96 +43,6 @@
         }
       }
     },
-    "/v1/envios/{compra}": {
-      "get": {
-        "operationId": "LeerEnvioDeLaCompra",
-        "parameters": [
-          {
-            "name": "compra",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnvioDeLaCompraResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NotFound",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Expired",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Unavailable",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Rechazo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/flujos/compensaciones": {
       "get": {
         "operationId": "FlujosCompensaciones",
@@ -2233,6 +2143,101 @@
         }
       }
     },
+    "/v1/flujos/tienda.envio/detalle": {
+      "post": {
+        "operationId": "TiendaEnvioDetalle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TiendaEnvioDetalleEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiendaEnvioDetalle"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "tienda.envio",
+          "operacion": "detalle",
+          "acceso": "personal"
+        }
+      }
+    },
     "/v1/flujos/tienda.envio/{id}": {
       "get": {
         "operationId": "TiendaEnvioConsultar",
@@ -3448,140 +3453,6 @@
           }
         }
       },
-      "DestinoDelEnvioResponse": {
-        "required": [
-          "line1",
-          "line2",
-          "city",
-          "region",
-          "postalCode",
-          "country",
-          "contact"
-        ],
-        "type": "object",
-        "properties": {
-          "line1": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "line2": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "city": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "region": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "postalCode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "country": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "contact": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "EnvioDeLaCompraResponse": {
-        "required": [
-          "compra",
-          "envio"
-        ],
-        "type": "object",
-        "properties": {
-          "compra": {
-            "type": "string"
-          },
-          "envio": {
-            "$ref": "#/components/schemas/EnvioResponse"
-          }
-        }
-      },
-      "EnvioResponse": {
-        "required": [
-          "id",
-          "destino",
-          "transportadora",
-          "estado",
-          "eventos"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "destino": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/DestinoDelEnvioResponse"
-              }
-            ]
-          },
-          "transportadora": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "estado": {
-            "type": "string"
-          },
-          "eventos": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EventoDelEnvioResponse"
-            }
-          }
-        }
-      },
-      "EventoDelEnvioResponse": {
-        "required": [
-          "estado",
-          "nota",
-          "fecha"
-        ],
-        "type": "object",
-        "properties": {
-          "estado": {
-            "type": "string"
-          },
-          "nota": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "fecha": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "MoneyDto": {
         "required": [
           "amount",
@@ -4690,6 +4561,131 @@
           },
           "deshaciendo": {
             "type": "boolean"
+          }
+        }
+      },
+      "TiendaEnvioDetalle": {
+        "required": [
+          "flujo",
+          "datos"
+        ],
+        "type": "object",
+        "properties": {
+          "flujo": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "destino",
+              "transportadora",
+              "estadoDelEnvio",
+              "eventos"
+            ],
+            "type": "object",
+            "properties": {
+              "destino": {
+                "oneOf": [
+                  {
+                    "required": [
+                      "linea1",
+                      "ciudad",
+                      "pais"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "linea1": {
+                        "type": "string"
+                      },
+                      "linea2": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "ciudad": {
+                        "type": "string"
+                      },
+                      "region": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "codigoPostal": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      },
+                      "pais": {
+                        "type": "string"
+                      },
+                      "contacto": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "transportadora": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "estadoDelEnvio": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "eventos": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "required": [
+                    "estado",
+                    "nota",
+                    "instante"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "estado": {
+                      "type": "string"
+                    },
+                    "nota": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "instante": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TiendaEnvioDetalleEntrada": {
+        "required": [
+          "compra"
+        ],
+        "type": "object",
+        "properties": {
+          "compra": {
+            "type": "string"
           }
         }
       },

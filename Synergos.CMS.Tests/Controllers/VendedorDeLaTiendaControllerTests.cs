@@ -38,12 +38,16 @@ public sealed class VendedorDeLaTiendaControllerTests
     private static readonly string[] PedidoDeLaBandeja =
         ["orderRef", "orderNumber", "fecha", "comprador", "camino", "etapa", "total", "totalFormatted", "moneda", "lineas", "actos", "motivoSinActos"];
 
+    /// <summary>El envío como lo cuenta la lectura <c>detalle</c> de <c>tienda.envio</c> (<c>LecturaDeFlujo</c> del host genérico).</summary>
     private const string EnvioDelOrquestador = """
-        {"compra":"pta-1","envio":{"id":"shp_1",
-         "destino":{"line1":"Carrera 7 # 8-9","line2":null,"city":"Medellín","region":"Antioquia","postalCode":null,"country":"CO","contact":"Ana"},
-         "transportadora":"servientrega","estado":"Ready",
-         "eventos":[{"estado":"Ready","nota":null,"fecha":"2026-10-25T14:02:11+00:00"}]}}
+        {"flujo":"tienda.envio","datos":{
+         "destino":{"linea1":"Carrera 7 # 8-9","linea2":null,"ciudad":"Medellín","region":"Antioquia","codigoPostal":null,"pais":"CO","contacto":"Ana"},
+         "transportadora":"servientrega","estadoDelEnvio":"Ready",
+         "eventos":[{"estado":"Ready","nota":null,"instante":"2026-10-25T14:02:11Z"}]}}
         """;
+
+    /// <summary>Lo que contesta el orquestador por una compra que no tiene: el rechazo de <c>flow.leer-original</c>.</summary>
+    private const string SinLaCompra = """{"code":"flow.original_no_encontrada","detail":"No existe la compra.","transient":false}""";
 
     /// <summary>La tienda en memoria con el controlador, la sesión que se le diga y un orquestador de mentira.</summary>
     private sealed class Tienda
@@ -188,9 +192,14 @@ public sealed class VendedorDeLaTiendaControllerTests
                 lock (o.Pedidos) o.Pedidos.Add($"{r.Method} {ruta} {sujeto}".TrimEnd());
                 var id = Uri.UnescapeDataString(ruta.Split('/').Last());
 
-                if (ruta.StartsWith("/v1/envios/", StringComparison.Ordinal) && o.Envios.TryGetValue(id, out var envio))
+                if (r.Method == HttpMethod.Post && ruta == $"/v1/flujos/{DespachosDeLaPuerta.FlujoDelEnvio}/{DespachosDeLaPuerta.Lectura}")
                 {
-                    return Responder(envio.Estado, envio.Cuerpo);
+                    using var lector = new StreamReader(r.Content!.ReadAsStream(ct));
+                    using var pedido = JsonDocument.Parse(lector.ReadToEnd());
+                    var compra = pedido.RootElement.GetProperty("compra").GetString()!;
+                    return o.Envios.TryGetValue(compra, out var envio)
+                        ? Responder(envio.Estado, envio.Cuerpo)
+                        : Responder(HttpStatusCode.NotFound, SinLaCompra);
                 }
                 if (r.Method == HttpMethod.Post && id is DespachosDeLaPuerta.FlujoDelEnvio or DespachosDeLaPuerta.FlujoDeLaEntrega)
                 {

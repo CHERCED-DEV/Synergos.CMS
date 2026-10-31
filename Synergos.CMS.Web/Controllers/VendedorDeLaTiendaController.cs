@@ -21,8 +21,9 @@ namespace Synergos.CMS.Web.Controllers;
 /// <para><b>La bandeja concilia antes de leer</b> (FR-004): una compra de la puerta cobrada cuyo comprador no volvió a
 /// «Mis compras» seguiría pendiente. <c>sinConciliar</c> dice cuántas no alcanzó el techo.</para>
 ///
-/// <para><b>El envío de un pedido de la puerta lo lee el orquestador</b>, porque la dirección sólo la guarda el envío; el
-/// de la directa sale de su <c>ShipTo</c>. Si no se pudo leer, <c>envio</c> es nulo con su motivo, y el pedido se ve
+/// <para><b>El envío de un pedido de la puerta lo lee el orquestador</b>, porque la dirección sólo la guarda el envío: la
+/// lectura <c>detalle</c> de <c>tienda.envio</c> por la puerta (<see cref="DespachosDeLaPuerta"/>, NS-2). El de la
+/// directa sale de su <c>ShipTo</c>. Si no se pudo leer, <c>envio</c> es nulo con su motivo, y el pedido se ve
 /// igual.</para>
 ///
 /// <para><b>El acto decide por el camino del pedido</b> (R4): uno de la puerta envía y entrega por el orquestador
@@ -316,10 +317,12 @@ public sealed class VendedorDeLaTiendaController : ControllerBase
                 : (new EnvioDto(null, null, null, []), "sin_direccion");
         }
 
-        var (envio, fallo) = await _registro.EnvioAsync(orden.OrderRef, ct);
+        var (envio, fallo) = await _despachos.DetalleAsync(orden.OrderRef, ct);
         if (envio is null)
         {
-            return (null, fallo is { Estado: StatusCodes.Status404NotFound } ? "sin_envio" : "envio_no_disponible");
+            return (null, fallo?.Codigo is DespachosDeLaPuerta.CompraNoEncontrada or DespachosDeLaPuerta.CompraNoCompletada
+                ? "sin_envio"
+                : "envio_no_disponible");
         }
         var destino = envio.Destino is { } d ? new DestinoDto(d.Line1, d.Line2, d.City, d.Region, d.PostalCode, d.Country, d.Contact) : null;
         return (new EnvioDto(destino, envio.Transportadora, envio.Estado,
