@@ -708,6 +708,34 @@ public sealed class HostDeFlujosTests
     }
 
     [Fact]
+    public async Task En_un_flujo_del_personal_otra_persona_llega_a_la_misma_saga_la_cierra_y_la_deshace()
+    {
+        // NS-3 de 013 (001-P12): la saga de un flujo del personal es del flujo. El rol lo comprueba la puerta, y quien la
+        // abrió queda como su dueña: el rastro.
+        using var banco = new Banco(Cita.Replace("\"clave\": \"prueba.cita\",", "\"clave\": \"prueba.cita\", \"acceso\": \"personal\",", StringComparison.Ordinal));
+        Assert.Empty(banco.Errores());
+        var fachada = banco.Fachada();
+        var otra = Ref.Create("prueba.paciente", "u-2");
+        Assert.True((await fachada.AbrirAsync("cita-1", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+        Assert.True((await fachada.AbrirAsync("cita-2", Paciente, Banco.Entrada(), CancellationToken.None)).IsOk);
+
+        var reintento = await fachada.AbrirAsync("cita-1", otra, Banco.Entrada().Set("paciente", otra), CancellationToken.None);
+        var cerrada = await fachada.ContinuarAsync("cerrar", "cita-1", otra, new FlowContext().Set("contacto", null), CancellationToken.None);
+        var deshecha = await fachada.CancelarAsync("cita-2", otra, CancellationToken.None);
+
+        Assert.Equal("cita-1", reintento.Value.Id);
+        Assert.True(fachada.DevolveriaLaMisma("cita-1", otra));
+        Assert.True(fachada.Consultar("cita-1", otra).IsOk);
+        Assert.True(cerrada.IsOk, cerrada.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Completed, cerrada.Value.Status);
+        Assert.True(deshecha.IsOk, deshecha.Rejection?.ToString());
+        Assert.Equal(SagaStatus.Compensated, banco.Motor.Find("cita-2")!.Status);
+        Assert.Single(banco.Puertos.Llamadas, l => l.EndsWith("cita-1|authorize", StringComparison.Ordinal));
+        Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("capturar", StringComparison.Ordinal));
+        Assert.Equal(Paciente, banco.Motor.Find("cita-1")!.Dueno);
+    }
+
+    [Fact]
     public async Task Una_llave_de_otro_flujo_no_devuelve_su_saga()
     {
         using var banco = new Banco();

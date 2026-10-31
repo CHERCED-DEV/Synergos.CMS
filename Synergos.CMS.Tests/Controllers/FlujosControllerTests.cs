@@ -867,6 +867,26 @@ public sealed class FlujosControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task En_una_operacion_del_personal_la_llave_es_del_flujo_y_no_de_la_persona()
+    {
+        // NS-3 de 013 (001-P12): otra persona del personal que reintenta lo mismo con la misma llave llega a la misma saga.
+        _ajustes.Flujos[Flujo] = Personal("vendedor");
+        _miembro.HasAnyRole(Arg.Any<string?>()).Returns(true);
+
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"), tabla: DelPersonal());
+        Sesion(Beto);
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k1"), tabla: DelPersonal());
+        await Pedir("POST", "abrir", cuerpo: Compra, cabeceras: Llave("k2"), tabla: DelPersonal());
+
+        var pedidos = _orquestador.Pedidos.Select(p => p.Cabeceras).ToList();
+        Assert.Equal(pedidos[0]["Idempotency-Key"], pedidos[1]["Idempotency-Key"]);
+        Assert.NotEqual(pedidos[0]["Idempotency-Key"], pedidos[2]["Idempotency-Key"]);
+        Assert.Equal(LoQuePoneLaPuerta.LlaveReemitida(LoQuePoneLaPuerta.DuenoDeLaLlaveDelPersonal, Flujo, "k1"), pedidos[0]["Idempotency-Key"]);
+        // El sujeto sigue siendo la persona: el rastro de quién lo pidió.
+        Assert.Equal(LoQuePoneLaPuerta.Sujeto("eventos.personal", Beto), pedidos[1][LoQuePoneLaPuerta.CabeceraDelSujeto]);
+    }
+
+    [Fact]
     public async Task Sin_el_rol_es_403_sin_sesion_401_y_no_sale_nada()
     {
         _ajustes.Flujos[Flujo] = Personal("vendedor");
