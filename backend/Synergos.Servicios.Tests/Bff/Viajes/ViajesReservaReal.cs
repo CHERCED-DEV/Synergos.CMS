@@ -143,6 +143,42 @@ internal sealed class ViajesReservaReal : IDisposable
     public static object ItemPorNoche(string producto, DateTimeOffset inicio, DateTimeOffset fin, string? etiqueta = null, bool porNoche = true)
         => new { producto, etiqueta, ventana = new { start = inicio, end = fin }, porNoche };
 
+    /// <summary>
+    /// Provisiona un vuelo como el manifiesto (lote 13, 006-P9): su recurso, la tarifa del trayecto por adulto
+    /// (<c>viajes.tarifa-trayecto</c>) y, si se da, la del niño (<c>viajes.tarifa-trayecto-nino</c>); ninguna por producto.
+    /// </summary>
+    public async Task<ViajesReservaReal> ConVuelo(string producto, decimal porAdulto, decimal? porNino = null, int cupos = 10)
+    {
+        await Crear("booking", "v1/resources", "recurso-" + producto,
+            new { subjectKind = "viajes.producto", subjectId = producto, capacity = cupos, timeZoneId = "UTC" });
+        await Crear("pricing", "v1/prices", "tarifa-trayecto-" + producto,
+            new { subjectKind = "viajes.tarifa-trayecto", subjectId = producto, amount = new { amount = porAdulto, currency = "COP" } });
+        if (porNino is { } nino)
+        {
+            await Crear("pricing", "v1/prices", "tarifa-trayecto-nino-" + producto,
+                new { subjectKind = "viajes.tarifa-trayecto-nino", subjectId = producto, amount = new { amount = nino, currency = "COP" } });
+        }
+        return this;
+    }
+
+    /// <summary>Provisiona un auto como el manifiesto (lote 13): su recurso y su tarifa POR DÍA (<c>viajes.tarifa-dia</c>).</summary>
+    public async Task<ViajesReservaReal> ConAuto(string producto, decimal porDia, int cupos = 10)
+    {
+        await Crear("booking", "v1/resources", "recurso-" + producto,
+            new { subjectKind = "viajes.producto", subjectId = producto, capacity = cupos, timeZoneId = "UTC" });
+        await Crear("pricing", "v1/prices", "tarifa-dia-" + producto,
+            new { subjectKind = "viajes.tarifa-dia", subjectId = producto, amount = new { amount = porDia, currency = "COP" } });
+        return this;
+    }
+
+    /// <summary>Un vuelo con sus tramos y sus pasajeros: se cotiza por trayecto.</summary>
+    public static object ItemDeVuelo(string producto, DateTimeOffset inicio, DateTimeOffset fin, int tramos, int adultos, int ninos = 0, string? etiqueta = null)
+        => new { producto, etiqueta, ventana = new { start = inicio, end = fin }, tramos, adultos, ninos };
+
+    /// <summary>Un auto con su marca: se cotiza por día.</summary>
+    public static object ItemPorDia(string producto, DateTimeOffset inicio, DateTimeOffset fin, string? etiqueta = null)
+        => new { producto, etiqueta, ventana = new { start = inicio, end = fin }, porDia = true };
+
     /// <summary>Ida en avión, dos noches de hotel y el auto de esos días.</summary>
     public static object[] ItinerarioDePrueba() =>
     [

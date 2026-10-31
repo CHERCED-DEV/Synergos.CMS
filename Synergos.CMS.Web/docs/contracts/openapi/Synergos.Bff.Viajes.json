@@ -3160,6 +3160,26 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "unidad": {
+                      "enum": [
+                        "noche",
+                        "dia",
+                        "trayecto"
+                      ],
+                      "type": "string"
+                    },
+                    "tramos": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "adultos": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "ninos": {
+                      "type": "integer",
+                      "format": "int32"
                     }
                   }
                 }
@@ -3313,6 +3333,33 @@
                     "null",
                     "boolean"
                   ]
+                },
+                "porDia": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "tramos": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "format": "int32"
+                },
+                "adultos": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "format": "int32"
+                },
+                "ninos": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "format": "int32"
                 }
               }
             }
@@ -3445,6 +3492,26 @@
                           "type": "string"
                         }
                       }
+                    },
+                    "unidad": {
+                      "enum": [
+                        "noche",
+                        "dia",
+                        "trayecto"
+                      ],
+                      "type": "string"
+                    },
+                    "tramos": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "adultos": {
+                      "type": "integer",
+                      "format": "int32"
+                    },
+                    "ninos": {
+                      "type": "integer",
+                      "format": "int32"
                     }
                   }
                 }

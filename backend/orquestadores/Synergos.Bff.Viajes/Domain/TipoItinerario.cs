@@ -17,12 +17,16 @@ namespace Synergos.Bff.Viajes.Domain;
 /// y, si no se cumplió, <c>noCumplido</c> y lo <c>devuelto</c>. Se escriben sólo cuando hay algo que decir, así que un viaje
 /// de antes —o uno que se confirmó entero— se lee y se escribe igual que siempre.</para>
 ///
-/// <para>No es un dato personal: producto, nombre en pantalla, periodo y dinero del viaje.</para>
+/// <para><b>Y cómo se cobra cada ítem</b> (lote 13, 006-P9), opcional como lo demás: <c>unidad</c> («noche», «dia» o
+/// «trayecto»; sin ella, por producto) y, en un vuelo, <c>tramos</c>, <c>adultos</c> y <c>ninos</c>.</para>
+///
+/// <para>No es un dato personal: producto, nombre en pantalla, periodo, cuántos viajan y dinero del viaje.</para>
 /// </remarks>
 public sealed class TipoItinerario : ITipoDeValor
 {
     private static readonly string[] Obligatorios = ["producto", "etiqueta", "inicio", "fin"];
-    private static readonly string[] Campos = [.. Obligatorios, "precio", "noCumplido", "devuelto"];
+    private static readonly string[] Campos = [.. Obligatorios, "precio", "noCumplido", "devuelto", "unidad", "tramos", "adultos", "ninos"];
+    private static readonly string[] Unidades = [ParadaDelViaje.PorNoche, ParadaDelViaje.PorDia, ParadaDelViaje.PorTrayecto];
 
     public string Nombre => "itinerario";
     public Type Clr => typeof(IReadOnlyList<ParadaDelViaje>);
@@ -52,7 +56,11 @@ public sealed class TipoItinerario : ITipoDeValor
                 (DateTimeOffset)instante.Leer(Propiedad(p, "fin", aqui), $"{aqui}.fin"),
                 Opcional(p, "precio") is { } precio ? (Money)dinero.Leer(precio, $"{aqui}.precio") : null,
                 NoCumplido(p, aqui),
-                Opcional(p, "devuelto") is { } devuelto ? (Money)dinero.Leer(devuelto, $"{aqui}.devuelto") : null));
+                Opcional(p, "devuelto") is { } devuelto ? (Money)dinero.Leer(devuelto, $"{aqui}.devuelto") : null,
+                Unidad(p, aqui),
+                Entero(p, "tramos", aqui),
+                Entero(p, "adultos", aqui),
+                Entero(p, "ninos", aqui)));
         }
         return (IReadOnlyList<ParadaDelViaje>)paradas;
     }
@@ -74,6 +82,10 @@ public sealed class TipoItinerario : ITipoDeValor
                 if (p.Precio is { } precio) parada["precio"] = dinero.Escribir(precio);
                 if (p.NoCumplido) parada["noCumplido"] = true;
                 if (p.Devuelto is { } devuelto) parada["devuelto"] = dinero.Escribir(devuelto);
+                if (p.Unidad is { } unidad) parada["unidad"] = unidad;
+                if (p.Tramos is { } tramos) parada["tramos"] = tramos;
+                if (p.Adultos is { } adultos) parada["adultos"] = adultos;
+                if (p.Ninos is { } ninos) parada["ninos"] = ninos;
                 return (JsonNode)parada;
             })
             .ToArray());
@@ -95,6 +107,14 @@ public sealed class TipoItinerario : ITipoDeValor
                 ["precio"] = new Dinero().Esquema(),
                 ["noCumplido"] = new JsonObject { ["type"] = "boolean" },
                 ["devuelto"] = new Dinero().Esquema(),
+                ["unidad"] = new JsonObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JsonArray(Unidades.Select(u => (JsonNode?)u).ToArray()),
+                },
+                ["tramos"] = new JsonObject { ["type"] = "integer", ["format"] = "int32" },
+                ["adultos"] = new JsonObject { ["type"] = "integer", ["format"] = "int32" },
+                ["ninos"] = new JsonObject { ["type"] = "integer", ["format"] = "int32" },
             },
         },
     };
@@ -112,6 +132,20 @@ public sealed class TipoItinerario : ITipoDeValor
         { ValueKind: JsonValueKind.True } => true,
         { ValueKind: JsonValueKind.False } => false,
         _ => throw new FormatException($"{donde}.noCumplido: tiene que ser sí o no."),
+    };
+
+    private static string? Unidad(JsonElement objeto, string donde) => Opcional(objeto, "unidad") switch
+    {
+        null => null,
+        { ValueKind: JsonValueKind.String } v when Unidades.Contains(v.GetString(), StringComparer.Ordinal) => v.GetString(),
+        _ => throw new FormatException($"{donde}.unidad: tiene que ser {string.Join(", ", Unidades)}."),
+    };
+
+    private static int? Entero(JsonElement objeto, string nombre, string donde) => Opcional(objeto, nombre) switch
+    {
+        null => null,
+        { ValueKind: JsonValueKind.Number } v when v.TryGetInt32(out var n) => n,
+        _ => throw new FormatException($"{donde}.{nombre}: tiene que ser un entero."),
     };
 
     private static string Texto(JsonElement objeto, string nombre, string donde)

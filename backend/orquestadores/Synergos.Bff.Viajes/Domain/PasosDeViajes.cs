@@ -12,10 +12,41 @@ namespace Synergos.Bff.Viajes.Domain;
 /// por ese ítem (su tarifa por su cantidad), y sólo sirve para repartir el total si el ítem no se cumple;
 /// <paramref name="NoCumplido"/> y <paramref name="Devuelto"/> los escribe la extensión del flujo al soltarlo: qué no se
 /// pudo confirmar y cuánto de lo cobrado le corresponde. Lo dice el servidor, no la pantalla.</para>
+///
+/// <para><b>Cómo se cobra</b> (lote 13, 006-P9): <paramref name="Unidad"/> dice con qué tarifa se cotiza el ítem —por
+/// producto (nula), por noche, por día o por trayecto— y, en un vuelo, <paramref name="Tramos"/> (1 la ida, 2 ida y vuelta),
+/// <paramref name="Adultos"/> y <paramref name="Ninos"/> (los infantes no pagan). De ahí salen sus <see cref="Lineas"/>, las
+/// mismas al cotizar que al repartir el precio por ítem, y quien viaja ve en el itinerario por qué cuesta lo que cuesta.</para>
 /// </remarks>
 public sealed record ParadaDelViaje(
     string Producto, string Etiqueta, DateTimeOffset Inicio, DateTimeOffset Fin,
-    Money? Precio = null, bool NoCumplido = false, Money? Devuelto = null);
+    Money? Precio = null, bool NoCumplido = false, Money? Devuelto = null,
+    string? Unidad = null, int? Tramos = null, int? Adultos = null, int? Ninos = null)
+{
+    public const string PorNoche = "noche";
+    public const string PorDia = "dia";
+    public const string PorTrayecto = "trayecto";
+
+    /// <summary>
+    /// Lo que se cotiza por este ítem, una línea por tarifa: la del producto por uno; la de la noche o la del día por los
+    /// días de su periodo; la del trayecto por los tramos y los adultos, y la del niño por los tramos y los niños.
+    /// </summary>
+    public IReadOnlyList<(Ref Sujeto, int Cantidad)> Lineas() => Unidad switch
+    {
+        PorNoche => [(TravelSubject.NightOf(Producto), Dias(Inicio, Fin))],
+        PorDia => [(TravelSubject.DayOf(Producto), Dias(Inicio, Fin))],
+        PorTrayecto when Ninos is > 0 =>
+        [
+            (TravelSubject.LegOf(Producto), (Tramos ?? 1) * (Adultos ?? 1)),
+            (TravelSubject.ChildLegOf(Producto), (Tramos ?? 1) * Ninos.Value),
+        ],
+        PorTrayecto => [(TravelSubject.LegOf(Producto), (Tramos ?? 1) * (Adultos ?? 1))],
+        _ => [(TravelSubject.PriceOf(Producto), 1)],
+    };
+
+    /// <summary>Los días (o noches) que cubre un periodo, al menos uno.</summary>
+    public static int Dias(DateTimeOffset inicio, DateTimeOffset fin) => Math.Max(1, (int)Math.Ceiling((fin - inicio).TotalDays));
+}
 
 /// <summary>
 /// Los pasos propios de la reserva por la puerta (<c>flujos/viajes.reserva.json</c>, línea 006): la regla del itinerario
@@ -48,9 +79,17 @@ public static class PasosDeViajes
 /// y cantidad uno. La marca la pone quien reserva, pero no decide el precio: cada clase de tarifa es otro sujeto en
 /// <c>Api.Pricing</c>, así que un alojamiento marcado «por producto» (o un vuelo marcado «por noche») no encuentra tarifa y
 /// la cotización se rechaza. Nadie paga una noche por tres.</para>
+///
+/// <para><b>Y el auto por día y el vuelo por trayecto y pasajero</b> (lote 13, 006-P9), como los cobra el catálogo: un ítem
+/// con <c>porDia</c> va con la tarifa del día por los días de su ventana; uno con <c>tramos</c> (1 o 2) va con la del
+/// trayecto por los tramos y los <c>adultos</c>, y con la del niño por los tramos y los <c>ninos</c>. Un ítem se cobra de
+/// una sola manera, y los pasajeros sólo cuentan en un vuelo.</para>
 /// </remarks>
 public sealed class PasoRevisarItinerario : IPaso
 {
+    /// <summary>Los pasajeros que pagan en un vuelo, como mucho: los de una reserva de aerolínea.</summary>
+    public const int MaxPasajeros = 9;
+
     public string Tipo => "viajes.revisar-itinerario";
     public int Lecturas => 1;
     public int Escrituras => 2;
@@ -87,24 +126,68 @@ public sealed class PasoRevisarItinerario : IPaso
             }
 
             var etiqueta = item.Has("etiqueta") ? item.Get<string?>("etiqueta")?.Trim() : null;
-            var porNoche = item.Has("porNoche") && item.Get<bool?>("porNoche") is true;
-            aCotizar.Add(porNoche ? (TravelSubject.NightOf(producto), Noches(ventana)) : (TravelSubject.PriceOf(producto), 1));
-            itinerario.Add(new ParadaDelViaje(producto, string.IsNullOrEmpty(etiqueta) ? producto : etiqueta, ventana.Start, ventana.End));
+            var (parada, motivo) = Parada(item, producto, string.IsNullOrEmpty(etiqueta) ? producto : etiqueta, ventana);
+            if (motivo is not null) return Rechaza(motivo);
+            aCotizar.AddRange(parada!.Lineas());
+            itinerario.Add(parada);
         }
 
         return Task.FromResult(SalidaDePaso.Sigue(
             (IReadOnlyList<(Ref Sujeto, int Cantidad)>)aCotizar, (IReadOnlyList<ParadaDelViaje>)itinerario));
     }
 
+    /// <summary>El ítem con su forma de cobro, o por qué no se puede cobrar así.</summary>
+    private static (ParadaDelViaje? Parada, Rejection? Motivo) Parada(FlowContext item, string producto, string etiqueta, TimeWindow ventana)
+    {
+        var porNoche = item.Has("porNoche") && item.Get<bool?>("porNoche") is true;
+        var porDia = item.Has("porDia") && item.Get<bool?>("porDia") is true;
+        var tramos = item.Has("tramos") ? item.Get<int?>("tramos") : null;
+        var adultos = item.Has("adultos") ? item.Get<int?>("adultos") : null;
+        var ninos = item.Has("ninos") ? item.Get<int?>("ninos") : null;
+        var parada = new ParadaDelViaje(producto, etiqueta, ventana.Start, ventana.End);
+
+        if ((porNoche ? 1 : 0) + (porDia ? 1 : 0) + (tramos is null ? 0 : 1) > 1)
+        {
+            return (null, Rejection.Invalid("viajes.bad_fare_mark",
+                $"'{producto}' se cobra de una sola manera: por noche, por día o por trayecto."));
+        }
+        if (tramos is null)
+        {
+            if (adultos is not null || ninos is not null)
+            {
+                return (null, Rejection.Invalid("viajes.bad_fare_mark", $"Los pasajeros de '{producto}' sólo cuentan en un vuelo, con sus tramos."));
+            }
+            return (porNoche ? parada with { Unidad = ParadaDelViaje.PorNoche }
+                : porDia ? parada with { Unidad = ParadaDelViaje.PorDia }
+                : parada, null);
+        }
+        if (tramos is not (1 or 2))
+        {
+            return (null, Rejection.Invalid("viajes.bad_fare_mark", $"Un vuelo va de un tramo (ida) o de dos (ida y vuelta); '{producto}' trae {tramos}."));
+        }
+        var cuantosAdultos = adultos ?? 1;
+        var cuantosNinos = ninos ?? 0;
+        if (cuantosAdultos < 1 || cuantosNinos < 0 || cuantosAdultos + cuantosNinos > MaxPasajeros)
+        {
+            return (null, Rejection.Invalid("viajes.bad_passengers",
+                $"Un vuelo lleva de 1 a {MaxPasajeros} pasajeros que pagan, con al menos un adulto; '{producto}' trae {cuantosAdultos} y {cuantosNinos}."));
+        }
+        return (parada with
+        {
+            Unidad = ParadaDelViaje.PorTrayecto, Tramos = tramos, Adultos = cuantosAdultos, Ninos = cuantosNinos > 0 ? cuantosNinos : null,
+        }, null);
+    }
+
     private static Task<SalidaDePaso> Rechaza(Rejection motivo) => Task.FromResult(SalidaDePaso.Rechaza(motivo));
 
     /// <summary>Las noches de una estadía: los días que cubre su ventana, al menos una.</summary>
-    public static int Noches(TimeWindow ventana) => Math.Max(1, (int)Math.Ceiling((ventana.End - ventana.Start).TotalDays));
+    public static int Noches(TimeWindow ventana) => ParadaDelViaje.Dias(ventana.Start, ventana.End);
 }
 
 /// <summary>
 /// <c>viajes.precio-del-item</c>: lee el itinerario, lo que se cotizó (una línea por ítem, en su orden) y la cotización;
-/// escribe el itinerario con el precio de cada ítem: su tarifa por su cantidad, como la cotizó <c>Api.Pricing</c>.
+/// escribe el itinerario con el precio de cada ítem: cada tarifa de sus líneas por su cantidad, sumadas, como las cotizó
+/// <c>Api.Pricing</c>.
 /// </summary>
 /// <remarks>
 /// <para><b>Para qué</b> (historia 3): si un ítem no se puede confirmar y el sitio admite la parcial, la parte de lo cobrado
@@ -129,21 +212,28 @@ public sealed class PasoPrecioDelItem : IPaso
         var precios = new Dictionary<Ref, Money>();
         foreach (var (sujeto, unitario) in entrada.Lee<QuoteView>(2).Lineas) precios.TryAdd(sujeto, unitario);
 
-        if (lineas.Count != itinerario.Count)
+        // Cada ítem tiene sus líneas (una, o dos en un vuelo con niños): las mismas que se cotizaron, en su orden.
+        if (!itinerario.SelectMany(p => p.Lineas()).SequenceEqual(lineas))
         {
-            throw new InvalidOperationException($"El itinerario tiene {itinerario.Count} ítems y se cotizaron {lineas.Count} líneas.");
+            throw new InvalidOperationException($"El itinerario de {itinerario.Count} ítems no es el que se cotizó ({lineas.Count} líneas).");
         }
 
         var conPrecio = new List<ParadaDelViaje>(itinerario.Count);
-        for (var i = 0; i < itinerario.Count; i++)
+        foreach (var parada in itinerario)
         {
-            var (sujeto, cantidad) = lineas[i];
-            if (!precios.TryGetValue(sujeto, out var unitario))
+            var suma = 0m;
+            string? moneda = null;
+            foreach (var (sujeto, cantidad) in parada.Lineas())
             {
-                return Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(PasoPreciosPorLinea.SinPrecioDeLinea,
-                    $"La cotización no trae precio para {sujeto}: no se sabría qué parte del viaje es «{itinerario[i].Etiqueta}».")));
+                if (!precios.TryGetValue(sujeto, out var unitario))
+                {
+                    return Task.FromResult(SalidaDePaso.Rechaza(Rejection.Invalid(PasoPreciosPorLinea.SinPrecioDeLinea,
+                        $"La cotización no trae precio para {sujeto}: no se sabría qué parte del viaje es «{parada.Etiqueta}».")));
+                }
+                suma += unitario.Amount * cantidad;
+                moneda = unitario.Currency;
             }
-            conPrecio.Add(itinerario[i] with { Precio = Money.Of(unitario.Amount * cantidad, unitario.Currency) });
+            conPrecio.Add(parada with { Precio = Money.Of(suma, moneda!) });
         }
 
         return Task.FromResult(SalidaDePaso.Sigue((IReadOnlyList<ParadaDelViaje>)conPrecio));
