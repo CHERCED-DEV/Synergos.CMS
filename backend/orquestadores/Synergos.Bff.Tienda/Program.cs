@@ -60,7 +60,7 @@ builder.Services.AddSingleton<OfertaDeTienda>();
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
 if (declarado)
 {
-    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, [new PasoRevisarLineas()]);
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly, new PasoRevisarLineas());
 
     // Interino de N-12: los tipos del host más las líneas del pedido (TipoLineasDePedido).
     builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoLineasDePedido()));
