@@ -109,10 +109,19 @@ public sealed class PedidosDeLaTienda
         return pedidos;
     }
 
+    /// <summary>
+    /// La etapa de un pedido pagado: la del seguimiento que lee el comprador, o <c>paid</c> si no tiene. La usan la
+    /// bandeja del personal y «Mis compras» (014-despiece-tienda), para que los dos digan lo mismo.
+    /// </summary>
+    public static async Task<string> EtapaAsync(IOrderTrackingService seguimiento, string orderRef, CancellationToken ct)
+    {
+        var etapa = (await seguimiento.GetTimelineAsync(orderRef, ct).ConfigureAwait(false))?.CurrentStage;
+        return EsEtapa(etapa) ? etapa! : StubOrderTrackingService.StagePaid;
+    }
+
     private async Task<PedidoDeLaTienda> ComoPedidoAsync(ShopOrder orden, CancellationToken ct)
     {
-        var etapa = (await _seguimiento.GetTimelineAsync(orden.OrderRef, ct).ConfigureAwait(false))?.CurrentStage;
-        etapa = EsEtapa(etapa) ? etapa! : StubOrderTrackingService.StagePaid;
+        var etapa = await EtapaAsync(_seguimiento, orden.OrderRef, ct).ConfigureAwait(false);
 
         var (actos, motivo) = ActosDe(orden, etapa);
         return new PedidoDeLaTienda(orden, orden.ViaGate ? "puerta" : "directa", etapa, actos, motivo);

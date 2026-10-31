@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -653,7 +655,7 @@ public sealed class ShopCatalogController : ControllerBase
             dtos.Add(new OrderDto(
                 OrderRef: o.OrderRef,
                 OrderNumber: o.OrderNumber,
-                Status: o.Status.ToString(),
+                Status: await EstadoQueVeElCompradorAsync(o, cancellationToken),
                 CustomerName: o.CustomerName,
                 CustomerEmail: o.CustomerEmail,
                 Total: o.Total,
@@ -665,6 +667,18 @@ public sealed class ShopCatalogController : ControllerBase
         }
 
         return Ok(new OrdersResponse(Orders: dtos));
+    }
+
+    /// <summary>
+    /// El estado que ve quien compró: el del pedido, salvo que su despacho ya avanzó, que entonces manda la etapa del
+    /// seguimiento (<c>preparing</c>, <c>shipped</c> o <c>delivered</c>). Un pedido entregado decía «Pagado»
+    /// (014-despiece-tienda); ahora dice lo mismo que la bandeja del personal.
+    /// </summary>
+    private async Task<string> EstadoQueVeElCompradorAsync(ShopOrder orden, CancellationToken ct)
+    {
+        if (orden.Status != OrderStatus.Paid) return orden.Status.ToString();
+        var etapa = await PedidosDeLaTienda.EtapaAsync(_tracking, orden.OrderRef, ct);
+        return etapa == StubOrderTrackingService.StagePaid ? orden.Status.ToString() : etapa;
     }
 
     // ── 6. Wishlist / listas (IUserCollection, seam genérico P11) ──
