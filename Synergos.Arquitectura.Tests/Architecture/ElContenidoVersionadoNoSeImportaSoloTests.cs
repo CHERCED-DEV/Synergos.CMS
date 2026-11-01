@@ -5,8 +5,14 @@ namespace Synergos.CMS.Tests.Architecture;
 
 /// <summary>
 /// El contenido de demostración que vive en <c>uSync/v9/Content</c> y <c>Media</c> (ADR 0129) no
-/// se importa SOLO en ningún perfil ni despliegue: cargarlo es siempre un paso explícito (ADR 0013).
+/// se importa SOLO al arrancar en ningún perfil ni despliegue: cargarlo es siempre un acto (ADR 0013).
 /// </summary>
+/// <remarks>
+/// <para><b>Desde 2026-11-01 ese acto es el despliegue</b> (salida a Hetzner, 002-produccion):
+/// <c>deploy-remoto.sh</c> corre <c>importar-schema.sh --contenido-la-primera-vez</c>, que trae el
+/// contenido sólo a una base que no lo tiene —lo dice una marca en el volumen de la base— y nunca al
+/// arrancar. Lo vigila <c>SalidaAProduccionTests</c>; esto sigue vigilando que ningún arranque lo haga.</para>
+/// </remarks>
 /// <remarks>
 /// <para><b>Por qué hace falta ahora.</b> Mientras el contenido no estaba en el repo, encender
 /// <c>ImportAtStartup</c> sólo reimportaba el esquema. Con las páginas y la media versionadas, la
@@ -40,7 +46,7 @@ public sealed class ElContenidoVersionadoNoSeImportaSoloTests
     private static readonly IReadOnlyDictionary<string, string> Explicitos = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["tools/importar-schema.sh"] =
-            "el import de un servidor NUEVO: a mano, una vez, en un contenedor efímero (compose run --rm) que importa y desaparece (#114)",
+            "el import de uSync en un contenedor efímero (compose run --rm) que importa y desaparece (#114); lo corre el despliegue, con el contenido sólo sobre una base nueva",
     };
 
     [Fact]

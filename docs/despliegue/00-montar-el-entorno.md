@@ -419,7 +419,7 @@ el sitio caído es peor que uno rojo, porque nadie lo mira.
 | Fichero | Dónde corre | Qué hace |
 |---|---|---|
 | `.github/workflows/deploy.yml` | runner | espera los gates, copia, ordena, y decide |
-| `tools/deploy-remoto.sh` | **el servidor** | repone los ficheros de una versión que ya estuvo, baja imágenes, para, arranca, comprueba etiquetas y guarda los ficheros de la versión en `versiones/<sha>/` |
+| `tools/deploy-remoto.sh` | **el servidor** | repone los ficheros de una versión que ya estuvo, baja imágenes, para, arranca, comprueba etiquetas, guarda los ficheros de la versión en `versiones/<sha>/`, y —salvo en una vuelta atrás— importa uSync y siembra las capacidades (§5.bis) |
 | `tools/humo-publico.sh` | **el runner** | prueba la URL pública como un visitante |
 
 > **El humo corre en el runner y no en el servidor, y esa es la parte que se suele hacer mal.**
@@ -471,14 +471,23 @@ backoffice. Eso sí es automático, y durante ese rato el proxy reintenta en vez
 > verdad**. Antes de #114 el humo daba eso por bueno, así que el primer despliegue de un servidor
 > nuevo se habría puesto **verde con el sitio en blanco**.
 
-El import es un paso, y está en el §5.bis de abajo.
+El import no lo hace el arranque: lo hace **el despliegue**, después de poner las piezas en pie
+(§5.bis de abajo).
 
 ---
 
-## 5.bis. El estado que hay que sembrar, UNA VEZ
+## 5.bis. El estado que hay que sembrar — lo hace el despliegue
 
-Un servidor recién montado tiene los procesos arriba y **nada dentro**. Esto es lo que hay que
-hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escrito acá.
+Un servidor recién montado tiene los procesos arriba y **nada dentro**. Nada de esto lo hace el
+arranque. **Desde 2026-11-01 lo hace `deploy-remoto.sh` en cada despliegue**, sin que nadie entre por
+SSH (lo pidió el arquitecto para la salida a Hetzner): primero el import de uSync —con el contenido
+sólo si la base es nueva— y después la siembra de las capacidades con su `--verificar`. En una vuelta
+atrás no hace ninguno de los dos: el schema de una versión anterior podría quitar lo que añadió la
+nueva. Lo prueba el ensayo (§8): un servidor nuevo queda verde sin un paso a mano, y un despliegue
+siguiente no revierte lo que cambió un editor.
+
+Los comandos de abajo quedan para casos a mano (repetir un import, sembrar tras dar de alta
+entidades sin desplegar).
 
 | Fichero | Dónde corre | Qué hace |
 |---|---|---|
@@ -501,9 +510,24 @@ hacer una vez, en orden. Nada de esto lo hace el arranque, y ninguno estaba escr
 ### 5.bis.1 El schema de uSync
 
 ```bash
-./importar-schema.sh --con-contenido   # en /opt/synergos, UNA vez, en un servidor NUEVO
-./importar-schema.sh                   # después: sólo schema (traer tipos nuevos sin tocar contenido)
+./importar-schema.sh --contenido-la-primera-vez   # lo que corre el despliegue (en /opt/synergos)
+./importar-schema.sh                              # a mano: sólo schema
+./importar-schema.sh --con-contenido              # a mano: fuerza el contenido (REVIERTE lo editado)
 ```
+
+**Quién decide que la base es nueva: una marca en el volumen de la base** (`cms-db`, el fichero
+`synergos-contenido-versionado` junto a `Umbraco.sqlite.db`), así que viaja con el respaldo y la
+restauración:
+
+| La marca | Lo que hace `--contenido-la-primera-vez` |
+|---|---|
+| no está, y la base no tiene documentos | base nueva: schema **y** contenido; marca `en-curso` antes y `importado` tras el veredicto |
+| `en-curso` | un import con contenido no terminó: lo repite |
+| `importado` o `adoptada` | sólo el schema |
+| no está, y la base **sí** tiene documentos | la adopta (marca `adoptada`) y sólo el schema: ante la duda, no se pisa |
+
+Un fichero en `/opt/synergos` no serviría: un servidor nuevo con la base restaurada lo tendría vacío y
+reimportaría encima de lo que publicaron los editores.
 
 > ⚠️ **Lo que esta sección decía y ya no vale (medido el 2026-10-15 en el ensayo, §8).** El import
 > procesaba **1240 ítems** —todo uSync menos `Content` (96) y `Media` (192)— y dejaba la base con

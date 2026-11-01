@@ -176,7 +176,8 @@ jobs:
       # servidor no necesita el repo y lo que corre es SIEMPRE lo que este
       # commit dice. Lo único permanente allá es `.env` —con los secretos, que
       # no salen de ahí— y los volúmenes.
-      - name: Copiar y ejecutar
+      - id: copiar
+        name: Copiar y ejecutar
         if: steps.config.outputs.listo == 'si'
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
@@ -208,8 +209,19 @@ jobs:
             tools/provisionar.recursos.json tools/provisionar.plantillas.json tools/provisionar.procesos.json \
             "$USUARIO@$HOST:/opt/synergos/"
 
+          # Desde 2026-11-01 `deploy-remoto.sh` hace el levantado ENTERO: las piezas,
+          # el import de uSync (el contenido sólo sobre una base nueva) y la siembra de
+          # las capacidades. Si falla con el stack ya tocado, la vuelta atrás de abajo
+          # corre aunque el humo no haya llegado a correr; su 3 es «no se tocó nada».
+          set +e
           ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$USUARIO@$HOST" \
             "chmod +x /opt/synergos/*.sh && /opt/synergos/deploy-remoto.sh $SHA"
+          CODIGO=$?
+          set -e
+          if [ "$CODIGO" != 0 ] && [ "$CODIGO" != 3 ]; then
+            echo "tocado=si" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$CODIGO"
 
       # ── 5. El humo, desde fuera ──────────────────────────────────────────
       - id: humo
@@ -227,16 +239,21 @@ jobs:
       #
       # Las dos cosas. Volver sin ponerse rojo deja un despliegue "exitoso" que
       # no desplegó nada; ponerse rojo sin volver deja el sitio caído.
+      #
+      # Y también cuando el servidor falló a medias (el import, la siembra, una pieza
+      # que no quedó sana): antes sólo volvía si el humo fallaba, y un fallo dentro de
+      # `deploy-remoto.sh` saltaba el humo Y la vuelta, con el sitio a medio poner.
       - name: Vuelta atrás
-        if: steps.config.outputs.listo == 'si' && steps.humo.outcome == 'failure'
+        if: ${{ !cancelled() && steps.config.outputs.listo == 'si' && (steps.humo.outcome == 'failure' || steps.copiar.outputs.tocado == 'si') }}
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USUARIO: ${{ secrets.DEPLOY_USER }}
           ANTERIOR: ${{ steps.anterior.outputs.valor }}
         run: |
           if [ -z "$ANTERIOR" ]; then
-            echo "✗ El humo falló y NO hay versión anterior a la que volver."
-            echo "  Es el primer despliegue: el sitio queda como quedó, y hay que mirarlo a mano."
+            echo "✗ El despliegue falló y NO hay versión anterior a la que volver."
+            echo "  Es el primer despliegue: el sitio queda como quedó. Volver a correr este"
+            echo "  workflow (Run workflow) retoma el import del contenido si quedó a medias."
             exit 1
           fi
 
@@ -259,5 +276,6 @@ jobs:
             echo
             echo "- **Versión**: \`${SHA:0:7}\`"
             echo "- **URL**: https://$DOMINIO"
+            echo "- En el servidor: las piezas sanas en esa versión, el schema de uSync importado (el contenido, sólo si la base era nueva) y lo que las capacidades exigen, publicado y verificado."
             echo "- Humo público en verde: portada, versión que contesta, y el árbol de servicios cerrado."
           } >> "$GITHUB_STEP_SUMMARY"

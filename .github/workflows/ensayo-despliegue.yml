@@ -27,6 +27,11 @@ name: Ensayo del despliegue
 #     que el arquitecto pone a mano: el dominio.
 #   · los MISMOS scripts, en el orden de la guía; el humo es `humo-publico.sh`,
 #     el mismo que corre el despliegue contra el dominio de verdad.
+#   · desde 2026-11-01 (salida a Hetzner), `deploy-remoto.sh` hace el levantado
+#     entero —piezas, uSync y siembra— y esto prueba las dos promesas: un servidor
+#     NUEVO queda verde sin un solo paso a mano, y un despliegue SIGUIENTE no toca
+#     lo que cambió un editor (con su contraprueba: un import con contenido sí lo
+#     revierte, así que la sonda no mira el vacío).
 #   · el dominio es `localhost`: Caddy le firma el certificado con su CA local
 #     y el humo confía en ella por `CURL_CA_BUNDLE`, sin tocar el script (que no
 #     puede decir `localhost`: lo vigila DeployPipelineTests).
@@ -198,31 +203,47 @@ jobs:
           set -uo pipefail
           cp .env .env.completo
           grep -v '^SYNERGOS_ADMIN_PASSWORD=' .env.completo > .env
-          if ./deploy-remoto.sh "$SHA" > /tmp/negativo.log 2>&1; then
-            cat /tmp/negativo.log; echo "✗ desplegó con una obligatoria vacía"; exit 1
-          fi
+          # El shell de GitHub es `bash -e`: sin el `||`, el 3 cortaría el paso acá.
+          CODIGO=0
+          ./deploy-remoto.sh "$SHA" > /tmp/negativo.log 2>&1 || CODIGO=$?
+          [ "$CODIGO" != 0 ] || { cat /tmp/negativo.log; echo "✗ desplegó con una obligatoria vacía"; exit 1; }
           grep -q 'SYNERGOS_ADMIN_PASSWORD' /tmp/negativo.log || { cat /tmp/negativo.log; echo "✗ falló sin nombrar la variable"; exit 1; }
           [ -z "$(docker ps -q)" ] || { docker ps; echo "✗ arrancó contenedores"; exit 1; }
+          # 3 = «no se tocó nada»: deploy.yml no hace la vuelta atrás por esto.
+          [ "$CODIGO" = 3 ] || { cat /tmp/negativo.log; echo "✗ salió $CODIGO y no 3: deploy.yml lo tomaría por un fallo con el stack tocado"; exit 1; }
           mv .env.completo .env
-          echo "| sin \`SYNERGOS_ADMIN_PASSWORD\`: se niega nombrándola, 0 contenedores | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| sin \`SYNERGOS_ADMIN_PASSWORD\`: se niega nombrándola, sale 3, 0 contenedores | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 3. Poner en pie, como el servidor ───────────────────────────────
-      - name: deploy-remoto.sh
+      # ── 3. Un servidor NUEVO, levantado entero por el despliegue ─────────
+      #
+      # Sin `importar-schema.sh` ni `provisionar-en-la-red.sh` a mano: los corre
+      # `deploy-remoto.sh`. Que la base se reconozca nueva y quede marcada lo dice
+      # su salida; que no quede nada por sembrar, `--verificar` desde fuera.
+      - name: Servidor nuevo — deploy-remoto.sh lo levanta entero
         working-directory: /opt/synergos
         env:
           SHA: ${{ steps.etiquetas.outputs.sha }}
         run: |
           set -euo pipefail
           t=$SECONDS
-          ./deploy-remoto.sh "$SHA"
-          echo "| en pie con \`${SHA:0:7}\` (\`deploy-remoto.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+          ./deploy-remoto.sh "$SHA" 2>&1 | tee /tmp/despliegue-1.log
+          grep -q 'base nueva (sin marca y sin documentos)' /tmp/despliegue-1.log \
+            || { echo "✗ el primer despliegue no reconoció la base nueva"; exit 1; }
+          grep -q 'marca del contenido: importado' /tmp/despliegue-1.log \
+            || { echo "✗ el contenido no quedó marcado como importado"; exit 1; }
+          ./provisionar-en-la-red.sh --verificar
+          echo "| servidor nuevo: \`deploy-remoto.sh\` pone las piezas en \`${SHA:0:7}\`, importa schema y contenido y siembra; \`--verificar\` en verde | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       # En una RAMA, la imagen del CMS se construye de la rama: el `Dockerfile` y el
       # `.dockerignore` son piezas del despliegue, y una imagen de master no ensaya
       # lo que la rama cambia en ellos (medido: la de master no lleva la vitrina).
       # Lleva la MISMA etiqueta y la misma versión, así que el humo la reconoce; y
-      # `compose up` recrea el CMS con ella sin tocar el volumen de medios, que ya
-      # existe — el caso que `importar-schema.sh --con-contenido` repone.
+      # `compose up` recrea el CMS con ella sin tocar el volumen de medios.
+      #
+      # ⚠️ Desde 2026-11-01 llega DESPUÉS del import: lo hace `deploy-remoto.sh`, que
+      # baja de GHCR la imagen de master y la usa para importar. La de la rama sirve
+      # el humo y el navegador de abajo; el despliegue siguiente vuelve a bajar la de
+      # master. Una rama que cambie lo que la imagen IMPORTA se ensaya en master.
       - name: En una rama, la imagen del CMS sale de la rama
         if: github.event_name == 'push'
         env:
@@ -240,14 +261,6 @@ jobs:
           done
           echo "| imagen del CMS construida de la rama | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: importar-schema.sh
-        working-directory: /opt/synergos
-        run: |
-          set -euo pipefail
-          t=$SECONDS
-          ./importar-schema.sh --con-contenido
-          echo "| schema y contenido (\`importar-schema.sh\`) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
-
       # Lo que sirve el CMS justo después del import, directo y sin el portero.
       # Medido en la corrida 4: tras un import de 1240 ítems sin errores, la
       # portada seguía siendo el cartel vacío. Esto dice si es la caché de
@@ -258,7 +271,7 @@ jobs:
         run: |
           set -uo pipefail
           C="docker compose --file compose.prod.yml --project-directory ."
-          export SYNERGOS_TAG="$(cat tag.actual)"
+          export SYNERGOS_TAG="$(cat tag.actual 2>/dev/null || true)"
           portada() {
             docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -o /tmp/p.html -w '%{http_code} %{size_download} B\n' http://cms:8080/ 2>/dev/null \
               || docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -w '%{http_code}\n' -o /dev/null http://cms:8080/
@@ -332,22 +345,65 @@ jobs:
           node ver.mjs
           echo "| navegador: portada y backoffice sin avisos por las cabeceras | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── 4. Lo que hay que sembrar, medido (R7) ──────────────────────────
+      # ── 3.ter. El producto el primer día, como lo ve un visitante ───────
       #
-      # `provisionar.sh` habla con las capacidades por su nombre de servicio,
-      # que sólo resuelve DENTRO de la red de Docker. Se corre como se correría
-      # en el servidor: en un contenedor efímero sobre `synergos_interna`.
-      - name: provisionar-en-la-red.sh
+      # MEDIDA, no puerta (002, 2026-11-01): qué contesta cada vertical en un servidor
+      # recién levantado, sin cuentas y con el `.env` del bootstrap. Es lo que decide qué
+      # le queda por hacer al arquitecto (F1.bis, P6) y lo que ya funciona sin manos.
+      - name: El primer día, lo que ve un visitante (medida)
+        if: always() && steps.etiquetas.outputs.sha != ''
+        run: |
+          set -uo pipefail
+          export CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt
+          echo "| ruta | código | qué trae |" > /tmp/primer-dia.md
+          echo "|---|---|---|" >> /tmp/primer-dia.md
+          for ruta in /api/ehr/doctors /api/ehr/copay /api/eventos/events /api/shop/search /api/academy/courses \
+                      /api/realty/listings /api/alquiler/equipment /api/gov/services; do
+            codigo="$(curl -s -o /tmp/r.json -w '%{http_code}' "https://localhost$ruta" || echo 000)"
+            que="$(jq -r 'if type=="array" then "\(length) elementos"
+                          else ([to_entries[] | select(.value|type=="array") | "\(.key): \(.value|length)"]
+                                + [to_entries[] | select(.value|type=="number") | "\(.key)=\(.value)"]) | join(", ") end' /tmp/r.json 2>/dev/null || head -c 120 /tmp/r.json)"
+            echo "| \`$ruta\` | $codigo | ${que:-—} |" | tee -a /tmp/primer-dia.md
+          done
+          { echo; echo "**El primer día, sin cuentas** (medida):"; echo; cat /tmp/primer-dia.md; echo; } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 4. Un editor cambia una página ──────────────────────────────────
+      #
+      # Lo que un despliegue SIGUIENTE no puede revertir. Se cambia en la base, con
+      # el CMS parado, el `heading` vigente de un documento que vino del contenido
+      # versionado —uSync lo compara con su XML al importar, así que un import con
+      # contenido lo devolvería al del repo (la contraprueba, abajo)—. El CMS lo
+      # vuelve a arrancar el respaldo, que es lo siguiente.
+      - name: Un editor cambia una página
         working-directory: /opt/synergos
         run: |
           set -euo pipefail
-          echo "── --verificar (en un servidor nuevo, tiene que decir qué falta)"
-          ./provisionar-en-la-red.sh --verificar || true
-          echo "── publicar"
-          ./provisionar-en-la-red.sh
-          echo "── --verificar otra vez (tiene que pasar)"
-          ./provisionar-en-la-red.sh --verificar
-          echo "| \`provisionar-en-la-red.sh\`: verificar, publicar, verificar | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          cat > /tmp/sonda.py <<'PY'
+          import sqlite3, sys
+          MARCA = ' — editado en el ensayo'
+          con = sqlite3.connect('/datos/Umbraco.sqlite.db')
+          VIGENTE = '''from umbracoPropertyData pd
+                       join cmsPropertyType pt on pt.id = pd.propertyTypeId
+                       join umbracoContentVersion cv on cv.id = pd.versionId
+                       join umbracoDocument d on d.nodeId = cv.nodeId
+                       where pt.Alias = 'heading' and cv."current" = 1'''
+          if sys.argv[1] == 'editar':
+              fila = con.execute('select pd.id, cv.nodeId, coalesce(pd.varcharValue, pd.textValue) ' + VIGENTE +
+                                 " and coalesce(pd.varcharValue, pd.textValue, '') <> '' order by cv.nodeId, pd.id limit 1").fetchone()
+              if fila is None:
+                  sys.exit('✗ no hay ningún heading con valor en la base: la sonda no tiene qué editar')
+              con.execute('update umbracoPropertyData set varcharValue = varcharValue || ?, textValue = textValue || ? where id = ?',
+                          (MARCA, MARCA, fila[0]))
+              con.commit()
+              print(f'nodo {fila[1]}: «{fila[2]}» → «{fila[2]}{MARCA}»')
+          else:
+              print(con.execute("select count(*) " + VIGENTE +
+                                " and coalesce(pd.varcharValue, pd.textValue) like ?", ('%' + MARCA,)).fetchone()[0])
+          con.close()
+          PY
+          docker compose --file compose.prod.yml --project-directory . stop cms >/dev/null
+          docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py editar
+          echo "| un editor cambia un \`heading\` vigente (en la base) | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── 5. Respaldo, pérdida y restauración ─────────────────────────────
       - name: respaldo.sh
@@ -361,9 +417,13 @@ jobs:
 
       # El ÚNICO `--volumes` de este fichero, y es a propósito: simula perder el
       # disco. Si la restauración no devuelve la base del CMS, Umbraco arranca
-      # VACÍO y el humo lo ve (el cartel «No published content»), porque esta
-      # vez NO se reimporta nada.
-      - name: Perder los volúmenes y restaurarlos
+      # VACÍO y el humo lo ve (el cartel «No published content»).
+      #
+      # Y es el SEGUNDO DESPLIEGUE: `deploy-remoto.sh` importa otra vez, y tiene que
+      # ser sólo el schema —la marca vino en el respaldo con la base— y dejar en pie
+      # lo que cambió el editor. Lo mismo vale para un despliegue sin restaurar: la
+      # marca se lee del volumen igual; acá además se prueba que viaja con él.
+      - name: Perder los volúmenes, restaurarlos y desplegar otra vez
         working-directory: /opt/synergos
         env:
           SHA: ${{ steps.etiquetas.outputs.sha }}
@@ -373,10 +433,18 @@ jobs:
           docker compose --file compose.prod.yml --project-directory . down --volumes
           ARCHIVO="$(ls -t /tmp/respaldos/*.tar.gz | head -1)"
           ./restaurar.sh "$ARCHIVO" --si-estoy-seguro
-          ./deploy-remoto.sh "$SHA"
-          echo "| volúmenes borrados → \`restaurar.sh\` → en pie | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+          ./deploy-remoto.sh "$SHA" 2>&1 | tee /tmp/despliegue-2.log
+          grep -q 'la base ya tiene su contenido' /tmp/despliegue-2.log \
+            || { echo "✗ el segundo despliegue no leyó la marca de la base restaurada"; exit 1; }
+          docker run --rm -v synergos_cms-db:/datos:ro alpine:3 cat /datos/synergos-contenido-versionado | grep -q '^importado ' \
+            || { echo "✗ la marca de la base restaurada no dice «importado»"; exit 1; }
+          grep -q 'importando el schema de uSync (sin contenido)' /tmp/despliegue-2.log \
+            || { echo "✗ el segundo despliegue no importó sólo el schema"; exit 1; }
+          EDITADOS="$(docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py contar)"
+          [ "$EDITADOS" -ge 1 ] || { echo "✗ el segundo despliegue revirtió lo que cambió el editor"; exit 1; }
+          echo "| volúmenes borrados → \`restaurar.sh\` → segundo despliegue: sólo el schema, lo del editor sigue ($EDITADOS) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Humo público (2) — sin reimportar
+      - name: Humo público (2) — sin reimportar el contenido
         env:
           SHA: ${{ steps.etiquetas.outputs.sha }}
         run: |
@@ -384,7 +452,19 @@ jobs:
           docker compose --file /opt/synergos/compose.prod.yml --project-directory /opt/synergos \
             cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/ca-del-ensayo.crt
           CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt ./tools/humo-publico.sh localhost "$SHA"
-          echo "| humo tras restaurar, sin reimportar: la base volvió | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| humo tras restaurar y redesplegar: la base volvió | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
+      # La contraprueba: un import CON contenido sí devuelve la página al XML del
+      # repo. Sin ella, «lo del editor sigue» podría ser una sonda que uSync no mira.
+      - name: Contraprueba — un import con contenido sí lo revierte
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          t=$SECONDS
+          ./importar-schema.sh --con-contenido
+          EDITADOS="$(docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py contar)"
+          [ "$EDITADOS" = "0" ] || { echo "✗ un import con contenido NO revirtió la edición: la sonda no prueba nada"; exit 1; }
+          echo "| contraprueba: \`importar-schema.sh --con-contenido\` sí revierte la edición | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── 6. Volver a la versión anterior, como hace deploy.yml si el humo falla
       - name: Vuelta atrás
@@ -395,7 +475,11 @@ jobs:
         run: |
           set -euo pipefail
           t=$SECONDS
-          ./deploy-remoto.sh "$ANTERIOR"
+          ./deploy-remoto.sh "$ANTERIOR" 2>&1 | tee /tmp/vuelta.log
+          # Una vuelta no importa el schema de antes encima del de ahora ni siembra.
+          grep -q 'es una vuelta atrás, así que ni se importa' /tmp/vuelta.log \
+            || { echo "✗ la vuelta atrás importó o sembró: el schema anterior podría quitar lo que añadió la nueva"; exit 1; }
+          if grep -q 'importando el schema' /tmp/vuelta.log; then echo "✗ la vuelta atrás corrió un import"; exit 1; fi
           # Lo que la versión nueva traía y la anterior no (la primera vez,
           # `bff-reservas`) no puede quedar corriendo: sería una pieza de otra
           # versión en pie, y la comprobación de etiquetas del script no la ve
@@ -406,7 +490,7 @@ jobs:
             echo "$NUEVAS"
             exit 1
           fi
-          echo "| vuelta a \`${ANTERIOR:0:7}\`, sin nada de \`${SHA:0:7}\` corriendo | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| vuelta a \`${ANTERIOR:0:7}\` sin importar ni sembrar, y sin nada de \`${SHA:0:7}\` corriendo | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Humo público (3) — la versión anterior
         env:
