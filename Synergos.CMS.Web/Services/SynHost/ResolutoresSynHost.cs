@@ -42,8 +42,10 @@ public static class ResolutoresSynHost
             services.AddSingleton(servicio, implementacion);
         }
 
-        // Lo que un resolver consulta y no es un resolver: el set de iconos del sitio (#192).
+        // Lo que un resolver consulta y no es un resolver: el set de iconos del sitio (#192) y en qué página vive cada
+        // vista de una app (014-despiece-tienda, I3).
         services.TryAddSingleton<IconosDelSistema>();
+        services.TryAddSingleton<IRutasDeLasVistas, RutasDeLasVistas>();
 
         return services;
     }

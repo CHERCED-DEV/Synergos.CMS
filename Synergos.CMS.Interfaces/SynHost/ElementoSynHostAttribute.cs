@@ -106,4 +106,11 @@ public enum OrigenDelCampo
     /// sesión.
     /// </summary>
     Sesion,
+
+    /// <summary>
+    /// Lo que el CMS lee de cómo está compuesto el sitio de la petición: en qué página vive cada vista de
+    /// una app (014-despiece-tienda, I3). El editor no lo escribe en el bloque: lo decide al componer
+    /// las páginas, y si mueve una, el enlace la sigue.
+    /// </summary>
+    Sitio,
 }

@@ -132,7 +132,8 @@ public sealed class NegocioDeStorefrontTests
     {
         var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true));
 
-        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO", "America/Bogota"), props);
+        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO", "America/Bogota", null, props.Rutas), props);
+        Assert.Empty(props.Rutas);
     }
 
     /// <summary>
@@ -201,12 +202,43 @@ public sealed class NegocioDeStorefrontTests
     private static StorefrontProps Resuelto(
         INegocioDelSitio<NegocioDeStorefront> negocio,
         ICaminoDeLosFlujos caminos,
-        ListadosSettings? listados = null)
+        ListadosSettings? listados = null,
+        IRutasDeLasVistas? rutas = null,
+        string? vista = null)
         => new StorefrontResolutor(
                 ElementoFalso.Fallback,
                 negocio,
                 caminos,
+                rutas ?? SinRutas(),
                 Options.Create(listados ?? new ListadosSettings()),
                 NullLogger<StorefrontResolutor>.Instance)
-            .Resolver(ElementoFalso.Con(("heading", "Tienda"))).Props;
+            .Resolver(vista is null ? ElementoFalso.Con(("heading", "Tienda")) : ElementoFalso.Con(("heading", "Tienda"), ("vista", vista)))
+            .Props;
+
+    private static IRutasDeLasVistas SinRutas()
+    {
+        var rutas = Substitute.For<IRutasDeLasVistas>();
+        rutas.Del(Arg.Any<string>(), Arg.Any<string>()).Returns([]);
+        return rutas;
+    }
+
+    // ── Qué parte de la tienda es la página (014-despiece-tienda, I3) ──────────────────────────────────────────
+    [Fact]
+    public void La_vista_es_la_que_elige_el_editor_y_las_rutas_las_del_sitio_con_el_inicio_por_defecto()
+    {
+        var rutas = Substitute.For<IRutasDeLasVistas>();
+        rutas.Del(StorefrontResolutor.AliasDelBloque, "inicio").Returns(
+            [new RutaDeUnaVista("inicio", "/tienda/"), new RutaDeUnaVista("carrito", "/tienda/carrito/")]);
+
+        var props = Resuelto(Fijo(null), Puerta(abierto: false, conDestino: false), rutas: rutas, vista: "carrito");
+
+        Assert.Equal("carrito", props.Vista);
+        Assert.Equal([new RutaDeUnaVista("inicio", "/tienda/"), new RutaDeUnaVista("carrito", "/tienda/carrito/")], props.Rutas);
+    }
+
+    [Fact]
+    public void Sin_vista_elegida_no_viaja_y_el_elemento_abre_en_el_inicio()
+    {
+        Assert.Null(Resuelto(Fijo(null), Puerta(abierto: false, conDestino: false)).Vista);
+    }
 }
