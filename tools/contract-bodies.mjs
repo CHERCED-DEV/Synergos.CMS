@@ -58,6 +58,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { carpetasDelDominio } from './dominios-de-la-ui.mjs';
 
 const CMS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (n) => process.argv.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
@@ -67,7 +68,8 @@ const UI = path.resolve(
 /** Los mismos pares que G-6: el vínculo app↔controller no se deduce de ningún sitio. */
 const PARES = [
     { app: 'academy', controllers: ['AcademyController.cs'] },
-    { app: 'storefront', controllers: ['ShopCatalogController.cs', 'ShopController.cs'] },
+    // Sus clientes viven en `libs/dominio/tienda`, uno por capacidad (014-despiece-tienda, T009).
+    { app: 'storefront', controllers: ['ShopCatalogController.cs', 'ShopController.cs'], dominio: { nombre: 'tienda' } },
     { app: 'eventos', controllers: ['EventosController.cs'] },
     { app: 'gov', controllers: ['GovController.cs'] },
     { app: 'ehr', controllers: ['EhrController.cs', 'HealthcareApiController.cs'] },
@@ -78,7 +80,8 @@ const PARES = [
     // La consola del vendedor (013-seller-operaciones, T025): mueve las devoluciones por `return/{id}/advance` de
     // ShopCatalogController. Sus rutas del personal (VendedorDeLaTiendaController, `api/shop/seller`) no ligan todavía:
     // este gate lee la plantilla del [HttpPost] sin el [Route] de la clase (anotado para el núcleo en la bitácora de 013).
-    { app: 'seller', controllers: ['ShopCatalogController.cs', 'VendedorDeLaTiendaController.cs'] },
+    // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
+    { app: 'seller', controllers: ['ShopCatalogController.cs', 'VendedorDeLaTiendaController.cs'], dominio: { nombre: 'tienda', carpetas: ['consola'] } },
 ];
 
 /** El ÚNICO lector de fuentes del gate: todo sale en LF, venga como venga del disco (#170). */
@@ -148,10 +151,15 @@ for (const m of src.matchAll(/record\s+(\w+)\s*\(([\s\S]*?)\)\s*[;{]/g)) {
     return alguno ? porRuta : null;
 }
 
-/** ruta → claves que el cliente MANDA, de los cuerpos literales. */
-function mandadoPorLaUi(app, ui = UI) {
+/**
+ * ruta → claves que el cliente MANDA, de los cuerpos literales: el de la carpeta de la app y, si el par declara
+ * `dominio`, el de las capacidades de su lib de dominio que le tocan (`tools/dominios-de-la-ui.mjs`).
+ */
+function mandadoPorLaUi(par, ui = UI) {
+    const { app } = par;
     const dir = path.join(ui, 'platforms', 'angular', 'apps', 'elements', 'modules', app, 'src');
     if (!fs.existsSync(dir)) return null;
+    const capacidades = carpetasDelDominio(PARES, par, ui);
 
     const ficheros = [];
     const walk = (d) => {
@@ -162,6 +170,7 @@ function mandadoPorLaUi(app, ui = UI) {
         }
     };
     walk(dir);
+    for (const capacidad of capacidades) walk(capacidad);
     if (ficheros.length === 0) return null;
 
     /**
@@ -185,6 +194,7 @@ function mandadoPorLaUi(app, ui = UI) {
         }
     };
     indexar(dir);
+    for (const capacidad of capacidades) indexar(capacidad);
 
     const porRuta = new Map();
     const noLiterales = [];
@@ -310,8 +320,12 @@ function mandadoPorLaUi(app, ui = UI) {
             // se perdía SIN DECLARARSE: el gate quedó verde cruzando 2 claves en 1 ruta. La ruta
             // llega en una variable o escrita ahí mismo (`${apiBase}/notification` entre comillas
             // invertidas).
+            //
+            // Y el helper de `@synergos/core` (`enviarJsonAlBorde(apiBase, url, body)`, 014-despiece-tienda):
+            // los adaptadores de una lib de dominio ya no tienen un `postJson` propio. Sin nombrarlo, la
+            // tienda dejó de mandar 5 claves en 3 rutas, y fue el piso de abajo el que lo dijo.
             const viaHelper = linea.match(
-                /\b(?:post|put|patch)Json\s*\(\s*(?:apiBase\s*,\s*)?(\w+|`[^`]*`)\s*,\s*(.*)$/i);
+                /\b(?:(?:post|put|patch)Json|enviarJsonAlBorde)\s*\(\s*(?:apiBase\s*,\s*)?(\w+|`[^`]*`)\s*,\s*(.*)$/i);
             const viaStringify = linea.match(/JSON\.stringify\(\s*(.*?)\s*\)/);
             if (!viaHelper && !viaStringify) return;
 
@@ -463,6 +477,11 @@ function autoprueba() {
         '    return this.postJson(apiBase, target, { x: 1 });',
         '  }',
         '',
+        '  async order(apiBase: string, orderRef: string): Promise<unknown> {',
+        '    const url = `${apiBase}/order`;',
+        '    return enviarJsonAlBorde(apiBase, url, { orderRef });',
+        '  }',
+        '',
         '  async favorite(apiBase: string, listingId: string): Promise<unknown> {',
         '    const url = `${apiBase}/favorite`;',
         "    return fetch(url, { method: 'POST', body: JSON.stringify({ listingId }) });",
@@ -487,12 +506,12 @@ function autoprueba() {
             fs.writeFileSync(path.join(dir, 'fixture-api.client.ts'), cliente.join(fin));
             return raiz;
         };
-        const lf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'lf'), '\n'));
-        const crlf = mandadoPorLaUi('fixture', escribir(path.join(tmp, 'crlf'), '\r\n'));
+        const lf = mandadoPorLaUi({ app: 'fixture' }, escribir(path.join(tmp, 'lf'), '\n'));
+        const crlf = mandadoPorLaUi({ app: 'fixture' }, escribir(path.join(tmp, 'crlf'), '\r\n'));
 
-        caso('el fixture en LF cruza sus seis rutas', cifra(lf), '9 claves en 6 rutas');
+        caso('el fixture en LF cruza sus siete rutas', cifra(lf), '10 claves en 7 rutas');
         caso('…con las claves de cada una', plano(lf),
-            'favorite:listingId lead:name+phone notes/{}/draft:body+title ping:at tags:name visit:listingId+slot');
+            'favorite:listingId lead:name+phone notes/{}/draft:body+title order:orderRef ping:at tags:name visit:listingId+slot');
         // ADR 0137 cambió la firma a `postJson(apiBase, url, body)` y el gate se quedó en 2 claves
         // en 1 ruta sin decir nada: `tags` y `ping` son esa firma, con la ruta en variable y en línea.
         caso('una llamada con la ruta ilegible se DECLARA, no se calla', lf.sinRuta.join(' '),
@@ -528,8 +547,9 @@ const sinRuta = [];
 let cruzadas = 0;
 let rutas = 0;
 
-for (const { app, controllers } of PARES) {
-    const ui = mandadoPorLaUi(app);
+for (const par of PARES) {
+    const { app, controllers } = par;
+    const ui = mandadoPorLaUi(par);
     const cms = declaradoPorElCms(controllers);
     if (!ui || !cms) continue;
 

@@ -73,6 +73,25 @@ public sealed class OrdenDeLaPuertaEnLaTiendaTests
         Assert.Equal(pagada.GetProperty("note").GetString(), pagada.GetProperty("description").GetString());
     }
 
+    /// <summary>
+    /// «Mis compras» dice la etapa del despacho cuando avanzó, como la bandeja del personal (014-despiece-tienda): un
+    /// pedido entregado decía «Pagado» mientras su seguimiento decía «Entregado».
+    /// </summary>
+    [Fact]
+    public async Task Mis_compras_sigue_al_despacho_enviada_y_entregada()
+    {
+        var t = new Tienda(Ana);
+        await t.Libro.ConfirmarAsync(DeAna());
+        async Task<string> Estado() => Assert.Single(Assert.IsType<ShopCatalogController.OrdersResponse>(
+            Assert.IsType<OkObjectResult>(await t.Sut.Orders(CancellationToken.None)).Value).Orders).Status;
+
+        await t.Seguimiento.AdvanceAsync(Compra, "shipped", "GUIA-123");
+        Assert.Equal("shipped", await Estado());
+
+        await t.Seguimiento.AdvanceAsync(Compra, "delivered", null);
+        Assert.Equal("delivered", await Estado());
+    }
+
     [Fact]
     public async Task La_devolucion_de_una_linea_abre_un_solo_caso_y_otro_miembro_no_puede()
     {

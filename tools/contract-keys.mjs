@@ -50,6 +50,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { carpetasDelDominio } from './dominios-de-la-ui.mjs';
 
 const CMS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = path.join(CMS, 'tools', 'contract-keys.baseline.json');
@@ -71,7 +72,8 @@ const PARES = [
     // El storefront pide /products, /order y /checkout, que sirve ShopCatalogController;
     // ShopController es SÓLO el carrito (api/shop/cart). Apuntar al segundo cruzaba 3 claves
     // en vez de 70 — ver la guarda de abajo, que es lo que lo destapó.
-    { app: 'storefront', controllers: ['ShopCatalogController.cs', 'ShopController.cs'] },
+    // Sus normalizadores viven en `libs/dominio/tienda`, uno por capacidad (014-despiece-tienda, T009).
+    { app: 'storefront', controllers: ['ShopCatalogController.cs', 'ShopController.cs'], dominio: { nombre: 'tienda' } },
     { app: 'eventos', controllers: ['EventosController.cs'] },
     { app: 'gov', controllers: ['GovController.cs'] },
     { app: 'ehr', controllers: ['EhrController.cs', 'HealthcareApiController.cs'] },
@@ -80,7 +82,8 @@ const PARES = [
     { app: 'blogs', controllers: ['BlogsController.cs'] },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
     // La consola del vendedor (013-seller-operaciones, T012): la bandeja y el detalle salen de las rutas del personal.
-    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'] },
+    // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
+    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'], dominio: { nombre: 'tienda', carpetas: ['consola'] } },
 ];
 
 /**
@@ -99,9 +102,12 @@ const PROPORCION_MINIMA = 0.2;
 
 const camel = (s) => s.charAt(0).toLowerCase() + s.slice(1);
 
-/** Las claves que el cliente de una app LEE de las respuestas. */
-function clavesQueLeeLaUi(app) {
-    const dir = path.join(UI, 'platforms', 'angular', 'apps', 'elements', 'modules', app, 'src');
+/**
+ * Las claves que el cliente de una app LEE de las respuestas: el de su carpeta y, si el par declara `dominio`, el de
+ * las capacidades de su lib de dominio que le tocan (`tools/dominios-de-la-ui.mjs`, 014-despiece-tienda).
+ */
+function clavesQueLeeLaUi(par) {
+    const dir = path.join(UI, 'platforms', 'angular', 'apps', 'elements', 'modules', par.app, 'src');
     if (!fs.existsSync(dir)) return null;
 
     // **Y también los `*.model.ts`, porque el normalizador no siempre vive en el cliente.**
@@ -119,6 +125,7 @@ function clavesQueLeeLaUi(app) {
         }
     };
     walk(dir);
+    for (const capacidad of carpetasDelDominio(PARES, par, UI)) walk(capacidad);
     if (clientes.length === 0) return null;
 
     const claves = new Set();
@@ -194,8 +201,9 @@ const huerfanas = {};
 const problemas = [];
 const avisos = [];
 
-for (const { app, controllers } of PARES) {
-    const ui = clavesQueLeeLaUi(app);
+for (const par of PARES) {
+    const { app, controllers } = par;
+    const ui = clavesQueLeeLaUi(par);
     const cms = clavesQueEmiteElCms(controllers);
 
     if (ui === null) { avisos.push(`[app] no se encontró el cliente de '${app}' bajo ${UI}`); continue; }
