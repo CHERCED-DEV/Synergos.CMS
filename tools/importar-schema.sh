@@ -29,10 +29,13 @@
 # deja de ser un ritual de backoffice imposible en un VPS sin pantalla.
 # ─────────────────────────────────────────────────────────────────────────────
 #
-#   ./importar-schema.sh [--con-contenido] [--compose <fichero>] [--espera <segundos>]
+#   ./importar-schema.sh [--con-contenido | --contenido-la-primera-vez]
+#                        [--compose <fichero>] [--espera <segundos>]
 #
 # Se corre EN EL SERVIDOR, con el stack ya levantado. Es idempotente: uSync
 # compara y aplica lo que difiere, así que correrlo dos veces no duplica nada.
+# Desde 2026-11-01 lo corre `deploy-remoto.sh` en cada despliegue, con
+# `--contenido-la-primera-vez` (abajo): a mano ya no hace falta.
 #
 # ── EL CONTENIDO, SÓLO CON `--con-contenido` ─────────────────────────────────
 #
@@ -51,6 +54,24 @@
 # nunca más — volver a importarlo después revertiría lo que publicaron los
 # editores. Para traer schema nuevo a un servidor que ya tiene contenido, sin la
 # bandera.
+#
+# ── `--contenido-la-primera-vez`: QUIÉN DECIDE QUE LA BASE ES NUEVA ──────────
+#
+# Lo pidió el arquitecto el 2026-11-01 (salida a Hetzner, 002-produccion): que el
+# despliegue suba lo compuesto sin que nadie entre al servidor. La regla de arriba
+# no cambia —el contenido entra UNA vez por base, y nunca al arrancar—; cambia
+# quién se acuerda: no el operador, sino una MARCA que vive en el volumen de la
+# base (`cms-db`, junto a `Umbraco.sqlite.db`), así que viaja con ella en el
+# respaldo y en la restauración. Un fichero en `/opt/synergos` no serviría: un
+# servidor nuevo con la base restaurada lo tendría vacío y reimportaría encima de
+# lo que publicaron los editores.
+#
+#   sin marca y sin documentos    → base nueva: con contenido
+#   `en-curso`                    → un import con contenido no terminó: se repite
+#   `importado` o `adoptada`      → sólo el schema
+#   sin marca y CON documentos    → una base que ya trae contenido (restaurada de
+#                                   antes de la marca, importada a mano): se adopta
+#                                   y sólo el schema. Ante la duda, no se pisa.
 #
 # Lo que hace: PARA el CMS, levanta un contenedor efímero con la misma imagen y
 # los mismos volúmenes y con `ImportAtStartup=All` puesto SÓLO para él, y cuando
@@ -74,9 +95,11 @@ COMPOSE_FILE="compose.prod.yml"
 # esperar.
 ESPERA="${SYNERGOS_IMPORT_TIMEOUT:-900}"
 CONTENIDO=false
+LA_PRIMERA_VEZ=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --con-contenido) CONTENIDO=true; shift ;;
+    --contenido-la-primera-vez) LA_PRIMERA_VEZ=true; shift ;;
     --compose) COMPOSE_FILE="$2"; shift 2 ;;
     --espera) ESPERA="$2"; shift 2 ;;
     *) echo "argumento desconocido: $1" >&2; exit 2 ;;
@@ -84,6 +107,10 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$COMPOSE_FILE" ] || { echo "✗ no existe $COMPOSE_FILE — corré esto desde donde vive el compose" >&2; exit 1; }
+if [ "$CONTENIDO" = "true" ] && [ "$LA_PRIMERA_VEZ" = "true" ]; then
+  echo "✗ --con-contenido y --contenido-la-primera-vez se excluyen: el primero lo decide quien lo corre, el segundo la marca de la base." >&2
+  exit 2
+fi
 
 # ── La versión que corre ─────────────────────────────────────────────────────
 #
@@ -120,6 +147,68 @@ $COMPOSE stop cms >/dev/null
 # La imagen que corre: de ella salen los ficheros de la vitrina y la cuenta de lo
 # que el import debería procesar.
 IMAGEN="$($COMPOSE config --images 2>/dev/null | grep '/synergos-cms:' | head -1 || true)"
+PROYECTO="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
+PROYECTO="${PROYECTO:-synergos}"
+
+# ── La marca del contenido, en el volumen de la base ─────────────────────────
+#
+# Se lee y se escribe con el CMS PARADO (acá arriba se paró): la base no cambia
+# mientras se cuenta. Python trae sqlite3 de serie y su imagen ya la baja el
+# despliegue para `provisionar-en-la-red.sh`, así que no se instala nada.
+MARCA="synergos-contenido-versionado"
+VOLUMEN_DB="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
+               --filter "label=com.docker.compose.volume=cms-db" | head -1 || true)"
+marca() {  # marca leer → «<estado> <documentos>»  ·  marca poner <estado> <detalle…>
+  docker run --rm -i --volume "$VOLUMEN_DB:/datos" --env "MARCA=$MARCA" python:3.12-alpine \
+    python3 - "$@" <<'PY'
+import os, sqlite3, sys
+marca = os.path.join('/datos', os.environ['MARCA'])
+if sys.argv[1] == 'leer':
+    estado = 'ninguna'
+    if os.path.exists(marca):
+        palabras = open(marca, encoding='utf-8').read().split()
+        estado = palabras[0] if palabras else 'ninguna'
+    documentos = 0
+    base = '/datos/Umbraco.sqlite.db'
+    if os.path.exists(base):
+        con = sqlite3.connect(base)
+        try:
+            documentos = con.execute('select count(*) from umbracoDocument').fetchone()[0]
+        except sqlite3.OperationalError:
+            documentos = 0
+        finally:
+            con.close()
+    print(estado, documentos)
+else:
+    with open(marca, 'w', encoding='utf-8') as f:
+        f.write(' '.join(sys.argv[2:]) + '\n')
+PY
+}
+AHORA() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+if [ "$LA_PRIMERA_VEZ" = "true" ]; then
+  [ -n "$VOLUMEN_DB" ] || { echo "✗ no encontré el volumen cms-db del proyecto $PROYECTO: no sé si la base es nueva, y ante la duda no se importa nada." >&2; exit 1; }
+  LEIDO="$(marca leer)" || { echo "✗ no se pudo leer la marca ni contar los documentos de la base (arriba, por qué)." >&2; exit 1; }
+  read -r ESTADO DOCUMENTOS <<< "$LEIDO"
+  case "$ESTADO" in
+    importado|adoptada)
+      echo "── la base ya tiene su contenido (marca: $ESTADO; $DOCUMENTOS documentos): sólo el schema" ;;
+    en-curso)
+      CONTENIDO=true
+      echo "── un import con contenido no terminó (marca: en-curso; $DOCUMENTOS documentos): se repite con contenido" ;;
+    ninguna)
+      if [ "$DOCUMENTOS" = "0" ]; then
+        CONTENIDO=true
+        echo "── base nueva (sin marca y sin documentos): schema Y contenido versionado"
+      else
+        marca poner adoptada "$SYNERGOS_TAG" "$(AHORA)" "$DOCUMENTOS" documentos
+        echo "── la base ya trae $DOCUMENTOS documentos y no tiene marca: se adopta (no se pisa nada) y sólo el schema"
+      fi ;;
+    *)
+      echo "✗ la marca del contenido dice «$ESTADO», que no es un estado que este script escriba: se deja como está y no se importa." >&2
+      exit 1 ;;
+  esac
+fi
 
 # ── Los ficheros de la vitrina, al volumen de medios si faltan ──────────────
 #
@@ -129,7 +218,6 @@ IMAGEN="$($COMPOSE config --images 2>/dev/null | grep '/synergos-cms:' | head -1
 # a ficheros que no están. Se copian sin pisar NADA de lo que haya (`-n`): lo que
 # un editor subió se queda como está.
 if [ "$CONTENIDO" = "true" ]; then
-  PROYECTO="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
   VOLUMEN="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
                --filter "label=com.docker.compose.volume=cms-media" | head -1 || true)"
   if [ -n "$VOLUMEN" ] && [ -n "$IMAGEN" ]; then
@@ -142,7 +230,13 @@ if [ "$CONTENIDO" = "true" ]; then
 fi
 
 if [ "$CONTENIDO" = "true" ]; then
-  echo "── importando el schema Y EL CONTENIDO versionado (--con-contenido) en un contenedor efímero…"
+  # `en-curso` ANTES de empezar: si el import se corta, el despliegue siguiente lo
+  # ve y lo repite con contenido en vez de dar la base por servida.
+  if [ -n "$VOLUMEN_DB" ]; then
+    marca poner en-curso "$SYNERGOS_TAG" "$(AHORA)" \
+      || echo "⚠ no se pudo escribir la marca «en-curso» en la base: el import sigue." >&2
+  fi
+  echo "── importando el schema Y EL CONTENIDO versionado en un contenedor efímero…"
 else
   echo "── importando el schema de uSync (sin contenido) en un contenedor efímero…"
 fi
@@ -199,9 +293,8 @@ kill -INT "$IMPORT" 2>/dev/null || true
 for _ in $(seq 1 30); do kill -0 "$IMPORT" 2>/dev/null || break; sleep 2; done
 kill -KILL "$IMPORT" 2>/dev/null || true
 wait "$IMPORT" 2>/dev/null || true
-PROYECTO_IMPORT="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
 docker ps --all --quiet \
-  --filter "label=com.docker.compose.project=${PROYECTO_IMPORT:-synergos}" \
+  --filter "label=com.docker.compose.project=$PROYECTO" \
   --filter "label=com.docker.compose.service=cms" \
   --filter "label=com.docker.compose.oneoff=True" | xargs -r docker rm --force >/dev/null 2>&1 || true
 set -e
@@ -278,6 +371,14 @@ else
   echo "✓ $PROCESADOS ítems, 0 errores (no hubo de dónde contar los .config: no se cruzó el conteo)"
 fi
 
+# Sólo tras el veredicto: un import con huecos se queda en `en-curso` y el
+# despliegue siguiente lo repite.
+if [ "$CONTENIDO" = "true" ] && [ -n "$VOLUMEN_DB" ]; then
+  marca poner importado "$SYNERGOS_TAG" "$(AHORA)" \
+    || { echo "✗ el contenido entró pero no se pudo escribir la marca «importado»: el despliegue siguiente lo reimportaría." >&2; exit 1; }
+  echo "── marca del contenido: importado ($SYNERGOS_TAG)"
+fi
+
 rm -f "$LOG"
 
 # ── El CMS de vuelta, y SANO ─────────────────────────────────────────────────
@@ -302,6 +403,8 @@ for i in $(seq 1 60); do
   sleep 5
 done
 
-echo
-echo "── ahora la portada tiene que dejar de ser el cartel de Umbraco vacío."
-echo "   Comprobalo con:  tools/humo-publico.sh <dominio> <sha>"
+if [ "$CONTENIDO" = "true" ]; then
+  echo
+  echo "── ahora la portada tiene que dejar de ser el cartel de Umbraco vacío."
+  echo "   Comprobalo con:  tools/humo-publico.sh <dominio> <sha>"
+fi

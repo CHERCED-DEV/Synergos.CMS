@@ -254,7 +254,11 @@ services:
       Synergos__Gob__Mode: ${SYNERGOS_GOB_MODE:-Stub}
       Synergos__Gob__BaseUrl: "http://api-workflow:8080"
       Synergos__Gob__ApiKey: ${SYNERGOS_API_KEY}
-      Synergos__Gob__DefinitionKey: ${SYNERGOS_GOB_DEFINITION:-gov.tramite}
+      # El default es el del CODIGO (GobSettings.DefinitionKey, la v2). Decia gov.tramite,
+      # y con Synergos__Gob__Mode=Api el CMS de produccion habria seguido abriendo
+      # expedientes con la v1 aunque el codigo ya dijera v2 (009, NP-1 b). provisionar.sh
+      # publica las dos del catalogo, asi que las dos existen en Api.Workflow.
+      Synergos__Gob__DefinitionKey: ${SYNERGOS_GOB_DEFINITION:-gov.tramite.v2}
 
       # Contra que se pone un acto administrativo en conocimiento (HU #62). Va por
       # SU PROPIO interruptor: notificar es Api.Messaging y decidir es Api.Workflow,

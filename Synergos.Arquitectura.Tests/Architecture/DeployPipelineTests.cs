@@ -371,7 +371,7 @@ public sealed class DeployPipelineTests
             + "importar en cada arranque REVIERTE lo que un editor publicó, en silencio. "
             + "Si de verdad se decide cambiarlo, va con ADR sucesor y hay que reescribir "
             + "docs/despliegue/00-montar-el-entorno.md §5.bis y tools/deploy-remoto.sh, que hoy "
-            + "dicen que es un paso a mano.");
+            + "importan en cada despliegue (y el contenido, sólo sobre una base nueva).");
     }
 
     [Fact]

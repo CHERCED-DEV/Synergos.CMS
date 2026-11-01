@@ -22,6 +22,32 @@
 # Se lo copia el workflow junto con compose.prod.yml y el Caddyfile. El servidor
 # NO tiene el repo: lo único que vive ahí de forma permanente es `.env` (con los
 # secretos, que nunca salen de ahí) y los volúmenes con los datos.
+#
+# ── EL LEVANTADO ENTERO, NO SÓLO LOS CONTENEDORES (2026-11-01) ──────────────
+#
+# El arquitecto lo pidió así para la salida a Hetzner: «que haya un programa y ese
+# programa sea el encargado de hacer el levantado de todo». Esto ponía las piezas
+# en pie y dejaba dos pasos a mano por SSH: el import de uSync y la siembra de las
+# capacidades. Hoy los hace él, en este orden y sólo si la versión se pone en pie:
+#
+#   1. `importar-schema.sh --contenido-la-primera-vez` — el schema SIEMPRE, y el
+#      contenido versionado sólo sobre una base que no lo tiene (la marca vive en
+#      el volumen de la base: ver la cabecera de ese script). Nunca al arrancar:
+#      lo dispara el despliegue, que es un acto explícito (ADR 0008, 0013).
+#   2. `provisionar-en-la-red.sh` y después `--verificar` — idempotente: lo que ya
+#      está no se toca, lo declarado que falta se publica.
+#
+# EXCEPTO al volver a una versión que ya estuvo en pie (la vuelta atrás de
+# deploy.yml, o un despliegue a mano de una versión vieja): su schema es anterior
+# al que la base ya tiene, e importarlo podría quitar lo que la versión nueva
+# añadió. Se ponen sus imágenes y sus ficheros, y nada más.
+#
+# ── LO QUE DEVUELVE ─────────────────────────────────────────────────────────
+#
+#   0  en pie, importado y sembrado
+#   3  NO se tocó nada (falta el .env, el pull falló): lo de antes sigue en pie y
+#      no hay a qué volver — deploy.yml no hace la vuelta atrás
+#   *  falló con el stack ya tocado: deploy.yml vuelve a la versión anterior
 
 set -euo pipefail
 
@@ -33,7 +59,7 @@ cd "$DIR"
 
 if [ ! -f .env ]; then
   echo "✗ falta $DIR/.env — los secretos se cargan a mano UNA vez (ver docs/despliegue)."
-  exit 1
+  exit 3
 fi
 
 # ── La versión a la que se puede volver ──────────────────────────────────────
@@ -62,6 +88,13 @@ echo "── versión a poner:  $SHA"
 # añaden, nunca se reescriben, así que el de ahora contiene el de antes.
 CATALOGO="provisionar.procesos.json"
 GUARDADOS="$DIR/versiones/$SHA"
+# Volver = poner una versión que ya estuvo en pie y no es la que corre. Redesplegar
+# la que corre (otra vez el mismo SHA) NO es volver: importa y siembra como siempre,
+# que es idempotente.
+VUELTA=no
+if [ -f "$GUARDADOS/compose.prod.yml" ] && [ "$SHA" != "$ANTERIOR" ]; then
+  VUELTA=si
+fi
 if [ -f "$GUARDADOS/compose.prod.yml" ] && [ -f "$GUARDADOS/Caddyfile" ]; then
   echo "── reponiendo el compose y el Caddyfile con que $SHA estuvo en pie"
   cp "$GUARDADOS/compose.prod.yml" "$GUARDADOS/Caddyfile" "$DIR/"
@@ -78,7 +111,7 @@ echo "── bajando imágenes…"
 if ! SYNERGOS_TAG="$SHA" $COMPOSE pull --quiet; then
   echo "✗ el pull de $SHA falló (arriba, por qué); no se paró nada."
   [ -f "$GUARDADOS/compose.prod.yml" ] || echo "  $SHA no tiene ficheros guardados en $GUARDADOS: si es una vuelta atrás, los suyos están en el repo (git show $SHA:compose.prod.yml)."
-  exit 1
+  exit 3
 fi
 
 # ── Parar, arrancar ──────────────────────────────────────────────────────────
@@ -159,4 +192,21 @@ if [ -f "$DIR/$CATALOGO" ]; then
   cp "$DIR/$CATALOGO" "$GUARDADOS/"
 fi
 echo "$SHA" > tag.actual
+
+# ── El CMS con su schema, y lo que las capacidades exigen ───────────────────
+#
+# Después de `tag.actual`: la versión ya corre, y si esto falla, deploy.yml vuelve a
+# la anterior (que es una vuelta, así que no importa nada encima).
+if [ "$VUELTA" = "si" ]; then
+  echo "── $SHA ya estuvo en pie y no es la que corría: es una vuelta atrás, así que ni se importa"
+  echo "   su schema (anterior al de la base) ni se siembra nada."
+else
+  echo "── el schema de uSync (y el contenido, sólo si la base es nueva)…"
+  SYNERGOS_TAG="$SHA" "$DIR/importar-schema.sh" --contenido-la-primera-vez
+
+  echo "── lo que las capacidades exigen (definiciones, plantillas, recursos y precios)…"
+  "$DIR/provisionar-en-la-red.sh"
+  "$DIR/provisionar-en-la-red.sh" --verificar
+fi
+
 echo "✓ $SHA desplegado (el humo público decide si se queda)"

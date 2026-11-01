@@ -272,7 +272,8 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("ContentHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
         Assert.Contains("MediaHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
 
-        // El ensayo importa con contenido: es lo que hace el arquitecto en un servidor nuevo.
+        // El ensayo importa con contenido a mano en su contraprueba (el despliegue lo hace solo la
+        // primera vez: El_despliegue_levanta_todo_y_el_contenido_entra_una_vez_por_base).
         Assert.Contains("./importar-schema.sh --con-contenido", Leer(".github", "workflows", "ensayo-despliegue.yml"), StringComparison.Ordinal);
     }
 
@@ -502,5 +503,81 @@ public sealed class SalidaAProduccionTests
         var construcciones = Regex.Count(images, @"uses:\s*docker/build-push-action");
         Assert.True(construcciones >= 2, "images.yml: no se encontraron las construcciones (docker/build-push-action).");
         Assert.Equal(construcciones, Regex.Count(images, @"(?m)^\s*pull:\s*true\s*$"));
+    }
+
+    // ── El levantado entero, sin pasos a mano (salida a Hetzner, 2026-11-01) ─
+
+    /// <summary>Un script de shell sin sus líneas de comentario: lo que corre, no lo que explica.</summary>
+    private static string SinComentarios(params string[] partes) => string.Join('\n',
+        Leer(partes).Split('\n').Where(l => !l.TrimStart().StartsWith('#')));
+
+    /// <summary>
+    /// <c>deploy-remoto.sh</c> pone las piezas, importa uSync y siembra las capacidades; el contenido
+    /// versionado entra una vez por base, y una vuelta atrás no importa nada.
+    /// </summary>
+    /// <remarks>
+    /// <para>El arquitecto lo pidió así para comprar el servidor (2026-11-01): que el primer despliegue
+    /// quede verde sin entrar por SSH. Antes eran dos pasos a mano —el import con
+    /// <c>--con-contenido</c> y la siembra— que la guía pedía «una vez».</para>
+    ///
+    /// <para>Las tres cosas que pueden salir mal sin que nada falle: que el contenido se reimporte en
+    /// cada despliegue (revierte lo que publicaron los editores, en silencio), que una vuelta atrás
+    /// importe el schema VIEJO encima del nuevo (quita lo que la versión nueva añadió), y que un fallo
+    /// dentro del servidor deje el sitio a medio poner sin volver a la versión anterior.</para>
+    /// </remarks>
+    [Fact]
+    public void El_despliegue_levanta_todo_y_el_contenido_entra_una_vez_por_base()
+    {
+        var remoto = SinComentarios("tools", "deploy-remoto.sh");
+        var importar = SinComentarios("tools", "importar-schema.sh");
+
+        // Importa y siembra DESPUÉS de comprobar que corre la etiqueta pedida y de escribirla, y
+        // nunca con `--con-contenido`: ése lo decide la marca de la base, no el despliegue.
+        var etiqueta = remoto.IndexOf("NO están en $SHA", StringComparison.Ordinal);
+        var escrita = remoto.IndexOf("> tag.actual", StringComparison.Ordinal);
+        var esVuelta = remoto.IndexOf("\"$VUELTA\" = \"si\"", StringComparison.Ordinal);
+        var importa = remoto.IndexOf("importar-schema.sh\" --contenido-la-primera-vez", StringComparison.Ordinal);
+        var siembra = remoto.IndexOf("provisionar-en-la-red.sh\"", StringComparison.Ordinal);
+        var verifica = remoto.IndexOf("provisionar-en-la-red.sh\" --verificar", StringComparison.Ordinal);
+        Assert.True(importa > 0 && siembra > 0 && verifica > siembra,
+            "deploy-remoto.sh no importa uSync (--contenido-la-primera-vez) o no siembra y verifica las capacidades: "
+            + "el primer despliegue dejaría pasos a mano por SSH.");
+        Assert.True(etiqueta >= 0 && escrita > etiqueta && importa > escrita,
+            "deploy-remoto.sh importa antes de comprobar la etiqueta o de escribir tag.actual.");
+        Assert.True(esVuelta >= 0 && esVuelta < importa,
+            "deploy-remoto.sh importa sin mirar si es una vuelta atrás: el schema viejo quitaría lo que añadió la versión nueva.");
+        Assert.Contains("[ \"$SHA\" != \"$ANTERIOR\" ]", remoto, StringComparison.Ordinal);
+        Assert.DoesNotContain("--con-contenido", remoto, StringComparison.Ordinal);
+
+        // «No se tocó nada» sale 3, y sólo eso: deploy.yml no vuelve atrás por ello.
+        Assert.Matches(@"el pull de \$SHA falló[\s\S]*?exit 3", remoto);
+        var deploy = Leer(".github", "workflows", "deploy.yml");
+        Assert.Contains("[ \"$CODIGO\" != 3 ]", deploy, StringComparison.Ordinal);
+        Assert.Contains("steps.copiar.outputs.tocado == 'si'", deploy, StringComparison.Ordinal);
+
+        // La marca vive en el volumen de la BASE (viaja con el respaldo), se pone `en-curso` antes de
+        // importar y `importado` sólo tras el veredicto; una base con documentos y sin marca se adopta.
+        Assert.Contains("com.docker.compose.volume=cms-db", importar, StringComparison.Ordinal);
+        var enCurso = importar.IndexOf("marca poner en-curso", StringComparison.Ordinal);
+        var arranque = importar.IndexOf("ImportAtStartup=All", StringComparison.Ordinal);
+        var veredicto = importar.IndexOf("se saltó algo", StringComparison.Ordinal);
+        var importado = importar.IndexOf("marca poner importado", StringComparison.Ordinal);
+        Assert.True(enCurso > 0 && enCurso < arranque, "La marca «en-curso» no se pone antes del import con contenido.");
+        Assert.True(veredicto > 0 && importado > veredicto, "La marca «importado» se pone antes del veredicto: un import con huecos quedaría por bueno.");
+        Assert.Contains("marca poner adoptada", importar, StringComparison.Ordinal);
+
+        // El ensayo lo prueba de verdad, y lo que busca en la salida lo dicen los scripts: si alguien
+        // cambia un mensaje, esto se pone rojo acá y no a los diez minutos de CI.
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        var buscados = Regex.Matches(ensayo, @"grep -q '(?<t>[^']+)' /tmp/(?:despliegue|vuelta)").Select(m => m.Groups["t"].Value).ToList();
+        Assert.True(buscados.Count >= 5, $"El ensayo sólo busca {buscados.Count} mensajes de los scripts: el descubrimiento está roto.");
+        var scripts = Leer("tools", "deploy-remoto.sh") + Leer("tools", "importar-schema.sh");
+        Assert.All(buscados, t => Assert.True(scripts.Contains(t, StringComparison.Ordinal),
+            $"El ensayo busca «{t}» y ningún script lo dice: el ensayo saldría rojo por un mensaje, no por un defecto."));
+        var edita = ensayo.IndexOf("/sonda.py editar", StringComparison.Ordinal);
+        var cuenta = ensayo.IndexOf("/sonda.py contar", StringComparison.Ordinal);
+        var contraprueba = ensayo.IndexOf("./importar-schema.sh --con-contenido", StringComparison.Ordinal);
+        Assert.True(edita > 0 && cuenta > edita && contraprueba > cuenta,
+            "El ensayo no edita una página, no comprueba que el despliegue siguiente la deja, o no hace la contraprueba después.");
     }
 }
