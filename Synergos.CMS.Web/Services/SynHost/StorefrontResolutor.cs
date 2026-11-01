@@ -23,9 +23,16 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
     /// <summary>El flujo de la compra: el que coloca <c>elementSynStorefront.cshtml</c> alrededor del elemento.</summary>
     public const string FlujoDeLaCompra = "tienda.compra";
 
+    /// <summary>El bloque de la tienda: las páginas que lo colocan son las de sus vistas.</summary>
+    public const string AliasDelBloque = "elementSynStorefront";
+
+    /// <summary>La vista de un bloque sin elegir: el inicio, que es la tienda entera de antes (014, I3).</summary>
+    public const string VistaPorDefecto = "inicio";
+
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeStorefront> _negocio;
     private readonly ICaminoDeLosFlujos _caminos;
+    private readonly IRutasDeLasVistas _rutas;
     private readonly string _zona;
     private readonly ILogger<StorefrontResolutor> _log;
 
@@ -33,12 +40,14 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
         IPublishedValueFallback fallback,
         INegocioDelSitio<NegocioDeStorefront> negocio,
         ICaminoDeLosFlujos caminos,
+        IRutasDeLasVistas rutas,
         IOptions<ListadosSettings> listados,
         ILogger<StorefrontResolutor> log)
     {
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
+        _rutas = rutas;
         _zona = listados.Value.ZonaHoraria;
         _log = log;
     }
@@ -54,6 +63,8 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             ApiBase: negocio.ApiBase,
             PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath),
             ShippingCountry: negocio.ShippingCountry,
-            ZonaHoraria: _zona));
+            ZonaHoraria: _zona,
+            Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
+            Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));
     }
 }

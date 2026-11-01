@@ -94,6 +94,8 @@ public sealed partial class SeamComposer
         services.AddTransient<SchemaBlockDefaults>();
         services.AddTransient<DevMediaFactory>();
         services.AddTransient<DevContentFiller>();
+        // 014-despiece-tienda, I3: la tienda de la demo compuesta por páginas, una por vista (se exporta con uSync).
+        services.AddTransient<DevTiendaPorPaginas>();
         // #119 — la portada de arranque. Es el único paso del despliegue que faltaba entre
         // «los 26 contenedores están sanos» y «el sitio enseña algo»: sin ella Umbraco sirve
         // su cartel «No published content» con 200. Nada corre en boot (ADR 0013): lo invoca

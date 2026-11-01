@@ -34,22 +34,41 @@ public static class PaginaQueColoca
     }
 
     /// <summary>Si <paramref name="pagina"/> coloca <paramref name="aliasDelBloque"/>, a cualquier profundidad de áreas.</summary>
-    public static bool Coloca(IPublishedElement pagina, string aliasDelBloque)
+    public static bool Coloca(IPublishedElement pagina, string aliasDelBloque) => Bloques(pagina, aliasDelBloque).Any();
+
+    /// <summary>
+    /// Los bloques <paramref name="aliasDelBloque"/> que coloca <paramref name="pagina"/>, a cualquier profundidad de
+    /// áreas y en el orden de sus propiedades: quien los pide lee algo de cada uno (la <c>vista</c> de una app, 014 I3).
+    /// </summary>
+    public static IEnumerable<IPublishedElement> Bloques(IPublishedElement pagina, string aliasDelBloque)
     {
         ArgumentNullException.ThrowIfNull(pagina);
         return pagina.Properties
             .Where(p => p.PropertyType.EditorAlias is AliasesDeEditor.BlockGrid or AliasesDeEditor.BlockList)
             .Select(p => p.GetValue())
-            .Any(valor => valor switch
+            .SelectMany(valor => valor switch
             {
                 BlockGridModel grid => EnLaRejilla(grid, aliasDelBloque),
-                BlockListModel lista => lista.Any(b => EsEl(b.Content, aliasDelBloque)),
-                _ => false,
+                BlockListModel lista => lista.Select(b => b.Content).Where(b => EsEl(b, aliasDelBloque)),
+                _ => Enumerable.Empty<IPublishedElement>(),
             });
     }
 
-    private static bool EnLaRejilla(IEnumerable<BlockGridItem> bloques, string alias)
-        => bloques.Any(b => EsEl(b.Content, alias) || b.Areas.Any(area => EnLaRejilla(area, alias)));
+    private static IEnumerable<IPublishedElement> EnLaRejilla(IEnumerable<BlockGridItem> bloques, string alias)
+    {
+        foreach (var bloque in bloques)
+        {
+            if (EsEl(bloque.Content, alias))
+            {
+                yield return bloque.Content;
+            }
+
+            foreach (var anidado in bloque.Areas.SelectMany(area => EnLaRejilla(area, alias)))
+            {
+                yield return anidado;
+            }
+        }
+    }
 
     private static bool EsEl(IPublishedElement? bloque, string alias)
         => string.Equals(bloque?.ContentType.Alias, alias, StringComparison.Ordinal);

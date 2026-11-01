@@ -11,17 +11,35 @@ namespace Synergos.CMS.Tests.Services.SynHost;
 /// <summary>
 /// La consola del vendedor recibe lo del editor, dónde vive su API en el sitio y la zona de sus fechas
 /// (013-seller-operaciones, T004): la bandeja dice el día de cada pedido en la hora del SITIO, como «Mis compras».
+/// Y qué parte de la consola es la página, con la página de cada parte (014-despiece-tienda, I3).
 /// </summary>
 public sealed class SellerResolutorTests
 {
-    private static SellerProps Resuelto(ListadosSettings listados)
+    private static SellerProps Resuelto(
+        ListadosSettings listados,
+        IRutasDeLasVistas? rutas = null,
+        params (string Alias, object? Valor)[] bloque)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeSeller>>();
         negocio.Actual().Returns(new NegocioDeSeller("/api/shop"));
-
-        return new SellerResolutor(ElementoFalso.Fallback, negocio, Options.Create(listados), NullLogger<SellerResolutor>.Instance)
-            .Resolver(ElementoFalso.Con(("heading", "Consola de la tienda"), ("subheading", "Pedidos y devoluciones")))
+        var muestra = bloque.Length > 0
+            ? bloque
+            : [("heading", "Consola de la tienda"), ("subheading", "Pedidos y devoluciones")];
+        return new SellerResolutor(
+                ElementoFalso.Fallback,
+                negocio,
+                rutas ?? SinRutas(),
+                Options.Create(listados),
+                NullLogger<SellerResolutor>.Instance)
+            .Resolver(ElementoFalso.Con(muestra))
             .Props;
+    }
+
+    private static IRutasDeLasVistas SinRutas()
+    {
+        var rutas = Substitute.For<IRutasDeLasVistas>();
+        rutas.Del(Arg.Any<string>(), Arg.Any<string>()).Returns([]);
+        return rutas;
     }
 
     [Fact]
@@ -29,12 +47,32 @@ public sealed class SellerResolutorTests
     {
         var props = Resuelto(new ListadosSettings());
 
-        Assert.Equal(new SellerProps("Consola de la tienda", "Pedidos y devoluciones", "/api/shop", "America/Bogota"), props);
+        Assert.Equal("Consola de la tienda", props.Heading);
+        Assert.Equal("Pedidos y devoluciones", props.Subheading);
+        Assert.Equal("/api/shop", props.ApiBase);
+        Assert.Equal("America/Bogota", props.ZonaHoraria);
+        Assert.Null(props.Vista);
+        Assert.Empty(props.Rutas);
     }
 
     [Fact]
     public void La_zona_es_la_que_declara_el_despliegue_y_no_una_que_suponga_el_elemento()
     {
         Assert.Equal("Europe/Madrid", Resuelto(new ListadosSettings { ZonaHoraria = "Europe/Madrid" }).ZonaHoraria);
+    }
+
+    [Fact]
+    public void La_vista_es_la_que_elige_el_editor_y_las_rutas_las_del_sitio_con_el_panel_por_defecto()
+    {
+        var rutas = Substitute.For<IRutasDeLasVistas>();
+        rutas.Del(SellerResolutor.AliasDelBloque, "panel").Returns(
+            [new RutaDeUnaVista("panel", "/tienda/vender/"), new RutaDeUnaVista("mensajes", "/tienda/vender/mensajes/")]);
+
+        var props = Resuelto(new ListadosSettings(), rutas, ("vista", "mensajes"));
+
+        Assert.Equal("mensajes", props.Vista);
+        Assert.Equal(
+            [new RutaDeUnaVista("panel", "/tienda/vender/"), new RutaDeUnaVista("mensajes", "/tienda/vender/mensajes/")],
+            props.Rutas);
     }
 }

@@ -3104,6 +3104,40 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "vista",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "rutas",
+          "tipo": "RutaDeUnaVista[]",
+          "opcional": false,
+          "origen": "sitio"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "vista",
+          "dataType": "DTSelectVistaDeLaConsola",
+          "multiple": false,
+          "campo": "vista",
+          "valores": [
+            {
+              "editor": "panel",
+              "viaja": "panel"
+            },
+            {
+              "editor": "publicar",
+              "viaja": "publicar"
+            },
+            {
+              "editor": "mensajes",
+              "viaja": "mensajes"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -3111,7 +3145,18 @@
         "heading": "Tu negocio, en un solo panel",
         "subheading": "Ventas, publicaciones, mensajes y devoluciones",
         "apiBase": "/api/shop",
-        "zonaHoraria": "America/Bogota"
+        "zonaHoraria": "America/Bogota",
+        "vista": "publicar",
+        "rutas": [
+          {
+            "vista": "panel",
+            "url": "/tienda/vender/"
+          },
+          {
+            "vista": "mensajes",
+            "url": "/tienda/vender/mensajes/"
+          }
+        ]
       }
     },
     {
@@ -3370,6 +3415,60 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "vista",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "rutas",
+          "tipo": "RutaDeUnaVista[]",
+          "opcional": false,
+          "origen": "sitio"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "vista",
+          "dataType": "DTSelectVistaDeLaTienda",
+          "multiple": false,
+          "campo": "vista",
+          "valores": [
+            {
+              "editor": "inicio",
+              "viaja": "inicio"
+            },
+            {
+              "editor": "catalogo",
+              "viaja": "catalogo"
+            },
+            {
+              "editor": "ficha",
+              "viaja": "ficha"
+            },
+            {
+              "editor": "carrito",
+              "viaja": "carrito"
+            },
+            {
+              "editor": "pago",
+              "viaja": "pago"
+            },
+            {
+              "editor": "confirmacion",
+              "viaja": "confirmacion"
+            },
+            {
+              "editor": "cuenta",
+              "viaja": "cuenta"
+            },
+            {
+              "editor": "vendedor",
+              "viaja": "vendedor"
+            }
+          ]
         }
       ],
       "ejemplo": {
@@ -3379,7 +3478,18 @@
         "apiBase": "/api/shop",
         "purchasePath": "directa",
         "shippingCountry": "CO",
-        "zonaHoraria": "America/Bogota"
+        "zonaHoraria": "America/Bogota",
+        "vista": "catalogo",
+        "rutas": [
+          {
+            "vista": "inicio",
+            "url": "/tienda/"
+          },
+          {
+            "vista": "carrito",
+            "url": "/tienda/carrito/"
+          }
+        ]
       }
     },
     {
@@ -4169,6 +4279,21 @@
           "nombre": "description",
           "tipo": "string",
           "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "RutaDeUnaVista",
+      "campos": [
+        {
+          "nombre": "vista",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "url",
+          "tipo": "string",
+          "opcional": false
         }
       ]
     },
