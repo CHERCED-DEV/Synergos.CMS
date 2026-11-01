@@ -297,13 +297,6 @@ jobs:
             sleep 5
           done
           portada || true
-          # Para el inventario de «Al desplegar» (002, 2026-11-01): uSync importa con
-          # las notificaciones suprimidas, así que los que publican la oferta al
-          # publicar una página no se enteran. Qué quedó en cada orquestador:
-          echo "── lo que guarda cada orquestador tras el primer despliegue (carpeta: ficheros):"
-          for v in $(docker volume ls --quiet --filter label=com.docker.compose.project=synergos | grep -E '_bff-'); do
-            echo "   $v → $(docker run --rm -v "$v:/d:ro" alpine:3 sh -c 'find /d -type f | sed "s|^/d/||; s|/[^/]*$||" | sort | uniq -c | tr -s " " | tr "\n" ";"')"
-          done
 
       # La CA local de Caddy cambia si se borra su volumen (paso 5), así que se
       # vuelve a leer antes de cada humo.

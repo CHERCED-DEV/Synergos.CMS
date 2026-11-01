@@ -557,7 +557,11 @@ public sealed class SalidaAProduccionTests
 
         // La marca vive en el volumen de la BASE (viaja con el respaldo), se pone `en-curso` antes de
         // importar y `importado` sólo tras el veredicto; una base con documentos y sin marca se adopta.
-        Assert.Contains("com.docker.compose.volume=cms-db", importar, StringComparison.Ordinal);
+        // El volumen se busca por NOMBRE: `restaurar.sh` lo recrea sin las etiquetas de compose, y por
+        // etiqueta no se encontraba la base restaurada (medido en el ensayo).
+        Assert.Contains("VOLUMEN_DB=\"$(volumen_de cms-db)\"", importar, StringComparison.Ordinal);
+        Assert.Contains("name=^${PROYECTO}_$1$", importar, StringComparison.Ordinal);
+        Assert.DoesNotContain("label=com.docker.compose.volume=", importar, StringComparison.Ordinal);
         var enCurso = importar.IndexOf("marca poner en-curso", StringComparison.Ordinal);
         var arranque = importar.IndexOf("ImportAtStartup=All", StringComparison.Ordinal);
         var veredicto = importar.IndexOf("se saltó algo", StringComparison.Ordinal);

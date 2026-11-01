@@ -150,14 +150,21 @@ IMAGEN="$($COMPOSE config --images 2>/dev/null | grep '/synergos-cms:' | head -1
 PROYECTO="$(sed -n 's/^name:[[:space:]]*//p' "$COMPOSE_FILE" | head -1)"
 PROYECTO="${PROYECTO:-synergos}"
 
+# El volumen real se busca por NOMBRE (`<proyecto>_<volumen>`, anclado), como en
+# `restaurar.sh`, y no por las etiquetas de compose: `restaurar.sh` recrea los
+# volúmenes con `docker volume create`, sin etiquetas, y buscarlos por etiqueta
+# no encontraba la base restaurada (medido en el ensayo, corrida 41325948580).
+volumen_de() {
+  docker volume ls --quiet --filter "name=^${PROYECTO}_$1$" | head -1 || true
+}
+
 # ── La marca del contenido, en el volumen de la base ─────────────────────────
 #
 # Se lee y se escribe con el CMS PARADO (acá arriba se paró): la base no cambia
 # mientras se cuenta. Python trae sqlite3 de serie y su imagen ya la baja el
 # despliegue para `provisionar-en-la-red.sh`, así que no se instala nada.
 MARCA="synergos-contenido-versionado"
-VOLUMEN_DB="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
-               --filter "label=com.docker.compose.volume=cms-db" | head -1 || true)"
+VOLUMEN_DB="$(volumen_de cms-db)"
 marca() {  # marca leer → «<estado> <documentos>»  ·  marca poner <estado> <detalle…>
   docker run --rm -i --volume "$VOLUMEN_DB:/datos" --env "MARCA=$MARCA" python:3.12-alpine \
     python3 - "$@" <<'PY'
@@ -218,8 +225,7 @@ fi
 # a ficheros que no están. Se copian sin pisar NADA de lo que haya (`-n`): lo que
 # un editor subió se queda como está.
 if [ "$CONTENIDO" = "true" ]; then
-  VOLUMEN="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$PROYECTO" \
-               --filter "label=com.docker.compose.volume=cms-media" | head -1 || true)"
+  VOLUMEN="$(volumen_de cms-media)"
   if [ -n "$VOLUMEN" ] && [ -n "$IMAGEN" ]; then
     echo "── los ficheros de la vitrina al volumen de medios (sin pisar nada)…"
     docker run --rm --user 0 --entrypoint sh --volume "$VOLUMEN:/destino" "$IMAGEN" -c \
@@ -352,6 +358,16 @@ AVISOS="$(grep --count ' WRN\]' "$LOG" || true)"
 if [ "$AVISOS" != "0" ]; then
   echo "── $AVISOS avisos (WRN) durante el import; los primeros:"
   grep ' WRN\]' "$LOG" | head -n 15 | cut -c1-240 | sed 's/^/   /'
+fi
+
+# Las OFERTAS, aparte y enteras. Al publicar una página, su vertical le publica la
+# oferta a su orquestador; durante un import el catálogo todavía no la ve y el
+# publicador la deja sin tocar, avisándolo (medido en el ensayo del 2026-11-01).
+# Se dicen todas porque son las que hay que republicar a mano después.
+OFERTAS="$(grep ' WRN\]' "$LOG" | grep --count -i 'oferta' || true)"
+if [ "$OFERTAS" != "0" ]; then
+  echo "── $OFERTAS páginas publicadas cuya oferta NO salió durante el import (se reparan republicando su vertical):"
+  grep ' WRN\]' "$LOG" | grep -i 'oferta' | cut -c1-200 | sed 's/^/   /'
 fi
 
 if [ "$ERRORES" != "0" ]; then
