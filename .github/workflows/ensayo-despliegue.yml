@@ -203,8 +203,9 @@ jobs:
           set -uo pipefail
           cp .env .env.completo
           grep -v '^SYNERGOS_ADMIN_PASSWORD=' .env.completo > .env
-          ./deploy-remoto.sh "$SHA" > /tmp/negativo.log 2>&1
-          CODIGO=$?
+          # El shell de GitHub es `bash -e`: sin el `||`, el 3 cortaría el paso acá.
+          CODIGO=0
+          ./deploy-remoto.sh "$SHA" > /tmp/negativo.log 2>&1 || CODIGO=$?
           [ "$CODIGO" != 0 ] || { cat /tmp/negativo.log; echo "✗ desplegó con una obligatoria vacía"; exit 1; }
           grep -q 'SYNERGOS_ADMIN_PASSWORD' /tmp/negativo.log || { cat /tmp/negativo.log; echo "✗ falló sin nombrar la variable"; exit 1; }
           [ -z "$(docker ps -q)" ] || { docker ps; echo "✗ arrancó contenedores"; exit 1; }
@@ -270,7 +271,7 @@ jobs:
         run: |
           set -uo pipefail
           C="docker compose --file compose.prod.yml --project-directory ."
-          export SYNERGOS_TAG="$(cat tag.actual)"
+          export SYNERGOS_TAG="$(cat tag.actual 2>/dev/null || true)"
           portada() {
             docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -o /tmp/p.html -w '%{http_code} %{size_download} B\n' http://cms:8080/ 2>/dev/null \
               || docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s -w '%{http_code}\n' -o /dev/null http://cms:8080/
