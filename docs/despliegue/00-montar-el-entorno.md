@@ -523,8 +523,15 @@ restauración:
 |---|---|
 | no está, y la base no tiene documentos | base nueva: schema **y** contenido; marca `en-curso` antes y `importado` tras el veredicto |
 | `en-curso` | un import con contenido no terminó: lo repite |
-| `importado` o `adoptada` | sólo el schema |
-| no está, y la base **sí** tiene documentos | la adopta (marca `adoptada`) y sólo el schema: ante la duda, no se pisa |
+| `importado` o `adoptada` | el schema y **sólo lo nuevo** del contenido y la media (`CreateOnly`): lo que ya existe no se toca |
+| no está, y la base **sí** tiene documentos | la adopta (marca `adoptada`), y lo mismo: el schema y sólo lo nuevo |
+
+**Sólo lo nuevo** (P10 de 002, medido el 2026-11-01 con uSync 13.3.2): una página o una media que se
+versiona después del primer despliegue entra en el siguiente; lo editado, despublicado, movido o mandado a
+la papelera en producción se queda así; y repetir el despliegue no cambia nada. Dos cosas que **no** hace:
+un cambio a un nodo que ya existe no llega (pisaría a los editores: eso se hace a mano en producción), y un
+nodo **borrado del todo** en producción vuelve si sigue en el repo (uSync busca por clave): para que no
+vuelva, se borra también del repo.
 
 Un fichero en `/opt/synergos` no serviría: un servidor nuevo con la base restaurada lo tendría vacío y
 reimportaría encima de lo que publicaron los editores.

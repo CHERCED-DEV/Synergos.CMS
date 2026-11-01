@@ -68,10 +68,23 @@
 #
 #   sin marca y sin documentos    → base nueva: con contenido
 #   `en-curso`                    → un import con contenido no terminó: se repite
-#   `importado` o `adoptada`      → sólo el schema
+#   `importado` o `adoptada`      → el schema, y del contenido SÓLO LO NUEVO
 #   sin marca y CON documentos    → una base que ya trae contenido (restaurada de
-#                                   antes de la marca, importada a mano): se adopta
-#                                   y sólo el schema. Ante la duda, no se pisa.
+#                                   antes de la marca, importada a mano): se adopta,
+#                                   y lo mismo: el schema y sólo lo nuevo.
+#
+# ── SÓLO LO NUEVO (P10 de 002, 2026-11-01) ──────────────────────────────────
+#
+# Desde la segunda vez, el contenido y la media se importan con `CreateOnly` (un
+# ajuste por handler de uSync 13): crea los nodos que la base NO tiene y no toca
+# los que ya están. Así llega lo que se versiona después del primer despliegue
+# —una página nueva, un vertical nuevo— sin revertir nada. Medido el 2026-11-01
+# contra una base con un editor encima: la edición sigue; lo despublicado, lo
+# movido y lo que está en la papelera se quedan así; los nodos y la media nuevos
+# entran; y una segunda corrida no cambia nada. Dos cosas que NO hace, a propósito:
+# un cambio a un nodo que ya existe no llega (eso pisaría a los editores), y un
+# nodo BORRADO del todo en producción vuelve si sigue en el repo (para uSync es
+# uno que no está): se borra también del repo.
 #
 # Lo que hace: PARA el CMS, levanta un contenedor efímero con la misma imagen y
 # los mismos volúmenes y con `ImportAtStartup=All` puesto SÓLO para él, y cuando
@@ -96,6 +109,7 @@ COMPOSE_FILE="compose.prod.yml"
 ESPERA="${SYNERGOS_IMPORT_TIMEOUT:-900}"
 CONTENIDO=false
 LA_PRIMERA_VEZ=false
+SOLO_LO_NUEVO=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --con-contenido) CONTENIDO=true; shift ;;
@@ -199,7 +213,8 @@ if [ "$LA_PRIMERA_VEZ" = "true" ]; then
   read -r ESTADO DOCUMENTOS <<< "$LEIDO"
   case "$ESTADO" in
     importado|adoptada)
-      echo "── la base ya tiene su contenido (marca: $ESTADO; $DOCUMENTOS documentos): sólo el schema" ;;
+      SOLO_LO_NUEVO=true
+      echo "── la base ya tiene su contenido (marca: $ESTADO; $DOCUMENTOS documentos): el schema y sólo lo nuevo del contenido" ;;
     en-curso)
       CONTENIDO=true
       echo "── un import con contenido no terminó (marca: en-curso; $DOCUMENTOS documentos): se repite con contenido" ;;
@@ -209,7 +224,8 @@ if [ "$LA_PRIMERA_VEZ" = "true" ]; then
         echo "── base nueva (sin marca y sin documentos): schema Y contenido versionado"
       else
         marca poner adoptada "$SYNERGOS_TAG" "$(AHORA)" "$DOCUMENTOS" documentos
-        echo "── la base ya trae $DOCUMENTOS documentos y no tiene marca: se adopta (no se pisa nada) y sólo el schema"
+        SOLO_LO_NUEVO=true
+        echo "── la base ya trae $DOCUMENTOS documentos y no tiene marca: se adopta (no se pisa nada); el schema y sólo lo nuevo del contenido"
       fi ;;
     *)
       echo "✗ la marca del contenido dice «$ESTADO», que no es un estado que este script escriba: se deja como está y no se importa." >&2
@@ -217,14 +233,20 @@ if [ "$LA_PRIMERA_VEZ" = "true" ]; then
   esac
 fi
 
+# Los handlers de contenido y media se encienden con el contenido completo o con
+# sólo lo nuevo; `CreateOnly`, sólo en el segundo caso.
+CON_HANDLERS=false
+{ [ "$CONTENIDO" = "true" ] || [ "$SOLO_LO_NUEVO" = "true" ]; } && CON_HANDLERS=true
+
 # ── Los ficheros de la vitrina, al volumen de medios si faltan ──────────────
 #
 # Los trae la imagen en `wwwroot/media` (ADR 0129) y Docker los copia al volumen
 # `cms-media` sólo cuando lo crea vacío. Si el volumen ya existía —un servidor que
 # se desplegó con una imagen anterior— los ítems de media se importarían apuntando
 # a ficheros que no están. Se copian sin pisar NADA de lo que haya (`-n`): lo que
-# un editor subió se queda como está.
-if [ "$CONTENIDO" = "true" ]; then
+# un editor subió se queda como está. Con sólo lo nuevo, igual: la media nueva
+# trae su fichero en la imagen.
+if [ "$CON_HANDLERS" = "true" ]; then
   VOLUMEN="$(volumen_de cms-media)"
   if [ -n "$VOLUMEN" ] && [ -n "$IMAGEN" ]; then
     echo "── los ficheros de la vitrina al volumen de medios (sin pisar nada)…"
@@ -243,6 +265,8 @@ if [ "$CONTENIDO" = "true" ]; then
       || echo "⚠ no se pudo escribir la marca «en-curso» en la base: el import sigue." >&2
   fi
   echo "── importando el schema Y EL CONTENIDO versionado en un contenedor efímero…"
+elif [ "$SOLO_LO_NUEVO" = "true" ]; then
+  echo "── importando el schema y SÓLO LO NUEVO del contenido (CreateOnly: lo que ya existe no se toca) en un contenedor efímero…"
 else
   echo "── importando el schema de uSync (sin contenido) en un contenedor efímero…"
 fi
@@ -268,8 +292,10 @@ timeout --signal=INT "$ESPERA" \
   $COMPOSE run --rm --no-deps --entrypoint "" \
     --env "uSync__Settings__ImportAtStartup=All" \
     --env "uSync__Settings__ExportOnSave=None" \
-    --env "uSync__Sets__Default__Handlers__ContentHandler__Enabled=$CONTENIDO" \
-    --env "uSync__Sets__Default__Handlers__MediaHandler__Enabled=$CONTENIDO" \
+    --env "uSync__Sets__Default__Handlers__ContentHandler__Enabled=$CON_HANDLERS" \
+    --env "uSync__Sets__Default__Handlers__MediaHandler__Enabled=$CON_HANDLERS" \
+    --env "uSync__Sets__Default__Handlers__ContentHandler__Settings__CreateOnly=$SOLO_LO_NUEVO" \
+    --env "uSync__Sets__Default__Handlers__MediaHandler__Settings__CreateOnly=$SOLO_LO_NUEVO" \
     --env "uSync__Sets__Default__HandlerDefaults__FailOnMissingParent=true" \
     --env "Umbraco__CMS__Global__DatabaseServerMessenger__TimeBetweenPruneOperations=1.00:00:00" \
     --env "Umbraco__CMS__KeepAlive__DisableKeepAliveTask=true" \
@@ -327,10 +353,11 @@ ERRORES="$(grep --count ' ERR]' "$LOG" || true)"
 #   · y aun sin eso, sin árbol no se comparaba nada: 1240 procesados de 1528 —sin
 #     el contenido— salían «✓ 0 errores» con la base vacía de documentos.
 # Hoy se cuenta el árbol que se IMPORTA: el de al lado si se corre desde un clon, y
-# si no, el de DENTRO de la imagen. Sin `--con-contenido` no cuentan Content ni
-# Media, que es justo lo que ese import no trae.
+# si no, el de DENTRO de la imagen. Sin los handlers de contenido no cuentan Content
+# ni Media, que es justo lo que ese import no trae; con sólo lo nuevo sí cuentan:
+# uSync recorre todos los ficheros y deja sin tocar los que ya existen (medido).
 FILTRO=(-mindepth 2 -name '*.config')
-[ "$CONTENIDO" = "true" ] || FILTRO+=(-not -path '*/Content/*' -not -path '*/Media/*')
+[ "$CON_HANDLERS" = "true" ] || FILTRO+=(-not -path '*/Content/*' -not -path '*/Media/*')
 ARBOL="$(dirname "$0")/../Synergos.CMS.Web/uSync/v9"
 ESPERADOS=0
 DE_DONDE="ningún sitio"

@@ -269,8 +269,11 @@ public sealed class SalidaAProduccionTests
 
         var importar = Leer("tools", "importar-schema.sh");
         Assert.Contains("--con-contenido", importar, StringComparison.Ordinal);
-        Assert.Contains("ContentHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
-        Assert.Contains("MediaHandler__Enabled=$CONTENIDO", importar, StringComparison.Ordinal);
+        Assert.Contains("ContentHandler__Enabled=$CON_HANDLERS", importar, StringComparison.Ordinal);
+        Assert.Contains("MediaHandler__Enabled=$CON_HANDLERS", importar, StringComparison.Ordinal);
+        // Y desde la segunda vez, sólo lo nuevo (P10): CreateOnly en los dos, y sólo en ese caso.
+        Assert.Contains("ContentHandler__Settings__CreateOnly=$SOLO_LO_NUEVO", importar, StringComparison.Ordinal);
+        Assert.Contains("MediaHandler__Settings__CreateOnly=$SOLO_LO_NUEVO", importar, StringComparison.Ordinal);
 
         // El ensayo importa con contenido a mano en su contraprueba (el despliegue lo hace solo la
         // primera vez: El_despliegue_levanta_todo_y_el_contenido_entra_una_vez_por_base).
@@ -570,6 +573,11 @@ public sealed class SalidaAProduccionTests
         Assert.True(veredicto > 0 && importado > veredicto, "La marca «importado» se pone antes del veredicto: un import con huecos quedaría por bueno.");
         Assert.Contains("marca poner adoptada", importar, StringComparison.Ordinal);
 
+        // Una base que ya tiene su contenido recibe sólo lo nuevo (P10): CreateOnly no toca lo que existe.
+        // Sólo ahí: con `--con-contenido` o en una base nueva, el import es el completo.
+        Assert.Matches(@"importado\|adoptada\)\s*\n\s*SOLO_LO_NUEVO=true", importar);
+        Assert.Equal(2, Regex.Count(importar, @"(?m)^\s*SOLO_LO_NUEVO=true\s*$"));
+
         // El ensayo lo prueba de verdad, y lo que busca en la salida lo dicen los scripts: si alguien
         // cambia un mensaje, esto se pone rojo acá y no a los diez minutos de CI.
         var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
@@ -579,9 +587,13 @@ public sealed class SalidaAProduccionTests
         Assert.All(buscados, t => Assert.True(scripts.Contains(t, StringComparison.Ordinal),
             $"El ensayo busca «{t}» y ningún script lo dice: el ensayo saldría rojo por un mensaje, no por un defecto."));
         var edita = ensayo.IndexOf("/sonda.py editar", StringComparison.Ordinal);
-        var cuenta = ensayo.IndexOf("/sonda.py contar", StringComparison.Ordinal);
+        var llegan = ensayo.IndexOf("/sonda.py llegan", StringComparison.Ordinal);
+        var cuenta = ensayo.IndexOf("$SONDA contar", StringComparison.Ordinal);
+        var llegaron = ensayo.IndexOf("$SONDA llegaron", StringComparison.Ordinal);
         var contraprueba = ensayo.IndexOf("./importar-schema.sh --con-contenido", StringComparison.Ordinal);
         Assert.True(edita > 0 && cuenta > edita && contraprueba > cuenta,
             "El ensayo no edita una página, no comprueba que el despliegue siguiente la deja, o no hace la contraprueba después.");
+        Assert.True(llegan > edita && llegaron > llegan && contraprueba > llegaron,
+            "El ensayo no prueba que lo nuevo del repo entra en el despliegue siguiente (P10).");
     }
 }
