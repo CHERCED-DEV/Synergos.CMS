@@ -30,10 +30,11 @@
 # en pie y dejaba dos pasos a mano por SSH: el import de uSync y la siembra de las
 # capacidades. Hoy los hace él, en este orden y sólo si la versión se pone en pie:
 #
-#   1. `importar-schema.sh --contenido-la-primera-vez` — el schema SIEMPRE, y el
-#      contenido versionado sólo sobre una base que no lo tiene (la marca vive en
-#      el volumen de la base: ver la cabecera de ese script). Nunca al arrancar:
-#      lo dispara el despliegue, que es un acto explícito (ADR 0008, 0013).
+#   1. `importar-schema.sh --contenido-la-primera-vez` — el schema SIEMPRE; el
+#      contenido versionado entero sólo sobre una base que no lo tiene (la marca vive
+#      en el volumen de la base: ver la cabecera de ese script), y después sólo lo
+#      NUEVO, sin tocar lo que ya existe (P10). Nunca al arrancar: lo dispara el
+#      despliegue, que es un acto explícito (ADR 0008, 0013).
 #   2. `provisionar-en-la-red.sh` y después `--verificar` — idempotente: lo que ya
 #      está no se toca, lo declarado que falta se publica.
 #

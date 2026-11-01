@@ -379,7 +379,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > /tmp/sonda.py <<'PY'
-          import sqlite3, sys
+          import sqlite3, sys, uuid
           MARCA = ' — editado en el ensayo'
           con = sqlite3.connect('/datos/Umbraco.sqlite.db')
           VIGENTE = '''from umbracoPropertyData pd
@@ -396,6 +396,26 @@ jobs:
                           (MARCA, MARCA, fila[0]))
               con.commit()
               print(f'nodo {fila[1]}: «{fila[2]}» → «{fila[2]}{MARCA}»')
+          elif sys.argv[1] == 'llegan':
+              # Lo que llega al repo DESPUÉS del primer despliegue (P10): un documento y una media que
+              # la base no tiene. Se consigue cambiándoles la clave en la base —uSync busca por clave—,
+              # así que para él son exactamente un nodo nuevo del repo. Hojas, para no huérfanos.
+              DOC, MEDIA = 'C66BA18E-EAF3-4CFF-8A22-41B16D66A972', 'B796F64C-1F99-4FFB-B886-4BF4BC011A9C'
+              hoja = '''select n.id, n.uniqueId from umbracoNode n join umbracoContent c on c.nodeId = n.id
+                        join cmsContentType ct on ct.nodeId = c.contentTypeId
+                        where upper(n.nodeObjectType) = ? and n.trashed = 0 and ct.alias <> 'Folder'
+                        and not exists (select 1 from umbracoNode h where h.parentId = n.id) order by n.id desc limit 1'''
+              claves = []
+              for tipo in (DOC, MEDIA):
+                  nid, clave = con.execute(hoja, (tipo,)).fetchone()
+                  nueva = str(uuid.uuid4())
+                  con.execute('update umbracoNode set uniqueId = ? where id = ?', (nueva.upper() if clave.isupper() else nueva, nid))
+                  claves.append(clave)
+              con.commit()
+              print(' '.join(claves))
+          elif sys.argv[1] == 'llegaron':
+              cuenta = lambda clave: con.execute('select count(*) from umbracoNode where lower(uniqueId) = lower(?)', (clave,)).fetchone()[0]
+              print(cuenta(sys.argv[2]), cuenta(sys.argv[3]), con.execute('select count(*) from umbracoContentVersion').fetchone()[0])
           else:
               print(con.execute("select count(*) " + VIGENTE +
                                 " and coalesce(pd.varcharValue, pd.textValue) like ?", ('%' + MARCA,)).fetchone()[0])
@@ -403,7 +423,9 @@ jobs:
           PY
           docker compose --file compose.prod.yml --project-directory . stop cms >/dev/null
           docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py editar
-          echo "| un editor cambia un \`heading\` vigente (en la base) | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+          docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py llegan > /tmp/llegan.txt
+          echo "lo que «llega» después del primer despliegue (documento y media): $(cat /tmp/llegan.txt)"
+          echo "| un editor cambia un \`heading\` vigente; y llegan al repo un documento y una media que la base no tiene | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
       # ── 5. Respaldo, pérdida y restauración ─────────────────────────────
       - name: respaldo.sh
@@ -420,9 +442,11 @@ jobs:
       # VACÍO y el humo lo ve (el cartel «No published content»).
       #
       # Y es el SEGUNDO DESPLIEGUE: `deploy-remoto.sh` importa otra vez, y tiene que
-      # ser sólo el schema —la marca vino en el respaldo con la base— y dejar en pie
-      # lo que cambió el editor. Lo mismo vale para un despliegue sin restaurar: la
-      # marca se lee del volumen igual; acá además se prueba que viaja con él.
+      # ser el schema y sólo lo nuevo del contenido —la marca vino en el respaldo con la
+      # base—: dejar en pie lo que cambió el editor y crear el documento y la media que
+      # «llegaron» al repo (P10). Repetido, no cambia nada. Lo mismo vale para un
+      # despliegue sin restaurar: la marca se lee del volumen igual; acá además se
+      # prueba que viaja con él.
       - name: Perder los volúmenes, restaurarlos y desplegar otra vez
         working-directory: /opt/synergos
         env:
@@ -438,11 +462,23 @@ jobs:
             || { echo "✗ el segundo despliegue no leyó la marca de la base restaurada"; exit 1; }
           docker run --rm -v synergos_cms-db:/datos:ro alpine:3 cat /datos/synergos-contenido-versionado | grep -q '^importado ' \
             || { echo "✗ la marca de la base restaurada no dice «importado»"; exit 1; }
-          grep -q 'importando el schema de uSync (sin contenido)' /tmp/despliegue-2.log \
-            || { echo "✗ el segundo despliegue no importó sólo el schema"; exit 1; }
-          EDITADOS="$(docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py contar)"
+          grep -q 'SÓLO LO NUEVO del contenido' /tmp/despliegue-2.log \
+            || { echo "✗ el segundo despliegue no importó el contenido en «sólo lo nuevo»"; exit 1; }
+          SONDA="docker run --rm -v synergos_cms-db:/datos -v /tmp/sonda.py:/sonda.py:ro python:3.12-alpine python3 /sonda.py"
+          EDITADOS="$($SONDA contar)"
           [ "$EDITADOS" -ge 1 ] || { echo "✗ el segundo despliegue revirtió lo que cambió el editor"; exit 1; }
-          echo "| volúmenes borrados → \`restaurar.sh\` → segundo despliegue: sólo el schema, lo del editor sigue ($EDITADOS) | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+          read -r DOC MEDIA < /tmp/llegan.txt
+          read -r HAY_DOC HAY_MEDIA VERSIONES <<< "$($SONDA llegaron "$DOC" "$MEDIA")"
+          [ "$HAY_DOC" = 1 ] && [ "$HAY_MEDIA" = 1 ] \
+            || { echo "✗ lo nuevo del repo no entró (documento: $HAY_DOC, media: $HAY_MEDIA)"; exit 1; }
+          echo "| volúmenes borrados → \`restaurar.sh\` → segundo despliegue: lo del editor sigue ($EDITADOS) y entran el documento y la media nuevos | ✓ | $((SECONDS - t)) s |" >> "$GITHUB_STEP_SUMMARY"
+
+          # Y otra vez lo mismo: nada nuevo que crear, así que ni una versión más y la edición intacta.
+          ./importar-schema.sh --contenido-la-primera-vez > /tmp/despliegue-2b.log 2>&1 || { cat /tmp/despliegue-2b.log; exit 1; }
+          read -r _ _ VERSIONES_2 <<< "$($SONDA llegaron "$DOC" "$MEDIA")"
+          [ "$VERSIONES_2" = "$VERSIONES" ] && [ "$($SONDA contar)" -ge 1 ] \
+            || { echo "✗ repetir el import cambió el contenido ($VERSIONES → $VERSIONES_2 versiones)"; exit 1; }
+          echo "| repetir el import: $VERSIONES versiones antes y después, la edición sigue | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Humo público (2) — sin reimportar el contenido
         env:
