@@ -345,6 +345,28 @@ jobs:
           node ver.mjs
           echo "| navegador: portada y backoffice sin avisos por las cabeceras | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
+      # ── 3.ter. El producto el primer día, como lo ve un visitante ───────
+      #
+      # MEDIDA, no puerta (002, 2026-11-01): qué contesta cada vertical en un servidor
+      # recién levantado, sin cuentas y con el `.env` del bootstrap. Es lo que decide qué
+      # le queda por hacer al arquitecto (F1.bis, P6) y lo que ya funciona sin manos.
+      - name: El primer día, lo que ve un visitante (medida)
+        if: always() && steps.etiquetas.outputs.sha != ''
+        run: |
+          set -uo pipefail
+          export CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt
+          echo "| ruta | código | qué trae |" > /tmp/primer-dia.md
+          echo "|---|---|---|" >> /tmp/primer-dia.md
+          for ruta in /api/ehr/doctors /api/ehr/copay /api/eventos/events /api/shop/search /api/academy/courses \
+                      /api/realty/listings /api/alquiler/equipment /api/gov/services; do
+            codigo="$(curl -s -o /tmp/r.json -w '%{http_code}' "https://localhost$ruta" || echo 000)"
+            que="$(jq -r 'if type=="array" then "\(length) elementos"
+                          else ([to_entries[] | select(.value|type=="array") | "\(.key): \(.value|length)"]
+                                + [to_entries[] | select(.value|type=="number") | "\(.key)=\(.value)"]) | join(", ") end' /tmp/r.json 2>/dev/null || head -c 120 /tmp/r.json)"
+            echo "| \`$ruta\` | $codigo | ${que:-—} |" | tee -a /tmp/primer-dia.md
+          done
+          { echo; echo "**El primer día, sin cuentas** (medida):"; echo; cat /tmp/primer-dia.md; echo; } >> "$GITHUB_STEP_SUMMARY"
+
       # ── 4. Un editor cambia una página ──────────────────────────────────
       #
       # Lo que un despliegue SIGUIENTE no puede revertir. Se cambia en la base, con
