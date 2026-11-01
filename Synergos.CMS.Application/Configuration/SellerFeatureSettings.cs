@@ -18,13 +18,20 @@ public sealed class SellerFeatureSettings : SeccionDeNegocio<SellerFeatureSitio,
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/shop";
 
+    /// <inheritdoc cref="StorefrontFeatureSettings.LecturasBase"/>
+    public string LecturasBase { get; init; } = LecturasDeLaTienda.Base;
+
     /// <inheritdoc />
     protected override NegocioDeSeller Fusionar(SellerFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(ApiBase: propio?.ApiBase ?? ApiBase, LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeSeller negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            LecturasDeLaTienda.Problema("LecturasBase", negocio.LecturasBase),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +41,7 @@ public sealed class SellerFeatureSitio
 {
     /// <inheritdoc cref="SellerFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="SellerFeatureSettings.LecturasBase"/>
+    public string? LecturasBase { get; init; }
 }

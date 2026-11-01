@@ -3100,6 +3100,12 @@
           "origen": "negocio"
         },
         {
+          "nombre": "lecturasBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
           "nombre": "zonaHoraria",
           "tipo": "string",
           "opcional": false,
@@ -3145,6 +3151,7 @@
         "heading": "Tu negocio, en un solo panel",
         "subheading": "Ventas, publicaciones, mensajes y devoluciones",
         "apiBase": "/api/shop",
+        "lecturasBase": "/api/lecturas/tienda",
         "zonaHoraria": "America/Bogota",
         "vista": "publicar",
         "rutas": [
@@ -3399,6 +3406,12 @@
           "origen": "negocio"
         },
         {
+          "nombre": "lecturasBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
           "nombre": "purchasePath",
           "tipo": "string",
           "opcional": false,
@@ -3476,6 +3489,7 @@
         "heading": "Compra en nuestra tienda online",
         "subheading": "Catálogo, carrito y checkout",
         "apiBase": "/api/shop",
+        "lecturasBase": "/api/lecturas/tienda",
         "purchasePath": "directa",
         "shippingCountry": "CO",
         "zonaHoraria": "America/Bogota",

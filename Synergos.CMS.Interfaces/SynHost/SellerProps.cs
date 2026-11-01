@@ -25,6 +25,7 @@ public sealed record SellerProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
     [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);

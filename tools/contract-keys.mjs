@@ -72,8 +72,18 @@ const PARES = [
     // El storefront pide /products, /order y /checkout, que sirve ShopCatalogController;
     // ShopController es SÓLO el carrito (api/shop/cart). Apuntar al segundo cruzaba 3 claves
     // en vez de 70 — ver la guarda de abajo, que es lo que lo destapó.
-    // Sus normalizadores viven en `libs/dominio/tienda`, uno por capacidad (014-despiece-tienda, T009).
-    { app: 'storefront', controllers: ['ShopCatalogController.cs', 'ShopController.cs'], dominio: { nombre: 'tienda' } },
+    // Sus normalizadores viven en `libs/dominio/tienda`, uno por capacidad (014-despiece-tienda, T009). Desde I4 lee
+    // las lecturas genéricas (`api/lecturas/{vertical}`); las de ShopCatalogController quedan interinas.
+    {
+        app: 'storefront',
+        controllers: [
+            'ShopCatalogController.cs', 'ShopController.cs',
+            'LecturaDelCatalogoController.cs', 'LecturaDeResenasController.cs', 'LecturaDePedidosController.cs',
+            'LecturaDeDevolucionesController.cs', 'LecturaDeColeccionesController.cs', 'LecturaDeMensajesController.cs',
+        ],
+        registros: ['Synergos.CMS.Interfaces/Lecturas'],
+        dominio: { nombre: 'tienda' },
+    },
     { app: 'eventos', controllers: ['EventosController.cs'] },
     { app: 'gov', controllers: ['GovController.cs'] },
     { app: 'ehr', controllers: ['EhrController.cs', 'HealthcareApiController.cs'] },
@@ -83,7 +93,13 @@ const PARES = [
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
     // La consola del vendedor (013-seller-operaciones, T012): la bandeja y el detalle salen de las rutas del personal.
     // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
-    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'], dominio: { nombre: 'tienda', carpetas: ['consola'] } },
+    // Y la bandeja de mensajes, de la lectura genérica (014-despiece-tienda, I4).
+    {
+        app: 'seller',
+        controllers: ['VendedorDeLaTiendaController.cs', 'LecturaDeMensajesController.cs'],
+        registros: ['Synergos.CMS.Interfaces/Lecturas'],
+        dominio: { nombre: 'tienda', carpetas: ['consola'] },
+    },
 ];
 
 /**
@@ -139,20 +155,36 @@ function clavesQueLeeLaUi(par) {
     return claves;
 }
 
-/** Las claves que uno o varios controllers EMITEN, camelizadas como las serializa ASP.NET. */
-function clavesQueEmiteElCms(controllers) {
+/**
+ * Las claves que uno o varios controllers EMITEN, camelizadas como las serializa ASP.NET.
+ *
+ * Y las de los `registros` del par: las carpetas donde viven los records que un controller devuelve sin declararlos él.
+ * Son las formas neutras de las lecturas genéricas (`Synergos.CMS.Interfaces/Lecturas`, 014-despiece-tienda, I4):
+ * los puertos las devuelven y el controller las serializa tal cual, así que leyendo sólo el controller el gate no las
+ * veía, y la deriva de una lectura genérica habría pasado en verde.
+ */
+function clavesQueEmiteElCms(controllers, registros = []) {
     const claves = new Set();
     let alguno = false;
-
     for (const controller of controllers) {
         const f = path.join(CMS, 'Synergos.CMS.Web', 'Controllers', controller);
         if (!fs.existsSync(f)) continue;
         alguno = true;
         recogerClaves(fs.readFileSync(f, 'utf8'), claves);
     }
-
+    for (const carpeta of registros) {
+        const dir = path.join(CMS, carpeta);
+        if (!fs.existsSync(dir)) {
+            problemas.push(`la carpeta de registros «${carpeta}» no existe: el par la declara y no se leyó.`);
+            continue;
+        }
+        for (const e of fs.readdirSync(dir).filter((n) => n.endsWith('.cs'))) {
+            recogerClaves(fs.readFileSync(path.join(dir, e), 'utf8'), claves);
+        }
+    }
     return alguno ? claves : null;
 }
+
 
 function recogerClaves(fuente, claves) {
     // Los comentarios se quitan ANTES de parsear, y no es cosmética: este repo documenta cada
@@ -204,7 +236,7 @@ const avisos = [];
 for (const par of PARES) {
     const { app, controllers } = par;
     const ui = clavesQueLeeLaUi(par);
-    const cms = clavesQueEmiteElCms(controllers);
+    const cms = clavesQueEmiteElCms(controllers, par.registros);
 
     if (ui === null) { avisos.push(`[app] no se encontró el cliente de '${app}' bajo ${UI}`); continue; }
     if (cms === null) { avisos.push(`[cms] no existe ninguno de ${controllers.join(', ')}`); continue; }

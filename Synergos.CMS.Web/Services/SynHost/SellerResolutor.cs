@@ -42,11 +42,13 @@ public sealed class SellerResolutor : IResolutorSynHost<SellerProps>
     public ElementoResuelto<SellerProps> Resolver(IPublishedElement elemento)
     {
         var editor = new LectorDelEditor(elemento, _fallback, _log);
+        var negocio = _negocio.Actual();
 
         return new ElementoResuelto<SellerProps>(new SellerProps(
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
-            ApiBase: _negocio.Actual().ApiBase,
+            ApiBase: negocio.ApiBase,
+            LecturasBase: negocio.LecturasBase,
             ZonaHoraria: _zona,
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
             Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));

@@ -15,6 +15,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// país del despliegue (<c>ShippingCountry</c>), y los textos de la compra salen de la sección
 /// <c>Storefront.Purchase</c> del diccionario (ADR 0136).</para>
 ///
+/// <para><b>Y de dónde lee</b> (<c>LecturasBase</c>, 014-despiece-tienda, I4): la base de las lecturas genéricas
+/// (<c>/api/lecturas/tienda</c>), con forma neutra de vertical. Vacía, la tienda lee las rutas interinas de
+/// <c>ApiBase</c>, como antes. Es del despliegue.</para>
+///
 /// <para><b>Y en qué hora dice sus fechas</b> (<c>ZonaHoraria</c>, la de <c>Synergos:Listados:ZonaHoraria</c>,
 /// 004-tienda-compra etapa 3): el pedido y cada etapa del seguimiento llegan como instantes, y «Mis compras» los dice
 /// en la hora del sitio y en es-CO, no en la de quien mira ni en ISO crudo. Es del despliegue.</para>
@@ -29,6 +33,7 @@ public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ShippingCountry,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria,

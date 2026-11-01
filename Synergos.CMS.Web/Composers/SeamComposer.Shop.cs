@@ -2,9 +2,11 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Interfaces.Lecturas;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Lecturas;
 using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
@@ -65,6 +67,19 @@ public sealed partial class SeamComposer
             new StubProductCatalogProvider(
                 sp.GetRequiredService<ICatalogSource<CatalogProduct>>(),
                 sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue));
+
+        // 014-despiece-tienda, I4 — la tienda en las lecturas genéricas (api/lecturas/tienda/…): la misma fuente de
+        // productos y los mismos servicios que ShopCatalogController, cuyas lecturas quedan interinas. Transient: cada
+        // una envuelve servicios ya registrados, y así no captura ninguno de vida más corta.
+        services.AddTransient<ILecturaDelCatalogo>(sp => CatalogoDeLaTienda.Lectura(
+            sp.GetRequiredService<ICatalogSource<CatalogProduct>>(),
+            sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue,
+            sp.GetRequiredService<IPriceFormatter>()));
+        services.AddTransient<ILecturaDeResenas, LecturaDeResenasDeLaTienda>();
+        services.AddTransient<ILecturaDePedidos, LecturaDePedidosDeLaTienda>();
+        services.AddTransient<ILecturaDeDevoluciones, LecturaDeDevolucionesDeLaTienda>();
+        services.AddTransient<ILecturaDeColecciones, LecturaDeColeccionesDeLaTienda>();
+        services.AddTransient<IContextoDeMensajes, ContextoDeMensajesDeLaTienda>();
 
         // OLA 1 Tienda (entrega A, fase T0 del spec tienda.md) — seams de la cara
         // compradora post-venta + cuenta, stub-first y aditivos (ADR 0002 + 0075).

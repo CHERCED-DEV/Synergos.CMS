@@ -35,6 +35,11 @@ namespace Synergos.CMS.Web.Controllers;
 /// pago; OMS/DB para las órdenes) sin tocar este controller. API pública (sin
 /// auth-gate): el comprador no necesita login para buscar/comprar; el orderRef es
 /// la credencial para confirm, y el email del comprador agrupa su historial.
+///
+/// <para><b>Sus lecturas son interinas</b> (014-despiece-tienda, I4): la tienda las lee de las lecturas genéricas
+/// <c>api/lecturas/{vertical}/…</c>, con forma neutra de vertical, y éstas siguen vivas para quien todavía las pida
+/// y como vuelta atrás (<c>LecturasBase</c> vacía). Cada GET dice cuál la reemplaza. Las escrituras siguen siendo de
+/// la tienda.</para>
 /// </remarks>
 [ApiController]
 [Route("api/shop")]
@@ -211,6 +216,7 @@ public sealed class ShopCatalogController : ControllerBase
     // Las facetas seleccionadas llegan como query params nombrados (brand,
     // minRating) y se reenvían al provider; la respuesta trae los productos +
     // las facetas derivadas para refinar la PLP sin recargar.
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/catalogo.
     [HttpGet("search")]
     public async Task<IActionResult> Search(
         [FromQuery] string? q,
@@ -293,6 +299,7 @@ public sealed class ShopCatalogController : ControllerBase
 
     // ── 2. Product detail (PDP) ────────────────────────────────────
     // GET /api/shop/product/{id} → { product, variants, reviews, questions }
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/catalogo/{id} y …/catalogo/{id}/resenas.
     [HttpGet("product/{id}")]
     public async Task<IActionResult> Product(string id, CancellationToken cancellationToken)
     {
@@ -368,6 +375,7 @@ public sealed class ShopCatalogController : ControllerBase
     //     y la tarjeta lee `images[0].src`/`images[0].alt`; con cadenas, `.src` es
     //     undefined y se pierde la imagen. No se toca `ProductDto` para no romper a
     //     search/PDP, que ya consumen el array de cadenas.
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/catalogo/{id}; la piden product-card y product-detail con /api/shop cableada.
     [HttpGet("products/sku/{sku}")]
     public async Task<IActionResult> ProductBySku(string sku, CancellationToken cancellationToken)
     {
@@ -629,6 +637,7 @@ public sealed class ShopCatalogController : ControllerBase
     // órdenes de CUALQUIER email (IDOR: email enumerable → historial ajeno). Ahora
     // la identidad viene de la sesión (server-trusted) y el filtro es por memberKey;
     // el ?customer= se ignora. Anónimo → 401.
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/pedidos.
     [HttpGet("orders")]
     public async Task<IActionResult> Orders(CancellationToken cancellationToken)
     {
@@ -690,6 +699,7 @@ public sealed class ShopCatalogController : ControllerBase
     // GET  /api/shop/wishlist/collections           → resumen de MIS listas
     // POST /api/shop/wishlist { collection?, itemRef }  → agrega a MI lista (idempotente)
     // DELETE /api/shop/wishlist?collection=&itemRef=    → quita de MI lista
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/colecciones/{coleccion}.
     [HttpGet("wishlist")]
     public async Task<IActionResult> Wishlist(
         [FromQuery] string? collection,
@@ -705,6 +715,7 @@ public sealed class ShopCatalogController : ControllerBase
         return Ok(await BuildWishlistAsync(owner, name, cancellationToken));
     }
 
+    // Interina (014-despiece-tienda, I4): la lectura genérica es sin genérica: no la pide nadie.
     [HttpGet("wishlist/collections")]
     public async Task<IActionResult> WishlistCollections(CancellationToken cancellationToken)
     {
@@ -789,6 +800,7 @@ public sealed class ShopCatalogController : ControllerBase
     // La orden alimenta el timeline al confirmar el pago (etapa "paid"); las
     // etapas siguientes las mueve el fulfillment/vendedor. Orden Pending →
     // timeline aún no iniciado (stages vacías, currentStage null).
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/pedidos/{referencia}/seguimiento.
     [HttpGet("order/{orderRef}/tracking")]
     public async Task<IActionResult> OrderTracking(string orderRef, CancellationToken cancellationToken)
     {
@@ -862,6 +874,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
     }
 
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/pedidos/{referencia}/devoluciones.
     [HttpGet("order/{orderRef}/return")]
     public async Task<IActionResult> ReturnsForOrder(string orderRef, CancellationToken cancellationToken)
     {
@@ -1005,6 +1018,7 @@ public sealed class ShopCatalogController : ControllerBase
         }
     }
 
+    // Interina (014-despiece-tienda, I4): la lectura genérica es sin genérica: no la pide nadie, y la bandeja genérica trae los mensajes de cada hilo.
     [HttpGet("messages/{threadId}")]
     public async Task<IActionResult> GetThread(string threadId, CancellationToken cancellationToken)
     {
@@ -1028,6 +1042,7 @@ public sealed class ShopCatalogController : ControllerBase
         return Ok(ToThreadDto(thread));
     }
 
+    // Interina (014-despiece-tienda, I4): la lectura genérica es GET api/lecturas/{vertical}/mensajes.
     [HttpGet("messages")]
     public async Task<IActionResult> Inbox(CancellationToken cancellationToken)
     {
