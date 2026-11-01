@@ -1440,6 +1440,12 @@ public sealed class ShopCatalogController : ControllerBase
     /// el dueño es el member de la sesión (ver <c>WishlistAdd</c>). Mismo trato que Orders da a
     /// <c>Customer</c>.
     /// </remarks>
+    /// <param name="ItemRef">
+    /// El ítem a guardar. Anulable a propósito: la UI manda <paramref name="ProductId"/> y no esta clave, y con
+    /// <c>[ApiController]</c> un <c>string</c> no anulable es OBLIGATORIO, así que el modelo contestaba 400 («The ItemRef
+    /// field is required») antes de llegar al controller. Guardar un favorito fallaba siempre; las pruebas llamaban al
+    /// método directo, con <c>ItemRef: null!</c>, y no lo veían (014-despiece-tienda, hallado en vivo en I4).
+    /// </param>
     /// <param name="ProductId">
     /// Alias de <paramref name="ItemRef"/>: es la clave con la que la UI manda el producto.
     /// </param>
@@ -1450,7 +1456,7 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record WishlistItemRequest(
         string? Owner,
         string? Collection,
-        string ItemRef,
+        string? ItemRef,
         string? ProductId = null,
         string? Action = null);
 
@@ -1537,7 +1543,10 @@ public sealed class ShopCatalogController : ControllerBase
     public sealed record StartThreadRequest(string ContextRef, string? From, string To, string Body);
 
     /// <summary>POST /api/shop/messages/{threadId}/reply — responder en el hilo.</summary>
-    public sealed record ReplyRequest(string From, string Body);
+    // From se conserva por compatibilidad y el servidor lo IGNORA, como en StartThreadRequest: el remitente es el member
+    // de la sesión. Anulable a propósito: con [ApiController] un string no anulable es OBLIGATORIO, y la consola manda
+    // sólo `{ body }`, así que responder contestaba 400 siempre (014-despiece-tienda, hallado en vivo en I4).
+    public sealed record ReplyRequest(string? From, string Body);
 
     public sealed record ThreadMessageDto(string MessageId, string From, string Body, DateTimeOffset SentAt);
 
