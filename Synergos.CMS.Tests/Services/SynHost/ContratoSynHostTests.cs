@@ -120,6 +120,7 @@ public sealed class ContratoSynHostTests
             {
                 ("heading", "Tu negocio, en un solo panel"),
                 ("subheading", "Ventas, publicaciones, mensajes y devoluciones"),
+                ("vista", "publicar"),
             },
             // La familia es una DECISIÓN del editor (qué equipos muestra el bloque); la API es de
             // negocio y la moneda llega con cada precio (#147).
@@ -133,6 +134,7 @@ public sealed class ContratoSynHostTests
             {
                 ("heading", "Compra en nuestra tienda online"),
                 ("subheading", "Catálogo, carrito y checkout"),
+                ("vista", "catalogo"),
             },
             ["travel-shell"] = new (string, object?)[]
             {
@@ -502,7 +504,7 @@ public sealed class ContratoSynHostTests
             .ToList();
 
         Assert.True(sinOrigen.Count == 0,
-            "Estos campos no declaran [CampoSynHost(Contenido|Decision|Negocio|Sesion)]: " + string.Join(", ", sinOrigen)
+            "Estos campos no declaran [CampoSynHost(Contenido|Decision|Negocio|Sesion|Sitio)]: " + string.Join(", ", sinOrigen)
             + ". Es la clasificación que la fábrica lee para saber qué dato pide un elemento.");
     }
 
@@ -845,6 +847,7 @@ public sealed class ContratoSynHostTests
                     OrigenDelCampo.Decision => "decision",
                     OrigenDelCampo.Negocio => "negocio",
                     OrigenDelCampo.Sesion => "sesion",
+                    OrigenDelCampo.Sitio => "sitio",
                     _ => "SIN-ORIGEN",
                 }
                 : null;
@@ -910,6 +913,7 @@ public sealed class ContratoSynHostTests
             .AddSingleton(ElementoFalso.Diccionario())
             .AddSingleton(ElementoFalso.Urls())
             .AddSingleton(IconosDeUSync())
+            .AddSingleton<IRutasDeLasVistas>(new RutasDeMuestra())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
@@ -1004,6 +1008,18 @@ public sealed class ContratoSynHostTests
     private sealed class PuertaSinDestino : IPuertaDeLosFlujos
     {
         public bool Abre(string flujo) => false;
+    }
+
+    /// <summary>
+    /// Un sitio compuesto con una página por vista (014-despiece-tienda, I3): sin petición no hay sitio que recorrer,
+    /// y una ruta que no viajara en la muestra no la miraría ningún gate.
+    /// </summary>
+    private sealed class RutasDeMuestra : IRutasDeLasVistas
+    {
+        public IReadOnlyList<RutaDeUnaVista> Del(string aliasDelBloque, string vistaPorDefecto)
+            => aliasDelBloque == SellerResolutor.AliasDelBloque
+                ? [new RutaDeUnaVista(vistaPorDefecto, "/tienda/vender/"), new RutaDeUnaVista("mensajes", "/tienda/vender/mensajes/")]
+                : [new RutaDeUnaVista(vistaPorDefecto, "/tienda/"), new RutaDeUnaVista("carrito", "/tienda/carrito/")];
     }
 
     private static async Task<JsonElement> Emitido(IServiceProvider proveedor, Type record, (string Alias, object? Valor)[] muestra)

@@ -18,6 +18,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y en qué hora dice sus fechas</b> (<c>ZonaHoraria</c>, la de <c>Synergos:Listados:ZonaHoraria</c>,
 /// 004-tienda-compra etapa 3): el pedido y cada etapa del seguimiento llegan como instantes, y «Mis compras» los dice
 /// en la hora del sitio y en es-CO, no en la de quien mira ni en ISO crudo. Es del despliegue.</para>
+///
+/// <para><b>Y qué parte de la tienda es esta página</b> (<c>Vista</c>, 014-despiece-tienda, I3): la elige el
+/// editor en el bloque; vacía, el inicio, que es la tienda entera de antes. Las <c>Rutas</c> dicen en qué página
+/// del sitio vive cada vista, y salen de cómo está compuesto el sitio, no del bloque: el elemento enlaza ahí, y
+/// la vista que no tiene página se sigue abriendo dentro de ésta.</para>
 /// </remarks>
 [ElementoSynHost("storefront", TipoDeColocable.Funcionalidad, Diccionario = ["Storefront.Purchase"])]
 public sealed record StorefrontProps(
@@ -26,4 +31,6 @@ public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ShippingCountry,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria,
+    [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);
