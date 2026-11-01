@@ -42,19 +42,31 @@ public sealed class StorefrontFeatureSettings : SeccionDeNegocio<StorefrontFeatu
     /// </summary>
     public string ShippingCountry { get; init; } = "CO";
 
+    /// <summary>
+    /// La base de las lecturas genéricas de la tienda (014-despiece-tienda, I4): el catálogo, los pedidos, las
+    /// devoluciones, la lista de deseos, los mensajes y las reseñas con forma neutra de vertical.
+    /// </summary>
+    /// <remarks>
+    /// Vacía, la tienda vuelve a leer las rutas interinas de <see cref="ApiBase"/> (<c>api/shop</c>): es la vuelta
+    /// atrás sin desplegar.
+    /// </remarks>
+    public string LecturasBase { get; init; } = LecturasDeLaTienda.Base;
+
     /// <inheritdoc />
     protected override NegocioDeStorefront Fusionar(StorefrontFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             Carrier: propio?.Carrier ?? Carrier,
             PurchasePath: CaminoDeCompra.Normalizar(propio?.PurchasePath ?? PurchasePath),
-            ShippingCountry: (propio?.ShippingCountry ?? ShippingCountry).Trim().ToUpperInvariant());
+            ShippingCountry: (propio?.ShippingCountry ?? ShippingCountry).Trim().ToUpperInvariant(),
+            LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeStorefront negocio)
         => new[]
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            LecturasDeLaTienda.Problema("LecturasBase", negocio.LecturasBase),
             string.IsNullOrWhiteSpace(negocio.Carrier) ? "Carrier: hace falta una transportadora; sin ella no se despacha." : null,
             ReglasDeNegocio.Camino("PurchasePath", negocio.PurchasePath),
             negocio.ShippingCountry is { Length: 2 } pais && pais.All(char.IsAsciiLetterUpper)
@@ -79,4 +91,7 @@ public sealed class StorefrontFeatureSitio
 
     /// <inheritdoc cref="StorefrontFeatureSettings.ShippingCountry"/>
     public string? ShippingCountry { get; init; }
+
+    /// <inheritdoc cref="StorefrontFeatureSettings.LecturasBase"/>
+    public string? LecturasBase { get; init; }
 }

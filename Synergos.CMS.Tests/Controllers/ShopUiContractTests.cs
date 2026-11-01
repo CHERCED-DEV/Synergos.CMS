@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -167,13 +168,33 @@ public sealed class ShopUiContractTests
             .Returns(new UserCollectionItem(Yo, "wishlist", "AUDIF-001", DateTimeOffset.UtcNow));
 
         var result = await h.Controller.WishlistAdd(
-            new ShopCatalogController.WishlistItemRequest(Owner: null, Collection: null, ItemRef: null!, ProductId: "AUDIF-001", Action: "add"),
+            new ShopCatalogController.WishlistItemRequest(Owner: null, Collection: null, ItemRef: null, ProductId: "AUDIF-001", Action: "add"),
             CancellationToken.None);
 
         await h.Collections.Received(1).AddAsync(Yo, Arg.Any<string>(), "AUDIF-001", Arg.Any<CancellationToken>());
         // Y devuelve la LISTA, que es lo que la UI vuelve a leer: con un ítem suelto descartaba
         // la respuesta entera y se quedaba con su copia local.
         Assert.True(Wire(result).TryGetProperty("items", out _));
+    }
+
+    /// <summary>
+    /// <b>Y el cuerpo que manda la UI pasa la validación del modelo.</b> Las dos pruebas de arriba llaman al método directo
+    /// y se saltan lo que hace ASP.NET antes: con <c>[ApiController]</c>, un <c>string</c> no anulable de un cuerpo es
+    /// obligatorio, y <c>{ productId, action }</c> sin <c>itemRef</c> contestaba 400 sin llegar al controller. Guardar un
+    /// favorito fallaba siempre (014-despiece-tienda, hallado en vivo en I4).
+    /// </summary>
+    /// <remarks>
+    /// Y lo mismo responder un mensaje desde la consola: <c>ReplyRequest.From</c> era obligatorio y la consola manda sólo
+    /// <c>{ body }</c> (el remitente lo pone la sesión).
+    /// </remarks>
+    [Theory]
+    [InlineData(typeof(ShopCatalogController.WishlistItemRequest), nameof(ShopCatalogController.WishlistItemRequest.ItemRef))]
+    [InlineData(typeof(ShopCatalogController.ReplyRequest), nameof(ShopCatalogController.ReplyRequest.From))]
+    public void El_cuerpo_no_exige_la_clave_que_la_UI_no_manda(Type cuerpo, string clave)
+    {
+        var parametro = cuerpo.GetConstructors().Single().GetParameters().Single(p => p.Name == clave);
+
+        Assert.Equal(NullabilityState.Nullable, new NullabilityInfoContext().Create(parametro).WriteState);
     }
 
     /// <summary>
@@ -186,7 +207,7 @@ public sealed class ShopUiContractTests
         var h = Make();
 
         await h.Controller.WishlistAdd(
-            new ShopCatalogController.WishlistItemRequest(Owner: null, Collection: null, ItemRef: null!, ProductId: "AUDIF-001", Action: "remove"),
+            new ShopCatalogController.WishlistItemRequest(Owner: null, Collection: null, ItemRef: null, ProductId: "AUDIF-001", Action: "remove"),
             CancellationToken.None);
 
         await h.Collections.Received(1).RemoveAsync(Yo, Arg.Any<string>(), "AUDIF-001", Arg.Any<CancellationToken>());

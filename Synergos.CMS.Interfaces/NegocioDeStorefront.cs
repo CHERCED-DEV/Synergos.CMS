@@ -9,5 +9,11 @@ namespace Synergos.CMS.Interfaces;
 /// declara, y entonces decide la regla de <see cref="CaminoDeCompra.Decidir"/>.</param>
 /// <param name="ShippingCountry">El país al que despacha la tienda (ISO 3166-1 alfa-2, en mayúsculas): la
 /// dirección de la compra por la puerta lo exige y el formulario de envío no lo pregunta.</param>
+/// <param name="LecturasBase">La base de las lecturas genéricas de la tienda (014-despiece-tienda, I4); vacía, la
+/// tienda lee las rutas interinas de <paramref name="ApiBase"/>.</param>
 public sealed record NegocioDeStorefront(
-    string ApiBase, string Carrier = "default", string? PurchasePath = null, string ShippingCountry = "CO");
+    string ApiBase,
+    string Carrier = "default",
+    string? PurchasePath = null,
+    string ShippingCountry = "CO",
+    string LecturasBase = "");

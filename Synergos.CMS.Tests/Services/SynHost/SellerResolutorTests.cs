@@ -21,7 +21,7 @@ public sealed class SellerResolutorTests
         params (string Alias, object? Valor)[] bloque)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeSeller>>();
-        negocio.Actual().Returns(new NegocioDeSeller("/api/shop"));
+        negocio.Actual().Returns(new NegocioDeSeller("/api/shop", "/api/lecturas/tienda"));
         var muestra = bloque.Length > 0
             ? bloque
             : [("heading", "Consola de la tienda"), ("subheading", "Pedidos y devoluciones")];
@@ -50,6 +50,7 @@ public sealed class SellerResolutorTests
         Assert.Equal("Consola de la tienda", props.Heading);
         Assert.Equal("Pedidos y devoluciones", props.Subheading);
         Assert.Equal("/api/shop", props.ApiBase);
+        Assert.Equal("/api/lecturas/tienda", props.LecturasBase);
         Assert.Equal("America/Bogota", props.ZonaHoraria);
         Assert.Null(props.Vista);
         Assert.Empty(props.Rutas);

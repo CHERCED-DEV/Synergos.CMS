@@ -30,7 +30,9 @@ public sealed class NegocioDeStorefrontTests
     [Fact]
     public void Sin_sitio_rigen_los_valores_base_y_la_transportadora_es_la_de_la_ruta_directa()
     {
-        Assert.Equal(new NegocioDeStorefront("/api/shop", "default", null), new StorefrontFeatureSettings().Para(null));
+        Assert.Equal(
+            new NegocioDeStorefront("/api/shop", "default", null, LecturasBase: LecturasDeLaTienda.Base),
+            new StorefrontFeatureSettings().Para(null));
     }
 
     [Fact]
@@ -38,7 +40,7 @@ public sealed class NegocioDeStorefrontTests
     {
         var seccion = Seccion(new() { [$"Sitios:{Bogota}:Carrier"] = "servientrega" });
 
-        Assert.Equal(new NegocioDeStorefront("/api/shop", "servientrega", null), seccion.Para(Bogota));
+        Assert.Equal(new NegocioDeStorefront("/api/shop", "servientrega", null, LecturasBase: LecturasDeLaTienda.Base), seccion.Para(Bogota));
         Assert.Equal("default", seccion.Para(null).Carrier);
     }
 
@@ -48,6 +50,7 @@ public sealed class NegocioDeStorefrontTests
     [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:PurchasePath", "orquestador", "PurchasePath")]
     [InlineData("ShippingCountry", "COL", "ShippingCountry")]
     [InlineData("Sitios:8b0e2f6a-1c3d-4e5f-9a7b-6c5d4e3f2a10:ShippingCountry", "c1", "ShippingCountry")]
+    [InlineData("LecturasBase", "//otro.com/api", "LecturasBase")]
     public void Una_clave_mal_escrita_no_deja_arrancar(string clave, string valor, string seDice)
     {
         using var sp = Opciones(new() { [clave] = valor });
@@ -66,9 +69,23 @@ public sealed class NegocioDeStorefrontTests
             ["PurchasePath"] = "puerta",
             [$"Sitios:{Bogota}:PurchasePath"] = "directa",
             [$"Sitios:{Bogota}:ShippingCountry"] = " mx ",
+            [$"Sitios:{Bogota}:LecturasBase"] = "",
         });
 
         sp.GetRequiredService<IStartupValidator>().Validate();
+    }
+
+    /// <summary>
+    /// Las lecturas genéricas (014-despiece-tienda, I4) van por defecto a las de la tienda, y un sitio con la base vacía
+    /// vuelve a las rutas interinas de <c>ApiBase</c>: es la vuelta atrás sin desplegar.
+    /// </summary>
+    [Fact]
+    public void Las_lecturas_genericas_van_a_las_de_la_tienda_y_un_sitio_puede_volver_a_las_interinas()
+    {
+        var seccion = Seccion(new() { [$"Sitios:{Bogota}:LecturasBase"] = "" });
+
+        Assert.Equal("/api/lecturas/tienda", seccion.Para(null).LecturasBase);
+        Assert.Equal(string.Empty, seccion.Para(Bogota).LecturasBase);
     }
 
     [Fact]
@@ -132,7 +149,9 @@ public sealed class NegocioDeStorefrontTests
     {
         var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true));
 
-        Assert.Equal(new StorefrontProps("Tienda", null, "/api/shop", CaminoDeCompra.Puerta, "CO", "America/Bogota", null, props.Rutas), props);
+        Assert.Equal(
+            new StorefrontProps("Tienda", null, "/api/shop", LecturasDeLaTienda.Base, CaminoDeCompra.Puerta, "CO", "America/Bogota", null, props.Rutas),
+            props);
         Assert.Empty(props.Rutas);
     }
 
@@ -170,7 +189,7 @@ public sealed class NegocioDeStorefrontTests
     private static INegocioDelSitio<NegocioDeStorefront> Fijo(string? camino)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeStorefront>>();
-        negocio.Actual().Returns(new NegocioDeStorefront("/api/shop", "default", camino));
+        negocio.Actual().Returns(new NegocioDeStorefront("/api/shop", "default", camino, LecturasBase: LecturasDeLaTienda.Base));
         return negocio;
     }
 

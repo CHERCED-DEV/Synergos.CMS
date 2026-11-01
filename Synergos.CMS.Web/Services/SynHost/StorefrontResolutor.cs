@@ -61,6 +61,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
+            LecturasBase: negocio.LecturasBase,
             PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath),
             ShippingCountry: negocio.ShippingCountry,
             ZonaHoraria: _zona,
