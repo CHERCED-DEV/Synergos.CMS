@@ -80,7 +80,8 @@ const PARES = [
     // La consola del vendedor (013-seller-operaciones, T025): mueve las devoluciones por `return/{id}/advance` de
     // ShopCatalogController. Sus rutas del personal (VendedorDeLaTiendaController, `api/shop/seller`) no ligan todavía:
     // este gate lee la plantilla del [HttpPost] sin el [Route] de la clase (anotado para el núcleo en la bitácora de 013).
-    { app: 'seller', controllers: ['ShopCatalogController.cs', 'VendedorDeLaTiendaController.cs'] },
+    // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
+    { app: 'seller', controllers: ['ShopCatalogController.cs', 'VendedorDeLaTiendaController.cs'], dominio: { nombre: 'tienda', carpetas: ['consola'] } },
 ];
 
 /** El ÚNICO lector de fuentes del gate: todo sale en LF, venga como venga del disco (#170). */

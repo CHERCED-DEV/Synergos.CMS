@@ -82,7 +82,8 @@ const PARES = [
     { app: 'blogs', controllers: ['BlogsController.cs'] },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
     // La consola del vendedor (013-seller-operaciones, T012): la bandeja y el detalle salen de las rutas del personal.
-    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'] },
+    // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
+    { app: 'seller', controllers: ['VendedorDeLaTiendaController.cs'], dominio: { nombre: 'tienda', carpetas: ['consola'] } },
 ];
 
 /**
