@@ -148,6 +148,25 @@ public sealed class PuertaDeLaCitaTests
             listados: new ListadosSettings { ZonaHoraria = "Europe/Madrid" }).Zona);
     }
 
+    /// <summary>
+    /// De dónde lee el portal (I1 de producción, T044): las lecturas genéricas de Salud por defecto; vacía, la vuelta
+    /// atrás a <c>ApiBase</c>, que vale; una base mal escrita no deja arrancar.
+    /// </summary>
+    [Fact]
+    public void Las_lecturas_son_las_genericas_de_salud_vacias_valen_y_mal_escritas_no()
+    {
+        var sitio = Guid.Parse("f289c6d5-4f6c-407f-8c35-ce7e0dec7b22");
+        var vueltaAtras = new EhrFeatureSettings
+        {
+            Sitios = new(StringComparer.OrdinalIgnoreCase) { [sitio.ToString()] = new EhrFeatureSitio { LecturasBase = " " } },
+        };
+
+        Assert.Equal("/api/lecturas/salud", Resolver(new EhrFeatureSettings(), laPuertaAbre: true).LecturasBase);
+        Assert.Equal(string.Empty, Resolver(vueltaAtras, laPuertaAbre: true, sitio).LecturasBase);
+        Assert.Empty(vueltaAtras.Problemas());
+        Assert.Contains(new EhrFeatureSettings { LecturasBase = "api lecturas" }.Problemas(), p => p.Contains("LecturasBase", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Sin_override_la_cita_va_por_la_puerta_si_abre_y_si_no_por_la_directa()
     {

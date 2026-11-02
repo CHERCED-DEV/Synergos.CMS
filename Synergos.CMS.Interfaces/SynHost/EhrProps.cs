@@ -26,9 +26,14 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y en qué zona se lee la hora</b> (<c>Zona</c>, la de <c>Synergos:Listados:ZonaHoraria</c>): por la
 /// puerta la franja viaja como instante, y el «10:00» que elige el paciente es la hora del sitio, no la del
 /// navegador. Sus textos de la cita son la sección <c>Health.Appointment</c> del diccionario (ADR 0136).</para>
+///
+/// <para><b>Y de dónde lee</b> (<c>LecturasBase</c>, 003-salud-cita, I1 de producción): la base de las lecturas
+/// genéricas de Salud (<c>/api/lecturas/salud</c>), con forma neutra de vertical, como la tienda. Vacía, el portal lee
+/// las rutas de <c>ApiBase</c>, como antes. Es del despliegue.</para>
 /// </remarks>
 [ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment"])]
 public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string Zona);

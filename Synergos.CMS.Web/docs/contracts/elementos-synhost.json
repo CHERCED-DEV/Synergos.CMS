@@ -1275,6 +1275,12 @@
           "origen": "negocio"
         },
         {
+          "nombre": "lecturasBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
           "nombre": "appointmentPath",
           "tipo": "string",
           "opcional": false,
@@ -1290,6 +1296,7 @@
       "ejemplo": {
         "culture": "es-CO",
         "apiBase": "/api/ehr",
+        "lecturasBase": "/api/lecturas/salud",
         "appointmentPath": "directa",
         "zona": "America/Bogota"
       }

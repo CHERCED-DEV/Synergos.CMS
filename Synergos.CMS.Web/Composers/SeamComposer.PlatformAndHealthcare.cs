@@ -162,12 +162,23 @@ public sealed partial class SeamComposer
         // Singleton por lo mismo que las otras: UmbracoProfessionalDirectorySource sólo sostiene
         // IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
         // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no hay dependencia cautiva.
+        //
+        // La fuente la elige el mismo flag, como la de la tienda: la lectura genérica (abajo) sirve lo que sirve el
+        // directorio. Con `cms`, IDoctorDirectory sigue leyendo esta fuente; con `demo`, su stub, que es la misma muestra.
         services.AddSingleton<ICatalogSource<MedicalDoctor>>(sp =>
-            ActivatorUtilities.CreateInstance<UmbracoProfessionalDirectorySource>(sp));
+            IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
+                ? ActivatorUtilities.CreateInstance<UmbracoProfessionalDirectorySource>(sp)
+                : new SaludDemoDirectorySource());
         services.AddSingleton<IDoctorDirectory>(sp =>
             IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
                 ? new CatalogDoctorDirectory(sp.GetRequiredService<ICatalogSource<MedicalDoctor>>())
                 : new StubDoctorDirectory());
+
+        // 003-salud-cita, I1 de producción — los profesionales en las lecturas genéricas (api/lecturas/salud/…), con
+        // la misma fuente que el directorio. Transient, como la de la tienda.
+        services.AddTransient<Synergos.CMS.Interfaces.Lecturas.ILecturaDelCatalogo>(sp => CatalogoDeSalud.Lectura(
+            sp.GetRequiredService<ICatalogSource<MedicalDoctor>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<CatalogSettings>>().CurrentValue));
         services.AddSingleton<IClinicalRecordService, StubClinicalRecordService>();
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
         // HU #25 — contra quién agenda la cita. Dos orígenes, mismo contrato, elegidos por

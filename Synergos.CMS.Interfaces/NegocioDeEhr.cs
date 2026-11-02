@@ -7,7 +7,13 @@ namespace Synergos.CMS.Interfaces;
 /// copago.</param>
 /// <param name="AppointmentPath">Por dónde agenda el elemento si el despliegue lo DECLARA (<c>puerta</c> o
 /// <c>directa</c>, ya normalizado); nulo si decide la regla de <see cref="CaminoDeCompra"/> (003-salud-cita).</param>
-public sealed record NegocioDeEhr(string ApiBase, ServicioAgendable Servicio, string? AppointmentPath = null);
+/// <param name="LecturasBase">La base de las lecturas genéricas de Salud (003-salud-cita, I1 de producción); vacía, el
+/// portal vuelve a leer las rutas de <see cref="ApiBase"/>.</param>
+public sealed record NegocioDeEhr(
+    string ApiBase,
+    ServicioAgendable Servicio,
+    string? AppointmentPath = null,
+    string LecturasBase = "");
 
 /// <summary>
 /// El servicio que se agenda, con la forma de un <c>Ref</c> del backend (<c>{ kind, id }</c>): es como lo lee

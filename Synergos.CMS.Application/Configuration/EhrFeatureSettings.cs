@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Configuration;
@@ -35,18 +36,31 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
     /// </summary>
     public string? AppointmentPath { get; init; }
 
+    /// <summary>
+    /// La base de las lecturas genéricas de Salud (003-salud-cita, I1 de producción): el directorio de profesionales con
+    /// forma neutra de vertical, como la tienda (014-despiece-tienda, I4).
+    /// </summary>
+    /// <remarks>
+    /// Vacía, el portal vuelve a leer las rutas de <see cref="ApiBase"/> (<c>api/ehr</c>, de desarrollo): es la vuelta
+    /// atrás sin desplegar.
+    /// </remarks>
+    public string LecturasBase { get; init; } = "/api/lecturas/" + CatalogoDeSalud.Vertical;
+
     /// <inheritdoc />
     protected override NegocioDeEhr Fusionar(EhrFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             Servicio: new ServicioAgendable(propio?.ServiceKind ?? ServiceKind, propio?.ServiceId ?? ServiceId),
-            AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath));
+            AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath),
+            LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEhr negocio)
         => new[]
         {
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            // Vacía vale: es la vuelta atrás.
+            string.IsNullOrWhiteSpace(negocio.LecturasBase) ? null : ReglasDeNegocio.ApiBase("LecturasBase", negocio.LecturasBase),
             ReglasDeNegocio.Camino("AppointmentPath", negocio.AppointmentPath),
             string.IsNullOrWhiteSpace(negocio.Servicio.Kind) || string.IsNullOrWhiteSpace(negocio.Servicio.Id)
                 ? "ServiceKind y ServiceId: el servicio que se agenda no puede quedar vacío (sin él la cita no tiene copago que cotizar)."
@@ -70,4 +84,7 @@ public sealed class EhrFeatureSitio
 
     /// <inheritdoc cref="EhrFeatureSettings.AppointmentPath"/>
     public string? AppointmentPath { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.LecturasBase"/>
+    public string? LecturasBase { get; init; }
 }
