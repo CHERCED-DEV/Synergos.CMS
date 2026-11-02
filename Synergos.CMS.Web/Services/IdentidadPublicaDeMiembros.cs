@@ -8,10 +8,14 @@ namespace Synergos.CMS.Web.Services;
 
 /// <summary>
 /// <see cref="IIdentidadPublica"/> sobre los miembros de Umbraco: el nombre de la ficha del miembro, la llave por
-/// <see cref="SeudonimoDePersona"/> y la regla de <see cref="CaraPublica"/>. Para volver de una llave o un alias al
-/// correo, lo anotado en <see cref="IJsonEntityStore"/> (ADR 0105).
+/// <see cref="SeudonimoDePersona.Publico"/> con el secreto de <see cref="SecretoDeLaCaraPublica"/>, y la regla de
+/// <see cref="CaraPublica"/>. Para volver de una llave o un alias al correo, lo anotado en <see cref="IJsonEntityStore"/>
+/// (ADR 0105).
 /// </summary>
 /// <remarks>
+/// <para><b>Lo anotado con una llave de antes sigue llevando a su correo</b> (I0.b): la llave sin secreto de I0, o la
+/// de otro secreto. No se borra ni se reescribe, y la cara nueva se anota cuando la persona vuelve a actuar.</para>
+///
 /// <para><b>Dos documentos por persona</b>: uno por su llave, con su correo y su alias, y otro por su alias, con su
 /// llave. El segundo existe porque un perfil se abre por el alias que sale en la tarjeta.</para>
 ///
@@ -36,12 +40,18 @@ public sealed class IdentidadPublicaDeMiembros : IIdentidadPublica
     private readonly IMemberService _miembros;
     private readonly IJsonEntityStore _store;
     private readonly ConcurrentDictionary<string, string> _anotadas = new(StringComparer.Ordinal);
+    private readonly Lazy<byte[]> _secreto;
 
-    /// <summary>Sobre los miembros de Umbraco y el almacén común.</summary>
-    public IdentidadPublicaDeMiembros(IMemberService miembros, IJsonEntityStore store)
+    /// <summary>Sobre los miembros de Umbraco, el almacén común y el secreto de la llave pública (I0.b).</summary>
+    public IdentidadPublicaDeMiembros(IMemberService miembros, IJsonEntityStore store, SecretoDeLaCaraPublica secreto)
     {
+        ArgumentNullException.ThrowIfNull(secreto);
         _miembros = miembros ?? throw new ArgumentNullException(nameof(miembros));
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        // Armar una cara es puro cómputo y el secreto se resuelve una vez: contagiar async a quien arma una tarjeta por
+        // eso sería pagar dos veces (la razón de LazyAgreementSigner). Sin cachear un fallo: si el almacén no contesta,
+        // la próxima cara lo vuelve a intentar.
+        _secreto = new Lazy<byte[]>(() => secreto.GetKeyAsync().GetAwaiter().GetResult(), LazyThreadSafetyMode.PublicationOnly);
     }
 
     /// <inheritdoc />
@@ -49,7 +59,7 @@ public sealed class IdentidadPublicaDeMiembros : IIdentidadPublica
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(correo);
         var limpio = correo.Trim();
-        return CaraPublica.De(SeudonimoDePersona.De(limpio), _miembros.GetByEmail(limpio)?.Name);
+        return CaraPublica.De(SeudonimoDePersona.Publico(limpio, _secreto.Value), _miembros.GetByEmail(limpio)?.Name);
     }
 
     /// <inheritdoc />

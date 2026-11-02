@@ -31,6 +31,9 @@ public static class TiposDeDeshacer
 
     /// <summary>Retirar el permiso que dio <c>consent.otorgar</c> (NN-23 de 003).</summary>
     public const string RevocarPermiso = "consent.revocar";
+
+    /// <summary>Borrar el documento que guardó <c>documents.guardar</c> (NN-25 de 003).</summary>
+    public const string BorrarDocumento = "documents.borrar";
 }
 
 /// <summary>

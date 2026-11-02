@@ -191,6 +191,48 @@ public interface IConsentPort
     Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct);
 }
 
+/// <summary>Anotar en <c>Api.Audit</c> quién hizo qué sobre qué (núcleo, NN-12 de 003).</summary>
+public interface IAuditPort
+{
+    /// <summary>
+    /// Anota que <paramref name="actor"/> hizo <paramref name="accion"/> sobre <paramref name="objetivo"/>, afirmado con la sesión
+    /// del CMS (<c>CmsSession</c>). Devuelve el id del asiento: la misma llave, el mismo asiento. Los
+    /// <paramref name="detalles"/> no llevan datos personales: el registro es permanente.
+    /// </summary>
+    Task<Result<string>> AnotarAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct);
+}
+
+/// <summary>Sellar un contenido con una llave de <c>Api.Signing</c> (núcleo, NN-24 de 003).</summary>
+public interface ISigningPort
+{
+    /// <summary>
+    /// Sella <paramref name="contenido"/> con la llave vigente de <paramref name="llave"/> (su propósito: una por consultorio).
+    /// Devuelve el sello y la llave que lo produjo. Es determinista y no vence: el mismo contenido, el mismo sello.
+    /// </summary>
+    Task<Result<(string Sello, string LlaveId)>> SellarAsync(string llave, string contenido, CancellationToken ct);
+}
+
+/// <summary>Un documento como llega a la fase que lo guarda: nombre, tipo y contenido. No se guarda en la saga.</summary>
+/// <param name="Nombre">Cómo se llama el fichero.</param>
+/// <param name="Tipo">Su tipo de contenido (<c>application/pdf</c>…): el que admite lo decide la capacidad.</param>
+/// <param name="ContenidoBase64">El contenido, en base64.</param>
+public sealed record DocumentoAdjunto(string Nombre, string Tipo, string ContenidoBase64);
+
+/// <summary>Guardar un documento en <c>Api.Documents</c> (núcleo, NN-25 de 003).</summary>
+public interface IDocumentsPort
+{
+    /// <summary>Guarda <paramref name="documento"/> como de <paramref name="dueno"/>. Devuelve su id: la misma llave, el mismo documento.</summary>
+    Task<Result<string>> GuardarAsync(Ref dueno, DocumentoAdjunto documento, IdempotencyKey llave, CancellationToken ct);
+}
+
+/// <summary>Borrar un documento: la compensación de <c>documents.guardar</c> (NN-25 de 003).</summary>
+public interface IDeshacerDocumentos
+{
+    /// <summary>Borra el documento. Uno que ya no existe no tiene nada que deshacer.</summary>
+    Task<Result<string>> BorrarAsync(string documento, CancellationToken ct);
+}
+
 /// <summary>Retirar un permiso por su id: la compensación de <c>consent.otorgar</c> (NN-23 de 003).</summary>
 public interface IDeshacerPermisos
 {

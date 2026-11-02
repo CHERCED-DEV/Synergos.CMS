@@ -1,0 +1,10 @@
+{
+  "clave": "muestra.documento-ajeno",
+  "entrada": ["titular", "archivo", "otro"],
+  "tipos": { "titular": { "de": "sujeto" }, "archivo": "documento", "otro": { "tipo": "ref", "kind": "muestra.paciente" } },
+  "salida": ["documentoId"],
+  "fases": { "guardar": ["guardar"] },
+  "pasos": {
+    "guardar": { "tipo": "documents.guardar", "lee": ["archivo", "otro"], "escribe": ["documentoId"], "llave": "doc" }
+  }
+}

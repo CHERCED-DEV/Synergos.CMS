@@ -167,7 +167,7 @@ public sealed class HostDeFlujosTests
     }
 
     /// <summary>Puertos falsos: lo que la capacidad contestaría, sin red.</summary>
-    private sealed class Falsos : IPricingPort, IBookingPort, IPaymentsPort, INotificationsPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias, IDeshacerPedidos, IConsentPort
+    private sealed class Falsos : IPricingPort, IBookingPort, IPaymentsPort, INotificationsPort, IDeshacerAgenda, IDeshacerCobros, IDeshacerExistencias, IDeshacerPedidos, IConsentPort, IAuditPort
     {
         public List<string> Llamadas { get; } = [];
         public bool RechazaAutorizar { get; set; }
@@ -193,6 +193,9 @@ public sealed class HostDeFlujosTests
         public Task<Result<string>> OtorgarAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct)
             => Ok("gr-2", $"otorgar {sujeto} {proposito} {version}");
         public Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-2", $"revocar {sujeto} {proposito}");
+        public Task<Result<string>> AnotarAsync(
+            Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct)
+            => Ok("as-1", $"anotar {actor} {accion} {objetivo}");
         /// <summary>Cuándo vence el apartado falso: lo que <c>booking.apartar</c> escribe si la definición lo nombra.</summary>
         public static readonly DateTimeOffset VenceElApartado = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
 
@@ -331,7 +334,7 @@ public sealed class HostDeFlujosTests
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
                 new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
                 new PasoLeerOriginal(sagas, tipos), new PasoPagosDevolver(Puertos),
-                new PasoPagosAnular(Puertos), new PasoAgendaCancelar(Puertos),
+                new PasoPagosAnular(Puertos), new PasoAgendaCancelar(Puertos), new PasoRegistroAnotar(Puertos),
             ]);
             Binding = new BindingDeFlujo(Flujo, tipos, Registro, deshacer.Tipos);
         }
@@ -795,6 +798,34 @@ public sealed class HostDeFlujosTests
             Assert.Equal(FlowRunner<SagaDeFlujo>.NoEnCurso, r.Rejection!.Code);
         }
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("devolver ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// La <c>accion</c> de un paso de registro (NN-12 de 003) se cruza como el propósito de un permiso: el paso que anota la
+    /// necesita, uno que no anota no la declara, y tiene la forma de una acción. Cada defecto parte del control que arranca.
+    /// </summary>
+    [Fact]
+    public void La_accion_de_un_paso_de_registro_se_cruza_al_arrancar()
+    {
+        const string fase = "\"abrir\": [\"apartar\", \"autorizar\"]";
+        const string anotar = "\"anotar\": { \"tipo\": \"audit.anotar\", \"lee\": [\"paciente\"], \"llave\": \"audit\"ACCION },\n    \"apartar\": {";
+        string ConAnotar(string accion) => Mutar(fase, "\"abrir\": [\"anotar\", \"apartar\", \"autorizar\"]")
+            .Replace("\"apartar\": {", anotar.Replace("ACCION", accion, StringComparison.Ordinal), StringComparison.Ordinal);
+
+        using (var control = new Banco(ConAnotar(", \"accion\": \"prueba.cita.abrir\"")))
+        {
+            Assert.Empty(control.Errores());
+        }
+        using (var sinAccion = new Banco(ConAnotar("")))
+        {
+            Assert.Contains(sinAccion.Errores(), e => e.Contains("anota una «accion», y no la declara", StringComparison.Ordinal));
+        }
+        using (var malEscrita = new Banco(ConAnotar(", \"accion\": \"Abrir Cita\"")))
+        {
+            Assert.Contains(malEscrita.Errores(), e => e.Contains("«Abrir Cita», que no es una acción", StringComparison.Ordinal));
+        }
+        using var deMas = new Banco(Mutar("\"plantilla\": \"prueba.cita.confirmada\"", "\"plantilla\": \"prueba.cita.confirmada\", \"accion\": \"prueba.cita.avisar\""));
+        Assert.Contains(deMas.Errores(), e => e.Contains("declara una acción y «notifications.avisar» no anota nada", StringComparison.Ordinal));
     }
 
     [Fact]

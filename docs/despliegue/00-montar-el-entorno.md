@@ -916,6 +916,13 @@ Casi todo eso se regenera. **Uno no:** `Synergos:Academy:CertificateSigningSecre
 el llavero `cms-dpkeys`, que **sí** va en la copia— los diplomas ya emitidos dejan de verificar, y
 el propio código lo deja escrito en el log al pasar. Guardalo donde guardás la identidad de `age`.
 
+**El secreto de la cara pública** (`Synergos:IdentidadPublica:Secreto`, I0.b de 012) no está en el `.env`: vacío,
+como sale, se genera la primera vez y se guarda cifrado en `cms-appdata`, con qué descifrarlo en `cms-dpkeys`. Los
+dos van en la copia, así que restaurarla conserva el alias de cada miembro. Si se perdieran, cada miembro cambiaría de
+alias y de llave pública —lo anotado con los de antes sigue llevando a su correo— y su perfil nuevo no se abriría hasta
+que volviera a actuar. Ponerlo en el `.env` sólo hace falta para llevarlo a otra instalación; entonces se guarda como
+el de los diplomas.
+
 ---
 
 ## 7. La cuenta

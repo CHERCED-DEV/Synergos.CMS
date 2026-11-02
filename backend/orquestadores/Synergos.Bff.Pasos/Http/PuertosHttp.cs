@@ -22,8 +22,8 @@ namespace Synergos.Bff.Pasos.Http;
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IOfertaPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
-    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort,
-    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos, IDeshacerPermisos
+    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort, IAuditPort, ISigningPort, IDocumentsPort,
+    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos, IDeshacerPermisos, IDeshacerDocumentos
 {
     public const string Pricing = "pricing";
     public const string Inventory = "inventory";
@@ -35,10 +35,13 @@ public sealed class PuertosHttp : CapabilityClients,
     public const string Orders = "orders";
     public const string Fulfillment = "fulfillment";
     public const string Workflow = "workflow";
+    public const string Audit = "audit";
+    public const string Signing = "signing";
+    public const string Documents = "documents";
 
     /// <summary>Las capacidades con las que habla: las que registra el arranque.</summary>
     public static IReadOnlyList<string> Capacidades { get; } =
-        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment, Workflow];
+        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment, Workflow, Audit, Signing, Documents];
 
     public PuertosHttp(IHttpClientFactory clients) : base(clients) { }
 
@@ -387,6 +390,74 @@ public sealed class PuertosHttp : CapabilityClients,
         return (await RevocarPermisoAsync(Ref.Create(leido.Value.SubjectKind, leido.Value.SubjectId), leido.Value.Purpose, ct)).Map(p => p.Id);
     }
 
+    // ── Audit ───────────────────────────────────────────────────────────────
+
+    /// <summary>Anota un asiento en el registro, afirmado con la sesión del CMS (NN-12 de 003).</summary>
+    public Task<Result<AsientoDto>> AnotarEnElRegistroAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(objetivo);
+        return Post<AsientoDto>(Audit, "v1/entries", new
+        {
+            actorKind = actor.Kind,
+            actorId = actor.Id,
+            action = accion,
+            targetKind = objetivo.Kind,
+            targetId = objetivo.Id,
+            details = detalles,
+            assertion = AfirmacionDeLaPuerta,
+        }, llave, ct);
+    }
+
+    async Task<Result<string>> IAuditPort.AnotarAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct)
+        => (await AnotarEnElRegistroAsync(actor, accion, objetivo, detalles, llave, ct)).Map(a => a.Id);
+
+    // ── Signing ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sella un contenido (NN-24 de 003). A <c>/v1/seals</c> y no a <c>/v1/signatures</c> (#45): aquel token vence y no es
+    /// determinista, y una nota o una receta firmada se consulta años después, como el contrato de Alquiler.
+    /// </summary>
+    public Task<Result<SelloDto>> SellarContenidoAsync(string llave, string contenido, CancellationToken ct)
+        => Post<SelloDto>(Signing, "v1/seals", new { purpose = llave, payload = contenido }, null, ct);
+
+    async Task<Result<(string Sello, string LlaveId)>> ISigningPort.SellarAsync(string llave, string contenido, CancellationToken ct)
+        => (await SellarContenidoAsync(llave, contenido, ct)).Map(s => (s.Seal, s.KeyId));
+
+    // ── Documents ───────────────────────────────────────────────────────────
+
+    /// <summary>Guarda un documento de un dueño (NN-25 de 003).</summary>
+    public Task<Result<DocumentoDto>> GuardarDocumentoAsync(Ref dueno, DocumentoAdjunto documento, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(dueno);
+        ArgumentNullException.ThrowIfNull(documento);
+        return Post<DocumentoDto>(Documents, "v1/documents", new
+        {
+            ownerKind = dueno.Kind,
+            ownerId = dueno.Id,
+            name = documento.Nombre,
+            contentType = documento.Tipo,
+            contentBase64 = documento.ContenidoBase64,
+        }, llave, ct);
+    }
+
+    /// <summary>Borra un documento: la capacidad lo hace sin llave.</summary>
+    public Task<Result<DocumentoDto>> BorrarDocumentoAsync(string documento, CancellationToken ct)
+        => Post<DocumentoDto>(Documents, $"v1/documents/{Uri.EscapeDataString(documento)}/delete", null, null, ct);
+
+    async Task<Result<string>> IDocumentsPort.GuardarAsync(Ref dueno, DocumentoAdjunto documento, IdempotencyKey llave, CancellationToken ct)
+        => (await GuardarDocumentoAsync(dueno, documento, llave, ct)).Map(d => d.Id);
+
+    async Task<Result<string>> IDeshacerDocumentos.BorrarAsync(string documento, CancellationToken ct)
+    {
+        var borrado = await BorrarDocumentoAsync(documento, ct);
+        return borrado.IsOk || borrado.Rejection!.Code == "documents.document_not_found"
+            ? Result.Ok(documento)
+            : Result.Rejected<string>(borrado.Rejection);
+    }
+
     // ── Cart ────────────────────────────────────────────────────────────────
 
     public Task<Result<CanastaDto>> LeerCanastaAsync(string canasta, CancellationToken ct)
@@ -551,6 +622,9 @@ public sealed record FranjaDto(DateTimeOffset Start, DateTimeOffset End, int Fre
 public sealed record FranjasDto(IReadOnlyList<FranjaDto> Items);
 public sealed record ReservaDto(string Id);
 public sealed record PermisoDto(string Id);
+public sealed record AsientoDto(string Id);
+public sealed record SelloDto(string Seal, string KeyId);
+public sealed record DocumentoDto(string Id);
 public sealed record PermisoLeidoDto(string Id, string SubjectKind, string SubjectId, string Purpose, bool Active);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);
 public sealed record CanastaDto(string Id, string OwnerKind, string OwnerId, IReadOnlyList<LineaDeCanastaDto> Lines, bool CheckedOut, bool Open);

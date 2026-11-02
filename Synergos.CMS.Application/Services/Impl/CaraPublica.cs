@@ -53,12 +53,12 @@ public static class CaraPublica
     public static bool EsCorreo(string? valor) => valor?.Contains('@', StringComparison.Ordinal) == true;
 
     /// <summary>
-    /// Si el valor tiene la forma de una llave pública: los 16 caracteres hexadecimales en minúsculas del seudónimo.
+    /// Si el valor tiene la forma de una llave pública: 16 caracteres hexadecimales en minúsculas.
     /// </summary>
     public static bool EsLlave(string? valor)
         => valor is { Length: LargoDeUnaLlave } && valor.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
-    /// <summary>El largo de la huella que da el seudónimo de una persona.</summary>
+    /// <summary>El largo de una llave pública, el mismo de las huellas de una persona.</summary>
     public const int LargoDeUnaLlave = 16;
 
     private static string Slug(string nombre)

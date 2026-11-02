@@ -86,6 +86,11 @@ public interface IPaso
     /// </remarks>
     bool UsaProposito => false;
 
+    /// <summary>Si anota la <c>accion</c> que declara su definición (núcleo, NN-12 de 003). Por defecto, no.</summary>
+    /// <remarks>Se cruza como el propósito, en los dos sentidos: un registro sin acción no dice qué se hizo, y una acción
+    /// declarada en un paso que no la anota haría creer que ese paso deja rastro.</remarks>
+    bool UsaAccion => false;
+
     /// <summary>Si actúa sobre el <c>proceso</c> que declara su definición (núcleo, lote 7; 009-P3 = A). Por defecto, no.</summary>
     /// <remarks>
     /// <para><b>El proceso, la transición, la lista cerrada y el rol son datos del paso</b>, como la plantilla del aviso:
