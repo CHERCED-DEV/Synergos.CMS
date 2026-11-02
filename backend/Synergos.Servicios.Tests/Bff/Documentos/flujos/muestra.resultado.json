@@ -1,0 +1,17 @@
+{
+  "clave": "muestra.resultado",
+  "acceso": "personal",
+  "entrada": ["quien", "paciente", "informe"],
+  "tipos": { "quien": { "de": "sujeto" }, "paciente": { "tipo": "ref", "kind": "muestra.paciente" }, "informe": "documento" },
+  "salida": ["documentoId"],
+  "fases": { "cargar": ["guardar"], "liberar": ["liberar"] },
+  "pasos": {
+    "guardar": {
+      "tipo": "documents.guardar", "lee": ["informe", "paciente"], "escribe": ["documentoId"], "llave": "doc",
+      "reserva": { "consumado_por": "liberar", "antes": "documents.borrar", "motivo": "el resultado no se liberó" }
+    },
+    "liberar": {
+      "tipo": "audit.anotar", "lee": ["paciente"], "llave": "audit", "accion": "muestra.resultado.liberar", "cierra_reserva": "guardar"
+    }
+  }
+}
