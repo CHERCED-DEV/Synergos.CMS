@@ -508,6 +508,49 @@ public sealed class SalidaAProduccionTests
         Assert.Equal(construcciones, Regex.Count(images, @"(?m)^\s*pull:\s*true\s*$"));
     }
 
+    // ── El CMS sabe dónde vive cada orquestador (P7 C, lote 15) ─────────────
+
+    /// <summary>
+    /// Todo orquestador con contrato tiene su dirección y su llave en el servicio <c>cms</c> del compose de
+    /// producción, y Reservas va apagada hasta su pase en vivo.
+    /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-11-01 el CMS conocía cinco de los nueve: Educación, Gobierno, Propiedades y Reservas arrancaban
+    /// en producción sin que nadie les hablara (009 NP-1 d). La lista sale de los contratos incrustados
+    /// (<c>Synergos.Bff.*.json</c>), así que un orquestador nuevo sin su dirección pone esto en rojo. Cablear no cambia
+    /// el camino de la visita, la matrícula ni la radicación (su sección de negocio declara «directa» por defecto,
+    /// medido con la copia), pero sí el de Reservas, cuya regla es «puerta si abre»: por eso <c>apagada</c>.
+    /// </remarks>
+    [Fact]
+    public void Cada_orquestador_tiene_su_direccion_en_el_CMS_de_produccion()
+    {
+        var compose = Leer("compose.prod.yml");
+        var inicio = compose.IndexOf("\n  cms:", StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "No se encontró el servicio cms en compose.prod.yml.");
+        var fin = Regex.Match(compose[(inicio + 1)..], @"\n  [a-z][a-z0-9-]*:\r?\n");
+        var cms = fin.Success ? compose.Substring(inicio, fin.Index + 1) : compose[inicio..];
+
+        var orquestadores = Directory.GetFiles(Proyectos.Ruta("Synergos.CMS.Web", "docs", "contracts", "openapi"), "Synergos.Bff.*.json")
+            .Select(f => Path.GetFileNameWithoutExtension(f)["Synergos.Bff.".Length..])
+            .ToList();
+        Assert.True(orquestadores.Count >= 9, $"Sólo {orquestadores.Count} contratos de orquestador: el descubrimiento está roto.");
+
+        foreach (var o in orquestadores)
+        {
+            Assert.True(cms.Contains($"Synergos__{o}__BaseUrl: \"http://bff-{o.ToLowerInvariant()}:8080\"", StringComparison.Ordinal),
+                $"El CMS de producción no sabe dónde vive bff-{o.ToLowerInvariant()}: falta Synergos__{o}__BaseUrl en el servicio cms "
+                + "(tools/compose-gen.mjs). Sin ella su puerta contesta «no disponible» y su oferta no sale.");
+            Assert.Contains($"Synergos__{o}__ApiKey:", cms, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Synergos__Features__Reserva__Camino: apagada", cms, StringComparison.Ordinal);
+        Assert.DoesNotContain("Synergos__Puerta__Flujos__", cms, StringComparison.Ordinal);
+
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        Assert.Contains("/dev/tcp/$s/8080", ensayo, StringComparison.Ordinal);
+        Assert.Contains("/propiedades/:visitPath /educacion/:enrollmentPath /gobierno/:camino", ensayo, StringComparison.Ordinal);
+    }
+
     // ── El levantado entero, sin pasos a mano (salida a Hetzner, 2026-11-01) ─
 
     /// <summary>Un script de shell sin sus líneas de comentario: lo que corre, no lo que explica.</summary>

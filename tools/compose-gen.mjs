@@ -734,6 +734,32 @@ services:
       # garantia perdida y nada fallando. Cero lo rechaza el composer al arrancar.
       Synergos__Alquiler__MaxRentalDays: \${SYNERGOS_ALQUILER_MAX_DAYS:-30}
 
+      # Y los cuatro orquestadores que el CMS de produccion no conocia (P7 C, lote 15,
+      # 2026-11-01): Educacion, Gobierno, Propiedades y Reservas arrancaban en este compose
+      # sin que nadie les hablara. Ahora el CMS sabe donde viven, como de los otros cinco,
+      # y la puerta queda disponible para el sitio que la declare; para el usuario no
+      # cambia nada, porque sus flujos se quedan en el camino que tenian.
+      #
+      # Medido el 2026-11-01, con la copia sobre la base reconstruida, antes y despues:
+      #   - la matricula, la visita y la radicacion siguen en «directa» con la direccion puesta:
+      #     su seccion de negocio declara «directa» por defecto (NegocioDeRealty y sus pares),
+      #     y lo que declara el sitio gana a la regla de la puerta. No hace falta declarar nada;
+      #   - los posteriores (la devolucion de matriculas, la cancelacion de la visita y los
+      #     actos del funcionario) no eligen camino: siguen el de su original;
+      #   - Reservas SI cambiaria: su regla es «puerta si abre» (no tiene directa). Va apagada,
+      #     como pidio 011 hasta su pase en vivo: sin enlace alternativo pinta el mismo «no
+      #     disponible» que hoy. Y va aca, no en appsettings.json: en desarrollo y en las
+      #     pilotos la direccion la pone quien arranca la copia, contando con la puerta.
+      Synergos__Educacion__BaseUrl: "http://bff-educacion:8080"
+      Synergos__Educacion__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Gobierno__BaseUrl: "http://bff-gobierno:8080"
+      Synergos__Gobierno__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Propiedades__BaseUrl: "http://bff-propiedades:8080"
+      Synergos__Propiedades__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Reservas__BaseUrl: "http://bff-reservas:8080"
+      Synergos__Reservas__ApiKey: \${SYNERGOS_API_KEY}
+      Synergos__Features__Reserva__Camino: apagada
+
       # Y el ARTEFACTO, que NO viaja: el secreto con que se sella el contrato. Mismo
       # trato que el QR de la entrada y el id del diploma (#154) — vacio no es «no
       # firmar», el host genera una llave y la guarda cifrada en cms-dpkeys, pero
