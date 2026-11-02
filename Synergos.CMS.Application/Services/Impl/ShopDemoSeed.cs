@@ -181,6 +181,12 @@ public sealed record CatalogProduct(
     /// <summary>Stock del producto sin variantes (override para productos planos).</summary>
     public int Stock { get; init; }
 
+    /// <summary>
+    /// El precio de antes, si el producto está en oferta (014-despiece-tienda, I5): mayor que <see cref="Price"/>, o
+    /// nulo. La tarjeta lo pinta tachado.
+    /// </summary>
+    public decimal? ListPrice { get; init; }
+
     /// <summary>Stock total: suma de variantes, o <see cref="Stock"/> si no hay variantes.</summary>
     public int TotalStock => Variants.Count > 0 ? Variants.Sum(v => v.Stock) : Stock;
 }

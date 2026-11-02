@@ -135,6 +135,7 @@ public sealed class ContratoSynHostTests
                 ("heading", "Compra en nuestra tienda online"),
                 ("subheading", "Catálogo, carrito y checkout"),
                 ("vista", "catalogo"),
+                ("seleccion", "ofertas"),
             },
             ["travel-shell"] = new (string, object?)[]
             {

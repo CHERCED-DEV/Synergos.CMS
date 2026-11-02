@@ -88,6 +88,18 @@ public sealed class NegocioDeStorefrontTests
         Assert.Equal(string.Empty, seccion.Para(Bogota).LecturasBase);
     }
 
+    /// <summary>
+    /// «Qué productos muestra» (014-despiece-tienda, I5): «ofertas» viaja como el filtro fijo del catálogo que la deja
+    /// sólo en las ofertas. El vocabulario es del CMS; el elemento no sabe qué es una oferta.
+    /// </summary>
+    [Fact]
+    public void La_seleccion_de_ofertas_viaja_como_un_filtro_fijo_del_catalogo()
+    {
+        Assert.Equal(new[] { new FiltroFijo("oferta", "En oferta") }, StorefrontResolutor.FiltrosDe(["ofertas"]));
+        Assert.Empty(StorefrontResolutor.FiltrosDe(null));
+        Assert.Empty(StorefrontResolutor.FiltrosDe(["otra"]));
+    }
+
     [Fact]
     public void El_pais_de_envio_es_CO_si_nadie_dice_otro_y_un_sitio_lo_cambia_normalizado()
     {
@@ -150,8 +162,9 @@ public sealed class NegocioDeStorefrontTests
         var props = Resuelto(Fijo(null), Puerta(abierto: true, conDestino: true));
 
         Assert.Equal(
-            new StorefrontProps("Tienda", null, "/api/shop", LecturasDeLaTienda.Base, CaminoDeCompra.Puerta, "CO", "America/Bogota", null, props.Rutas),
+            new StorefrontProps("Tienda", null, "/api/shop", LecturasDeLaTienda.Base, CaminoDeCompra.Puerta, "CO", "America/Bogota", null, props.Filtros, props.Rutas),
             props);
+        Assert.Empty(props.Filtros);
         Assert.Empty(props.Rutas);
     }
 

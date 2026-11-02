@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.SynHost;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -28,6 +29,18 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
 
     /// <summary>La vista de un bloque sin elegir: el inicio, que es la tienda entera de antes (014, I3).</summary>
     public const string VistaPorDefecto = "inicio";
+
+    /// <summary>«Qué productos muestra» del bloque (014-despiece-tienda, I5).</summary>
+    public const string AliasDeLaSeleccion = "seleccion";
+
+    /// <summary>
+    /// La selección del editor como filtros fijos del catálogo: «ofertas» es <c>oferta = En oferta</c>. El vocabulario es
+    /// del CMS; el elemento aplica el filtro sin saber qué es una oferta.
+    /// </summary>
+    internal static IReadOnlyList<FiltroFijo> FiltrosDe(IReadOnlyList<string>? seleccion)
+        => seleccion?.Contains(CatalogoDeLaTienda.SeleccionDeLasOfertas, StringComparer.Ordinal) == true
+            ? [new FiltroFijo(CatalogoDeLaTienda.CampoDeLaOferta, CatalogoDeLaTienda.ValorDeLaOferta)]
+            : [];
 
     private readonly IPublishedValueFallback _fallback;
     private readonly INegocioDelSitio<NegocioDeStorefront> _negocio;
@@ -66,6 +79,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             ShippingCountry: negocio.ShippingCountry,
             ZonaHoraria: _zona,
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
+            Filtros: FiltrosDe(editor.Opciones(AliasDeLaSeleccion)),
             Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));
     }
 }
