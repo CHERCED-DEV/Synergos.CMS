@@ -110,12 +110,32 @@ public sealed class FachadaDeFlujo<TSaga> where TSaga : class, ISaga<TSaga>
 
             // La que quedó en duda al abrir (001-P10 = A) no abrió: repetir con su llave la retoma.
             return previa.Status == SagaStatus.Running && string.Equals(_flujo.FaseEnDuda(previa), _abre, StringComparison.Ordinal)
-                ? await _flujo.EjecutarFaseAsync(_abre, previa.Id, entrada, ct)
+                ? LaQueOtraTermino(await _flujo.EjecutarFaseAsync(_abre, previa.Id, entrada, ct), previa.Id, dueno)
                 : Result.Ok(previa);
         }
 
-        return await _flujo.EjecutarFaseAsync(_abre, slot.Id, entrada, ct);
+        return LaQueOtraTermino(await _flujo.EjecutarFaseAsync(_abre, slot.Id, entrada, ct), slot.Id, dueno);
     }
+
+    /// <summary>
+    /// Otra llamada con la misma llave terminó la saga mientras ésta corría la misma fase: contesta lo mismo que si hubiera
+    /// llegado después, la saga y su resultado, como el doble clic de <see cref="ContinuarAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Pasa en una fase que abre y termina, como una devolución: las dos corren la fase con las MISMAS llaves de paso,
+    /// así que la capacidad hizo una sola cosa, y la que termina detrás encuentra la saga completada
+    /// (<c>flow.not_running</c>). La vio la CI de <c>8990ef17</c> en la carrera de dos personas del personal. Contestarle
+    /// «error» a quien sí devolvió la plata era el defecto.</para>
+    ///
+    /// <para>Sólo si la saga es de quien llama (en un flujo del personal, la del flujo): la de otro dueño sigue siendo el
+    /// rechazo, y no se le enseña.</para>
+    /// </remarks>
+    private Result<TSaga> LaQueOtraTermino(Result<TSaga> r, string sagaId, Ref dueno)
+        => r.Rejection?.Code == FlowRunner<TSaga>.NoEnCurso
+           && (Regla(dueno) is { } suyo ? _sagas.FindDe(sagaId, suyo) : _sagas.Find(sagaId)) is { Status: SagaStatus.Completed } hecha
+           && _esDelFlujo(hecha)
+            ? Result.Ok(hecha)
+            : r;
 
     /// <summary>Si abrir con esta llave devolvería una saga de <paramref name="dueno"/> que ya existe, sin escribir nada.</summary>
     public bool DevolveriaLaMisma(string llave, Ref dueno) => _sagas.Abrir(llave, Regla(dueno)).Reusar is { } s && _esDelFlujo(s);
