@@ -367,6 +367,29 @@ jobs:
           done
           { echo; echo "**El primer día, sin cuentas** (medida):"; echo; cat /tmp/primer-dia.md; echo; } >> "$GITHUB_STEP_SUMMARY"
 
+      # ── 3.ter-bis. Cada página versionada quedó en la base ─────────────────
+      #
+      # El import cuenta ítems PROCESADOS, no nodos creados: uno procesado que no dejara su nodo pasaba en
+      # verde. Se mira la base del servidor recién levantado (con el CMS corriendo: su -wal está al lado y
+      # SQLite lo lee) contra las claves de Content/ y Media/, y las entradas de Apps responden como las verá
+      # un visitante (002-produccion, 2026-11-02).
+      - name: Cada página versionada quedó en la base
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          USYNC="$GITHUB_WORKSPACE/Synergos.CMS.Web/uSync/v9"
+          docker run --rm -v synergos_cms-db:/datos -v "$USYNC:/usync:ro" \
+            -v "$GITHUB_WORKSPACE/tools/nodos-versionados.py:/nodos.py:ro" python:3.12-alpine \
+            python3 /nodos.py /datos/Umbraco.sqlite.db /usync | tee /tmp/nodos.txt
+          APPS="$(grep -ho '<Path>/SynergosLabs/Synergos/Apps/[^<]*' "$USYNC"/Content/*.config \
+            | sed 's#<Path>/SynergosLabs##' | tr '[:upper:]' '[:lower:]' | sort)"
+          for ruta in $APPS; do
+            codigo="$(CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt curl -s -o /dev/null -w '%{http_code}' "https://localhost$ruta/" || echo 000)"
+            [ "$codigo" = 200 ] || { echo "✗ $ruta/ responde $codigo"; exit 1; }
+            echo "✓ $ruta/ (200)"
+          done
+          echo "| $(head -1 /tmp/nodos.txt); las $(echo "$APPS" | wc -l) entradas de Apps responden 200 | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 3.cuater. El CMS llega a cada orquestador y los caminos no cambian (P7 C) ─
       #
       # El CMS de producción sabe dónde vive cada orquestador del compose (lote 15: los cuatro que

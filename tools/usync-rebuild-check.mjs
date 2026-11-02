@@ -26,6 +26,12 @@
  *      filesystem:
  *      la máquina del arquitecto puede tener export sin commitear todavía
  *      —contenido del seeder, por ejemplo— y eso inflaría el conteo.
+ *   4. Cada página y cada medio versionado QUEDÓ en la base
+ *      (`tools/nodos-versionados.py`: la clave de cada .config de Content/ y
+ *      Media/ en umbracoNode). `processed` cuenta ítems procesados, no nodos
+ *      creados: un ítem procesado que no dejara su nodo pasaba en verde y en
+ *      silencio (002-produccion, 2026-11-02). Necesita Python 3, como las
+ *      sondas del ensayo del despliegue.
  *
  * Decisiones de entorno, todas deliberadas:
  *   - DB en un directorio temporal via ConnectionStrings override — el gate
@@ -82,6 +88,9 @@ const opt = (name, fallback) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
 };
+
+// En Windows, `python3` es el atajo de la tienda, no el intérprete.
+const PYTHON = process.platform === 'win32' ? 'python' : 'python3';
 
 const NO_BUILD = flag('--no-build');
 const KEEP_DB = flag('--keep-db');
@@ -275,6 +284,24 @@ function verdict() {
          'uSync se saltó parte del árbol (¿carpeta no montada? ¿handler apagado?)');
   }
 
+  // El proceso ya salió, así que la base está quieta; su -wal sigue al lado y SQLite lo lee.
+  let nodos = null;
+  try {
+    nodos = execFileSync(
+      PYTHON,
+      ['-I', join(ROOT, 'tools', 'nodos-versionados.py'), dbPath, join(WEB, 'uSync', 'v9')],
+      { cwd: ROOT, encoding: 'utf8' },
+    ).trim().split('\n')[0];
+    log(nodos);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      fail(`no hay ${PYTHON} para mirar que cada página versionada quedó en la base`);
+    } else {
+      fail('el import no dejó en la base todo el contenido versionado:');
+      for (const l of `${e.stdout ?? ''}${e.stderr ?? ''}`.trim().split('\n').slice(0, 12)) console.error('   ' + l);
+    }
+  }
+
   // El import reescribe plantillas Razor en disco (BOM incluido). Es ruido
   // conocido — se AVISA y no se toca nada: restaurar automáticamente pisaría
   // ediciones locales sin commitear.
@@ -291,7 +318,7 @@ function verdict() {
 
   if (process.exitCode !== 1) {
     log(`✓ reconstrucción OK — una DB vacía + el repo reproducen el entorno ` +
-        `(${summary.processed}/${EXPECTED} ítems, 0 errores)`);
+        `(${summary.processed}/${EXPECTED} ítems, 0 errores; ${nodos})`);
   }
 }
 

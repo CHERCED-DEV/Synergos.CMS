@@ -551,6 +551,32 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("/propiedades/:visitPath /educacion/:enrollmentPath /gobierno/:camino", ensayo, StringComparison.Ordinal);
     }
 
+    // ── Cada página versionada queda en la base (2026-11-02) ────────────────
+
+    /// <summary>
+    /// La reconstrucción y el ensayo del despliegue miran la BASE, no sólo el conteo del import: cada clave de
+    /// <c>Content/</c> y <c>Media/</c> tiene que quedar en <c>umbracoNode</c> (<c>tools/nodos-versionados.py</c>).
+    /// </summary>
+    /// <remarks>
+    /// uSync cuenta ítems procesados, no nodos creados, y <c>usync-rebuild-check</c> comparaba ese número con los
+    /// archivos: un ítem procesado sin su nodo pasaba en verde. El verificador lee la base con su <c>-wal</c>; sin él
+    /// se «midieron» 11 nodos ausentes que sí estaban.
+    /// </remarks>
+    [Fact]
+    public void La_reconstruccion_y_el_ensayo_miran_que_cada_pagina_quedo_en_la_base()
+    {
+        var verificador = Leer("tools", "nodos-versionados.py");
+        Assert.Contains("select uniqueId from umbracoNode", verificador, StringComparison.Ordinal);
+        Assert.Contains("('Content', 'Media')", verificador, StringComparison.Ordinal);
+
+        Assert.Contains("'tools', 'nodos-versionados.py'", Leer("tools", "usync-rebuild-check.mjs"), StringComparison.Ordinal);
+        Assert.Contains("tools/nodos-versionados.py", Leer(".github", "workflows", "usync-rebuild.yml"), StringComparison.Ordinal);
+
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        Assert.Contains("python3 /nodos.py /datos/Umbraco.sqlite.db /usync", ensayo, StringComparison.Ordinal);
+        Assert.Contains("<Path>/SynergosLabs/Synergos/Apps/", ensayo, StringComparison.Ordinal);
+    }
+
     // ── El levantado entero, sin pasos a mano (salida a Hetzner, 2026-11-01) ─
 
     /// <summary>Un script de shell sin sus líneas de comentario: lo que corre, no lo que explica.</summary>
