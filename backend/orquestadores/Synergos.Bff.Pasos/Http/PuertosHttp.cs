@@ -22,7 +22,7 @@ namespace Synergos.Bff.Pasos.Http;
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IOfertaPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
-    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort,
+    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort, IAuditPort,
     IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos, IDeshacerPermisos
 {
     public const string Pricing = "pricing";
@@ -35,10 +35,11 @@ public sealed class PuertosHttp : CapabilityClients,
     public const string Orders = "orders";
     public const string Fulfillment = "fulfillment";
     public const string Workflow = "workflow";
+    public const string Audit = "audit";
 
     /// <summary>Las capacidades con las que habla: las que registra el arranque.</summary>
     public static IReadOnlyList<string> Capacidades { get; } =
-        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment, Workflow];
+        [Pricing, Inventory, Payments, Booking, Notifications, Consent, Cart, Orders, Fulfillment, Workflow, Audit];
 
     public PuertosHttp(IHttpClientFactory clients) : base(clients) { }
 
@@ -387,6 +388,30 @@ public sealed class PuertosHttp : CapabilityClients,
         return (await RevocarPermisoAsync(Ref.Create(leido.Value.SubjectKind, leido.Value.SubjectId), leido.Value.Purpose, ct)).Map(p => p.Id);
     }
 
+    // ── Audit ───────────────────────────────────────────────────────────────
+
+    /// <summary>Anota un asiento en el registro, afirmado con la sesión del CMS (NN-12 de 003).</summary>
+    public Task<Result<AsientoDto>> AnotarEnElRegistroAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(objetivo);
+        return Post<AsientoDto>(Audit, "v1/entries", new
+        {
+            actorKind = actor.Kind,
+            actorId = actor.Id,
+            action = accion,
+            targetKind = objetivo.Kind,
+            targetId = objetivo.Id,
+            details = detalles,
+            assertion = AfirmacionDeLaPuerta,
+        }, llave, ct);
+    }
+
+    async Task<Result<string>> IAuditPort.AnotarAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct)
+        => (await AnotarEnElRegistroAsync(actor, accion, objetivo, detalles, llave, ct)).Map(a => a.Id);
+
     // ── Cart ────────────────────────────────────────────────────────────────
 
     public Task<Result<CanastaDto>> LeerCanastaAsync(string canasta, CancellationToken ct)
@@ -551,6 +576,7 @@ public sealed record FranjaDto(DateTimeOffset Start, DateTimeOffset End, int Fre
 public sealed record FranjasDto(IReadOnlyList<FranjaDto> Items);
 public sealed record ReservaDto(string Id);
 public sealed record PermisoDto(string Id);
+public sealed record AsientoDto(string Id);
 public sealed record PermisoLeidoDto(string Id, string SubjectKind, string SubjectId, string Purpose, bool Active);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);
 public sealed record CanastaDto(string Id, string OwnerKind, string OwnerId, IReadOnlyList<LineaDeCanastaDto> Lines, bool CheckedOut, bool Open);

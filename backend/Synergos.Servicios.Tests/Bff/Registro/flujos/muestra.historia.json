@@ -1,0 +1,11 @@
+{
+  "clave": "muestra.historia",
+  "acceso": "personal",
+  "entrada": ["quien", "paciente"],
+  "tipos": { "quien": { "de": "sujeto" }, "paciente": { "tipo": "ref", "kind": "muestra.paciente" } },
+  "salida": ["asientoId"],
+  "fases": { "abrir": ["anotar"] },
+  "pasos": {
+    "anotar": { "tipo": "audit.anotar", "lee": ["paciente"], "escribe": ["asientoId"], "llave": "audit", "accion": "muestra.historia.leer" }
+  }
+}

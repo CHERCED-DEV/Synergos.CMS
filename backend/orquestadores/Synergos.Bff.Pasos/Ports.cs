@@ -191,6 +191,18 @@ public interface IConsentPort
     Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct);
 }
 
+/// <summary>Anotar en <c>Api.Audit</c> quién hizo qué sobre qué (núcleo, NN-12 de 003).</summary>
+public interface IAuditPort
+{
+    /// <summary>
+    /// Anota que <paramref name="actor"/> hizo <paramref name="accion"/> sobre <paramref name="objetivo"/>, afirmado con la sesión
+    /// del CMS (<c>CmsSession</c>). Devuelve el id del asiento: la misma llave, el mismo asiento. Los
+    /// <paramref name="detalles"/> no llevan datos personales: el registro es permanente.
+    /// </summary>
+    Task<Result<string>> AnotarAsync(
+        Ref actor, string accion, Ref objetivo, IReadOnlyDictionary<string, string> detalles, IdempotencyKey llave, CancellationToken ct);
+}
+
 /// <summary>Retirar un permiso por su id: la compensación de <c>consent.otorgar</c> (NN-23 de 003).</summary>
 public interface IDeshacerPermisos
 {

@@ -36,13 +36,13 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **6613 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **6618 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
    | `Synergos.CMS.Tests` | 4000 | **un** proyecto: `Synergos.CMS.Web` |
-   | `Synergos.Servicios.Tests` | 2044 | Core, Shared, las 20 `Api.*` y los 10 `Bff.*` |
+   | `Synergos.Servicios.Tests` | 2049 | Core, Shared, las 20 `Api.*` y los 10 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 569 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
@@ -193,7 +193,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **6613**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **6618**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -3090,12 +3090,12 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (6613 tests) — la solución integradora las lanza juntas:
+# Las tres suites (6618 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 4000
-dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 2044
+dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 2049
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 569
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
@@ -3593,7 +3593,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (141 endpoints, 256 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 6613 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 6618 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que
@@ -3603,11 +3603,12 @@ segregación y molde en verde.
 > sustantivos de negocio y cero ramas sobre `Ref.Kind`, las dos con gate. Que alguien las haya
 > **vuelto a usar** sólo se comprueba contando.
 >
-> Con SEGUNDO consumidor (o sea reutilización PROBADA): `Api.Booking`, `Api.Cart`,
+> Con SEGUNDO consumidor (o sea reutilización PROBADA): `Api.Audit`, `Api.Booking`, `Api.Cart`,
 > `Api.Consent`, `Api.Fulfillment`, `Api.Inventory`, `Api.Orders`, `Api.Payments`, `Api.Pricing` y
-> `Api.Workflow` (desde el lote 7 del núcleo: los pasos comunes de procesos, además del CMS).
+> `Api.Workflow` (desde el lote 7 del núcleo: los pasos comunes de procesos, además del CMS; `Api.Audit` desde
+> NN-12 de 003, el paso `audit.anotar`).
 >
-> Con **uno**, seis: `Api.Audit`, `Api.Identity`, `Api.Messaging`, `Api.Notifications`,
+> Con **uno**, cinco: `Api.Identity`, `Api.Messaging`, `Api.Notifications`,
 > `Api.Sessions` y `Api.Signing`. Con **ninguno**, cinco: `Api.Catalog`, `Api.Documents`, `Api.Engagement`,
 > `Api.Geo` y `Api.Moderation`.
 >
