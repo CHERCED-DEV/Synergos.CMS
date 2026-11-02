@@ -1,0 +1,11 @@
+{
+  "clave": "muestra.resultado-sin-paciente",
+  "acceso": "personal",
+  "entrada": ["quien", "informe"],
+  "tipos": { "quien": { "de": "sujeto" }, "informe": "documento" },
+  "salida": ["documentoId"],
+  "fases": { "cargar": ["guardar"] },
+  "pasos": {
+    "guardar": { "tipo": "documents.guardar", "lee": ["informe"], "escribe": ["documentoId"], "llave": "doc" }
+  }
+}

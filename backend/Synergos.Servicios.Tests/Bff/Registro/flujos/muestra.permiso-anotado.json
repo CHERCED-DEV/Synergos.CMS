@@ -1,0 +1,11 @@
+{
+  "clave": "muestra.permiso-anotado",
+  "entrada": ["titular", "version"],
+  "tipos": { "titular": { "de": "sujeto" }, "version": "texto" },
+  "salida": ["permisoId"],
+  "fases": { "otorgar": ["anotar", "otorgar"] },
+  "pasos": {
+    "anotar": { "tipo": "audit.anotar", "lee": ["titular"], "llave": "audit", "accion": "muestra.permiso.otorgar" },
+    "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "muestra.datos" }
+  }
+}

@@ -68,6 +68,13 @@ public sealed class ContratoConsumidorPasosTests
         ["OtorgarPermisoAsync"] = p => p.OtorgarPermisoAsync(Alguien, "muestra.datos", "texto-v3", Llave, Ct),
         ["LeerPermisoAsync"] = p => p.LeerPermisoAsync("gr-1", Ct),
         ["RevocarPermisoAsync"] = p => p.RevocarPermisoAsync(Alguien, "muestra.datos", Ct),
+        ["SellarContenidoAsync"] = p => p.SellarContenidoAsync("muestra.consultorio.c-1", "la nota", Ct),
+        ["GuardarDocumentoAsync"] = p => p.GuardarDocumentoAsync(
+            Alguien, new Synergos.Bff.Pasos.DocumentoAdjunto("informe.pdf", "application/pdf", "JVBERi0xLjQ="), Llave, Ct),
+        ["BorrarDocumentoAsync"] = p => p.BorrarDocumentoAsync("dc-1", Ct),
+        ["AnotarEnElRegistroAsync"] = p => p.AnotarEnElRegistroAsync(
+            Ref.Create("muestra.personal", "dr-1"), "muestra.historia.leer", Alguien,
+            new Dictionary<string, string> { ["saga"] = "s-1", ["flujo"] = "muestra.historia" }, Llave, Ct),
         ["LeerCanastaAsync"] = p => p.LeerCanastaAsync("ca-1", Ct),
         ["CerrarCanastaAsync"] = p => p.CerrarCanastaAsync("ca-1", Ct),
         ["CrearPedidoAsync"] = p => p.CrearPedidoAsync(
@@ -93,6 +100,15 @@ public sealed class ContratoConsumidorPasosTests
         [PuertosHttp.Notifications] =
             "Api.Notifications no publica documento: la forma del aviso la cruza TicketingAvisoTests contra la capacidad " +
             "REAL (el mismo cuerpo que EventosCapabilities.NotifyAsync).",
+        [PuertosHttp.Audit] =
+            "Api.Audit no publica documento: la forma del asiento la cruza RegistroDeclaradoTests contra la capacidad REAL "
+            + "(quién, qué, sobre qué, con qué identidad y los detalles, leídos de vuelta en el registro).",
+        [PuertosHttp.Signing] =
+            "Api.Signing no publica documento (NN-9 de 005): la forma del sello la cruza DocumentosDeclaradosTests contra la "
+            + "capacidad REAL, comprobándolo con /v1/seals/verify.",
+        [PuertosHttp.Documents] =
+            "Api.Documents no publica documento: la forma de guardar y borrar la cruza DocumentosDeclaradosTests contra la "
+            + "capacidad REAL (dueño, nombre, tipo, tamaño y hash, leídos de vuelta).",
     };
 
     public static TheoryData<string> Metodos()
