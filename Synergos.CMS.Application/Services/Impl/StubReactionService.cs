@@ -49,6 +49,7 @@ public sealed class StubReactionService : IReactionService, IDisposable
 
     private readonly IJsonEntityStore _store;
     private readonly string _resourceType;
+    private readonly SemillaDeLaRed _semilla;
 
     // Serializa el read-modify-write del toggle. lock{} no sirve: el cuerpo hace await.
     private readonly SemaphoreSlim _mutate = new(1, 1);
@@ -69,10 +70,13 @@ public sealed class StubReactionService : IReactionService, IDisposable
     /// <param name="store">Backing store durable. Null deja las reacciones en memoria.</param>
     /// <param name="storeNamespace">Familia de entidades. Null usa
     ///   <see cref="DefaultResourceType"/>.</param>
-    public StubReactionService(IJsonEntityStore? store, string? storeNamespace)
+    /// <param name="semilla">Si se sirven las reacciones de la demo. Null las sirve, como siempre;
+    ///   el composer la pasa según DevSeed (012, I0).</param>
+    public StubReactionService(IJsonEntityStore? store, string? storeNamespace, SemillaDeLaRed? semilla = null)
     {
         _store = store ?? new InMemoryJsonEntityStore();
         _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
+        _semilla = semilla ?? SemillaDeLaRed.Encendida;
     }
 
     public async Task<ReactionState> ReactAsync(string actorId, string objectKey, string type, CancellationToken cancellationToken = default)
@@ -163,7 +167,7 @@ public sealed class StubReactionService : IReactionService, IDisposable
     public async Task<IReadOnlyDictionary<string, int>> CountsForAllAsync(CancellationToken cancellationToken = default)
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var (objectKey, byActor) in SocialDemoSeed.Reactions)
+        foreach (var (objectKey, byActor) in _semilla.Reactions)
         {
             counts[objectKey] = byActor.Count;
         }
@@ -213,7 +217,7 @@ public sealed class StubReactionService : IReactionService, IDisposable
         {
             return doc.Reactions;
         }
-        if (SocialDemoSeed.Reactions.TryGetValue(objectKey, out var seeded))
+        if (_semilla.Reactions.TryGetValue(objectKey, out var seeded))
         {
             return seeded
                 .Select(kv => new ReactionEntry { ActorId = kv.Key, Type = kv.Value })
