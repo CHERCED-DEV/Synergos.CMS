@@ -160,8 +160,8 @@ public sealed class BlogsController : ControllerBase
     //
     // La app necesita la llave pública de quien lee para saber qué es suyo —no ofrecerse
     // «Seguir» a sí mismo, reconocer su perfil— y antes usaba su correo, que era también la
-    // llave que el servidor ponía en público. Ahora la llave es su seudónimo, y sólo el
-    // servidor sabe calcularla.
+    // llave que el servidor ponía en público. Ahora la llave es una huella de su correo con
+    // el secreto del despliegue (I0.b), y sólo el servidor sabe calcularla.
     [HttpGet("me")]
     public async Task<IActionResult> Me(CancellationToken cancellationToken)
     {

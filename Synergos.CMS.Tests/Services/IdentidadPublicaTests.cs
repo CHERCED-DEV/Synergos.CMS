@@ -5,8 +5,8 @@ using Synergos.CMS.Web.Services;
 namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
-/// La cara pública de una persona (012-blogs-social, I0, P3 A): su nombre, un alias estable y su llave, el seudónimo.
-/// Nunca su correo.
+/// La cara pública de una persona (012-blogs-social, I0, P3 A): su nombre, un alias estable y su llave, una huella del
+/// correo con el secreto del despliegue (I0.b, en <see cref="LlavePublicaConSecretoTests"/>). Nunca su correo.
 /// </summary>
 public sealed class IdentidadPublicaTests
 {
@@ -65,7 +65,7 @@ public sealed class IdentidadPublicaTests
     {
         var cara = IdentidadDePrueba.Con((Ana, "Ana Pérez")).De(Ana);
 
-        Assert.Equal(SeudonimoDePersona.De(Ana), cara.Llave);
+        Assert.Equal(IdentidadDePrueba.LlaveDe(Ana), cara.Llave);
         Assert.Equal("Ana Pérez", cara.Nombre);
         Assert.Equal($"ana-perez-{cara.Llave[..6]}", cara.Alias);
         Assert.DoesNotContain("@", $"{cara.Llave}{cara.Alias}{cara.Nombre}", StringComparison.Ordinal);
