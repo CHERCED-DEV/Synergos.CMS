@@ -9,10 +9,11 @@ namespace Synergos.CMS.Interfaces;
 /// sesión, y como su perfil no estaba en la semilla de la demo, el autor salía como <c>(correo, correo, correo)</c>: en
 /// el nombre, en el alias y en la llave, a la vista de cualquiera que abriera el inicio sin sesión.</para>
 ///
-/// <para><b>La llave pública es el seudónimo</b> (P3 A del plan de 012): la huella del correo con la que las
-/// capacidades ya conocen a una persona. No pretende ser anonimato —quien ya tiene un correo puede calcular su huella—:
-/// es no esparcir el correo. El nombre y el alias salen de esa llave y del nombre del miembro, así que son estables
-/// mientras el miembro no cambie su nombre.</para>
+/// <para><b>La llave pública es una huella del correo con un secreto del despliegue</b> (P3 A del plan de 012 y su
+/// I0.b): un HMAC, y no la huella sin secreto con la que las capacidades conocen a una persona. Con aquélla, quien ya
+/// tenía un correo podía calcular su llave y saber qué alias era; con el secreto, sólo la calcula este despliegue. El
+/// nombre y el alias salen de esa llave y del nombre del miembro, así que son estables mientras no cambien ni el nombre
+/// ni el secreto.</para>
 ///
 /// <para><b>De la llave o el alias no se vuelve al correo con una cuenta</b>, porque la huella no se invierte. Por eso
 /// <see cref="RecordarAsync"/> anota la cara pública cuando la persona actúa (publica, comenta, sigue, escribe), y
@@ -31,7 +32,8 @@ public interface IIdentidadPublica
 }
 
 /// <summary>Una persona tal como sale en público.</summary>
-/// <param name="Llave">La llave pública: el seudónimo del correo. Es lo que se usa para seguirla o escribirle.</param>
+/// <param name="Llave">La llave pública: la huella del correo con el secreto del despliegue. Es lo que se usa para seguirla
+/// o escribirle.</param>
 /// <param name="Alias">El alias legible, sin <c>@</c>: el nombre en minúsculas y sin tildes, y el comienzo de la llave.</param>
 /// <param name="Nombre">El nombre del miembro, o «Miembro» si no tiene uno o el que tiene parece un correo.</param>
 public sealed record IdentidadPublica(string Llave, string Alias, string Nombre);

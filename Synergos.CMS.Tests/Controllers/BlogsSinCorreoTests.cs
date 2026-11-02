@@ -100,7 +100,8 @@ public sealed class BlogsSinCorreoTests : IDisposable
         Assert.Equal(cara.Alias, autor.Handle);
         Assert.Equal(cara.Llave, autor.ActorKey);
         Assert.Equal(cara.Llave, autor.Id);
-        Assert.Equal(SeudonimoDePersona.De(Ana), autor.ActorKey);
+        Assert.Equal(IdentidadDePrueba.LlaveDe(Ana), autor.ActorKey);
+        Assert.NotEqual(SeudonimoDePersona.De(Ana), autor.ActorKey);
     }
 
     [Fact]
