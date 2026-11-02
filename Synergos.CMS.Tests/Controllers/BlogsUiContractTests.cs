@@ -55,7 +55,7 @@ public sealed class BlogsUiContractTests
 
         return new BlogsController(
             stream, graph, reactions, profiles, comments ?? new SinComentarios(),
-            messaging, collections, notifications, gate);
+            messaging, collections, notifications, gate, IdentidadDePrueba.Con());
     }
 
     private static JsonElement Wire(IActionResult result)
@@ -195,7 +195,7 @@ public sealed class BlogsUiContractTests
         var c = new BlogsController(
             new StubContentStream(graph, reactions), graph, reactions,
             new StubSocialProfileProjection(), new SinComentarios(), messaging,
-            new StubUserCollection(), new StubNotificationFeed(graph, reactions), gate);
+            new StubUserCollection(), new StubNotificationFeed(graph, reactions), gate, IdentidadDePrueba.Con());
 
         var res = await c.Message(
             ComoLoManda<BlogsController.SendMessageRequest>(

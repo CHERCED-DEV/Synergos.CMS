@@ -30,7 +30,8 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// <see cref="IJsonEntityStore"/> (ADR 0105) y ya no en un diccionario del
 /// proceso: un reinicio borraba todo lo que alguien hubiera publicado, dejando
 /// solo la semilla de la demo. La semilla NO se persiste — es contenido de
-/// código (<see cref="SocialDemoSeed.Posts"/>), no del usuario.</para>
+/// código (<see cref="SocialDemoSeed.Posts"/>), no del usuario — y sólo se
+/// sirve con <see cref="SemillaDeLaRed"/> encendida, que es DevSeed (012, I0).</para>
 ///
 /// <para><b>Costo de lectura.</b> Una página de feed recorre DOS espacios
 /// completos: los items creados (para unirlos a la semilla y poder ordenar y
@@ -61,6 +62,7 @@ public sealed class StubContentStream : IContentStream
     private readonly Func<DateTime> _utcNow;
     private readonly IJsonEntityStore _store;
     private readonly string _resourceType;
+    private readonly SemillaDeLaRed _semilla;
 
     public StubContentStream(ISocialGraphService graph, IReactionService reactions)
         : this(graph, reactions, null)
@@ -89,12 +91,15 @@ public sealed class StubContentStream : IContentStream
     /// <param name="store">Backing store durable. Null deja los items en memoria.</param>
     /// <param name="storeNamespace">Familia de entidades. Null usa
     ///   <see cref="DefaultResourceType"/>.</param>
+    /// <param name="semilla">Si se sirve la semilla de la demo. Null la sirve, como siempre;
+    ///   el composer la pasa según DevSeed.</param>
     public StubContentStream(
         ISocialGraphService graph,
         IReactionService reactions,
         Func<DateTime>? utcNow,
         IJsonEntityStore? store,
-        string? storeNamespace)
+        string? storeNamespace,
+        SemillaDeLaRed? semilla = null)
     {
         _graph = graph ?? throw new ArgumentNullException(nameof(graph));
         _reactions = reactions as StubReactionService
@@ -104,6 +109,7 @@ public sealed class StubContentStream : IContentStream
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
         _store = store ?? new InMemoryJsonEntityStore();
         _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
+        _semilla = semilla ?? SemillaDeLaRed.Encendida;
     }
 
     public async Task<ContentStreamPage> GetFeedAsync(FeedQuery query, CancellationToken cancellationToken = default)
@@ -201,7 +207,7 @@ public sealed class StubContentStream : IContentStream
         var created = new ContentStreamItem(
             Id: id,
             Kind: string.IsNullOrWhiteSpace(item.Kind) ? "post" : item.Kind.Trim().ToLowerInvariant(),
-            Author: SocialDemoSeed.AuthorById(item.AuthorId),
+            Author: _semilla.AuthorById(item.AuthorId),
             Body: item.Body?.Trim() ?? string.Empty,
             MediaUrl: string.IsNullOrWhiteSpace(item.MediaUrl) ? null : item.MediaUrl.Trim(),
             CreatedUtc: _utcNow(),
@@ -232,11 +238,11 @@ public sealed class StubContentStream : IContentStream
             .ToList();
     }
 
-    private static IEnumerable<ContentStreamItem> SeededItems()
-        => SocialDemoSeed.Posts.Select(p => new ContentStreamItem(
+    private IEnumerable<ContentStreamItem> SeededItems()
+        => _semilla.Posts.Select(p => new ContentStreamItem(
             Id: p.Id,
             Kind: p.Kind,
-            Author: SocialDemoSeed.AuthorById(p.AuthorId),
+            Author: _semilla.AuthorById(p.AuthorId),
             Body: p.Body,
             MediaUrl: p.MediaUrl,
             CreatedUtc: SocialDemoSeed.Epoch.AddMinutes(p.OffsetMinutes),

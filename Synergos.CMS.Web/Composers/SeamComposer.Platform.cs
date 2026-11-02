@@ -62,6 +62,14 @@ public sealed partial class SeamComposer
             services.AddSingleton<IIdentityTokenIssuer, StubIdentityTokenIssuer>();
         }
 
+        // ── La cara pública de una persona (012-blogs-social, I0) ──────────
+        //
+        // Va acá por lo mismo que la identidad de arriba: cómo sale alguien en lo que el sitio
+        // muestra a otros —su nombre, un alias y su llave, nunca su correo— no es un asunto de un
+        // vertical. Hoy la usan la red social y sus comentarios; las reseñas y las bandejas de
+        // cualquier vertical la encuentran registrada.
+        services.AddSingleton<IIdentidadPublica, IdentidadPublicaDeMiembros>();
+
         // Ola 54.1 — IBrandingProvider resuelve el brand activo según el
         // hostname del request, matchéandolo contra los siteConfigSettings
         // publicados (cada uno con su brandKey via compBranding). Si no

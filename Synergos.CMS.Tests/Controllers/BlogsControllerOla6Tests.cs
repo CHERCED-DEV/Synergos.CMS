@@ -36,7 +36,8 @@ public sealed class BlogsControllerOla6Tests
         gate.CurrentMemberEmail.Returns("act-elena");
 
         return new BlogsController(
-            stream, graph, reactions, profiles, comments, messaging, collections, notifications, gate);
+            stream, graph, reactions, profiles, comments, messaging, collections, notifications, gate,
+            IdentidadDePrueba.Con());
     }
 
     private static T Body<T>(IActionResult result)
@@ -144,7 +145,7 @@ public sealed class BlogsControllerOla6Tests
 
         // El artículo también aparece en el feed (polimorfismo con el post).
         var feed = Body<BlogsController.FeedResponse>(
-            await c.Feed(scope: null, cursor: null, actorId: null, kind: "article", CancellationToken.None));
+            await c.Feed(scope: null, cursor: null, kind: "article", CancellationToken.None));
         Assert.Contains(feed.Posts, p => p.Id == created.Post.Id);
     }
 

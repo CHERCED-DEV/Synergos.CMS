@@ -19,8 +19,9 @@ public sealed class AppLauncherResolutorTests
         """[{"id":"tienda","name":"Tienda","tagline":"Catálogo y checkout","status":"live","url":"/tienda","icon":"bag","industry":"Retail","persona":"Comprador","capabilities":["Catálogo","Pagos"],"demoMode":"deeplink"},{"name":"Gobierno","capabilities":"Trámites, Citas"}]""";
 
     private readonly ILogger<AppLauncherResolutor> _log = Substitute.For<ILogger<AppLauncherResolutor>>();
+    private readonly IDestinosApagados _destinos = Substitute.For<IDestinosApagados>();
 
-    private AppLauncherResolutor Resolutor() => new(ElementoFalso.Fallback, _log);
+    private AppLauncherResolutor Resolutor() => new(ElementoFalso.Fallback, _destinos, _log);
 
     [Fact]
     public void Un_bloque_sin_nada_autorado_no_manda_ninguna_clave()
@@ -55,6 +56,30 @@ public sealed class AppLauncherResolutorTests
 
         Assert.Equal(new[] { new AppDelLanzador("Blogs") }, apps);
         Assert.Equal(1, _log.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(ILogger.Log)));
+    }
+
+    [Fact]
+    public void Una_app_cuya_pagina_esta_apagada_no_viaja_y_las_demas_si()
+    {
+        // 002-produccion P11 C: Salud despublicada no se anuncia con un enlace a «página no encontrada».
+        var elemento = ElementoFalso.Con(
+            ("apps", """[{"name":"Tienda","url":"/tienda"},{"name":"Healthcare","url":"/healthcare"},{"name":"Blogs"}]"""));
+        _destinos.Apagado("/healthcare", elemento, "apps").Returns(true);
+
+        var apps = Resolutor().Resolver(elemento).Props.Apps!;
+
+        Assert.Equal(new[] { "Tienda", "Blogs" }, apps.Select(a => a.Name));
+        _destinos.Received(1).Apagado("/tienda", elemento, "apps");
+        _destinos.Received(1).Apagado(null, elemento, "apps");
+    }
+
+    [Fact]
+    public void Si_todas_estan_apagadas_no_viaja_ninguna()
+    {
+        var elemento = ElementoFalso.Con(("apps", """[{"name":"Healthcare","url":"/healthcare"}]"""));
+        _destinos.Apagado("/healthcare", elemento, "apps").Returns(true);
+
+        Assert.Null(Resolutor().Resolver(elemento).Props.Apps);
     }
 
     [Fact]

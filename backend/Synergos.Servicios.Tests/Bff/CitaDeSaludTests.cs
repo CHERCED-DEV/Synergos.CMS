@@ -351,6 +351,37 @@ public sealed class CitaDeSaludTests
         Assert.Equal("Completed", consultada.GetProperty("estado").GetString());
     }
 
+    /// <summary>
+    /// NN-22: publicar la oferta del profesional en Salud le abre la agenda, sin código ni manifiesto. La oferta común
+    /// registra su recurso con la clase que la cita halla, y la cita aparta una franja de esa agenda.
+    /// </summary>
+    [Fact]
+    public async Task Publicar_la_oferta_de_un_profesional_le_abre_la_agenda_y_la_cita_aparta_en_ella()
+    {
+        using var c = new CitaDeSaludReal();
+        var (antes, sinAgenda) = await c.Abrir("cita-antes", profesionalId: "dra-nueva");
+        Assert.True(antes != HttpStatusCode.Created, sinAgenda.ToString());
+
+        var dias = Enum.GetValues<DayOfWeek>().Select(d => new { dia = d.ToString(), desde = "08:00", hasta = "20:00" }).ToList();
+        using var publicar = new HttpRequestMessage(HttpMethod.Post, "v1/ofertas")
+        {
+            Content = JsonContent.Create(new
+            {
+                pieza = "dra-nueva", precio = 0m, moneda = "COP",
+                agenda = new { cupos = 1, franjaMinutos = 30, horario = dias, zona = "UTC", avisoMinutos = 0 },
+            }),
+        };
+        publicar.Headers.Add("Idempotency-Key", "oferta-dra-nueva");
+        using var publicada = await c.Orquestador.SendAsync(publicar);
+        Assert.True(publicada.StatusCode == HttpStatusCode.OK, await publicada.Content.ReadAsStringAsync());
+
+        var recurso = await c.Leer("booking", "v1/resources/por-sujeto?subjectKind=salud.profesional&subjectId=dra-nueva");
+        Assert.Equal(30, recurso.GetProperty("slotMinutes").GetInt32());
+        var (estado, abierta) = await c.Abrir("cita-despues", profesionalId: "dra-nueva");
+        Assert.True(estado == HttpStatusCode.Created, abierta.ToString());
+        Assert.Equal("Running", abierta.GetProperty("estado").GetString());
+    }
+
     [Fact]
     public async Task Cotizar_dice_el_copago_que_se_autoriza_sin_apartar_nada()
     {

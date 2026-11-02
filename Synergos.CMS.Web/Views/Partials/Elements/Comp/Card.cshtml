@@ -2,9 +2,13 @@
     elementCompCard renderer (Ola 22). SSR-native composite atómico.
     Tarjeta stand-alone con heading + media + body + cta. Props todas
     de composiciones (compContent* + compDom*).
+
+    Una tarjeta cuyo enlace lleva a una página apagada no se pinta (002-produccion P11 C): anunciaría
+    una vertical despublicada con un enlace a «página no encontrada». Vuelve al volver a publicarla.
 *@
 @using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject Synergos.CMS.Web.Services.SynHost.IDestinosApagados Destinos
 @{
     var title = Model.Value<string>("headingTitle");
     if (string.IsNullOrWhiteSpace(title)) { return; }
@@ -15,6 +19,7 @@
     var ctaLabel = Model.Value<string>("ctaLabel");
     var ctaLink = Model.Value<Link>("ctaLink");
     var ctaUrl = ctaLink?.Url;
+    if (Destinos.Apagado(ctaUrl, Model, "ctaLink")) { return; }
     var ctaOpenInNewTab = Model.Value<bool>("ctaOpenInNewTab") || string.Equals(ctaLink?.Target, "_blank", StringComparison.OrdinalIgnoreCase);
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");

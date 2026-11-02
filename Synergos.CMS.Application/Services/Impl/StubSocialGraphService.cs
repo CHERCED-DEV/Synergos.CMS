@@ -53,6 +53,7 @@ public sealed class StubSocialGraphService : ISocialGraphService, IDisposable
 
     private readonly IJsonEntityStore _store;
     private readonly string _resourceType;
+    private readonly SemillaDeLaRed _semilla;
 
     // Serializa el read-modify-write de follow/unfollow. lock{} no sirve: el
     // cuerpo hace await.
@@ -74,10 +75,13 @@ public sealed class StubSocialGraphService : ISocialGraphService, IDisposable
     /// <param name="store">Backing store durable. Null deja el grafo en memoria.</param>
     /// <param name="storeNamespace">Familia de entidades. Null usa
     ///   <see cref="DefaultResourceType"/>.</param>
-    public StubSocialGraphService(IJsonEntityStore? store, string? storeNamespace)
+    /// <param name="semilla">Si se sirve el grafo de la demo. Null lo sirve, como siempre;
+    ///   el composer la pasa según DevSeed (012, I0).</param>
+    public StubSocialGraphService(IJsonEntityStore? store, string? storeNamespace, SemillaDeLaRed? semilla = null)
     {
         _store = store ?? new InMemoryJsonEntityStore();
         _resourceType = string.IsNullOrWhiteSpace(storeNamespace) ? DefaultResourceType : storeNamespace;
+        _semilla = semilla ?? SemillaDeLaRed.Encendida;
     }
 
     public async Task<FollowState> FollowAsync(string followerId, string followeeId, CancellationToken cancellationToken = default)
@@ -192,7 +196,7 @@ public sealed class StubSocialGraphService : ISocialGraphService, IDisposable
     private async Task<Dictionary<string, HashSet<string>>> LoadAllAsync(CancellationToken cancellationToken)
     {
         var graph = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var (follower, followees) in SocialDemoSeed.Follows)
+        foreach (var (follower, followees) in _semilla.Follows)
         {
             graph[follower] = new HashSet<string>(followees, StringComparer.Ordinal);
         }
@@ -224,7 +228,7 @@ public sealed class StubSocialGraphService : ISocialGraphService, IDisposable
         {
             return new HashSet<string>(doc.Followees, StringComparer.Ordinal);
         }
-        return SocialDemoSeed.Follows.TryGetValue(actorId, out var seeded)
+        return _semilla.Follows.TryGetValue(actorId, out var seeded)
             ? new HashSet<string>(seeded, StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
     }

@@ -15,12 +15,17 @@ name: uSync rebuild (DB derivable)
 # Mientras eso sea verde, la base de datos es DERIVABLE — perder trabajo
 # exigiría perder el repo, y el import manual del arquitecto deja de ser
 # un acto de fe: cada PR ya demostró que aplica.
+#
+# Y mira la base, no sólo el conteo: cada página y cada medio versionado tiene que
+# haber QUEDADO en ella (tools/nodos-versionados.py). Un ítem procesado no es un
+# nodo creado, y el conteo no veía la diferencia (002-produccion, 2026-11-02).
 
 on:
   pull_request:
     paths:
       - 'Synergos.CMS.Web/uSync/**'
       - 'tools/usync-rebuild-check.mjs'
+      - 'tools/nodos-versionados.py'
       - '.github/workflows/usync-rebuild.yml'
   push:
     branches:
@@ -29,6 +34,7 @@ on:
     paths:
       - 'Synergos.CMS.Web/uSync/**'
       - 'tools/usync-rebuild-check.mjs'
+      - 'tools/nodos-versionados.py'
       - '.github/workflows/usync-rebuild.yml'
   # Manual, para probar el gate sin tocar schema.
   workflow_dispatch:

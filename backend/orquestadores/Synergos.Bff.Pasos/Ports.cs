@@ -44,8 +44,25 @@ public interface IPricingPort
         IReadOnlyList<(Ref Sujeto, int Cantidad)> lineas, string? promocion, CancellationToken ct);
 }
 
+/// <summary>Un bloque del horario semanal de una agenda: el día y de qué hora a qué hora, en la zona del recurso.</summary>
+/// <param name="Dia">El día en inglés, como lo lee la agenda (<c>Monday</c>…).</param>
+/// <param name="Desde">La hora en que abre, <c>HH:mm</c>.</param>
+/// <param name="Hasta">La hora en que cierra, <c>HH:mm</c>, después de <paramref name="Desde"/> el mismo día.</param>
+public sealed record BloqueDeAgenda(string Dia, string Desde, string Hasta);
+
+/// <summary>La agenda de una pieza en <c>Api.Booking</c>: lo que una oferta declarada publica y revisa (NN-22).</summary>
+/// <param name="Cupos">Cuántas reservas admite a la vez cada franja.</param>
+/// <param name="FranjaMinutos">Lo que dura cada franja: la agenda rechaza una ventana de otro largo (NB-1).</param>
+/// <param name="Horario">El horario semanal.</param>
+/// <param name="Zona">La zona horaria del horario. La agenda no la cambia en un recurso ya registrado.</param>
+/// <param name="AvisoMinutos">Con cuánta anticipación se puede cancelar.</param>
+public sealed record AgendaDeLaPieza(int Cupos, int FranjaMinutos, IReadOnlyList<BloqueDeAgenda> Horario, string Zona, int AvisoMinutos);
+
+/// <summary>Un recurso de la agenda como lo lee la oferta: su id y la agenda que tiene.</summary>
+public sealed record RecursoDeLaPieza(string Id, AgendaDeLaPieza Agenda);
+
 /// <summary>Lo que hace una oferta publicada en las capacidades (P12; NM-1 de 010, NN-16 de 005, NE-7 de 007).</summary>
-/// <remarks>Hoy, sólo el precio: el pozo y el recurso de la agenda entran cuando una oferta declarada los pida (001-P11).</remarks>
+/// <remarks>El precio y, desde NN-22 de 003, el recurso de la agenda. El pozo entra cuando una oferta declarada lo pida (001-P11).</remarks>
 public interface IOfertaPort
 {
     /// <summary>
@@ -55,6 +72,19 @@ public interface IOfertaPort
     /// <remarks>Retirar un precio es fijarlo con <paramref name="hasta"/> en el instante de retirar: la cotización
     /// lo rechaza desde entonces y el precio sigue ahí, con su historia.</remarks>
     Task<Result<string>> FijarPrecioAsync(Ref sujeto, Money precio, DateTimeOffset? hasta, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>El recurso de la agenda de <paramref name="sujeto"/>; si no lo hay, el rechazo de la agenda (<c>booking.resource_not_found</c>).</summary>
+    Task<Result<RecursoDeLaPieza>> HallarRecursoAsync(Ref sujeto, CancellationToken ct);
+
+    /// <summary>Registra el recurso de la agenda de <paramref name="sujeto"/>.</summary>
+    Task<Result<RecursoDeLaPieza>> RegistrarRecursoAsync(Ref sujeto, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>
+    /// Revisa el recurso ya registrado (NB-7), con la agenda ENTERA salvo la zona. La agenda no cancela ninguna reserva:
+    /// devuelve cuántas vigentes ya no cabrían.
+    /// </summary>
+    Task<Result<(RecursoDeLaPieza Recurso, int Fuera)>> RevisarRecursoAsync(
+        string recurso, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct);
 }
 
 /// <summary>Apartar y consumir existencias de un pozo contable de <c>Api.Inventory</c>.</summary>
