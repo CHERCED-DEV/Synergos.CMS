@@ -3580,7 +3580,8 @@
         }
       },
       "SaludConsentimientoEntrada": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false
       },
       "SaludConsentimientoPagina": {
         "required": [
@@ -3636,7 +3637,8 @@
             "type": "string"
           },
           "datos": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false
           },
           "compensacionesPendientes": {
             "type": "integer",
@@ -3654,7 +3656,8 @@
         }
       },
       "SaludConsentimientoRetiroEntrada": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false
       },
       "SaludConsentimientoRetiroPagina": {
         "required": [
@@ -3710,7 +3713,8 @@
             "type": "string"
           },
           "datos": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false
           },
           "compensacionesPendientes": {
             "type": "integer",
