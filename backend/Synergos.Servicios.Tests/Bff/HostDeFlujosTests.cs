@@ -125,6 +125,21 @@ public sealed class HostDeFlujosTests
         """;
 
     /// <summary>
+    /// La forma de una devolución (<c>tienda.devolucion</c>, <c>educacion.devolucion</c>): UNA fase, que abre y termina, sin
+    /// reservas, así que la saga se escribe al final, justo antes de completarla.
+    /// </summary>
+    private const string DevolucionDeUnaFase = """
+        {
+          "clave": "prueba.devolucion",
+          "entrada": ["quien", "cobro", "monto"],
+          "tipos": { "quien": { "de": "sujeto" }, "cobro": "texto", "monto": "dinero" },
+          "salida": ["cobro", "monto"],
+          "fases": { "devolver": ["devolver"] },
+          "pasos": { "devolver": { "tipo": "payments.devolver", "lee": ["cobro", "monto"], "llave": "refund" } }
+        }
+        """;
+
+    /// <summary>
     /// La cita con una lectura sin saga (núcleo, NB-3 de 011): sus horas libres, sin dueño. La entrada de la lectura
     /// va en otro orden que lo que lee su paso, para que cada mutación nombre UNA de las dos.
     /// </summary>
@@ -288,7 +303,8 @@ public sealed class HostDeFlujosTests
 
         /// <param name="definicion">La definición.</param>
         /// <param name="logs">Si está, el motor, el intérprete y los puertos escriben en él (NB-9); si no, en nada.</param>
-        public Banco(string definicion = Cita, ILoggerFactory? logs = null)
+        /// <param name="almacen">Si está, envuelve el almacén de las sagas (para meter otra corrida en medio).</param>
+        public Banco(string definicion = Cita, ILoggerFactory? logs = null, Func<ISagaStore<SagaDeFlujo>, ISagaStore<SagaDeFlujo>>? almacen = null)
         {
             _logs = logs;
             Puertos.Log = logs?.CreateLogger("puertos");
@@ -296,9 +312,10 @@ public sealed class HostDeFlujosTests
             var vocabulario = new SagaVocabulary("prueba", "la cita");
             var deshacer = new DeshacerComun(Puertos, Puertos, Puertos, Puertos, []);
             Raiz = Path.Combine(Path.GetTempPath(), "host-flujos-" + Guid.NewGuid().ToString("N"));
-            var almacen = new FileSystemSagaStore<SagaDeFlujo>(Options.Create(new SagaStorageOptions { Root = Raiz }));
+            var enDisco = new FileSystemSagaStore<SagaDeFlujo>(Options.Create(new SagaStorageOptions { Root = Raiz }));
+            var sagas = almacen?.Invoke(enDisco) ?? enDisco;
             Motor = new SagaEngine<SagaDeFlujo>(
-                almacen, new Compensator<SagaDeFlujo>(deshacer, TimeProvider.System, NullLogger<Compensator<SagaDeFlujo>>.Instance),
+                sagas, new Compensator<SagaDeFlujo>(deshacer, TimeProvider.System, NullLogger<Compensator<SagaDeFlujo>>.Instance),
                 new CompensationAlert(new SinRed(), vocabulario, Options.Create(new AlertOptions())),
                 ArriendoDePrueba.Nuevo(), vocabulario, TimeProvider.System,
                 logs?.CreateLogger<SagaEngine<SagaDeFlujo>>() ?? NullLogger<SagaEngine<SagaDeFlujo>>.Instance);
@@ -310,7 +327,7 @@ public sealed class HostDeFlujosTests
                 new PasoCotizacionSinCodigo(Puertos), new PasoDesglose(), new PasoAgendaHallar(Puertos),
                 new PasoLineasDeLaRenta(), new PasoConservar(), new PasoConsentimientoVerificar(Puertos), new PasoResumir(),
                 new PasoAgendaFranjas(Puertos), new PasoPagosConservar(),
-                new PasoLeerOriginal(almacen, tipos), new PasoPagosDevolver(Puertos),
+                new PasoLeerOriginal(sagas, tipos), new PasoPagosDevolver(Puertos),
                 new PasoPagosAnular(Puertos), new PasoAgendaCancelar(Puertos),
             ]);
             Binding = new BindingDeFlujo(Flujo, tipos, Registro, deshacer.Tipos);
@@ -346,6 +363,27 @@ public sealed class HostDeFlujosTests
 
         public static FlowContext Entrada(decimal monto = 50_000m) => new FlowContext()
             .Set("paciente", Paciente).Set("recurso", "rs-1").Set("ventana", Hora).Set("monto", Money.Of(monto, "COP"));
+    }
+
+    /// <summary>
+    /// El almacén de verdad con un gancho en <c>Find</c>: lo que otra corrida escribe justo antes de que ésta lea (la que
+    /// termina la saga mientras ésta la va a completar).
+    /// </summary>
+    private sealed class AlmacenConGancho(ISagaStore<SagaDeFlujo> real) : ISagaStore<SagaDeFlujo>
+    {
+        public Action<ISagaStore<SagaDeFlujo>, string>? AlLeer { get; set; }
+
+        public SagaDeFlujo? Find(string id)
+        {
+            AlLeer?.Invoke(real, id);
+            return real.Find(id);
+        }
+
+        public IReadOnlyList<SagaDeFlujo> WithPendingCompensations() => real.WithPendingCompensations();
+        public IReadOnlyList<SagaDeFlujo> StartedBefore(DateTimeOffset limite) => real.StartedBefore(limite);
+        public IReadOnlyList<SagaDeFlujo> DeDueno(Ref dueno) => real.DeDueno(dueno);
+        public void Put(SagaDeFlujo saga) => real.Put(saga);
+        public void Invalidate() => real.Invalidate();
     }
 
     private sealed class SinRed : IHttpClientFactory
@@ -705,6 +743,55 @@ public sealed class HostDeFlujosTests
         var otraVez = await fachada.ContinuarAsync("cerrar", "cita-1", Paciente, new FlowContext().Set("contacto", null), CancellationToken.None);
         Assert.True(otraVez.IsOk);
         Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("capturar", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Dos peticiones con la misma llave corren la misma devolución, y la otra la completa justo antes de que ésta la vaya a
+    /// completar (lo que vio la CI de `8990ef17` en la carrera de dos personas del personal): ésta encuentra la saga
+    /// completada. Es la misma saga y su resultado, no un `flow.not_running` definitivo, y la plata salió una vez. Si es
+    /// suya, o del flujo en uno del personal, se le devuelve; la de otro dueño sigue siendo el rechazo, para no enseñársela.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "u-1", true)]
+    [InlineData(false, "u-2", false)]
+    [InlineData(true, "u-2", true)]
+    public async Task Si_otra_peticion_con_la_misma_llave_termino_la_saga_mientras_esta_corria_se_devuelve_esa(
+        bool personal, string quienLaTermino, bool laDevuelve)
+    {
+        var definicion = personal
+            ? DevolucionDeUnaFase.Replace("\"clave\": \"prueba.devolucion\",", "\"clave\": \"prueba.devolucion\", \"acceso\": \"personal\",", StringComparison.Ordinal)
+            : DevolucionDeUnaFase;
+        Assert.Equal(personal, definicion.Contains("\"acceso\": \"personal\"", StringComparison.Ordinal));
+        AlmacenConGancho? gancho = null;
+        Banco? banco = null;
+        using var _ = banco = new Banco(definicion, almacen: real => gancho = new AlmacenConGancho(real));
+        Assert.Empty(banco.Errores());
+        gancho!.AlLeer = (real, id) =>
+        {
+            // La primera lectura después de que ésta movió la plata es con la que la va a completar: ahí, la otra ya terminó
+            // (escrita como la escribe una devolución completada, con las mismas llaves de paso).
+            if (id != "rma-1" || !banco!.Puertos.Llamadas.Any(l => l.StartsWith("devolver ", StringComparison.Ordinal))) return;
+            gancho.AlLeer = null;
+            real.Put(new SagaDeFlujo("rma-1", "prueba.devolucion", Ref.Create("prueba.paciente", quienLaTermino), SagaStatus.Completed,
+                new Dictionary<string, ValorDeFlujo>(), new Dictionary<string, IReadOnlyList<ReservaDeFlujo>>(), [], null, DateTimeOffset.UtcNow));
+        };
+        var entrada = new FlowContext().Set("quien", Paciente).Set("cobro", "pg-1").Set("monto", Money.Of(20_000m, "COP"));
+
+        var r = await banco.Fachada().AbrirAsync("rma-1", Paciente, entrada, CancellationToken.None);
+
+        Assert.Null(gancho.AlLeer);
+        if (laDevuelve)
+        {
+            Assert.True(r.IsOk, r.Rejection?.ToString());
+            Assert.Equal("rma-1", r.Value.Id);
+            Assert.Equal(SagaStatus.Completed, r.Value.Status);
+        }
+        else
+        {
+            Assert.False(r.IsOk);
+            Assert.Equal(FlowRunner<SagaDeFlujo>.NoEnCurso, r.Rejection!.Code);
+        }
+        Assert.Single(banco.Puertos.Llamadas, l => l.StartsWith("devolver ", StringComparison.Ordinal));
     }
 
     [Fact]
