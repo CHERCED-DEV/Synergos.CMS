@@ -34,6 +34,91 @@ public sealed class PasoConsentimientoVerificar(IConsentPort permisos) : IPaso
 }
 
 /// <summary>
+/// Quién es el titular de un permiso que se da o se retira por la puerta: el dueño de la saga, el sujeto que puso la
+/// puerta (NN-23 de 003).
+/// </summary>
+/// <remarks>
+/// <para><b>Nunca algo que se lee.</b> Un titular leído de la entrada dejaría dar o retirar el permiso de otro con un cuerpo
+/// armado a mano: la puerta comprobó la sesión de ESTE miembro, no la de quien él nombre.</para>
+///
+/// <para><b>En un flujo del personal no hay titular</b>: el dueño es quien actúa, no a quien se le da el permiso, y darlo
+/// por otro en ventanilla es otra cosa —quién lo pidió y con qué— que hoy no pide nadie (como <c>forget</c> en
+/// <c>Api.Consent</c>).</para>
+/// </remarks>
+internal static class TitularDelPermiso
+{
+    public const string Requerido = "consent.titular_requerido";
+
+    public static Ref? De(EntradaDePaso entrada) => entrada.Flujo is { EsDePersonal: true } ? null : entrada.Dueno;
+
+    public static Rejection Falta(string tipo) => Rejection.Forbidden(Requerido,
+        $"«{tipo}» da o retira el permiso de quien abrió la saga por la puerta, y aquí no lo hay (una lectura, o un flujo del personal).");
+}
+
+/// <summary>
+/// <c>consent.otorgar</c>: el dueño de la saga da su permiso para el <c>proposito</c> que declara la definición, con la
+/// versión del texto que lee (NN-23 de 003). Escribe el id del permiso.
+/// </summary>
+/// <remarks>
+/// <para><b>La identidad la afirma la sesión del CMS</b> (<c>CmsSession</c>, 003-Q8): la puerta comprobó la sesión del
+/// miembro, y el permiso queda escrito con la versión del texto que aceptó. El token de Identity, cuando se encienda.</para>
+///
+/// <para><b>El propósito es un dato del flujo</b>, como en <c>consent.verificar</c>; <b>la versión, del texto que la persona
+/// vio</b>: es contenido del CMS, que la manda como negocio. Con la misma llave, el mismo permiso.</para>
+///
+/// <para><b>Reserva el permiso</b>: una definición que lo declare con <c>antes: "consent.revocar"</c> lo retira si la saga
+/// se deshace antes de consumirlo (el «cancelar» de un flujo abierto). Una que no, lo deja dado.</para>
+/// </remarks>
+public sealed class PasoConsentimientoOtorgar(IConsentPort permisos) : IPaso
+{
+    public string Tipo => "consent.otorgar";
+    public int Lecturas => 1;
+    public int Escrituras => 1;
+    public LlaveRequerida Llave => LlaveRequerida.Fija;
+    public bool UsaProposito => true;
+    public IReadOnlyList<Type> TiposDeEscritura => [typeof(string)];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        if (TitularDelPermiso.De(entrada) is not { } titular) return SalidaDePaso.Rechaza(TitularDelPermiso.Falta(Tipo));
+
+        var dado = await permisos.OtorgarAsync(titular, entrada.Paso.Proposito!, entrada.Lee<string>(0), entrada.Llave(), ct);
+        return dado.IsOk ? SalidaDePaso.Reserva(new Reservado(dado.Value), dado.Value) : SalidaDePaso.Rechaza(dado.Rejection!);
+    }
+}
+
+/// <summary>
+/// <c>consent.revocar</c>: el dueño de la saga retira su permiso para el <c>proposito</c> que declara la definición
+/// (NN-23 de 003). Un acto propio, que se puede pedir en cualquier momento: el permiso es de larga vida y se retira
+/// semanas después, con la saga que lo dio ya cerrada.
+/// </summary>
+/// <remarks>
+/// Retirar uno ya retirado es lo mismo (la capacidad), así que no pide llave; uno que nunca se dio es el rechazo de la
+/// capacidad (<c>consent.not_granted</c>). No tiene vuelta: el validador lo deja al final, detrás de lo que se deshace.
+/// </remarks>
+public sealed class PasoConsentimientoRevocar(IConsentPort permisos) : IPaso
+{
+    public string Tipo => "consent.revocar";
+    public int Lecturas => 0;
+    public int Escrituras => 0;
+    public LlaveRequerida Llave => LlaveRequerida.Ninguna;
+    public bool UsaProposito => true;
+    public bool ActuaSinLlave => true;
+    public bool SinVuelta => true;
+    public IReadOnlyList<Type> TiposDeEscritura => [];
+
+    public async Task<SalidaDePaso> EjecutarAsync(EntradaDePaso entrada, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entrada);
+        if (TitularDelPermiso.De(entrada) is not { } titular) return SalidaDePaso.Rechaza(TitularDelPermiso.Falta(Tipo));
+
+        var retirado = await permisos.RevocarAsync(titular, entrada.Paso.Proposito!, ct);
+        return retirado.IsOk ? SalidaDePaso.Sigue() : SalidaDePaso.Rechaza(retirado.Rejection!);
+    }
+}
+
+/// <summary>
 /// <c>cart.leer</c>: lee la canasta y quién compra, y escribe sus líneas (sujeto y cantidad), lo que se cotiza
 /// y se aparta.
 /// </summary>

@@ -55,6 +55,9 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IDeshacerCobros>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerAgenda>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IConsentPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        // Deshacer consent.otorgar (NN-23 de 003): retirar el permiso que dio. Va junto a los estándar del deshacer común.
+        builder.Services.AddSingleton<IDeshacerPermisos>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerPermiso(sp.GetRequiredService<IDeshacerPermisos>()));
         builder.Services.AddSingleton<ICartPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IOrdersPort>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IFulfillmentPort>(sp => sp.GetRequiredService<PuertosHttp>());
@@ -98,7 +101,8 @@ public static class PasosComunes
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
             new PasoAvisar(puertos, zona), new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
-            new PasoConsentimientoVerificar(puertos), new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
+            new PasoConsentimientoVerificar(puertos), new PasoConsentimientoOtorgar(puertos), new PasoConsentimientoRevocar(puertos),
+            new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
             new PasoSeguirEnvio(puertos), new PasoLeerEnvio(puertos),
             new PasoProcesoArrancar(puertos), new PasoProcesoDisparar(puertos), new PasoProcesoDispararElegida(puertos),

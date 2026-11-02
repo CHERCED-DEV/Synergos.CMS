@@ -24,6 +24,12 @@ public sealed class PasosDeCompraTests
         public Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct)
             => Hacer("gr-1", $"permiso {sujeto} {proposito}");
 
+        public Task<Result<string>> OtorgarAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct)
+            => Hacer("gr-2", $"otorgar {sujeto} {proposito} {version} {llave.Value}");
+
+        public Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct)
+            => Hacer("gr-2", $"revocar {sujeto} {proposito}");
+
         public Task<Result<CanastaView>> LeerAsync(string canasta, CancellationToken ct)
         {
             Llamadas.Add($"leer {canasta}");
@@ -84,6 +90,72 @@ public sealed class PasosDeCompraTests
         puertos.Rechaza = Rejection.Conflict("consent.not_granted", "guionado");
         var no = await paso.EjecutarAsync(Entrada("consent.verificar", ["comprador"], Ctx(), proposito: "salud.agenda"), CancellationToken.None);
         Assert.Equal("consent.not_granted", no.Rechazo?.Code);
+    }
+
+    // ── El permiso que se da y se retira (NN-23 de 003) ─────────────────────
+
+    /// <summary>Un flujo del personal, para lo que lo pregunta el paso: no se valida aquí.</summary>
+    private static readonly FlujoDef DelPersonal = FlujoDef.Leer("""
+        { "clave": "prueba.permiso", "acceso": "personal", "entrada": ["version"], "tipos": { "version": "texto" },
+          "fases": { "otorgar": ["otorgar"] },
+          "pasos": { "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "salud.datos" } } }
+        """);
+
+    private static EntradaDePaso DelDueno(string tipo, string[] lee, Ref? dueno, FlujoDef? flujo = null, string? llave = null)
+        => new("permiso-1", Ref.Create("prueba.permiso", "permiso-1"),
+            new PasoDef("p", tipo, lee, [], llave, null, null, null, null, Proposito: "salud.datos"),
+            new FlowContext().Set("version", "texto-v3").Set("comprador", Ref.Create("prueba.comprador", "otro")), null, null,
+            flujo: flujo, dueno: dueno);
+
+    [Fact]
+    public async Task Otorgar_da_el_permiso_del_dueno_de_la_saga_con_la_version_que_lee_y_lo_reserva()
+    {
+        var puertos = new Puertos();
+
+        var salida = await new PasoConsentimientoOtorgar(puertos).EjecutarAsync(
+            DelDueno("consent.otorgar", ["version"], Comprador, llave: "grant"), CancellationToken.None);
+
+        Assert.Equal(PasoResultado.Continuar, salida.Control);
+        Assert.Equal("otorgar prueba.comprador:u-1 salud.datos texto-v3 permiso-1|grant", Assert.Single(puertos.Llamadas));
+        Assert.Equal("gr-2", salida.Reservado?.Id);
+        Assert.Equal("gr-2", Assert.Single(salida.Valores));
+    }
+
+    [Fact]
+    public async Task Revocar_retira_el_permiso_del_dueno_de_la_saga_y_devuelve_el_no_tal_cual()
+    {
+        var puertos = new Puertos();
+        var paso = new PasoConsentimientoRevocar(puertos);
+
+        var si = await paso.EjecutarAsync(DelDueno("consent.revocar", [], Comprador), CancellationToken.None);
+        Assert.Equal(PasoResultado.Continuar, si.Control);
+        Assert.Equal("revocar prueba.comprador:u-1 salud.datos", Assert.Single(puertos.Llamadas));
+
+        puertos.Rechaza = Rejection.NotFound("consent.not_granted", "guionado");
+        var no = await paso.EjecutarAsync(DelDueno("consent.revocar", [], Comprador), CancellationToken.None);
+        Assert.Equal("consent.not_granted", no.Rechazo?.Code);
+    }
+
+    /// <summary>
+    /// Sin dueño (una lectura) o en un flujo del personal no hay titular: ni se da ni se retira el permiso de nadie, y no se
+    /// le pregunta a la capacidad.
+    /// </summary>
+    [Fact]
+    public async Task Sin_dueno_o_en_un_flujo_del_personal_no_se_da_ni_se_retira_el_permiso_de_nadie()
+    {
+        var puertos = new Puertos();
+        IPaso[] pasos = [new PasoConsentimientoOtorgar(puertos), new PasoConsentimientoRevocar(puertos)];
+
+        foreach (var paso in pasos)
+        {
+            var lee = paso.Lecturas == 1 ? new[] { "version" } : [];
+            var sinDueno = await paso.EjecutarAsync(DelDueno(paso.Tipo, lee, dueno: null, llave: "grant"), CancellationToken.None);
+            var delPersonal = await paso.EjecutarAsync(DelDueno(paso.Tipo, lee, Comprador, DelPersonal, "grant"), CancellationToken.None);
+
+            Assert.Equal("consent.titular_requerido", sinDueno.Rechazo?.Code);
+            Assert.Equal("consent.titular_requerido", delPersonal.Rechazo?.Code);
+        }
+        Assert.Empty(puertos.Llamadas);
     }
 
     [Fact]

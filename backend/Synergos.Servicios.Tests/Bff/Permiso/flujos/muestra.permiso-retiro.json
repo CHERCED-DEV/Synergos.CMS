@@ -1,0 +1,10 @@
+{
+  "clave": "muestra.permiso-retiro",
+  "entrada": ["titular"],
+  "tipos": { "titular": { "de": "sujeto" } },
+  "salida": [],
+  "fases": { "revocar": ["revocar"] },
+  "pasos": {
+    "revocar": { "tipo": "consent.revocar", "proposito": "muestra.datos" }
+  }
+}
