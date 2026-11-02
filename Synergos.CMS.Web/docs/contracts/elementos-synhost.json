@@ -1253,6 +1253,7 @@
         "Health.Appointment.Loading",
         "Health.Appointment.NoAgenda",
         "Health.Appointment.NoCopay",
+        "Health.Appointment.NoSlots",
         "Health.Appointment.NotCancellable",
         "Health.Appointment.NotConfirmable",
         "Health.Appointment.NotFound",

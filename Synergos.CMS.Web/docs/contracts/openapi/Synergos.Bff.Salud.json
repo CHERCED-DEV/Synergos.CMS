@@ -991,6 +991,100 @@
         }
       }
     },
+    "/v1/flujos/salud.cita/disponibilidad": {
+      "post": {
+        "operationId": "SaludCitaDisponibilidad",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaludCitaDisponibilidadEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludCitaDisponibilidad"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        },
+        "x-synergos-flujo": {
+          "flujo": "salud.cita",
+          "operacion": "disponibilidad"
+        }
+      }
+    },
     "/v1/flujos/salud.cita/{id}": {
       "get": {
         "operationId": "SaludCitaConsultar",
@@ -1781,6 +1875,90 @@
                 ]
               }
             }
+          }
+        }
+      },
+      "SaludCitaDisponibilidad": {
+        "required": [
+          "flujo",
+          "datos"
+        ],
+        "type": "object",
+        "properties": {
+          "flujo": {
+            "type": "string"
+          },
+          "datos": {
+            "required": [
+              "franjas"
+            ],
+            "type": "object",
+            "properties": {
+              "franjas": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "required": [
+                    "inicio",
+                    "fin",
+                    "libres"
+                  ],
+                  "type": "object",
+                  "properties": {
+                    "inicio": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "fin": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "libres": {
+                      "type": "integer",
+                      "format": "int32"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SaludCitaDisponibilidadEntrada": {
+        "required": [
+          "profesional",
+          "desde",
+          "hasta"
+        ],
+        "type": "object",
+        "properties": {
+          "profesional": {
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "salud.profesional"
+                ],
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
