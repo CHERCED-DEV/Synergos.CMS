@@ -235,7 +235,33 @@ public sealed class UmbracoProductCatalogSource : ICatalogSource<CatalogProduct>
             Questions: Array.Empty<CatalogQuestion>())
         {
             Stock = product.Value<int>("productStockQty"),
+            ListPrice = PrecioDeAntes(product, sku, price),
         };
+    }
+
+    /// <summary>
+    /// El precio de antes (<c>productPriceBefore</c>, 014-despiece-tienda, I5), o nulo. Con la misma regla que el precio,
+    /// sólo dígitos, y sólo si es MAYOR que el precio: si no, no es una oferta. Lo que el editor escribió y no sirve se
+    /// anota; no se pierde callado.
+    /// </summary>
+    private decimal? PrecioDeAntes(IPublishedContent product, string sku, decimal price)
+    {
+        var raw = product.Value<string>("productPriceBefore")?.Trim();
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+
+        if (PrecioAutorado.EsInequivoco(raw, out var antes) && antes > price)
+        {
+            return antes;
+        }
+
+        _logger.LogWarning(
+            "UmbracoProductCatalogSource: SKU '{Sku}' tiene productPriceBefore='{Raw}', que no es un precio mayor que el " +
+            "precio base ({Price}). No sale en oferta.",
+            sku, raw, price);
+        return null;
     }
 
     /// <summary>

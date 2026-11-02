@@ -33,13 +33,15 @@ public sealed record ConsultaDelCatalogo(
 
 /// <summary>
 /// Un elemento del catálogo. <see cref="Atributos"/> lleva lo que el vertical quiere mostrar con su clave
-/// (la tienda: <c>marca</c> y <c>categoria</c>; un evento: <c>fecha</c> y <c>lugar</c>).
+/// (la tienda: <c>marca</c> y <c>categoria</c>; un evento: <c>fecha</c> y <c>lugar</c>). <see cref="PrecioAntes"/> es
+/// el precio de antes de una oferta, mayor que <see cref="Precio"/>, o nulo (014-despiece-tienda, I5).
 /// </summary>
 public sealed record ElementoDelCatalogo(
     string Id,
     string Titulo,
     string? Imagen,
     Precio? Precio,
+    Precio? PrecioAntes,
     Calificacion? Calificacion,
     int? Disponibles,
     IReadOnlyDictionary<string, string> Atributos);

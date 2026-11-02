@@ -83,6 +83,12 @@ public sealed class StubProductCatalogProvider : IProductCatalogProvider
             // (el wire ya lo lleva), esto se revisa con su vertical.
             new CatalogTermFilter<CatalogProduct>("category", "Categoría", p => new[] { p.Category }),
             new CatalogTermFilter<CatalogProduct>("brand", "Marca", p => new[] { p.Brand }),
+            // La oferta (014-despiece-tienda, I5): un chip, «En oferta», para los productos con un precio de antes mayor
+            // que su precio. La página «Ofertas» lo fija con `filtro.oferta`; en el catálogo, es un filtro más.
+            new CatalogTermFilter<CatalogProduct>(
+                CatalogoDeLaTienda.CampoDeLaOferta,
+                "Ofertas",
+                p => CatalogoDeLaTienda.EsOferta(p) ? new[] { CatalogoDeLaTienda.ValorDeLaOferta } : Array.Empty<string>()),
             new CatalogThresholdFilter<CatalogProduct>("minRating", "Calificación", p => p.Rating, new[]
             {
                 // Declarados, no derivados: derivarlos daría un chip por cada rating

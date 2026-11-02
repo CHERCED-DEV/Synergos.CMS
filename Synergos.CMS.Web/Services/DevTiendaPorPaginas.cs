@@ -33,7 +33,14 @@ public sealed class DevTiendaPorPaginas
     public static readonly Guid Vender = Guid.Parse("13dda046-015b-4639-b6cc-bdf37329b19d");
 
     /// <summary>Una página por componer: su nombre, bajo qué página cuelga, qué app coloca y con qué vista.</summary>
-    public sealed record PaginaDeUnaVista(string Nombre, Guid Padre, string Bloque, string Vista, string ClaseDeLaSeccion);
+    public sealed record PaginaDeUnaVista(
+        string Nombre,
+        Guid Padre,
+        string Bloque,
+        string Vista,
+        string ClaseDeLaSeccion,
+        string? Seleccion = null,
+        bool EnElMenu = false);
 
     /// <summary>
     /// Las páginas, en el orden en que se crean. El inicio de la tienda (la Tienda) y el panel de la consola (Vender) ya
@@ -51,6 +58,8 @@ public sealed class DevTiendaPorPaginas
         new("Escritorio del vendedor", Vender, "elementSynStorefront", "vendedor", "syn-storefront__module"),
         new("Publicar", Vender, "elementSynSeller", "publicar", "syn-seller__module"),
         new("Mensajes", Vender, "elementSynSeller", "mensajes", "syn-seller__module"),
+        // I5: el catálogo con una selección fija. Es una página del menú, con su título, y no una vista de la app.
+        new("Ofertas", Tienda, "elementSynStorefront", "catalogo", "syn-storefront__module", Seleccion: "ofertas", EnElMenu: true),
     ];
 
     private readonly IContentService _contenido;
@@ -102,7 +111,9 @@ public sealed class DevTiendaPorPaginas
                 .Set("spacingBottom", "[\"none\"]")
                 .Set("spacingInline", "[\"none\"]")
                 .ApplyDefaults(_defectos.DefaultsFor(seccion.Key))
-                .AddChild(AreaDeLaSeccion, app.Key, bloque => bloque
+                .AddChild(AreaDeLaSeccion, app.Key, bloque => (pagina.Seleccion is null
+                        ? bloque
+                        : bloque.Set("seleccion", $"[\"{pagina.Seleccion}\"]"))
                     .Set("vista", $"[\"{pagina.Vista}\"]")
                     .ApplyDefaults(_defectos.DefaultsFor(app.Key)));
 
@@ -112,13 +123,13 @@ public sealed class DevTiendaPorPaginas
             nueva.SetValue(Rejilla, rejilla.Build(), Cultura);
             if (nueva.HasProperty("hideFromMainMenu"))
             {
-                nueva.SetValue("hideFromMainMenu", 1);
+                nueva.SetValue("hideFromMainMenu", pagina.EnElMenu ? 0 : 1);
             }
 
             // Sin el título de la página encima, como «Vender»: la barra de la app ya dice dónde se está.
             if (nueva.HasProperty("showTitle"))
             {
-                nueva.SetValue("showTitle", 0);
+                nueva.SetValue("showTitle", pagina.EnElMenu ? 1 : 0);
             }
 
             var guardada = _contenido.SaveAndPublish(nueva, new[] { Cultura });
@@ -128,6 +139,66 @@ public sealed class DevTiendaPorPaginas
             }
 
             hechas.Add($"{pagina.Nombre}: creada (id {nueva.Id}, vista {pagina.Vista})");
+        }
+
+        return new ResultadoDeLaComposicion(true, hechas, null);
+    }
+
+    /// <summary>
+    /// Las ofertas de muestra de la copia piloto (014-despiece-tienda, I5), una por categoría: el SKU y su «Precio
+    /// antes», como los pondría el editor.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Sku, string PrecioAntes)> OfertasDeMuestra =
+    [
+        ("AUDIF-DIADEMA-001", "380000"),
+        ("BOTELLA-TERM-002", "139000"),
+        ("CHAQUETA-VIENTO-001", "299000"),
+        ("LIBRETA-DURA-001", "55000"),
+    ];
+
+    /// <summary>
+    /// Lo que haría el editor en el backoffice: «Precio antes» en los productos de <see cref="OfertasDeMuestra"/>. Sólo
+    /// en los que lo tienen vacío: lo que el editor ya escribió no se pisa. Idempotente.
+    /// </summary>
+    public ResultadoDeLaComposicion MarcarOfertasDeMuestra()
+    {
+        var hechas = new List<string>();
+        var tienda = _contenido.GetById(Tienda);
+        if (tienda is null)
+        {
+            return new ResultadoDeLaComposicion(false, hechas, $"falta la página {Tienda}");
+        }
+
+        var productos = _contenido.GetPagedDescendants(tienda.Id, 0, 2000, out _)
+            .Where(c => string.Equals(c.ContentType.Alias, "productPage", StringComparison.Ordinal))
+            .ToList();
+        foreach (var (sku, antes) in OfertasDeMuestra)
+        {
+            var producto = productos.FirstOrDefault(p =>
+                string.Equals(p.GetValue<string>("productSku"), sku, StringComparison.OrdinalIgnoreCase));
+            if (producto is null)
+            {
+                hechas.Add($"{sku}: no está en la Tienda");
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(producto.GetValue<string>("productPriceBefore")))
+            {
+                hechas.Add($"{sku}: ya tenía precio de antes");
+                continue;
+            }
+
+            producto.SetValue("productPriceBefore", antes);
+            var culturas = producto.PublishedCultures.ToArray();
+            var guardado = culturas.Length > 0
+                ? _contenido.SaveAndPublish(producto, culturas)
+                : _contenido.SaveAndPublish(producto);
+            if (!guardado.Success)
+            {
+                return new ResultadoDeLaComposicion(false, hechas, $"{sku}: no se publicó ({guardado.Result})");
+            }
+
+            hechas.Add($"{sku}: precio de antes {antes}");
         }
 
         return new ResultadoDeLaComposicion(true, hechas, null);

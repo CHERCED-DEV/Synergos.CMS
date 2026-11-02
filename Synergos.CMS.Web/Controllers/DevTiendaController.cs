@@ -39,4 +39,13 @@ public sealed class DevTiendaController : ControllerBase
         var resultado = _tienda.Componer();
         return resultado.Ok ? Ok(resultado) : Conflict(resultado);
     }
+
+    /// <summary>Las ofertas de muestra de la copia piloto (014-despiece-tienda, I5): «Precio antes» en cuatro productos.</summary>
+    [HttpPost("ofertas-de-muestra")]
+    public IActionResult OfertasDeMuestra()
+    {
+        _logger.LogInformation("Dev endpoint ofertas-de-muestra invocado.");
+        var resultado = _tienda.MarcarOfertasDeMuestra();
+        return resultado.Ok ? Ok(resultado) : Conflict(resultado);
+    }
 }

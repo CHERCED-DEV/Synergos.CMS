@@ -3436,6 +3436,12 @@
           "origen": "decision"
         },
         {
+          "nombre": "filtros",
+          "tipo": "FiltroFijo[]",
+          "opcional": false,
+          "origen": "decision"
+        },
+        {
           "nombre": "rutas",
           "tipo": "RutaDeUnaVista[]",
           "opcional": false,
@@ -3443,6 +3449,19 @@
         }
       ],
       "selectores": [
+        {
+          "propiedad": "seleccion",
+          "dataType": "DTSelectSeleccionDelCatalogo",
+          "multiple": false,
+          "campo": null,
+          "valores": [
+            {
+              "editor": "ofertas",
+              "viaja": null
+            }
+          ],
+          "deDatos": true
+        },
         {
           "propiedad": "vista",
           "dataType": "DTSelectVistaDeLaTienda",
@@ -3494,6 +3513,12 @@
         "shippingCountry": "CO",
         "zonaHoraria": "America/Bogota",
         "vista": "catalogo",
+        "filtros": [
+          {
+            "campo": "oferta",
+            "valor": "En oferta"
+          }
+        ],
         "rutas": [
           {
             "vista": "inicio",
@@ -4208,6 +4233,21 @@
           "nombre": "specs",
           "tipo": "DatoDeLaFila[]",
           "opcional": true
+        }
+      ]
+    },
+    {
+      "record": "FiltroFijo",
+      "campos": [
+        {
+          "nombre": "campo",
+          "tipo": "string",
+          "opcional": false
+        },
+        {
+          "nombre": "valor",
+          "tipo": "string",
+          "opcional": false
         }
       ]
     },

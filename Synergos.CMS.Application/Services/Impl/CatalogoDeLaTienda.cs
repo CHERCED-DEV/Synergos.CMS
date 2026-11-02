@@ -14,6 +14,22 @@ public static class CatalogoDeLaTienda
     /// <summary>La clave de la tienda en <c>api/lecturas/{vertical}</c>.</summary>
     public const string Vertical = "tienda";
 
+    /// <summary>El campo de la faceta de las ofertas en el listado (<c>filtro.oferta</c>, 014-despiece-tienda, I5).</summary>
+    public const string CampoDeLaOferta = "oferta";
+
+    /// <summary>El valor de esa faceta: es lo que lee el chip.</summary>
+    public const string ValorDeLaOferta = "En oferta";
+
+    /// <summary>La selección del bloque del catálogo que muestra sólo las ofertas.</summary>
+    public const string SeleccionDeLasOfertas = "ofertas";
+
+    /// <summary>Un producto está en oferta si tiene un precio de antes mayor que su precio.</summary>
+    public static bool EsOferta(CatalogProduct producto)
+    {
+        ArgumentNullException.ThrowIfNull(producto);
+        return producto.ListPrice is decimal antes && antes > producto.Price;
+    }
+
     /// <summary>El catálogo de la tienda como lectura genérica.</summary>
     public static ILecturaDelCatalogo Lectura(
         ICatalogSource<CatalogProduct> fuente,
@@ -66,6 +82,7 @@ public static class CatalogoDeLaTienda
             Titulo: p.Name,
             Imagen: string.IsNullOrWhiteSpace(p.ImageUrl) ? null : p.ImageUrl,
             Precio: PrecioDe(p.Price, precios),
+            PrecioAntes: EsOferta(p) ? PrecioDe(p.ListPrice!.Value, precios) : null,
             Calificacion: p.Reviews.Count == 0 && p.Rating <= 0 ? null : new Calificacion(p.Rating, p.Reviews.Count),
             Disponibles: p.TotalStock,
             Atributos: atributos);

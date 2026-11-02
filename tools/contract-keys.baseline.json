@@ -134,6 +134,7 @@
     "paymentSessionId",
     "pedidos",
     "precio",
+    "precioAntes",
     "pregunta",
     "preguntas",
     "price",

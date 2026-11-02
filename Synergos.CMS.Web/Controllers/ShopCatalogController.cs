@@ -236,6 +236,9 @@ public sealed class ShopCatalogController : ControllerBase
         AddFacet(facets, "category", category);
         AddFacet(facets, "brand", brand);
         AddFacet(facets, "minRating", minRating);
+        // La oferta (014-despiece-tienda, I5) llega como las demás facetas, `oferta=En oferta`. Se lee de la query y no
+        // de un parámetro más: la firma la usan las pruebas por posición, y el token de cancelación va último.
+        AddFacet(facets, CatalogoDeLaTienda.CampoDeLaOferta, HttpContext?.Request.Query[CatalogoDeLaTienda.CampoDeLaOferta].ToString());
 
         // page es 1-based en la UI (shop-api.client.ts:307 manda ?page=N solo si N>1); Skip
         // es 0-based. Una page<1 se trata como la 1: un enlace roto no merece un 400.
