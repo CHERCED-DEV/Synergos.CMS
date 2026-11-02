@@ -391,9 +391,14 @@ jobs:
             || { echo "✗ Reservas no va apagada"; exit 1; }
           for par in /propiedades/:visitPath /educacion/:enrollmentPath /gobierno/:camino; do
             ruta="${par%%:*}"; clave="${par##*:}"
-            CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt curl -s "https://localhost$ruta" | grep -q "\"$clave\":\"directa\"" \
-              || { echo "✗ $ruta ya no pinta $clave=directa"; exit 1; }
-            echo "✓ $ruta: $clave=directa"
+            codigo="$(CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt curl -s -o /tmp/pagina.html -w '%{http_code}' "https://localhost$ruta" || echo 000)"
+            pinta="$(grep -o "\"$clave\":\"[a-z-]*\"" /tmp/pagina.html | sort -u | tr '\n' ' ' || true)"
+            if ! grep -q "\"$clave\":\"directa\"" /tmp/pagina.html; then
+              echo "✗ $ruta ($codigo) no pinta $clave=directa; pinta: ${pinta:-nada}"
+              grep -o '<synergos-[a-z-]*[^>]\{0,240\}' /tmp/pagina.html | head -5 || true
+              exit 1
+            fi
+            echo "✓ $ruta ($codigo): $pinta"
           done
           echo "| el CMS llega a cada orquestador del compose; visita, matrícula y radicación siguen en «directa»; Reservas apagada | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
