@@ -47,6 +47,9 @@ public static class ResolutoresSynHost
         services.TryAddSingleton<IconosDelSistema>();
         services.TryAddSingleton<IRutasDeLasVistas, RutasDeLasVistas>();
 
+        // Si un enlace del editor lleva a una página apagada: el lanzador y la tarjeta no la anuncian (002, P11 C).
+        services.TryAddSingleton<IDestinosApagados, DestinosApagados>();
+
         return services;
     }
 }
