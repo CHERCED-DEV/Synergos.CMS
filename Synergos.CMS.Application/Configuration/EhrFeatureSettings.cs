@@ -46,13 +46,25 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
     /// </remarks>
     public string LecturasBase { get; init; } = "/api/lecturas/" + CatalogoDeSalud.Vertical;
 
+    /// <summary>
+    /// La versión del texto del permiso de datos de salud (003-salud-cita, T048-T049): la del texto de la sección
+    /// <c>Health.Consent</c> del diccionario que ve quien lo da. Llega a <c>Api.Consent</c> con el permiso, como prueba de
+    /// qué se aceptó (Ley 1581, art. 9).
+    /// </summary>
+    /// <remarks>
+    /// <b>Cambiar el texto obliga a subir la versión</b>: un permiso dado con otro texto se reconoce por la suya. Vacía no
+    /// deja arrancar. La de hoy es la del borrador: el texto lo aprueba el arquitecto antes de encender Salud (S-4).
+    /// </remarks>
+    public string VersionDelPermiso { get; init; } = "2026-11-borrador";
+
     /// <inheritdoc />
     protected override NegocioDeEhr Fusionar(EhrFeatureSitio? propio)
         => new(
             ApiBase: propio?.ApiBase ?? ApiBase,
             Servicio: new ServicioAgendable(propio?.ServiceKind ?? ServiceKind, propio?.ServiceId ?? ServiceId),
             AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath),
-            LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
+            LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim(),
+            VersionDelPermiso: (propio?.VersionDelPermiso ?? VersionDelPermiso).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEhr negocio)
@@ -62,6 +74,9 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
             // Vacía vale: es la vuelta atrás.
             string.IsNullOrWhiteSpace(negocio.LecturasBase) ? null : ReglasDeNegocio.ApiBase("LecturasBase", negocio.LecturasBase),
             ReglasDeNegocio.Camino("AppointmentPath", negocio.AppointmentPath),
+            string.IsNullOrWhiteSpace(negocio.VersionDelPermiso)
+                ? "VersionDelPermiso: no puede quedar vacía (sin ella, un permiso no dice qué texto se aceptó)."
+                : null,
             string.IsNullOrWhiteSpace(negocio.Servicio.Kind) || string.IsNullOrWhiteSpace(negocio.Servicio.Id)
                 ? "ServiceKind y ServiceId: el servicio que se agenda no puede quedar vacío (sin él la cita no tiene copago que cotizar)."
                 : null,
@@ -87,4 +102,7 @@ public sealed class EhrFeatureSitio
 
     /// <inheritdoc cref="EhrFeatureSettings.LecturasBase"/>
     public string? LecturasBase { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.VersionDelPermiso"/>
+    public string? VersionDelPermiso { get; init; }
 }

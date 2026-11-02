@@ -31,7 +31,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// genéricas de Salud (<c>/api/lecturas/salud</c>), con forma neutra de vertical, como la tienda. Vacía, el portal lee
 /// las rutas de <c>ApiBase</c>, como antes. Es del despliegue.</para>
 /// </remarks>
-[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment"])]
+[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent"])]
 public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,

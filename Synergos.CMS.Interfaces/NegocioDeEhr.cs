@@ -9,11 +9,15 @@ namespace Synergos.CMS.Interfaces;
 /// <c>directa</c>, ya normalizado); nulo si decide la regla de <see cref="CaminoDeCompra"/> (003-salud-cita).</param>
 /// <param name="LecturasBase">La base de las lecturas genéricas de Salud (003-salud-cita, I1 de producción); vacía, el
 /// portal vuelve a leer las rutas de <see cref="ApiBase"/>.</param>
+/// <param name="VersionDelPermiso">La versión del texto del permiso de datos de salud que se muestra en el sitio (T048): la
+/// puerta la manda a <c>salud.consentimiento</c> como negocio y llega a <c>Api.Consent</c> con el permiso. El navegador
+/// no la elige.</param>
 public sealed record NegocioDeEhr(
     string ApiBase,
     ServicioAgendable Servicio,
     string? AppointmentPath = null,
-    string LecturasBase = "");
+    string LecturasBase = "",
+    string VersionDelPermiso = "");
 
 /// <summary>
 /// El servicio que se agenda, con la forma de un <c>Ref</c> del backend (<c>{ kind, id }</c>): es como lo lee

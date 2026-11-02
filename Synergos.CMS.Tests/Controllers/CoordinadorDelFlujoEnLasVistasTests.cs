@@ -22,8 +22,9 @@ namespace Synergos.CMS.Tests.Controllers;
 /// cartelera sin decir nada. Acá se fija el nombre; el cruce con lo que lee el UI
 /// (<c>AVISOS_DE_LOS_FLUJOS</c>) es <c>gate:avisos</c> (G-15), del lado del UI.</para>
 ///
-/// <para><b>Un flujo dentro de otro, sólo si es una operación posterior suya</b> (NR-10 de 008): la cancelación de una
-/// visita dentro de la visita. El coordinador ya deja subir lo ajeno —el de adentro atiende su flujo y el de afuera el
+/// <para><b>Un flujo dentro de otro, sólo si es una operación posterior suya o si los dos son del mismo orquestador</b>
+/// (NR-10 de 008; D-003-GATE): la cancelación de una visita dentro de la visita, o el permiso de datos de salud dentro de
+/// la cita, que son de <c>Bff.Salud</c> los dos. Dos flujos de orquestadores distintos no se anidan. El coordinador ya deja subir lo ajeno —el de adentro atiende su flujo y el de afuera el
 /// suyo (<c>flujos.spec.ts</c> del UI)—, así que no hace falta tocarlo; lo que se decide es qué anidamiento es un
 /// error de la vista. La relación es la <c>posterior_a</c> de las definiciones de los orquestadores.</para>
 ///
@@ -185,16 +186,40 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     }
 
     [Fact]
-    public void Un_flujo_solo_va_dentro_de_otro_si_es_una_operacion_posterior_suya()
+    public void Un_flujo_solo_va_dentro_de_otro_si_es_una_operacion_posterior_suya_o_de_su_mismo_orquestador()
     {
         var posteriores = PosterioresDeclarados();
+        var orquestadores = OrquestadoresDeclarados();
         var malos = Vistas()
-            .SelectMany(v => AnidadosQueNoSonPosteriores(v.Texto, posteriores).Select(m => $"{v.Ruta}: {m}"))
+            .SelectMany(v => AnidadosQueNoSonPosteriores(v.Texto, posteriores, orquestadores).Select(m => $"{v.Ruta}: {m}"))
             .ToList();
 
         Assert.True(malos.Count == 0,
-            "Una vista coloca un flujo dentro de otro que no es su original: " + string.Join("; ", malos)
-            + ". Sólo una operación posterior va dentro de lo que la origina (posterior_a).");
+            "Una vista coloca un flujo dentro de otro que no es su original ni de su orquestador: " + string.Join("; ", malos)
+            + ". Sólo una operación posterior va dentro de lo que la origina (posterior_a), o un flujo del mismo orquestador.");
+    }
+
+    /// <summary>
+    /// D-003-GATE: dos flujos del mismo orquestador se anidan (el permiso dentro de la cita, los dos de <c>Bff.Salud</c>);
+    /// dos de orquestadores distintos no, ni un flujo dentro de sí, ni uno cuyo orquestador no se conoce.
+    /// </summary>
+    [Fact]
+    public void La_regla_del_anidamiento_admite_un_flujo_del_mismo_orquestador_y_no_de_otro()
+    {
+        var sinPosteriores = new Dictionary<string, string>(StringComparer.Ordinal);
+        var orquestadores = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["s.cita"] = "Synergos.Bff.Salud",
+            ["s.permiso"] = "Synergos.Bff.Salud",
+            ["t.compra"] = "Synergos.Bff.Tienda",
+        };
+        static string Abre(string clave) => $"<synergos-flujo flujo=\"{clave}\" style=\"display:contents\">";
+        const string Cierra = "</synergos-flujo>";
+
+        Assert.Empty(AnidadosQueNoSonPosteriores(Abre("s.cita") + Abre("s.permiso") + Cierra + Cierra, sinPosteriores, orquestadores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("s.cita") + Abre("t.compra") + Cierra + Cierra, sinPosteriores, orquestadores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("s.cita") + Abre("s.cita") + Cierra + Cierra, sinPosteriores, orquestadores));
+        Assert.Single(AnidadosQueNoSonPosteriores(Abre("s.cita") + Abre("x.desconocido") + Cierra + Cierra, sinPosteriores, orquestadores));
     }
 
     [Fact]
@@ -224,6 +249,14 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
     /// las etiquetas con una pila: un hermano ya cerrado no cuenta como el que envuelve.
     /// </summary>
     internal static IReadOnlyList<string> AnidadosQueNoSonPosteriores(string texto, IReadOnlyDictionary<string, string> posteriorA)
+        => AnidadosQueNoSonPosteriores(texto, posteriorA, new Dictionary<string, string>(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Lo mismo, admitiendo además un flujo del mismo orquestador que el que lo envuelve (D-003-GATE). El mismo flujo dentro
+    /// de sí no se admite, y uno cuyo orquestador no está en <paramref name="orquestadorDe"/> tampoco.
+    /// </summary>
+    internal static IReadOnlyList<string> AnidadosQueNoSonPosteriores(
+        string texto, IReadOnlyDictionary<string, string> posteriorA, IReadOnlyDictionary<string, string> orquestadorDe)
     {
         var malos = new List<string>();
         var abiertos = new Stack<string?>();
@@ -239,7 +272,10 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             if (abiertos.Count > 0)
             {
                 var afuera = abiertos.Peek();
-                if (clave is null || afuera is null || posteriorA.GetValueOrDefault(clave) != afuera)
+                var posterior = clave is not null && posteriorA.GetValueOrDefault(clave) == afuera;
+                var hermano = clave is not null && afuera is not null && clave != afuera
+                    && orquestadorDe.GetValueOrDefault(clave) is { } suyo && suyo == orquestadorDe.GetValueOrDefault(afuera);
+                if (clave is null || afuera is null || !(posterior || hermano))
                 {
                     malos.Add($"<synergos-flujo flujo=\"{clave}\"> dentro de <synergos-flujo flujo=\"{afuera}\">");
                 }
@@ -249,8 +285,21 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
         return malos;
     }
 
-    /// <summary>Lo que cada definición de los orquestadores declara <c>posterior_a</c>: clave → la de su original.</summary>
-    private static IReadOnlyDictionary<string, string> PosterioresDeclarados()
+    /// <summary>De qué orquestador es cada flujo declarado: clave → el proyecto que lo declara (<c>Synergos.Bff.X</c>).</summary>
+    private static IReadOnlyDictionary<string, string> OrquestadoresDeclarados()
+    {
+        var orquestadores = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var definicion in Definiciones())
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(definicion));
+            orquestadores[doc.RootElement.GetProperty("clave").GetString()!] =
+                Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(definicion)))!;
+        }
+        return orquestadores;
+    }
+
+    /// <summary>Las definiciones de flujo de los orquestadores: los <c>flujos/*.json</c> de <c>backend/orquestadores</c>.</summary>
+    private static IReadOnlyList<string> Definiciones()
     {
         var separador = Path.DirectorySeparatorChar;
         var definiciones = Directory.EnumerateFiles(Path.Combine(RepoRoot(), "backend", "orquestadores"), "*.json", SearchOption.AllDirectories)
@@ -258,9 +307,14 @@ public sealed class CoordinadorDelFlujoEnLasVistasTests
             .Where(f => !f.Contains($"{separador}bin{separador}", StringComparison.Ordinal) && !f.Contains($"{separador}obj{separador}", StringComparison.Ordinal))
             .ToList();
         Assert.True(definiciones.Count >= 3, $"Se leyeron {definiciones.Count} definiciones de flujo: el descubrimiento está roto.");
+        return definiciones;
+    }
 
+    /// <summary>Lo que cada definición de los orquestadores declara <c>posterior_a</c>: clave → la de su original.</summary>
+    private static IReadOnlyDictionary<string, string> PosterioresDeclarados()
+    {
         var posteriores = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var definicion in definiciones)
+        foreach (var definicion in Definiciones())
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(definicion));
             if (doc.RootElement.TryGetProperty("posterior_a", out var original))

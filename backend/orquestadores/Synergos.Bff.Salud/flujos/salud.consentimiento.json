@@ -1,0 +1,13 @@
+{
+  "clave": "salud.consentimiento",
+  "entrada": ["paciente", "version"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "version": { "de": "negocio", "campo": "versionDelPermiso", "tipo": "texto" }
+  },
+  "salida": [],
+  "fases": { "abrir": ["otorgar"] },
+  "pasos": {
+    "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "salud.agenda" }
+  }
+}

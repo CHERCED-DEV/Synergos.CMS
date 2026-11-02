@@ -167,6 +167,27 @@ public sealed class PuertaDeLaCitaTests
         Assert.Contains(new EhrFeatureSettings { LecturasBase = "api lecturas" }.Problemas(), p => p.Contains("LecturasBase", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// T048: la versión del texto del permiso la declara el servidor y viaja en el negocio de <c>salud.consentimiento</c>
+    /// con la clave que lee su definición (<c>versionDelPermiso</c>); un sitio la puede cambiar, y vacía no deja arrancar.
+    /// </summary>
+    [Fact]
+    public void La_version_del_permiso_viaja_en_el_negocio_un_sitio_la_cambia_y_vacia_no_deja_arrancar()
+    {
+        var sitio = Guid.Parse("f289c6d5-4f6c-407f-8c35-ce7e0dec7b22");
+        var ajustes = new EhrFeatureSettings
+        {
+            Sitios = new(StringComparer.OrdinalIgnoreCase) { [sitio.ToString()] = new EhrFeatureSitio { VersionDelPermiso = "2027-01" } },
+        };
+
+        Assert.Equal("2026-11-borrador", new EhrFeatureSettings().Para(null).VersionDelPermiso);
+        Assert.Equal("2027-01", ajustes.Para(sitio).VersionDelPermiso);
+        var definicion = File.ReadAllText(Path.Combine(
+            Raiz(), "backend", "orquestadores", "Synergos.Bff.Salud", "flujos", "salud.consentimiento.json"));
+        Assert.Contains("\"campo\": \"versionDelPermiso\"", definicion, StringComparison.Ordinal);
+        Assert.Contains(new EhrFeatureSettings { VersionDelPermiso = " " }.Problemas(), p => p.Contains("VersionDelPermiso", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Sin_override_la_cita_va_por_la_puerta_si_abre_y_si_no_por_la_directa()
     {
