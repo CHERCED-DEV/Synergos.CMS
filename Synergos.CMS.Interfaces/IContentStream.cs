@@ -121,6 +121,9 @@ public sealed record ContentStreamPage(
 ///   AUTOR y no se deriva: derivarlo del cuerpo es un apaño razonable para
 ///   pintar, pero guardarlo como si fuera suyo hace invisible que nunca lo
 ///   escribió — y la a11y del feed depende de que se distinga.</param>
+/// <param name="CmsNodeId">El id del nodo del CMS cuando el item es un post que alguien
+///   autoró (<c>postPage</c>), o <c>null</c>. Lo repone al leer quien lo sembró: con él,
+///   la app y la página del post comentan en el MISMO hilo (012-blogs-social, I0).</param>
 public sealed record ContentStreamItem(
     string Id,
     string Kind,
@@ -129,7 +132,8 @@ public sealed record ContentStreamItem(
     string? MediaUrl,
     DateTime CreatedUtc,
     ContentMetrics Metrics,
-    string? MediaAlt = null);
+    string? MediaAlt = null,
+    int? CmsNodeId = null);
 
 /// <summary>
 /// Autor de un item — proyección liviana del Member para el feed (lo rico vive

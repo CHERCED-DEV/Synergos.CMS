@@ -16,6 +16,20 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubSocialProfileProjection : ISocialProfileProjection
 {
+    private readonly SemillaDeLaRed _semilla;
+
+    public StubSocialProfileProjection()
+        : this(null)
+    {
+    }
+
+    /// <param name="semilla">Si se sirven los perfiles de la demo. Null los sirve, como siempre;
+    ///   el composer la pasa según DevSeed (012, I0).</param>
+    public StubSocialProfileProjection(SemillaDeLaRed? semilla)
+    {
+        _semilla = semilla ?? SemillaDeLaRed.Encendida;
+    }
+
     public Task<SocialProfile?> GetByHandleAsync(string handle, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(handle))
@@ -24,7 +38,7 @@ public sealed class StubSocialProfileProjection : ISocialProfileProjection
         }
 
         var needle = handle.Trim().TrimStart('@');
-        var profile = SocialDemoSeed.Profiles.FirstOrDefault(p =>
+        var profile = _semilla.Profiles.FirstOrDefault(p =>
             string.Equals(p.Handle, needle, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(profile);
     }
@@ -36,7 +50,7 @@ public sealed class StubSocialProfileProjection : ISocialProfileProjection
             return Task.FromResult<SocialProfile?>(null);
         }
 
-        var profile = SocialDemoSeed.Profiles.FirstOrDefault(p =>
+        var profile = _semilla.Profiles.FirstOrDefault(p =>
             string.Equals(p.ActorId, actorId, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(profile);
     }

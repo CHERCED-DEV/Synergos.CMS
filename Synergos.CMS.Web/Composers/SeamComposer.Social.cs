@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
@@ -46,15 +47,24 @@ public sealed partial class SeamComposer
         // guarda estado propio. El feed de notificaciones se DERIVA del grafo y de las
         // reacciones, así que hacer durables esos dos lo hizo durable por composición; darle
         // store propio duplicaría justo el estado que existe para no duplicar.
+        //
+        // La semilla de la demo (posts, perfiles, seguidos y reacciones) se sirve SÓLO con
+        // Synergos:DevSeed:Enabled (012-blogs-social, I0, P2 A). Antes «un documento ausente cae
+        // al seed» valía en todo entorno, producción incluida, y la red mostraba a cuatro personas
+        // que no existen. Una sola pieza lo decide y la reciben los cinco stubs.
+        services.AddSingleton(sp =>
+            SemillaDeLaRed.Segun(sp.GetRequiredService<IOptions<DevSeedSettings>>().Value.Enabled));
         services.AddSingleton(sp =>
             new StubReactionService(
                 sp.GetRequiredService<IJsonEntityStore>(),
-                StubReactionService.DefaultResourceType));
+                StubReactionService.DefaultResourceType,
+                sp.GetRequiredService<SemillaDeLaRed>()));
         services.AddSingleton<IReactionService>(sp => sp.GetRequiredService<StubReactionService>());
         services.AddSingleton<ISocialGraphService>(sp =>
             new StubSocialGraphService(
                 sp.GetRequiredService<IJsonEntityStore>(),
-                StubSocialGraphService.DefaultResourceType));
+                StubSocialGraphService.DefaultResourceType,
+                sp.GetRequiredService<SemillaDeLaRed>()));
         // ── EJE 1 · el catálogo de Social: de dónde salen los posts (#146) ──────────
         //
         // Social tenia DOS lectores de «un post», y eso es lo que el ticket midio:
@@ -85,7 +95,8 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<StubReactionService>(),
                 null,
                 sp.GetRequiredService<IJsonEntityStore>(),
-                StubContentStream.DefaultResourceType));
+                StubContentStream.DefaultResourceType,
+                sp.GetRequiredService<SemillaDeLaRed>()));
 
         // El decorador envuelve al stub y NO lo sustituye: el stub sigue siendo el almacen del
         // feed —lo que se publica desde la app vive ahi— y el decorador solo mete lo autorado.
@@ -96,7 +107,8 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<IJsonEntityStore>(),
                     sp.GetRequiredService<StubContentStream>())
                 : sp.GetRequiredService<StubContentStream>());
-        services.AddSingleton<ISocialProfileProjection, StubSocialProfileProjection>();
+        services.AddSingleton<ISocialProfileProjection>(sp =>
+            new StubSocialProfileProjection(sp.GetRequiredService<SemillaDeLaRed>()));
 
         // OLA 6 Blogs (doc 21 §2.3) — app social completa sobre el motor social ya
         // vivo. Aditivo (no toca los otros dominios). El único seam NUEVO es el
@@ -114,10 +126,15 @@ public sealed partial class SeamComposer
         // un hosted service al arrancar (ADR 0013). La siembra POST /dev/seed-blogs-demo,
         // detrás de Synergos:DevSeed:Enabled. Hasta el #176 la sembraba un hosted service en
         // cada arranque y en todo entorno, producción incluida.
+        // Quien sale en una notificación sale por su cara pública: su nombre en el texto y su
+        // llave en el id, nunca su correo (012, I0).
         services.AddSingleton<INotificationFeed>(sp =>
             new StubNotificationFeed(
                 sp.GetRequiredService<ISocialGraphService>(),
-                sp.GetRequiredService<StubReactionService>()));
+                sp.GetRequiredService<StubReactionService>(),
+                null,
+                sp.GetRequiredService<SemillaDeLaRed>(),
+                sp.GetRequiredService<IIdentidadPublica>()));
 
     }
 }

@@ -38,6 +38,8 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="Kind">Qué es para el feed: <c>article</c> para un post editorial largo. Va acá y
 ///   no cableado en quien siembra porque es una propiedad del contenido.</param>
 /// <param name="Author">Quién lo firma.</param>
+/// <param name="NodeId">El id del nodo en el CMS: el del hilo de comentarios de su página, que la app comparte
+///   (012-blogs-social, I0). <c>null</c> si quien lo produce no lo sabe.</param>
 public sealed record AuthoredPost(
     string Id,
     string Title,
@@ -47,7 +49,8 @@ public sealed record AuthoredPost(
     string? HeroImageAlt,
     DateTime? PublishedUtc,
     string Kind,
-    AuthoredPostAuthor Author);
+    AuthoredPostAuthor Author,
+    int? NodeId = null);
 
 /// <summary>
 /// Quien firma un post autorado: la proyección del <c>authorPage</c> que su <c>authorRef</c>
