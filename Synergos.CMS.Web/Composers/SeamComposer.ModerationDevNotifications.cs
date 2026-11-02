@@ -109,6 +109,9 @@ public sealed partial class SeamComposer
         // devuelve 404 sin el flag; nada corre en boot (ADR 0013).
         services.AddTransient<DevProductReviewSeeder>();
         services.AddTransient<DevPaidOrderSeeder>();
+        // 003-salud-cita, T052: los profesionales de muestra de Salud, para las demos de la piloto. Igual: el endpoint
+        // devuelve 404 sin el flag y nada corre al arrancar.
+        services.AddTransient<DevProfesionalesDeMuestraSeeder>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.

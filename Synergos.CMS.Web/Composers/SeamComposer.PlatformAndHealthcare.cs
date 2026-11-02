@@ -192,6 +192,30 @@ public sealed partial class SeamComposer
         // SaludWiringTests.
         services.Configure<SaludSettings>(builder.Config.GetSection("Synergos:Salud"));
 
+        // 003-salud-cita, T047 (sobre NN-22 del núcleo): la OFERTA de cada profesional con su agenda, al orquestador de
+        // Salud, al publicar su ficha. Hay destino sólo si el despliegue dice dónde vive (Synergos:Salud:BaseUrl, la
+        // misma clave con que la puerta lo encuentra); sin él, publicar un profesional no sale a la red. Diez segundos,
+        // porque quien espera es el editor que publica, y una oferta que no salió se repara republicando.
+        var salud = builder.Config.GetSection("Synergos:Salud");
+        var hayOrquestadorDeSalud = !string.IsNullOrWhiteSpace(salud["BaseUrl"]);
+        if (hayOrquestadorDeSalud)
+        {
+            services.AddClienteDelArbolDeServicios(
+                Services.Salud.PublicadorDeOfertasDeProfesionales.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
+        }
+        services.AddSingleton<Services.Salud.IPublicadorDeOfertasDeProfesionales>(sp => new Services.Salud.PublicadorDeOfertasDeProfesionales(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<Services.Salud.PublicadorDeOfertasDeProfesionales>>(),
+            hayOrquestadorDeSalud,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CartSettings>>().Value.Currency,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ListadosSettings>>().Value.ZonaHoraria));
+
+        // Se dispara al publicar y al retirar, NUNCA al arrancar (ADR 0013).
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentPublishedNotification, Notifications.OfertaDeProfesionalAlPublicar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentUnpublishedNotification, Notifications.OfertaDeProfesionalAlRetirar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentMovedToRecycleBinNotification, Notifications.OfertaDeProfesionalAlRetirar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentDeletedNotification, Notifications.OfertaDeProfesionalAlRetirar>();
+
         if (Interruptor.Encendido(builder.Config, "Synergos:Salud:Mode", "Bff", new SaludSettings().Mode))
         {
             // La cadena entera —llave, correlación (HU #28), telemetría, reintento— la arma la
