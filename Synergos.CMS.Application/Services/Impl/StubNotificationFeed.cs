@@ -35,12 +35,19 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// 0002). El adapter real (store de eventos con fan-out) reemplaza la seam sin
 /// tocar el módulo Angular. ADR 0075 (seam con tests). Singleton — stateless.
 /// </para>
+/// <para>
+/// <b>Quien sale en una notificación sale por su cara pública</b> (012-blogs-social, I0). El texto lleva su nombre y
+/// el id lleva su llave: con el autor «desconocido» de la semilla, un miembro salía con su correo en los dos, en la
+/// notificación que le llega a otra persona.
+/// </para>
 /// </remarks>
 public sealed class StubNotificationFeed : INotificationFeed
 {
     private readonly ISocialGraphService _graph;
     private readonly StubReactionService _reactions;
     private readonly Func<DateTime> _utcNow;
+    private readonly SemillaDeLaRed _semilla;
+    private readonly IIdentidadPublica? _identidad;
 
     public StubNotificationFeed(ISocialGraphService graph, IReactionService reactions)
         : this(graph, reactions, null)
@@ -53,7 +60,14 @@ public sealed class StubNotificationFeed : INotificationFeed
     /// concreto para leer las reacciones por objeto (misma técnica que
     /// <see cref="StubContentStream"/> — no se duplica el estado de reacciones).
     /// </summary>
-    public StubNotificationFeed(ISocialGraphService graph, IReactionService reactions, Func<DateTime>? utcNow)
+    /// <param name="semilla">Si se sirven las publicaciones de la demo. Null las sirve, como siempre.</param>
+    /// <param name="identidad">La cara pública de un miembro. Null deja a cada actor como lo resuelve la semilla.</param>
+    public StubNotificationFeed(
+        ISocialGraphService graph,
+        IReactionService reactions,
+        Func<DateTime>? utcNow,
+        SemillaDeLaRed? semilla = null,
+        IIdentidadPublica? identidad = null)
     {
         _graph = graph ?? throw new ArgumentNullException(nameof(graph));
         _reactions = reactions as StubReactionService
@@ -61,6 +75,8 @@ public sealed class StubNotificationFeed : INotificationFeed
                 "StubNotificationFeed espera el StubReactionService concreto para leer reacciones.",
                 nameof(reactions));
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
+        _semilla = semilla ?? SemillaDeLaRed.Encendida;
+        _identidad = identidad;
     }
 
     public async Task<IReadOnlyList<SocialNotification>> GetForAsync(
@@ -85,7 +101,8 @@ public sealed class StubNotificationFeed : INotificationFeed
         {
             var actor = ToActor(followerId);
             events.Add(new SocialNotification(
-                Id: $"ntf-follow-{followerId}-{recipient}",
+                // Sin el destinatario: la lista es la suya, y su id interno puede ser su correo.
+                Id: $"ntf-follow-{actor.Id}",
                 Type: "follow",
                 Actor: actor,
                 ObjectId: null,
@@ -94,7 +111,7 @@ public sealed class StubNotificationFeed : INotificationFeed
         }
 
         // ── reaction: quién reaccionó a los posts del destinatario ───────
-        foreach (var post in SocialDemoSeed.Posts.Where(p =>
+        foreach (var post in _semilla.Posts.Where(p =>
                      string.Equals(p.AuthorId, recipient, StringComparison.OrdinalIgnoreCase)))
         {
             var reactionsOnPost = await _reactions.ReactionsForAsync(post.Id, cancellationToken);
@@ -106,7 +123,7 @@ public sealed class StubNotificationFeed : INotificationFeed
                 }
                 var actor = ToActor(reactorId);
                 events.Add(new SocialNotification(
-                    Id: $"ntf-reaction-{reactorId}-{post.Id}",
+                    Id: $"ntf-reaction-{actor.Id}-{post.Id}",
                     Type: "reaction",
                     Actor: actor,
                     ObjectId: post.Id,
@@ -116,17 +133,17 @@ public sealed class StubNotificationFeed : INotificationFeed
         }
 
         // ── mention: menciones @handle del destinatario en posts ajenos ──
-        var myHandle = SocialDemoSeed.AuthorById(recipient).Handle;
+        var myHandle = ToActor(recipient).Handle;
         if (!string.IsNullOrWhiteSpace(myHandle))
         {
             var needle = "@" + myHandle;
-            foreach (var post in SocialDemoSeed.Posts.Where(p =>
+            foreach (var post in _semilla.Posts.Where(p =>
                          !string.Equals(p.AuthorId, recipient, StringComparison.OrdinalIgnoreCase) &&
                          p.Body.Contains(needle, StringComparison.OrdinalIgnoreCase)))
             {
                 var actor = ToActor(post.AuthorId);
                 events.Add(new SocialNotification(
-                    Id: $"ntf-mention-{post.AuthorId}-{post.Id}",
+                    Id: $"ntf-mention-{actor.Id}-{post.Id}",
                     Type: "mention",
                     Actor: actor,
                     ObjectId: post.Id,
@@ -142,9 +159,16 @@ public sealed class StubNotificationFeed : INotificationFeed
             .ToList();
     }
 
-    private static NotificationActor ToActor(string actorId)
+    /// <summary>El actor tal como sale: un miembro, por su cara pública; los demás, como los resuelve la semilla.</summary>
+    private NotificationActor ToActor(string actorId)
     {
-        var author = SocialDemoSeed.AuthorById(actorId);
+        if (_identidad is not null && CaraPublica.EsCorreo(actorId))
+        {
+            var cara = _identidad.De(actorId);
+            return new NotificationActor(Id: cara.Llave, Handle: cara.Alias, DisplayName: cara.Nombre, AvatarUrl: null, Verified: false);
+        }
+
+        var author = _semilla.AuthorById(actorId);
         return new NotificationActor(
             Id: author.Id,
             Handle: author.Handle,

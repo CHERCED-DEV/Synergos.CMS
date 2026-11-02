@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -25,9 +26,15 @@ namespace Synergos.CMS.Web.Controllers;
 ///
 /// <para><b>Mapeo post-id ↔ nodeId de comentarios.</b> Los posts tienen id string
 /// (<c>post-001</c>); <see cref="ICommentReader"/> indexa por <c>int nodeId</c>.
-/// Se deriva un nodeId estable y determinista del id del post (hash FNV-1a) para
-/// reusar el store de comentarios sin schema nuevo — la misma técnica que usaría
-/// cualquier objeto comentable que no sea un nodo Umbraco.</para>
+/// Un post autorado en el CMS comenta en el nodo de su página, y uno publicado desde
+/// la app en un nodo derivado de su id: lo decide <see cref="HiloDeUnaPublicacion"/>.</para>
+///
+/// <para><b>Quien lee es el de la sesión, y nadie sale con su correo</b> (012-blogs-social,
+/// I0). Las rutas tomaban a «Elena», un actor de la demo, como lectora del inicio, la
+/// publicación, el perfil y explorar, y el inicio aceptaba además el lector por la query.
+/// Y como el CMS conoce a un miembro por su correo, todo lo que publicaba salía firmado con
+/// él. Ahora cada persona sale por su cara pública (<see cref="IIdentidadPublica"/>) y lo
+/// que llega del cliente para nombrar a alguien es su llave pública, nunca un correo.</para>
 /// </remarks>
 [ApiController]
 [Route("api/blogs")]
@@ -43,6 +50,7 @@ public sealed class BlogsController : ControllerBase
     private readonly INotificationFeed _notifications;
 
     private readonly IMemberAccessGate _gate;
+    private readonly IIdentidadPublica _identidad;
 
     public BlogsController(
         IContentStream stream,
@@ -53,7 +61,8 @@ public sealed class BlogsController : ControllerBase
         IMessagingService messaging,
         IUserCollection collections,
         INotificationFeed notifications,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        IIdentidadPublica identidad)
     {
         _stream = stream;
         _graph = graph;
@@ -64,6 +73,7 @@ public sealed class BlogsController : ControllerBase
         _collections = collections;
         _notifications = notifications;
         _gate = gate;
+        _identidad = identidad;
     }
 
 
@@ -86,23 +96,28 @@ public sealed class BlogsController : ControllerBase
         return (null, email);
     }
 
+    /// <summary>
+    /// Quien lee: el miembro de la sesión, o nadie. Nunca un actor de la demo ni uno que mande el cliente.
+    /// </summary>
+    private string? Lector()
+        => _gate.IsAuthenticated && !string.IsNullOrWhiteSpace(_gate.CurrentMemberEmail) ? _gate.CurrentMemberEmail : null;
+
     // ── 1. Feed ────────────────────────────────────────────────────
     // GET /api/blogs/feed?scope=foryou|following&cursor=  → { posts:[...], nextCursor }
     [HttpGet("feed")]
     public async Task<IActionResult> Feed(
         [FromQuery] string? scope,
         [FromQuery] string? cursor,
-        [FromQuery] string? actorId,
         [FromQuery] string? kind,
         CancellationToken cancellationToken)
     {
         var feedScope = ParseScope(scope);
 
-        // "Siguiendo" sin actor de contexto → usa el actor demo "yo" para que la
-        // demo muestre un feed poblado (en prod sale del Member autenticado).
-        var contextActor = string.IsNullOrWhiteSpace(actorId)
-            ? (feedScope == FeedScope.Following ? DemoCurrentActor : null)
-            : actorId.Trim();
+        // "Siguiendo" es el de quien lee. Sin sesión no hay a quién seguir, y el stream
+        // devuelve la página vacía: tomar a un actor de la demo era pintarle a cada visitante
+        // los seguidos de otra persona. Por eso tampoco se acepta un lector por la query.
+        var lector = Lector();
+        var contextActor = feedScope == FeedScope.Following ? lector : null;
 
         var page = await _stream.GetFeedAsync(
             new FeedQuery(Scope: feedScope, Cursor: cursor, AuthorId: contextActor, Kind: kind),
@@ -111,7 +126,7 @@ public sealed class BlogsController : ControllerBase
         var posts = new List<PostDto>(page.Items.Count);
         foreach (var item in page.Items)
         {
-            posts.Add(await ToPostDto(item, contextActor, cancellationToken));
+            posts.Add(await ToPostDto(item, lector, cancellationToken));
         }
 
         return Ok(new FeedResponse(Posts: posts, NextCursor: page.NextCursor));
@@ -133,11 +148,28 @@ public sealed class BlogsController : ControllerBase
             return NotFound(new { error = $"Post '{id}' no encontrado." });
         }
 
-        var post = await ToPostDto(item, DemoCurrentActor, cancellationToken);
+        var post = await ToPostDto(item, Lector(), cancellationToken);
 
-        var comments = await ToThreadAsync(_comments.GetApprovedForNode(NodeIdFor(id)), cancellationToken);
+        var comments = await ToThreadAsync(_comments.GetApprovedForNode(HiloDeUnaPublicacion.Nodo(item)), cancellationToken);
 
         return Ok(new PostDetailResponse(Post: post, Comments: comments));
+    }
+
+    // ── 2.bis Quién soy en la red ──────────────────────────────────
+    // GET /api/blogs/me → { author }
+    //
+    // La app necesita la llave pública de quien lee para saber qué es suyo —no ofrecerse
+    // «Seguir» a sí mismo, reconocer su perfil— y antes usaba su correo, que era también la
+    // llave que el servidor ponía en público. Ahora la llave es su seudónimo, y sólo el
+    // servidor sabe calcularla.
+    [HttpGet("me")]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        var (denied, who) = RequireActor();
+        if (denied is not null) { return denied; }
+
+        await RecordarAsync(who, cancellationToken);
+        return Ok(new MeResponse(Author: await PublicoPorIdAsync(who, cancellationToken)));
     }
 
     // ── 3. Create post ─────────────────────────────────────────────
@@ -172,6 +204,7 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = ex.Motivo() });
         }
 
+        await RecordarAsync(authorId, cancellationToken);
         var post = await ToPostDto(created, authorId, cancellationToken);
         return Ok(new CreatePostResponse(Post: post));
     }
@@ -207,6 +240,8 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = ex.Motivo() });
         }
 
+        // Quien reacciona sale en las notificaciones de la autora: desde ahí se le abre el perfil.
+        await RecordarAsync(actor, cancellationToken);
         return Ok(new ReactResponse(Reactions: ToReactionsDto(state)));
     }
 
@@ -228,17 +263,29 @@ public sealed class BlogsController : ControllerBase
         var (denied, follower) = RequireActor();
         if (denied is not null) { return denied; }
 
+        // A quién: el cliente lo nombra por su llave pública, y el grafo lo conoce por dentro.
+        var followee = await InternoDeAsync(authorId, cancellationToken);
+        if (followee is null)
+        {
+            return NotFound(new { error = "No encontramos a esa persona." });
+        }
+        if (string.Equals(followee, follower, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "No puedes seguirte a ti." });
+        }
 
         // Toggle: si ya sigue → unfollow; si no → follow. Idempotente en ambas vías.
-        var alreadyFollowing = await _graph.IsFollowingAsync(follower, authorId, cancellationToken);
+        var alreadyFollowing = await _graph.IsFollowingAsync(follower, followee, cancellationToken);
         var state = alreadyFollowing
-            ? await _graph.UnfollowAsync(follower, authorId, cancellationToken)
-            : await _graph.FollowAsync(follower, authorId, cancellationToken);
+            ? await _graph.UnfollowAsync(follower, followee, cancellationToken)
+            : await _graph.FollowAsync(follower, followee, cancellationToken);
 
+        // Quien sigue sale en las notificaciones de a quien sigue.
+        await RecordarAsync(follower, cancellationToken);
         return Ok(new FollowResponse(
             Following: state.Following,
-            FollowerId: state.FollowerId,
-            AuthorId: state.FolloweeId,
+            FollowerId: LlavePublicaDe(state.FollowerId),
+            AuthorId: LlavePublicaDe(state.FolloweeId),
             Followers: state.FolloweeFollowers,
             FollowingCount: state.FolloweeFollowing));
     }
@@ -253,27 +300,33 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = "El handle es requerido." });
         }
 
+        // El perfil de la demo por su handle, o el de un miembro por el alias de su cara pública.
         var profile = await _profiles.GetByHandleAsync(handle, cancellationToken);
-        if (profile is null)
+        var miembro = profile is null ? await _identidad.CorreoDeAsync(handle, cancellationToken) : null;
+        if (profile is null && miembro is null)
         {
             return NotFound(new { error = $"Perfil '{handle}' no encontrado." });
         }
 
+        var actorId = profile?.ActorId ?? miembro!;
+        var autor = profile is not null ? ToProfileDto(profile) : DeMiembro(miembro!);
+
         var page = await _stream.GetFeedAsync(
-            new FeedQuery(Scope: FeedScope.Author, AuthorId: profile.ActorId),
+            new FeedQuery(Scope: FeedScope.Author, AuthorId: actorId),
             cancellationToken);
 
+        var lector = Lector();
         var posts = new List<PostDto>(page.Items.Count);
         foreach (var item in page.Items)
         {
-            posts.Add(await ToPostDto(item, DemoCurrentActor, cancellationToken));
+            posts.Add(await ToPostDto(item, lector, cancellationToken));
         }
 
-        var counts = await _graph.GetCountsAsync(profile.ActorId, cancellationToken);
-        var viewerFollows = await _graph.IsFollowingAsync(DemoCurrentActor, profile.ActorId, cancellationToken);
+        var counts = await _graph.GetCountsAsync(actorId, cancellationToken);
+        var viewerFollows = lector is not null && await _graph.IsFollowingAsync(lector, actorId, cancellationToken);
 
         return Ok(new ProfileResponse(
-            Author: ToProfileDto(profile) with
+            Author: autor with
             {
                 Following = viewerFollows,
                 // Los TRES contadores del header se leen del autor, no de `stats`: el
@@ -334,6 +387,7 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = ex.Motivo() });
         }
 
+        await RecordarAsync(authorId, cancellationToken);
         var post = await ToPostDto(created, authorId, cancellationToken);
         return Ok(new CreatePostResponse(Post: post));
     }
@@ -347,6 +401,7 @@ public sealed class BlogsController : ControllerBase
         if (denied is not null) { return denied; }
 
         var inbox = await _messaging.GetInboxAsync(who, cancellationToken);
+        var yo = LlavePublicaDe(who);
 
         var threads = new List<DmThreadSummaryDto>(inbox.Count);
         foreach (var t in inbox)
@@ -359,7 +414,7 @@ public sealed class BlogsController : ControllerBase
                 LastMessageAt: t.LastMessageAt,
                 MessageCount: t.MessageCount,
                 Id: t.ThreadId,
-                Participant: OtherParticipant(participants, who),
+                Participant: OtherParticipant(participants, yo),
                 LastMessage: t.LastMessagePreview,
                 LastAtUtc: t.LastMessageAt));
         }
@@ -442,8 +497,16 @@ public sealed class BlogsController : ControllerBase
             }
             else
             {
+                // El destinatario llega por su llave pública: el correo no se publica, así que
+                // tampoco se acepta para nombrar a alguien.
+                var to = await InternoDeAsync(request.To!, cancellationToken);
+                if (to is null)
+                {
+                    return NotFound(new { error = "No encontramos a esa persona." });
+                }
+
                 thread = await _messaging.StartThreadAsync(
-                    DmContext, from, request.To!.Trim(), request.Body, cancellationToken);
+                    DmContext, from, to, request.Body, cancellationToken);
             }
         }
         catch (ArgumentException ex)
@@ -451,6 +514,8 @@ public sealed class BlogsController : ControllerBase
             return BadRequest(new { error = ex.Motivo() });
         }
 
+        // Quien escribe sale en la bandeja de quien recibe.
+        await RecordarAsync(from, cancellationToken);
         var dto = await ToDmThreadDto(thread, from, cancellationToken);
         // El mensaje RECIÉN añadido, que es lo que la app lee para pintar la burbuja
         // confirmada. Devolver sólo el hilo la dejaba sintetizándola en local.
@@ -468,12 +533,16 @@ public sealed class BlogsController : ControllerBase
 
         var events = await _notifications.GetForAsync(who, cancellationToken: cancellationToken);
 
+        // El feed ya trae a cada actor por su cara pública. Se repasa aquí también porque es la
+        // última puerta antes del cable: un actor con un correo por id no sale así.
         var dtos = events.Select(n => new NotificationDto(
             Id: n.Id,
             Type: n.Type,
             Verb: MapVerb(n.Type),
-            Actor: new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified,
-                ActorKey: n.Actor.Id),
+            Actor: CaraPublica.EsCorreo(n.Actor.Id)
+                ? DeMiembro(n.Actor.Id)
+                : new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified,
+                    ActorKey: n.Actor.Id),
             ObjectId: n.ObjectId,
             PostId: n.ObjectId,
             Text: n.Text,
@@ -511,10 +580,11 @@ public sealed class BlogsController : ControllerBase
             matches = matches.Where(i => ExtractTags(i.Body).Contains(hashtag, StringComparer.OrdinalIgnoreCase));
         }
 
+        var lector = Lector();
         var posts = new List<PostDto>();
         foreach (var item in matches)
         {
-            posts.Add(await ToPostDto(item, DemoCurrentActor, cancellationToken));
+            posts.Add(await ToPostDto(item, lector, cancellationToken));
         }
 
         // `hashtags` es la clave que la UI lee; `trending` se conserva para los
@@ -609,8 +679,6 @@ public sealed class BlogsController : ControllerBase
         var (denied, authorId) = RequireActor();
         if (denied is not null) { return denied; }
 
-        var profile = await _profiles.GetByActorIdAsync(authorId, cancellationToken);
-
         var page = await _stream.GetFeedAsync(
             new FeedQuery(Scope: FeedScope.Author, AuthorId: authorId, PageSize: 100),
             cancellationToken);
@@ -623,16 +691,19 @@ public sealed class BlogsController : ControllerBase
         foreach (var item in page.Items)
         {
             var state = await _reactions.GetStateAsync(item.Id, null, cancellationToken);
+            // Los comentarios del hilo de verdad: el item no los cuenta (sus métricas sólo
+            // llevan reacciones), así que el alcance salía sin ninguno.
+            var comments = ComentariosDe(item);
             totalReactions += state.Total;
-            totalComments += item.Metrics.Comments;
+            totalComments += comments;
             topPosts.Add(new StudioPostDto(
                 Id: item.Id,
                 Kind: item.Kind,
                 Excerpt: Excerpt(item.Body),
                 Reactions: state.Total,
-                Comments: item.Metrics.Comments,
+                Comments: comments,
                 PostId: item.Id,
-                Engagements: state.Total + item.Metrics.Comments));
+                Engagements: state.Total + comments));
         }
 
         var postCount = page.Items.Count;
@@ -646,7 +717,7 @@ public sealed class BlogsController : ControllerBase
             .ToList();
 
         return Ok(new StudioResponse(
-            Author: profile is not null ? ToProfileDto(profile) : SyntheticAuthor(authorId),
+            Author: await PublicoPorIdAsync(authorId, cancellationToken),
             Metrics: new StudioMetricsDto(
                 Followers: counts.Followers,
                 Following: counts.Following,
@@ -662,30 +733,98 @@ public sealed class BlogsController : ControllerBase
 
     // ── Helpers ────────────────────────────────────────────────────
 
-    // Actor "yo" de la demo (en prod = Member autenticado). Permite que las
-    // acciones de escritura y el feed "Siguiendo" rindan sin login en la demo.
-    private const string DemoCurrentActor = "act-elena";
-
     // Contexto opaco de los hilos de DM en el IMessagingService genérico.
     private const string DmContext = "dm";
 
     // Colección de guardados en el IUserCollection genérico.
     private const string SavedCollection = "saved";
 
+    // ── La cara pública (012-blogs-social, I0) ─────────────────────
+    //
+    // Por dentro, un miembro es su correo: así lo guardan el grafo, las reacciones, el
+    // stream y la mensajería. Por fuera nunca: sale por su cara pública, y lo que el
+    // cliente manda para nombrarlo es su llave. La semilla de la demo y los autores del
+    // CMS no son miembros y ya eran públicos, así que salen como estaban.
+
+    /// <summary>Un miembro por su cara pública.</summary>
+    private AuthorDto DeMiembro(string correo)
+    {
+        var cara = _identidad.De(correo);
+        return new AuthorDto(
+            Id: cara.Llave,
+            Handle: cara.Alias,
+            DisplayName: cara.Nombre,
+            AvatarUrl: null,
+            Verified: false,
+            ActorKey: cara.Llave);
+    }
+
+    /// <summary>El autor de un item tal como sale.</summary>
+    private AuthorDto Publico(ContentAuthor autor)
+        => CaraPublica.EsCorreo(autor.Id)
+            ? DeMiembro(autor.Id)
+            : new AuthorDto(
+                Id: autor.Id,
+                Handle: autor.Handle,
+                DisplayName: autor.DisplayName,
+                AvatarUrl: autor.AvatarUrl,
+                Verified: autor.Verified,
+                ActorKey: autor.Id);
+
+    /// <summary>Una persona por su id interno: un miembro por su cara pública; si no, su perfil de la demo.</summary>
+    private async Task<AuthorDto> PublicoPorIdAsync(string actorId, CancellationToken cancellationToken)
+    {
+        if (CaraPublica.EsCorreo(actorId))
+        {
+            return DeMiembro(actorId);
+        }
+        var profile = await _profiles.GetByActorIdAsync(actorId, cancellationToken);
+        return profile is not null ? ToProfileDto(profile) : SyntheticAuthor(actorId);
+    }
+
+    /// <summary>La llave pública de una persona por su id interno.</summary>
+    private string LlavePublicaDe(string actorId)
+        => CaraPublica.EsCorreo(actorId) ? _identidad.De(actorId).Llave : actorId;
+
+    /// <summary>
+    /// El id interno de quien el cliente nombra: un miembro por su llave pública, si salió alguna vez en público;
+    /// la semilla y los autores del CMS, por el suyo. Nunca por su correo: es justo lo que no se publica, y aceptarlo
+    /// dejaría preguntar si un correo cualquiera tiene cuenta.
+    /// </summary>
+    private async Task<string?> InternoDeAsync(string publico, CancellationToken cancellationToken)
+    {
+        var valor = publico.Trim();
+        if (valor.Length == 0 || CaraPublica.EsCorreo(valor))
+        {
+            return null;
+        }
+        return CaraPublica.EsLlave(valor) ? await _identidad.CorreoDeAsync(valor, cancellationToken) : valor;
+    }
+
+    /// <summary>Anota la cara pública de quien actúa, para poder volver a él desde su llave o su alias.</summary>
+    private async Task RecordarAsync(string actorId, CancellationToken cancellationToken)
+    {
+        if (CaraPublica.EsCorreo(actorId))
+        {
+            await _identidad.RecordarAsync(actorId, cancellationToken);
+        }
+    }
+
+    /// <summary>Cuántos comentarios aprobados tiene el hilo de un item.</summary>
+    private int ComentariosDe(ContentStreamItem item)
+        => _comments.GetApprovedForNode(HiloDeUnaPublicacion.Nodo(item)).Count;
+
     private async Task<PostDto> ToPostDto(ContentStreamItem item, string? viewerId, CancellationToken cancellationToken)
     {
         var reactions = await _reactions.GetStateAsync(item.Id, viewerId, cancellationToken);
+        // Los del hilo de verdad: el item no los cuenta, así que cada tarjeta decía 0 y la app
+        // los sumaba en local, para perderlos al recargar.
+        var comments = ComentariosDe(item);
         return new PostDto(
             Id: item.Id,
             Kind: item.Kind,
             ObjectKind: MapObjectKind(item.Kind),
-            Author: new AuthorDto(
-                Id: item.Author.Id,
-                Handle: item.Author.Handle,
-                DisplayName: item.Author.DisplayName,
-                AvatarUrl: item.Author.AvatarUrl,
-                Verified: item.Author.Verified,
-                ActorKey: item.Author.Id),
+            Author: Publico(item.Author),
             Body: item.Body,
             MediaUrl: item.MediaUrl,
             Media: string.IsNullOrWhiteSpace(item.MediaUrl)
@@ -699,8 +838,8 @@ public sealed class BlogsController : ControllerBase
             CreatedUtc: item.CreatedUtc,
             CreatedAtUtc: item.CreatedUtc,
             Reactions: ToReactionsDto(reactions),
-            Comments: item.Metrics.Comments,
-            CommentCount: item.Metrics.Comments,
+            Comments: comments,
+            CommentCount: comments,
             Reposts: item.Metrics.Reposts,
             RepostCount: item.Metrics.Reposts);
     }
@@ -772,7 +911,7 @@ public sealed class BlogsController : ControllerBase
         var flat = new List<CommentDto>(approved.Count);
         foreach (var c in approved)
         {
-            flat.Add(await ToCommentDto(c, cancellationToken));
+            flat.Add(await ToCommentDto(c, _profiles, cancellationToken));
         }
 
         var byId = flat.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
@@ -800,9 +939,11 @@ public sealed class BlogsController : ControllerBase
             .ToList();
     }
 
-    private async Task<CommentDto> ToCommentDto(Comment c, CancellationToken cancellationToken)
+    /// <summary>Un comentario tal como lo lee la app. Lo usa también quien comenta desde ella.</summary>
+    internal static async Task<CommentDto> ToCommentDto(
+        Comment c, ISocialProfileProjection profiles, CancellationToken cancellationToken)
     {
-        var author = await ResolveCommentAuthor(c, cancellationToken);
+        var author = await ResolveCommentAuthor(c, profiles, cancellationToken);
         return new CommentDto(
             Id: c.Id,
             Author: author,
@@ -818,26 +959,35 @@ public sealed class BlogsController : ControllerBase
             Replies: Array.Empty<CommentDto>());
     }
 
-    // Resuelve el autor del comentario al AuthorDto (objeto) que la UI lee. Si el
-    // comentario trae MemberKey y hay perfil social resoluble, se usa; si no, se
-    // deriva un autor del propio comentario (nombre visible + handle-slug), sin
-    // inventar verificación ni avatar.
-    private async Task<AuthorDto> ResolveCommentAuthor(Comment c, CancellationToken cancellationToken)
+    // Resuelve el autor del comentario al AuthorDto (objeto) que la UI lee. Lo que se
+    // comenta desde la app lleva la llave pública por MemberKey y su nombre, y de los dos
+    // sale la cara pública entera (012, I0). Si no, el perfil social si hay uno; y si no,
+    // se deriva un autor del propio comentario (nombre visible + handle-slug), sin
+    // inventar verificación ni avatar. En ningún caso con un correo.
+    internal static async Task<AuthorDto> ResolveCommentAuthor(
+        Comment c, ISocialProfileProjection profiles, CancellationToken cancellationToken)
     {
+        if (CaraPublica.EsLlave(c.MemberKey))
+        {
+            var cara = CaraPublica.De(c.MemberKey!, c.AuthorName);
+            return new AuthorDto(cara.Llave, cara.Alias, cara.Nombre, AvatarUrl: null, Verified: false, ActorKey: cara.Llave);
+        }
+
         if (!string.IsNullOrWhiteSpace(c.MemberKey))
         {
-            var profile = await _profiles.GetByActorIdAsync(c.MemberKey, cancellationToken);
+            var profile = await profiles.GetByActorIdAsync(c.MemberKey, cancellationToken);
             if (profile is not null)
             {
                 return ToProfileDto(profile);
             }
         }
 
-        var id = string.IsNullOrWhiteSpace(c.MemberKey) ? c.Id : c.MemberKey!;
+        var id = string.IsNullOrWhiteSpace(c.MemberKey) || CaraPublica.EsCorreo(c.MemberKey) ? c.Id : c.MemberKey!;
+        var nombre = string.IsNullOrWhiteSpace(c.AuthorName) ? id : CaraPublica.Nombre(c.AuthorName);
         return new AuthorDto(
             Id: id,
-            Handle: HandleFromName(c.AuthorName),
-            DisplayName: string.IsNullOrWhiteSpace(c.AuthorName) ? id : c.AuthorName,
+            Handle: HandleFromName(nombre),
+            DisplayName: nombre,
             AvatarUrl: null,
             Verified: false,
             ActorKey: id);
@@ -892,8 +1042,7 @@ public sealed class BlogsController : ControllerBase
         var list = new List<AuthorDto>(participantIds.Count);
         foreach (var id in participantIds)
         {
-            var profile = await _profiles.GetByActorIdAsync(id, cancellationToken);
-            list.Add(profile is not null ? ToProfileDto(profile) : SyntheticAuthor(id));
+            list.Add(await PublicoPorIdAsync(id, cancellationToken));
         }
         return list;
     }
@@ -902,23 +1051,29 @@ public sealed class BlogsController : ControllerBase
         MessageThread thread, string viewerId, CancellationToken cancellationToken)
     {
         var participants = await ToParticipants(thread.Participants, cancellationToken);
+        // Por id interno: los mensajes guardan a su remitente así, y por fuera sale su cara pública.
         var byId = new Dictionary<string, AuthorDto>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in participants)
+        for (var i = 0; i < thread.Participants.Count && i < participants.Count; i++)
         {
-            byId[p.Id] = p;
+            byId[thread.Participants[i]] = participants[i];
         }
 
-        var messages = thread.Messages.Select(m => new DmMessageDto(
-            Id: m.MessageId,
-            From: m.From,
-            Body: m.Body,
-            SentAt: m.SentAt,
+        var messages = new List<DmMessageDto>(thread.Messages.Count);
+        foreach (var m in thread.Messages)
+        {
             // El autor va como OBJETO: el id suelto no le sirve al normalizador, que
             // descartaba cada mensaje y dejaba la conversación en blanco.
-            Author: byId.TryGetValue(m.From, out var a) ? a : SyntheticAuthor(m.From),
-            CreatedAtUtc: m.SentAt,
-            Outgoing: string.Equals(m.From, viewerId, StringComparison.OrdinalIgnoreCase),
-            ThreadId: thread.ThreadId)).ToList();
+            var author = byId.TryGetValue(m.From, out var a) ? a : await PublicoPorIdAsync(m.From, cancellationToken);
+            messages.Add(new DmMessageDto(
+                Id: m.MessageId,
+                From: author.Id,
+                Body: m.Body,
+                SentAt: m.SentAt,
+                Author: author,
+                CreatedAtUtc: m.SentAt,
+                Outgoing: string.Equals(m.From, viewerId, StringComparison.OrdinalIgnoreCase),
+                ThreadId: thread.ThreadId));
+        }
 
         return new DmThreadDto(
             ThreadId: thread.ThreadId,
@@ -926,7 +1081,7 @@ public sealed class BlogsController : ControllerBase
             Messages: messages,
             LastMessageAt: thread.LastMessageAt,
             Id: thread.ThreadId,
-            Participant: OtherParticipant(participants, viewerId));
+            Participant: OtherParticipant(participants, LlavePublicaDe(viewerId)));
     }
 
     /// <summary>
@@ -1050,25 +1205,11 @@ public sealed class BlogsController : ControllerBase
         return text.Length <= 120 ? text : text[..117] + "…";
     }
 
-    // Autor sintético estable cuando el actor no está en el catálogo de perfiles.
+    // Autor sintético estable cuando el actor no está en el catálogo de perfiles. Sólo para
+    // ids que ya son públicos: a un miembro (un correo) lo resuelve PublicoPorIdAsync.
     private static AuthorDto SyntheticAuthor(string actorId)
         => new(Id: actorId, Handle: actorId, DisplayName: actorId, AvatarUrl: null, Verified: false,
             ActorKey: actorId);
-
-    // nodeId determinista a partir del id string del post (FNV-1a 32-bit, forzado
-    // positivo) para reusar el ICommentReader (indexado por int) sin schema nuevo.
-    private static int NodeIdFor(string postId)
-    {
-        const uint fnvOffset = 2166136261;
-        const uint fnvPrime = 16777619;
-        var hash = fnvOffset;
-        foreach (var ch in postId)
-        {
-            hash ^= ch;
-            hash *= fnvPrime;
-        }
-        return (int)(hash & 0x7FFFFFFF);
-    }
 
     // ── Request DTOs (binding del módulo blogs) ────────────────────
 
@@ -1226,6 +1367,12 @@ public sealed class BlogsController : ControllerBase
         IReadOnlyList<CommentDto> Replies);
 
     public sealed record ProfileStatsDto(int Posts, int Followers, int Following);
+
+    /// <summary>
+    /// Quién es en la red quien lee (<c>GET /api/blogs/me</c>): su cara pública, la misma con que sale en lo que
+    /// publica. La app la usa para reconocer lo suyo sin saber su correo (012-blogs-social, I0).
+    /// </summary>
+    public sealed record MeResponse(AuthorDto Author);
 
     // ── OLA 6 — DMs ────────────────────────────────────────────────
 

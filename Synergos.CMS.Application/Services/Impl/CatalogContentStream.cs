@@ -63,8 +63,8 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
     /// <summary>Cache del mapping durable. Se relee cuando aparece un post sin sembrar.</summary>
     private Dictionary<string, SeededPost>? _seeded;
 
-    /// <summary>Autores por id de item, para reponerlos al leer.</summary>
-    private Dictionary<string, AuthoredPostAuthor> _authors = new(StringComparer.Ordinal);
+    /// <summary>Los posts autorados por id de item, para reponer al leer su autor y el nodo de su hilo.</summary>
+    private Dictionary<string, AuthoredPost> _authors = new(StringComparer.Ordinal);
 
     public CatalogContentStream(
         ICatalogSource<AuthoredPost> source,
@@ -103,21 +103,29 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
     public Task<ContentStreamItem> CreateAsync(NewContentItem item, CancellationToken cancellationToken = default)
         => _inner.CreateAsync(item, cancellationToken);
 
-    /// <summary>El item con su autor autorado, o tal cual si no lo sembró esta clase.</summary>
+    /// <summary>
+    /// El item con su autor autorado y el nodo de su hilo, o tal cual si no lo sembró esta clase.
+    /// </summary>
+    /// <remarks>
+    /// El nodo es el de la página del post: con él la app comenta en el hilo de esa página y no en
+    /// uno aparte (012-blogs-social, I0). Se repone al leer por lo mismo que el autor: el item
+    /// guardado no lo lleva.
+    /// </remarks>
     private ContentStreamItem ConAutor(ContentStreamItem item)
-        => _authors.TryGetValue(item.Id, out var autor)
+        => _authors.TryGetValue(item.Id, out var post)
             ? item with
             {
                 Author = new ContentAuthor(
-                    Id: autor.ActorId,
-                    Handle: autor.Handle,
-                    DisplayName: autor.DisplayName,
-                    AvatarUrl: autor.AvatarUrl,
+                    Id: post.Author.ActorId,
+                    Handle: post.Author.Handle,
+                    DisplayName: post.Author.DisplayName,
+                    AvatarUrl: post.Author.AvatarUrl,
                     // Sin campo en el schema no hay nada que leer, y aquí `false` es la lectura
                     // conservadora correcta —«no consta que nadie lo haya verificado»— y no la
                     // afirmación del addendum #111, que era decir «no» sobre algo que podía ser
                     // «sí». Ver AuthoredPostAuthor.
                     Verified: false),
+                CmsNodeId = post.NodeId,
             }
             : item;
 
@@ -204,12 +212,12 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
 
     private void RememberAuthors(IReadOnlyList<AuthoredPost> posts, Dictionary<string, SeededPost> seeded)
     {
-        var autores = new Dictionary<string, AuthoredPostAuthor>(_authors, StringComparer.Ordinal);
+        var autores = new Dictionary<string, AuthoredPost>(_authors, StringComparer.Ordinal);
         foreach (var post in posts)
         {
             if (seeded.TryGetValue(post.Id, out var hit))
             {
-                autores[hit.ContentItemId] = post.Author;
+                autores[hit.ContentItemId] = post;
             }
         }
 

@@ -188,7 +188,9 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
                 ActorId: "autor-" + handle,
                 Handle: handle,
                 DisplayName: nombre!,
-                AvatarUrl: autorNodo?.Value<IPublishedContent>("authorAvatar")?.Url()));
+                AvatarUrl: autorNodo?.Value<IPublishedContent>("authorAvatar")?.Url()),
+            // El hilo de comentarios de la página del post es el de su nodo: la app comenta en ése.
+            NodeId: node.Id);
     }
 
     private void Report(IReadOnlyList<SocialContentIssue> issues)

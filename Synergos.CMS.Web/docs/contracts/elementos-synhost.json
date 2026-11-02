@@ -547,7 +547,16 @@
       "nombre": "blogs",
       "tipo": "funcionalidad",
       "record": "BlogsProps",
-      "diccionario": [],
+      "diccionario": [
+        "Blogs.Comentarios"
+      ],
+      "claves": [
+        "Blogs.Comentarios.EnRevision",
+        "Blogs.Comentarios.MeGustaNoGuardado",
+        "Blogs.Comentarios.MeGustaSinSesion",
+        "Blogs.Comentarios.NoPublicado",
+        "Blogs.Comentarios.SinSesion"
+      ],
       "campos": [
         {
           "nombre": "heading",
