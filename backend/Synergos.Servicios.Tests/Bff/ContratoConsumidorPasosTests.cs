@@ -65,6 +65,9 @@ public sealed class ContratoConsumidorPasosTests
         ["PedirAvisoAsync"] = p => p.PedirAvisoAsync(
             Alguien, "ana@ejemplo.co", "muestra.cita.confirmada", new Dictionary<string, string> { ["nombre"] = "Ana" }, Llave, Ct),
         ["VerificarPermisoAsync"] = p => p.VerificarPermisoAsync(Alguien, "muestra.agenda", Ct),
+        ["OtorgarPermisoAsync"] = p => p.OtorgarPermisoAsync(Alguien, "muestra.datos", "texto-v3", Llave, Ct),
+        ["LeerPermisoAsync"] = p => p.LeerPermisoAsync("gr-1", Ct),
+        ["RevocarPermisoAsync"] = p => p.RevocarPermisoAsync(Alguien, "muestra.datos", Ct),
         ["LeerCanastaAsync"] = p => p.LeerCanastaAsync("ca-1", Ct),
         ["CerrarCanastaAsync"] = p => p.CerrarCanastaAsync("ca-1", Ct),
         ["CrearPedidoAsync"] = p => p.CrearPedidoAsync(

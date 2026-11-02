@@ -28,6 +28,29 @@ public static class TiposDeDeshacer
 
     /// <summary>Anular un pedido que no se cumplió (núcleo N2).</summary>
     public const string CancelarPedido = "orders.cancelar";
+
+    /// <summary>Retirar el permiso que dio <c>consent.otorgar</c> (NN-23 de 003).</summary>
+    public const string RevocarPermiso = "consent.revocar";
+}
+
+/// <summary>
+/// Deshace <c>consent.otorgar</c>: retira el permiso que dio, por su id (NN-23 de 003). Uno que ya no está vigente, o que no
+/// existe, no tiene nada que deshacer.
+/// </summary>
+/// <remarks>
+/// Lo registra el orquestador declarado junto a los estándar, sobre su propio puerto: el permiso se retira por el titular y
+/// el propósito que la capacidad guardó con él, no por lo que diga la saga.
+/// </remarks>
+public sealed class DeshacerPermiso(IDeshacerPermisos permisos) : IDeshaceUnTipo
+{
+    public string Tipo => TiposDeDeshacer.RevocarPermiso;
+
+    public async Task<Rejection?> DeshacerAsync(SagaDeFlujo saga, Compensation pendiente, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(pendiente);
+        var retirado = await permisos.RevocarAsync(pendiente.TargetId, ct);
+        return retirado.IsOk ? null : retirado.Rejection;
+    }
 }
 
 /// <summary>Cómo se deshace UN tipo de compensación de una saga genérica.</summary>

@@ -168,7 +168,7 @@ public interface IBookingPort
     Task<Result<string>> ConfirmarAsync(string apartado, IdempotencyKey llave, CancellationToken ct);
 }
 
-/// <summary>Comprobar en <c>Api.Consent</c> que hay un permiso vigente (núcleo N2).</summary>
+/// <summary>Comprobar, dar y retirar un permiso en <c>Api.Consent</c> (núcleo N2; NN-23 de 003).</summary>
 public interface IConsentPort
 {
     /// <summary>
@@ -176,6 +176,29 @@ public interface IConsentPort
     /// se dio, se retiró o venció—, el rechazo de la capacidad tal cual (<c>consent.not_granted</c>…).
     /// </summary>
     Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct);
+
+    /// <summary>
+    /// Da el permiso de <paramref name="sujeto"/> para <paramref name="proposito"/> con la <paramref name="version"/> del texto
+    /// que aceptó, afirmado con la sesión del CMS (<c>CmsSession</c>, 003-Q8). Devuelve el id del permiso: la misma llave,
+    /// el mismo permiso.
+    /// </summary>
+    Task<Result<string>> OtorgarAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>
+    /// Retira el permiso de <paramref name="sujeto"/> para <paramref name="proposito"/>, afirmado igual. Retirar uno ya
+    /// retirado es lo mismo; si nunca se dio, el rechazo de la capacidad (<c>consent.not_granted</c>).
+    /// </summary>
+    Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct);
+}
+
+/// <summary>Retirar un permiso por su id: la compensación de <c>consent.otorgar</c> (NN-23 de 003).</summary>
+public interface IDeshacerPermisos
+{
+    /// <summary>
+    /// Retira el permiso <paramref name="permiso"/>: el de su titular para su propósito. Uno que ya no está vigente, o que
+    /// no existe, queda como estaba: no hay nada que deshacer.
+    /// </summary>
+    Task<Result<string>> RevocarAsync(string permiso, CancellationToken ct);
 }
 
 /// <summary>Una canasta como la ve quien la compra: de quién es, qué trae y si se puede cerrar.</summary>

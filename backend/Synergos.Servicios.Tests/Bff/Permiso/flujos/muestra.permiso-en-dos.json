@@ -1,0 +1,14 @@
+{
+  "clave": "muestra.permiso-en-dos",
+  "entrada": ["titular", "version"],
+  "tipos": { "titular": { "de": "sujeto" }, "version": "texto" },
+  "salida": ["permisoId"],
+  "fases": { "abrir": ["otorgar"], "confirmar": ["confirmar"] },
+  "pasos": {
+    "otorgar": {
+      "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "muestra.datos",
+      "reserva": { "consumado_por": "confirmar", "antes": "consent.revocar", "motivo": "el permiso no se confirmó" }
+    },
+    "confirmar": { "tipo": "consent.verificar", "lee": ["titular"], "proposito": "muestra.datos", "cierra_reserva": "otorgar" }
+  }
+}
