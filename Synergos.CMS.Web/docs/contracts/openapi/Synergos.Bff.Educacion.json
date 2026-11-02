@@ -1627,6 +1627,70 @@
   },
   "components": {
     "schemas": {
+      "AgendaDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "cupos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "franjaMinutos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "horario": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BloqueDeLaOfertaDto"
+            }
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "avisoMinutos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "BloqueDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "dia": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "desde": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasta": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CompensacionDeFlujo": {
         "required": [
           "sagaId",
@@ -2108,7 +2172,9 @@
           "moneda",
           "variantes",
           "precios",
-          "retirada"
+          "retirada",
+          "recursoId",
+          "reservasFuera"
         ],
         "type": "object",
         "properties": {
@@ -2134,6 +2200,16 @@
           },
           "retirada": {
             "type": "boolean"
+          },
+          "recursoId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reservasFuera": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -2195,6 +2271,16 @@
             "items": {
               "$ref": "#/components/schemas/VarianteDeLaOfertaDto"
             }
+          },
+          "agenda": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgendaDeLaOfertaDto"
+              }
+            ]
           }
         }
       },

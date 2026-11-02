@@ -30,6 +30,112 @@ public sealed class OfertaDeclaradaTests
 
     private static readonly (string, decimal)[] Planes = [("contado", 850_000m), ("premium", 1_200_000m), ("beca", 0m)];
 
+    /// <summary>La pieza con su agenda: los lunes de 08:00 a 12:00 en Bogotá, por franjas de 30 minutos.</summary>
+    private static object ConAgenda(
+        decimal precio = 0m, int cupos = 1, int franja = 30, string zona = "America/Bogota", string desde = "08:00", string hasta = "12:00",
+        string dia = "monday", int? aviso = 120)
+        => new
+        {
+            pieza = "mate-1",
+            precio,
+            moneda = "COP",
+            agenda = new { cupos, franjaMinutos = franja, horario = new[] { new { dia, desde, hasta } }, zona, avisoMinutos = aviso },
+        };
+
+    /// <summary>Un lunes de dentro de tres semanas o más, a medianoche en Bogotá.</summary>
+    private static DateTimeOffset UnLunes()
+    {
+        var hoy = DateTimeOffset.UtcNow.Date.AddDays(21);
+        while (hoy.DayOfWeek != DayOfWeek.Monday) hoy = hoy.AddDays(1);
+        return new DateTimeOffset(hoy, TimeSpan.Zero).AddHours(5);
+    }
+
+    [Fact]
+    public async Task Publicar_con_agenda_registra_el_recurso_de_la_pieza_con_su_horario_y_su_franja()
+    {
+        await using var a = await Academia.Arrancar();
+
+        var (estado, publicada) = await a.Publicar(ConAgenda());
+
+        Assert.True(estado == HttpStatusCode.OK, publicada.ToString());
+        var (hallado, recurso) = await a.Recurso();
+        Assert.True(hallado == HttpStatusCode.OK, recurso.ToString());
+        Assert.Equal(recurso.GetProperty("id").GetString(), publicada.GetProperty("recursoId").GetString());
+        Assert.Equal(1, recurso.GetProperty("capacity").GetInt32());
+        Assert.Equal(30, recurso.GetProperty("slotMinutes").GetInt32());
+        Assert.Equal(120, recurso.GetProperty("cancellationNoticeMinutes").GetInt32());
+        Assert.Equal("America/Bogota", recurso.GetProperty("timeZoneId").GetString());
+        var bloque = Assert.Single(recurso.GetProperty("opening").EnumerateArray());
+        Assert.Equal(("Monday", "08:00", "12:00"),
+            (bloque.GetProperty("day").GetString(), bloque.GetProperty("from").GetString(), bloque.GetProperty("to").GetString()));
+        Assert.Equal(8, await a.Franjas(recurso.GetProperty("id").GetString()!, UnLunes()));
+    }
+
+    [Fact]
+    public async Task Republicar_la_misma_agenda_no_registra_otro_recurso_y_otra_agenda_lo_revisa_sin_cancelar_reservas()
+    {
+        await using var a = await Academia.Arrancar();
+        var (_, primera) = await a.Publicar(ConAgenda());
+        var recurso = primera.GetProperty("recursoId").GetString()!;
+        var reserva = await a.Reservar(recurso, UnLunes().AddHours(11), 30);
+
+        var (_, igual) = await a.Publicar(ConAgenda(), "oferta-2");
+        var (estado, revisada) = await a.Publicar(ConAgenda(cupos: 2, hasta: "10:00"), "oferta-3");
+
+        Assert.Equal(recurso, igual.GetProperty("recursoId").GetString());
+        Assert.Equal(0, igual.GetProperty("reservasFuera").GetInt32());
+        Assert.True(estado == HttpStatusCode.OK, revisada.ToString());
+        Assert.Equal(recurso, revisada.GetProperty("recursoId").GetString());
+        Assert.Equal(1, revisada.GetProperty("reservasFuera").GetInt32());
+        var (_, enLaAgenda) = await a.Recurso();
+        Assert.Equal(recurso, enLaAgenda.GetProperty("id").GetString());
+        Assert.Equal(2, enLaAgenda.GetProperty("capacity").GetInt32());
+        Assert.Equal(4, await a.Franjas(recurso, UnLunes()));
+        Assert.Equal("Confirmed", (await a.Reserva(reserva)).GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Otra_zona_se_rechaza_sin_tocar_la_agenda_ni_el_precio()
+    {
+        await using var a = await Academia.Arrancar();
+        Assert.Equal(HttpStatusCode.OK, (await a.Publicar(ConAgenda(precio: 50_000m))).Estado);
+
+        var (estado, cuerpo) = await a.Publicar(ConAgenda(precio: 70_000m, cupos: 3, zona: "Europe/Madrid"), "oferta-2");
+
+        Assert.Equal(HttpStatusCode.Conflict, estado);
+        Assert.Equal("muestra.oferta_no_actualizable", cuerpo.GetProperty("code").GetString());
+        Assert.Equal(50_000m, await a.Total(null));
+        var (_, recurso) = await a.Recurso();
+        Assert.Equal("America/Bogota", recurso.GetProperty("timeZoneId").GetString());
+        Assert.Equal(1, recurso.GetProperty("capacity").GetInt32());
+    }
+
+    [Fact]
+    public async Task Republicar_sin_agenda_deja_la_agenda_como_estaba()
+    {
+        await using var a = await Academia.Arrancar();
+        var (_, primera) = await a.Publicar(ConAgenda());
+
+        var (estado, sinAgenda) = await a.Publicar(Oferta(precio: 10_000m), "oferta-2");
+
+        Assert.True(estado == HttpStatusCode.OK, sinAgenda.ToString());
+        Assert.Equal(primera.GetProperty("recursoId").GetString(), sinAgenda.GetProperty("recursoId").GetString());
+        var (_, recurso) = await a.Recurso();
+        Assert.Equal(1, recurso.GetProperty("capacity").GetInt32());
+        Assert.Equal(10_000m, await a.Total(null));
+    }
+
+    [Fact]
+    public async Task Una_oferta_sin_agenda_no_registra_recurso()
+    {
+        await using var a = await Academia.Arrancar();
+
+        var (_, publicada) = await a.Publicar(Oferta());
+
+        Assert.Equal(JsonValueKind.Null, publicada.GetProperty("recursoId").ValueKind);
+        Assert.Equal(HttpStatusCode.NotFound, (await a.Recurso()).Estado);
+    }
+
     [Fact]
     public async Task Publicar_fija_el_precio_de_la_pieza_y_el_de_cada_variante_y_el_flujo_cotiza_ese_mismo_nombre()
     {
@@ -119,6 +225,15 @@ public sealed class OfertaDeclaradaTests
         { "variantes.codigo", Oferta(variantes: [("pre/mium", 1m)]) },
         { "variantes.total", Oferta(variantes: [("premium", -1m)]) },
         { "variantes.codigo", Oferta(variantes: [("premium", 1m), ("premium", 2m)]) },
+        { "agenda.cupos", ConAgenda(cupos: 0) },
+        { "agenda.franjaMinutos", ConAgenda(franja: 0) },
+        { "agenda.franjaMinutos", ConAgenda(franja: 300) },
+        { "agenda.avisoMinutos", ConAgenda(aviso: -1) },
+        { "agenda.zona", ConAgenda(zona: "Bogota/Centro") },
+        { "agenda.horario.dia", ConAgenda(dia: "lunes") },
+        { "agenda.horario.dia", ConAgenda(dia: "1") },
+        { "agenda.horario", ConAgenda(desde: "12:00", hasta: "08:00") },
+        { "agenda.horario", ConAgenda(desde: "8am") },
     };
 
     [Theory]
@@ -133,6 +248,7 @@ public sealed class OfertaDeclaradaTests
         Assert.Equal("muestra.oferta_invalida", cuerpo.GetProperty("code").GetString());
         Assert.Contains($"«{campo}»", cuerpo.GetProperty("detail").GetString(), StringComparison.Ordinal);
         Assert.Equal("pricing.price_not_found", (await a.Abrir(null, "m-nada")).Cuerpo.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await a.Recurso()).Estado);
     }
 
     [Fact]
@@ -169,7 +285,8 @@ public sealed class OfertaDeclaradaTests
 
         public ArnesDeCapacidades Capacidades { get; } = new ArnesDeCapacidades()
             .Levanta<Synergos.Api.Pricing.Contracts.PriceResponse>("pricing")
-            .Levanta<Synergos.Api.Payments.Contracts.PaymentResponse>("payments");
+            .Levanta<Synergos.Api.Payments.Contracts.PaymentResponse>("payments")
+            .Levanta<Synergos.Api.Booking.Contracts.HoldResponse>("booking");
 
         public HttpClient Cliente { get; private set; } = null!;
 
@@ -252,11 +369,59 @@ public sealed class OfertaDeclaradaTests
             return cuerpo.GetProperty("datos").GetProperty("total").GetProperty("amount").GetDecimal();
         }
 
-        private async Task<(HttpStatusCode, JsonElement)> Enviar(HttpRequestMessage peticion)
+        /// <summary>El recurso de la pieza en la agenda REAL, leído por la clase de la oferta.</summary>
+        public async Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Recurso(string pieza = "mate-1")
+        {
+            using var booking = Capacidades.CreateClient("booking");
+            return await Enviar(booking, new HttpRequestMessage(HttpMethod.Get, $"v1/resources/por-sujeto?subjectKind={Clase}&subjectId={pieza}"));
+        }
+
+        /// <summary>Cuántas franjas lista la agenda real para el recurso en ese día.</summary>
+        public async Task<int> Franjas(string recurso, DateTimeOffset dia)
+        {
+            using var booking = Capacidades.CreateClient("booking");
+            var (estado, cuerpo) = await Enviar(booking, new HttpRequestMessage(HttpMethod.Get,
+                $"v1/resources/{recurso}/slots?from={Uri.EscapeDataString(dia.ToString("O"))}&to={Uri.EscapeDataString(dia.AddDays(1).ToString("O"))}"));
+            Assert.True(estado == HttpStatusCode.OK, $"La agenda no listó las franjas: {(int)estado} {cuerpo}");
+            return cuerpo.GetProperty("items").GetArrayLength();
+        }
+
+        /// <summary>Reserva de verdad una ventana en la agenda real: aparta y confirma.</summary>
+        public async Task<string> Reservar(string recurso, DateTimeOffset inicio, int minutos)
+        {
+            using var booking = Capacidades.CreateClient("booking");
+            var apartar = new HttpRequestMessage(HttpMethod.Post, "v1/holds")
+            {
+                Content = JsonContent.Create(new
+                {
+                    resourceId = recurso, start = inicio, end = inicio.AddMinutes(minutos), heldForKind = "muestra.alumno", heldForId = "a-1",
+                }),
+            };
+            apartar.Headers.Add("Idempotency-Key", "apartar-1");
+            var (estado, apartado) = await Enviar(booking, apartar);
+            Assert.True(estado == HttpStatusCode.Created, $"No se apartó la ventana: {(int)estado} {apartado}");
+
+            var confirmar = new HttpRequestMessage(HttpMethod.Post, $"v1/holds/{apartado.GetProperty("id").GetString()}/confirm");
+            confirmar.Headers.Add("Idempotency-Key", "confirmar-1");
+            var (otro, reserva) = await Enviar(booking, confirmar);
+            Assert.True(otro == HttpStatusCode.Created, $"No se confirmó la reserva: {(int)otro} {reserva}");
+            return reserva.GetProperty("id").GetString()!;
+        }
+
+        /// <summary>La reserva, leída en la agenda real.</summary>
+        public async Task<JsonElement> Reserva(string id)
+        {
+            using var booking = Capacidades.CreateClient("booking");
+            return (await Enviar(booking, new HttpRequestMessage(HttpMethod.Get, $"v1/reservations/{id}"))).Item2;
+        }
+
+        private Task<(HttpStatusCode, JsonElement)> Enviar(HttpRequestMessage peticion) => Enviar(Cliente, peticion);
+
+        private static async Task<(HttpStatusCode, JsonElement)> Enviar(HttpClient cliente, HttpRequestMessage peticion)
         {
             using (peticion)
             {
-                using var r = await Cliente.SendAsync(peticion);
+                using var r = await cliente.SendAsync(peticion);
                 var texto = await r.Content.ReadAsStringAsync();
                 return (r.StatusCode, string.IsNullOrWhiteSpace(texto) ? default : JsonDocument.Parse(texto).RootElement.Clone());
             }

@@ -1397,10 +1397,251 @@
           }
         }
       }
+    },
+    "/v1/ofertas": {
+      "post": {
+        "operationId": "PublishDeclaredOffer",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicarOfertaDeclaradaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfertaDeclaradaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ofertas/{pieza}/retirar": {
+      "post": {
+        "operationId": "RetireDeclaredOffer",
+        "parameters": [
+          {
+            "name": "pieza",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfertaDeclaradaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AgendaDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "cupos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "franjaMinutos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "horario": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BloqueDeLaOfertaDto"
+            }
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "avisoMinutos": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "AppointmentResponse": {
         "required": [
           "id",
@@ -1458,6 +1699,29 @@
             "format": "int32"
           },
           "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BloqueDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "dia": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "desde": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasta": {
             "type": [
               "null",
               "string"
@@ -1533,6 +1797,54 @@
           },
           "currency": {
             "type": "string"
+          }
+        }
+      },
+      "OfertaDeclaradaResponse": {
+        "required": [
+          "pieza",
+          "precio",
+          "moneda",
+          "variantes",
+          "precios",
+          "retirada",
+          "recursoId",
+          "reservasFuera"
+        ],
+        "type": "object",
+        "properties": {
+          "pieza": {
+            "type": "string"
+          },
+          "precio": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "moneda": {
+            "type": "string"
+          },
+          "variantes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "precios": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "retirada": {
+            "type": "boolean"
+          },
+          "recursoId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reservasFuera": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -1640,6 +1952,49 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "PublicarOfertaDeclaradaRequest": {
+        "type": "object",
+        "properties": {
+          "pieza": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "precio": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
+          },
+          "moneda": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "variantes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/VarianteDeLaOfertaDto"
+            }
+          },
+          "agenda": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgendaDeLaOfertaDto"
+              }
+            ]
           }
         }
       },
@@ -2043,6 +2398,24 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "VarianteDeLaOfertaDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "decimal"
           }
         }
       }

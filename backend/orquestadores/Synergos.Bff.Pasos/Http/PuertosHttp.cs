@@ -82,6 +82,66 @@ public sealed class PuertosHttp : CapabilityClients,
         Ref sujeto, Money precio, DateTimeOffset? hasta, IdempotencyKey llave, CancellationToken ct)
         => (await FijarPrecioDeLaOfertaAsync(sujeto, precio, hasta, llave, ct)).Map(p => p.Id);
 
+    /// <summary>El recurso de la agenda de una pieza, con la agenda que tiene (la oferta declarada, NN-22).</summary>
+    public Task<Result<RecursoDeLaOfertaDto>> HallarRecursoDeLaOfertaAsync(Ref sujeto, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Get<RecursoDeLaOfertaDto>(Booking,
+            $"v1/resources/por-sujeto?subjectKind={Uri.EscapeDataString(sujeto.Kind)}&subjectId={Uri.EscapeDataString(sujeto.Id)}", ct);
+    }
+
+    /// <summary>Registra el recurso de la agenda de una pieza, con su franja (NB-1).</summary>
+    public Task<Result<RecursoDeLaOfertaDto>> RegistrarRecursoDeLaOfertaAsync(
+        Ref sujeto, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        ArgumentNullException.ThrowIfNull(agenda);
+        return Post<RecursoDeLaOfertaDto>(Booking, "v1/resources", new
+        {
+            subjectKind = sujeto.Kind,
+            subjectId = sujeto.Id,
+            capacity = agenda.Cupos,
+            timeZoneId = agenda.Zona,
+            opening = Apertura(agenda),
+            cancellationNoticeMinutes = agenda.AvisoMinutos,
+            slotMinutes = agenda.FranjaMinutos,
+        }, llave, ct);
+    }
+
+    /// <summary>Revisa el recurso ya registrado (NB-7): la agenda entera salvo la zona, que la agenda no cambia.</summary>
+    public Task<Result<RevisionDeLaOfertaDto>> RevisarRecursoDeLaOfertaAsync(
+        string recurso, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(agenda);
+        return Post<RevisionDeLaOfertaDto>(Booking, $"v1/resources/{Uri.EscapeDataString(recurso)}/revise", new
+        {
+            capacity = agenda.Cupos,
+            opening = Apertura(agenda),
+            cancellationNoticeMinutes = agenda.AvisoMinutos,
+            slotMinutes = agenda.FranjaMinutos,
+        }, llave, ct);
+    }
+
+    private static List<object> Apertura(AgendaDeLaPieza agenda)
+        => agenda.Horario.Select(b => (object)new { day = b.Dia, from = b.Desde, to = b.Hasta }).ToList();
+
+    private static RecursoDeLaPieza DeLaOferta(RecursoDeLaOfertaDto r) => new(r.Id, new AgendaDeLaPieza(
+        r.Capacity,
+        r.SlotMinutes ?? 0,
+        (r.Opening ?? []).Select(a => new BloqueDeAgenda(a.Day ?? "", a.From ?? "", a.To ?? "")).ToList(),
+        r.TimeZoneId,
+        r.CancellationNoticeMinutes));
+
+    async Task<Result<RecursoDeLaPieza>> IOfertaPort.HallarRecursoAsync(Ref sujeto, CancellationToken ct)
+        => (await HallarRecursoDeLaOfertaAsync(sujeto, ct)).Map(DeLaOferta);
+
+    async Task<Result<RecursoDeLaPieza>> IOfertaPort.RegistrarRecursoAsync(Ref sujeto, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct)
+        => (await RegistrarRecursoDeLaOfertaAsync(sujeto, agenda, llave, ct)).Map(DeLaOferta);
+
+    async Task<Result<(RecursoDeLaPieza Recurso, int Fuera)>> IOfertaPort.RevisarRecursoAsync(
+        string recurso, AgendaDeLaPieza agenda, IdempotencyKey llave, CancellationToken ct)
+        => (await RevisarRecursoDeLaOfertaAsync(recurso, agenda, llave, ct)).Map(r => (DeLaOferta(r.Resource), (r.Outside ?? []).Count));
+
     // ── Inventory ───────────────────────────────────────────────────────────
 
     public Task<Result<ExistenciaDto>> HallarExistenciaAsync(Ref sujeto, CancellationToken ct)
@@ -429,6 +489,11 @@ public sealed record ApartadoDto(string Id);
 public sealed record CobroDto(string Id, DineroDto Refundable);
 public sealed record EntregaDto(string Id);
 public sealed record RecursoDto(string Id);
+public sealed record AperturaDto(string? Day, string? From, string? To);
+public sealed record RecursoDeLaOfertaDto(
+    string Id, int Capacity, string TimeZoneId, IReadOnlyList<AperturaDto>? Opening, int CancellationNoticeMinutes, int? SlotMinutes);
+public sealed record FueraDeLaAgendaDto(string ReservationId);
+public sealed record RevisionDeLaOfertaDto(RecursoDeLaOfertaDto Resource, IReadOnlyList<FueraDeLaAgendaDto>? Outside);
 public sealed record ApartadoDeAgendaDto(string Id, DateTimeOffset ExpiresAt);
 public sealed record FranjaDto(DateTimeOffset Start, DateTimeOffset End, int Free);
 public sealed record FranjasDto(IReadOnlyList<FranjaDto> Items);
