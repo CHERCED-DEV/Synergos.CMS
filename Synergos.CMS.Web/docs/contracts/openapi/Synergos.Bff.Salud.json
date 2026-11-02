@@ -1528,7 +1528,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonElement"
+                "$ref": "#/components/schemas/SaludConsentimientoEntrada"
               }
             }
           },
@@ -1758,7 +1758,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonElement"
+                "$ref": "#/components/schemas/SaludConsentimientoRetiroEntrada"
               }
             }
           },
@@ -3579,6 +3579,9 @@
           }
         }
       },
+      "SaludConsentimientoEntrada": {
+        "type": "object"
+      },
       "SaludConsentimientoPagina": {
         "required": [
           "items",
@@ -3649,6 +3652,9 @@
             "type": "boolean"
           }
         }
+      },
+      "SaludConsentimientoRetiroEntrada": {
+        "type": "object"
       },
       "SaludConsentimientoRetiroPagina": {
         "required": [

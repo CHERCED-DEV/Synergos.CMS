@@ -218,7 +218,12 @@ internal static class ContratoOpenApi
                 return Task.CompletedTask;
             }
 
-            if (contrato.Cuerpo is { } cuerpo)
+            // D-003-CUERPO: un abrir sin campos en el cuerpo —sólo el sujeto y el negocio, como el permiso de Salud— recibe
+            // igual un JSON, que el host lee como JsonElement y este contrato quita de los componentes. Sin esto su cuerpo
+            // apuntaba a un esquema que no está; se publica como un objeto vacío, con su nombre.
+            var cuerpoPublicado = contrato.Cuerpo
+                ?? (op.RequestBody is not null ? new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() } : null);
+            if (cuerpoPublicado is { } cuerpo)
             {
                 var nombre = contrato.NombreDelCuerpo ?? contrato.Nombre + "Entrada";
                 RegistrarCuerpo(nombre, cuerpo);
