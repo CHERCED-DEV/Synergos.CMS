@@ -367,6 +367,36 @@ jobs:
           done
           { echo; echo "**El primer día, sin cuentas** (medida):"; echo; cat /tmp/primer-dia.md; echo; } >> "$GITHUB_STEP_SUMMARY"
 
+      # ── 3.cuater. El CMS llega a cada orquestador y los caminos no cambian (P7 C) ─
+      #
+      # El CMS de producción sabe dónde vive cada orquestador del compose (lote 15: los cuatro que
+      # faltaban, Educación, Gobierno, Propiedades y Reservas) y lo alcanza desde su propio
+      # contenedor; y para el usuario no cambia nada: la visita, la matrícula y la radicación siguen
+      # pintando «directa» (su sitio lo declara), y Reservas va apagada.
+      - name: El CMS llega a los orquestadores y los caminos no cambian
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          C="docker compose --file compose.prod.yml --project-directory ."
+          export SYNERGOS_TAG="$(cat tag.actual)"
+          ENTORNO="$($C exec -T cms printenv)"
+          for s in $($C config --services | grep '^bff-' | sort); do
+            printf '%s\n' "$ENTORNO" | grep -q "__BaseUrl=http://$s:8080$" \
+              || { echo "✗ el CMS no sabe dónde vive $s"; exit 1; }
+            $C exec -T cms bash -c "exec 3<>/dev/tcp/$s/8080 && printf 'GET /health HTTP/1.0\r\nHost: $s\r\n\r\n' >&3 && head -1 <&3" \
+              | grep -q ' 200' || { echo "✗ el CMS no alcanza $s"; exit 1; }
+            echo "✓ $s: el CMS sabe dónde vive y lo alcanza"
+          done
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Features__Reserva__Camino=apagada$' \
+            || { echo "✗ Reservas no va apagada"; exit 1; }
+          for par in /propiedades/:visitPath /educacion/:enrollmentPath /gobierno/:camino; do
+            ruta="${par%%:*}"; clave="${par##*:}"
+            CURL_CA_BUNDLE=/tmp/ca-del-ensayo.crt curl -s "https://localhost$ruta" | grep -q "\"$clave\":\"directa\"" \
+              || { echo "✗ $ruta ya no pinta $clave=directa"; exit 1; }
+            echo "✓ $ruta: $clave=directa"
+          done
+          echo "| el CMS llega a cada orquestador del compose; visita, matrícula y radicación siguen en «directa»; Reservas apagada | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 4. Un editor cambia una página ──────────────────────────────────
       #
       # Lo que un despliegue SIGUIENTE no puede revertir. Se cambia en la base, con
