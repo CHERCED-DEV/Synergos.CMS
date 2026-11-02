@@ -32,6 +32,8 @@ public sealed class ContratoConsumidorPasosTests
     private static readonly Money Monto = Money.Of(1000m, "COP");
     private static readonly TimeWindow Ventana = TimeWindow.Of(
         new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 10, 20, 15, 30, 0, TimeSpan.Zero));
+    private static readonly Synergos.Bff.Pasos.AgendaDeLaPieza Agenda = new(
+        1, 30, [new Synergos.Bff.Pasos.BloqueDeAgenda("Monday", "08:00", "12:00")], "America/Bogota", 120);
 
     /// <summary>Cómo llamar a cada método con argumentos plausibles; el valor no importa, la forma sí.</summary>
     private static readonly Dictionary<string, Func<PuertosHttp, Task>> Recorrido = new(StringComparer.Ordinal)
@@ -39,6 +41,10 @@ public sealed class ContratoConsumidorPasosTests
         ["CotizarHttpAsync"] = p => p.CotizarHttpAsync([(Ref.Create("muestra.servicio", "consulta"), 1)], "BIENVENIDA10", Ct),
         ["FijarPrecioDeLaOfertaAsync"] = p => p.FijarPrecioDeLaOfertaAsync(
             Ref.Create("muestra.pieza.variante", "p-1/premium"), Monto, Ventana.End, Llave, Ct),
+        ["HallarRecursoDeLaOfertaAsync"] = p => p.HallarRecursoDeLaOfertaAsync(Ref.Create("muestra.profesional", "dra-1"), Ct),
+        ["RegistrarRecursoDeLaOfertaAsync"] = p => p.RegistrarRecursoDeLaOfertaAsync(
+            Ref.Create("muestra.profesional", "dra-1"), Agenda, Llave, Ct),
+        ["RevisarRecursoDeLaOfertaAsync"] = p => p.RevisarRecursoDeLaOfertaAsync("rs-1", Agenda, Llave, Ct),
         ["HallarExistenciaAsync"] = p => p.HallarExistenciaAsync(Ref.Create("muestra.pozo", "p-1"), Ct),
         ["ApartarExistenciaAsync"] = p => p.ApartarExistenciaAsync("po-1", 2, Algo, Llave, Ct),
         ["ConsumirExistenciaAsync"] = p => p.ConsumirExistenciaAsync("ah-1", Ct),

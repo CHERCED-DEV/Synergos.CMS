@@ -40,6 +40,11 @@ using Synergos.Shared;
 // que es lo que usa la ruta directa del CMS: dos motores en rutas distintas, y
 // el interruptor salud:Flujos:Modo dice si corre el declarado («declarado»
 // por defecto en las rutas de la puerta: lote 2, matiz 1).
+//
+// LA OFERTA DEL PROFESIONAL (NN-22 de 003). Con el declarado corre la oferta
+// común del núcleo: la pieza es el profesional (salud:Oferta:Clase, la misma
+// clase que salud.cita halla con booking.hallar), y publicarla registra o
+// revisa su agenda en Booking. El CMS la llama al publicar la ficha.
 // ─────────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
@@ -68,7 +73,11 @@ var app = builder.Build();
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Salud:ApiKey"]);
 app.MapSaludEndpoints();
-if (declarado) app.MapFlujosDeclarados();
+if (declarado)
+{
+    app.MapFlujosDeclarados();
+    app.MapOfertaDeclarada();
+}
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
