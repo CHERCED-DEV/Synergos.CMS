@@ -23,7 +23,7 @@ namespace Synergos.Bff.Pasos.Http;
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IOfertaPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
     IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort,
-    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos
+    IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos, IDeshacerPermisos
 {
     public const string Pricing = "pricing";
     public const string Inventory = "inventory";
@@ -335,6 +335,58 @@ public sealed class PuertosHttp : CapabilityClients,
     async Task<Result<string>> IConsentPort.VerificarAsync(Ref sujeto, string proposito, CancellationToken ct)
         => (await VerificarPermisoAsync(sujeto, proposito, ct)).Map(p => p.Id);
 
+    /// <summary>
+    /// Con qué se afirma la identidad de quien da o retira un permiso por la puerta: la sesión del CMS, que comprobó al
+    /// miembro (003-Q8). El token de Identity, cuando se encienda para todos.
+    /// </summary>
+    public const string AfirmacionDeLaPuerta = nameof(IdentityAssertion.CmsSession);
+
+    /// <summary>Da el permiso, con la versión del texto aceptado (NN-23 de 003).</summary>
+    public Task<Result<PermisoDto>> OtorgarPermisoAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Post<PermisoDto>(Consent, "v1/grants", new
+        {
+            subjectKind = sujeto.Kind,
+            subjectId = sujeto.Id,
+            purpose = proposito,
+            policyVersion = version,
+            assertion = AfirmacionDeLaPuerta,
+        }, llave, ct);
+    }
+
+    /// <summary>Un permiso por su id: de quién es, para qué, y si sigue vigente.</summary>
+    public Task<Result<PermisoLeidoDto>> LeerPermisoAsync(string permiso, CancellationToken ct)
+        => Get<PermisoLeidoDto>(Consent, $"v1/grants/{Uri.EscapeDataString(permiso)}", ct);
+
+    /// <summary>Retira el permiso del sujeto para el propósito; la capacidad no pide llave: retirar dos veces es lo mismo.</summary>
+    public Task<Result<PermisoDto>> RevocarPermisoAsync(Ref sujeto, string proposito, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sujeto);
+        return Post<PermisoDto>(Consent, "v1/grants/revoke", new
+        {
+            subjectKind = sujeto.Kind,
+            subjectId = sujeto.Id,
+            purpose = proposito,
+            assertion = AfirmacionDeLaPuerta,
+        }, null, ct);
+    }
+
+    async Task<Result<string>> IConsentPort.OtorgarAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct)
+        => (await OtorgarPermisoAsync(sujeto, proposito, version, llave, ct)).Map(p => p.Id);
+
+    async Task<Result<string>> IConsentPort.RevocarAsync(Ref sujeto, string proposito, CancellationToken ct)
+        => (await RevocarPermisoAsync(sujeto, proposito, ct)).Map(p => p.Id);
+
+    async Task<Result<string>> IDeshacerPermisos.RevocarAsync(string permiso, CancellationToken ct)
+    {
+        var leido = await LeerPermisoAsync(permiso, ct);
+        if (!leido.IsOk) return leido.Rejection!.Code == "consent.grant_not_found" ? Result.Ok(permiso) : Result.Rejected<string>(leido.Rejection);
+        if (!leido.Value.Active) return Result.Ok(permiso);
+
+        return (await RevocarPermisoAsync(Ref.Create(leido.Value.SubjectKind, leido.Value.SubjectId), leido.Value.Purpose, ct)).Map(p => p.Id);
+    }
+
     // ── Cart ────────────────────────────────────────────────────────────────
 
     public Task<Result<CanastaDto>> LeerCanastaAsync(string canasta, CancellationToken ct)
@@ -499,6 +551,7 @@ public sealed record FranjaDto(DateTimeOffset Start, DateTimeOffset End, int Fre
 public sealed record FranjasDto(IReadOnlyList<FranjaDto> Items);
 public sealed record ReservaDto(string Id);
 public sealed record PermisoDto(string Id);
+public sealed record PermisoLeidoDto(string Id, string SubjectKind, string SubjectId, string Purpose, bool Active);
 public sealed record LineaDeCanastaDto(string SubjectKind, string SubjectId, int Quantity);
 public sealed record CanastaDto(string Id, string OwnerKind, string OwnerId, IReadOnlyList<LineaDeCanastaDto> Lines, bool CheckedOut, bool Open);
 public sealed record PedidoDto(string Id);

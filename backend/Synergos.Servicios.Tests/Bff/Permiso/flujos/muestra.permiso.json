@@ -1,0 +1,10 @@
+{
+  "clave": "muestra.permiso",
+  "entrada": ["titular", "version"],
+  "tipos": { "titular": { "de": "sujeto" }, "version": "texto" },
+  "salida": ["permisoId"],
+  "fases": { "otorgar": ["otorgar"] },
+  "pasos": {
+    "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "muestra.datos" }
+  }
+}

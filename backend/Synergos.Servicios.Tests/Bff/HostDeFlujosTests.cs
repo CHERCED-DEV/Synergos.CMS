@@ -190,6 +190,9 @@ public sealed class HostDeFlujosTests
 
         public Task<Result<string>> HallarAsync(Ref sujeto, CancellationToken ct) => Ok("rs-1", $"hallar {sujeto}");
         public Task<Result<string>> VerificarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-1", $"permiso {proposito}");
+        public Task<Result<string>> OtorgarAsync(Ref sujeto, string proposito, string version, IdempotencyKey llave, CancellationToken ct)
+            => Ok("gr-2", $"otorgar {sujeto} {proposito} {version}");
+        public Task<Result<string>> RevocarAsync(Ref sujeto, string proposito, CancellationToken ct) => Ok("gr-2", $"revocar {sujeto} {proposito}");
         /// <summary>Cuándo vence el apartado falso: lo que <c>booking.apartar</c> escribe si la definición lo nombra.</summary>
         public static readonly DateTimeOffset VenceElApartado = new(2026, 10, 16, 15, 10, 0, TimeSpan.Zero);
 
