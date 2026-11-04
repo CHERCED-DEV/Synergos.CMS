@@ -425,6 +425,38 @@ jobs:
           done
           echo "| el CMS llega a cada orquestador del compose; visita, matrícula y radicación siguen en «directa»; Reservas apagada | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
+      # ── 3.quinquies. La bitácora del CMS va a Api.Audit (D-003-I2-3) ──────
+      #
+      # En producción la auditoría va a Api.Audit para todas las verticales. Se mira que el CMS
+      # corre en ese modo y con esa dirección, que desde su contenedor alcanza la capacidad, y que
+      # la capacidad acepta un asiento con la llave y la forma EXACTA que manda `HttpAuditTrailWriter`
+      # (el seudónimo como actor, `CmsSession`, `Idempotency-Key`) y lo devuelve al leerlo. Un
+      # asiento nacido de una acción del CMS pediría un miembro, y el ensayo no crea ninguno.
+      - name: La bitácora del CMS va a Api.Audit
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          C="docker compose --file compose.prod.yml --project-directory ."
+          export SYNERGOS_TAG="$(cat tag.actual)"
+          ENTORNO="$($C exec -T cms printenv)"
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Audit__Mode=Api$' \
+            || { echo "✗ el CMS no escribe en Api.Audit: Synergos__Audit__Mode no es Api"; exit 1; }
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Audit__BaseUrl=http://api-audit:8080$' \
+            || { echo "✗ el CMS no sabe dónde vive api-audit"; exit 1; }
+          $C exec -T cms bash -c "exec 3<>/dev/tcp/api-audit/8080 && printf 'GET /health HTTP/1.0\r\nHost: api-audit\r\n\r\n' >&3 && head -1 <&3" \
+            | grep -q ' 200' || { echo "✗ el CMS no alcanza api-audit"; exit 1; }
+          LLAVE="$(grep '^SYNERGOS_API_KEY=' .env | cut -d= -f2-)"
+          ID="ensayo-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          CURL="docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s"
+          CODIGO="$($CURL -o /dev/null -w '%{http_code}' -X POST http://api-audit:8080/v1/entries \
+            -H "X-Synergos-Key: $LLAVE" -H "Idempotency-Key: cms-audit-$ID" -H 'Content-Type: application/json' \
+            -d "{\"actorKind\":\"cms.actor\",\"actorId\":\"ensayo\",\"actorRoles\":[],\"action\":\"ensayo.bitacora\",\"targetKind\":\"cms.recurso\",\"targetId\":\"$ID\",\"details\":{},\"assertion\":\"CmsSession\"}")"
+          [ "$CODIGO" = 201 ] || { echo "✗ Api.Audit no aceptó el asiento con la llave y la forma del CMS ($CODIGO)"; exit 1; }
+          $CURL -H "X-Synergos-Key: $LLAVE" "http://api-audit:8080/v1/entries?targetKind=cms.recurso&targetId=$ID" \
+            | grep -q '"ensayo.bitacora"' || { echo "✗ el asiento no se lee de vuelta en Api.Audit"; exit 1; }
+          echo "✓ el CMS corre con la bitácora en Api.Audit, la alcanza, y la capacidad guarda y devuelve un asiento suyo"
+          echo "| la bitácora del CMS va a Api.Audit: modo Api, la alcanza, y un asiento con su forma se guarda y se lee | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 4. Un editor cambia una página ──────────────────────────────────
       #
       # Lo que un despliegue SIGUIENTE no puede revertir. Se cambia en la base, con
