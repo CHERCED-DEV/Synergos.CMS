@@ -55,4 +55,27 @@ internal static class SeudonimoDePersona
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(limpio));
         return Convert.ToHexString(hash)[..16].ToLowerInvariant();
     }
+
+    /// <summary>
+    /// La huella de un correo para MOSTRARLA: la llave pública de la cara de una persona (<c>IIdentidadPublica</c>),
+    /// con el secreto del despliegue.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Por qué no es <see cref="De"/></b> (012-blogs-social, I0.b). <see cref="De"/> no lleva secreto, y es a
+    /// propósito: es como las capacidades conocen a una persona, la misma huella a los dos lados, con sus vectores y lo
+    /// que ya se guardó con ella. Puesta en público, deja que quien conozca un correo calcule su huella y sepa qué alias
+    /// es. Con el secreto, la llave pública sólo la calcula este despliegue.</para>
+    ///
+    /// <para>El mismo correo limpio y el mismo largo que <see cref="De"/>: dieciséis hexadecimales en minúsculas, que es
+    /// lo que <c>CaraPublica.EsLlave</c> reconoce. Un secreto vacío no se acepta, porque un HMAC con la llave vacía lo
+    /// calcula cualquiera.</para>
+    /// </remarks>
+    internal static string Publico(string? correo, byte[] secreto)
+    {
+        ArgumentNullException.ThrowIfNull(secreto);
+        ArgumentOutOfRangeException.ThrowIfZero(secreto.Length, nameof(secreto));
+        var limpio = (correo ?? string.Empty).Trim().ToLowerInvariant();
+        var hash = HMACSHA256.HashData(secreto, Encoding.UTF8.GetBytes(limpio));
+        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
+    }
 }

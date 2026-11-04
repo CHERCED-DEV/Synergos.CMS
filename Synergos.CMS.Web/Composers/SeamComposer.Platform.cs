@@ -68,6 +68,12 @@ public sealed partial class SeamComposer
         // muestra a otros —su nombre, un alias y su llave, nunca su correo— no es un asunto de un
         // vertical. Hoy la usan la red social y sus comentarios; las reseñas y las bandejas de
         // cualquier vertical la encuentran registrada.
+        //
+        // I0.b: la llave pública es una huella del correo CON un secreto del despliegue, para que quien conozca un correo
+        // no pueda calcularla. El secreto sigue la custodia de las tres firmas opcionales: vacío, se genera una vez y se
+        // guarda cifrado, sin variable nueva obligatoria.
+        services.Configure<IdentidadPublicaSettings>(builder.Config.GetSection("Synergos:IdentidadPublica"));
+        services.AddSingleton<SecretoDeLaCaraPublica>();
         services.AddSingleton<IIdentidadPublica, IdentidadPublicaDeMiembros>();
 
         // Ola 54.1 — IBrandingProvider resuelve el brand activo según el
