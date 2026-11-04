@@ -137,6 +137,27 @@ public interface INotificationsPort
         IdempotencyKey llave, CancellationToken ct);
 }
 
+/// <summary>
+/// Programar un aviso para una hora, y retirarlo (núcleo, NN-26 de 003, P13 = A): el recordatorio. El disparo vive en
+/// <c>Api.Notifications</c>, que ya guarda la dirección de cada envío; el orquestador no la guarda (ADR 0140 F3).
+/// </summary>
+public interface IAvisosProgramados
+{
+    /// <summary>
+    /// Pide el aviso para que salga no antes de <paramref name="cuando"/>: la capacidad lo deja en su cola y lo manda su barrido
+    /// cuando llega la hora (una hora pasada, en el acto). Devuelve el id de la entrega: la misma llave, la misma entrega.
+    /// </summary>
+    Task<Result<string>> ProgramarAsync(
+        Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores, DateTimeOffset cuando,
+        IdempotencyKey llave, CancellationToken ct);
+
+    /// <summary>
+    /// Retira la entrega antes de que salga. Una ya retirada es lo mismo; una que ya salió no tiene nada que retirar y queda
+    /// como estaba. Una que no existe es el no de la capacidad.
+    /// </summary>
+    Task<Result<string>> RetirarAsync(string entrega, CancellationToken ct);
+}
+
 /// <summary>Un apartado en la agenda: cuál es y hasta cuándo vale si nadie lo confirma.</summary>
 /// <param name="Id">El apartado.</param>
 /// <param name="Vence">Cuándo deja de valer (<c>HoldResponse.ExpiresAt</c>): lo que la pantalla puede decirle a quien
