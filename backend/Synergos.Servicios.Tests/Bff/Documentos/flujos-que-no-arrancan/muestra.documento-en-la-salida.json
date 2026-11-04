@@ -1,0 +1,10 @@
+{
+  "clave": "muestra.documento-en-la-salida",
+  "entrada": ["titular", "archivo"],
+  "tipos": { "titular": { "de": "sujeto" }, "archivo": "documento" },
+  "salida": ["documentoId", "archivo"],
+  "fases": { "guardar": ["guardar"] },
+  "pasos": {
+    "guardar": { "tipo": "documents.guardar", "lee": ["archivo"], "escribe": ["documentoId"], "llave": "doc" }
+  }
+}

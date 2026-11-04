@@ -55,6 +55,12 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton<IDeshacerCobros>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshacerAgenda>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IConsentPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IAuditPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<ISigningPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IDocumentsPort>(sp => sp.GetRequiredService<PuertosHttp>());
+        // Deshacer documents.guardar (NN-25 de 003): borrar el documento que guardó.
+        builder.Services.AddSingleton<IDeshacerDocumentos>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerDocumento(sp.GetRequiredService<IDeshacerDocumentos>()));
         // Deshacer consent.otorgar (NN-23 de 003): retirar el permiso que dio. Va junto a los estándar del deshacer común.
         builder.Services.AddSingleton<IDeshacerPermisos>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerPermiso(sp.GetRequiredService<IDeshacerPermisos>()));
@@ -69,7 +75,7 @@ public static class OrquestadorDeclarado
         builder.Services.AddSingleton(sp => OfertaDeclarada.De(
             sp.GetRequiredService<IConfiguration>(), vocabulario, sp.GetRequiredService<IOfertaPort>(), sp.GetRequiredService<TimeProvider>()));
 
-        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas(), new TipoEventosDeEnvio()));
+        builder.Services.AddSingleton(TiposDeValor.Con(new TipoContacto(), new TipoDireccion(), new TipoFranjas(), new TipoEventosDeEnvio(), new TipoDocumento()));
         // flow.leer-original (P6) lee la saga original en el MISMO almacén: una operación posterior vive en el orquestador
         // de su original.
         // La zona del sitio, en la que un aviso escribe una hora (NM-2 de 010, NN-6 de 003): la del orquestador, o la de Bogotá.
@@ -102,6 +108,7 @@ public static class PasosComunes
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
             new PasoAvisar(puertos, zona), new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
             new PasoConsentimientoVerificar(puertos), new PasoConsentimientoOtorgar(puertos), new PasoConsentimientoRevocar(puertos),
+            new PasoRegistroAnotar(puertos), new PasoFirmaSellar(puertos), new PasoDocumentoGuardar(puertos),
             new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),
             new PasoPedidoCrear(puertos), new PasoPedidoCumplir(puertos), new PasoDespachar(puertos),
             new PasoSeguirEnvio(puertos), new PasoLeerEnvio(puertos),

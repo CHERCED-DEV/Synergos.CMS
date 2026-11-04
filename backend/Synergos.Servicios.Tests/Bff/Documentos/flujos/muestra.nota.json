@@ -1,0 +1,11 @@
+{
+  "clave": "muestra.nota",
+  "acceso": "personal",
+  "entrada": ["quien", "consultorio", "nota"],
+  "tipos": { "quien": { "de": "sujeto" }, "consultorio": "texto", "nota": "texto" },
+  "salida": ["sello", "llaveId"],
+  "fases": { "firmar": ["firmar"] },
+  "pasos": {
+    "firmar": { "tipo": "signing.firmar", "lee": ["consultorio", "nota"], "escribe": ["sello", "llaveId"] }
+  }
+}

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,7 @@ namespace Synergos.Bff.Core.Flow;
 /// lee del contexto al sembrar la saga. Si faltan, la saga no nace y la compra falla antes de
 /// reservar nada; no queda nada a medias.</para>
 /// </remarks>
-public static class FlowValidator
+public static partial class FlowValidator
 {
     /// <summary>La fuente de un bloque que repite sobre las reservas de un paso: <c>reservas:apartar</c>.</summary>
     public const string Reservas = "reservas:";
@@ -822,6 +823,19 @@ public static class FlowValidator
                       + "que ese paso pide permiso.");
             }
 
+            if (registro.Para(paso.Tipo) is { } anota && anota.UsaAccion != paso.Accion is not null)
+            {
+                errores.Add(anota.UsaAccion
+                    ? $"el paso «{paso.Id}» es de tipo «{paso.Tipo}», que anota una «accion», y no la declara."
+                    : $"el paso «{paso.Id}» declara una acción y «{paso.Tipo}» no anota nada: quien lo lea creerá que ese "
+                      + "paso deja rastro.");
+            }
+            else if (paso.Accion is { } accion && !Acciones().IsMatch(accion))
+            {
+                errores.Add($"el paso «{paso.Id}» anota «{accion}», que no es una acción: van palabras en minúscula separadas "
+                    + "por puntos, como «salud.historia.leer».");
+            }
+
             RevisarDatosDeProceso(paso, registro.Para(paso.Tipo), errores);
             RevisarEstado(paso, registro.Para(paso.Tipo), errores);
         }
@@ -850,6 +864,10 @@ public static class FlowValidator
     /// que no la usa haría creer que el flujo mueve un expediente. Una lista vacía no deja elegir nada, y un nombre
     /// repetido es una errata.
     /// </remarks>
+    /// <summary>Una acción anotada: palabras en minúscula separadas por puntos (NN-12 de 003).</summary>
+    [GeneratedRegex(@"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant)]
+    private static partial Regex Acciones();
+
     /// <summary>
     /// El <c>estado</c> fijo de un paso que mueve algo (núcleo, NS-1 de 013), cruzado en los dos sentidos y contra los estados
     /// que admite el paso, que son los de la capacidad.
