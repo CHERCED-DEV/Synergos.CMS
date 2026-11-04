@@ -1,12 +1,33 @@
 name: Despliegue
 
-# HU #19 — un push a master llega al servidor, y el humo dice si sobrevivió.
+# HU #19 — un release llega al servidor, y el humo dice si sobrevivió.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SÓLO UN RELEASE LLEGA A PRODUCCIÓN (R-2, lote 19, 2026-11-04)
+#
+# Hasta el lote 19, cada push a master desplegaba: este workflow corría al terminar
+# «Imágenes (GHCR)» en master. El arquitecto pidió un único release con todo
+# completo, no muchos (R-1), así que producción se despliega SÓLO con una etiqueta
+# de release que pone el director: `release-AAAA-MM-DD` (`release-AAAA-MM-DD.2` si
+# hay dos el mismo día). Un push a master sigue corriendo la CI, las imágenes y el
+# «Ensayo del despliegue», y no despliega nada.
+#
+# Por qué una etiqueta y no sólo el disparo manual: la etiqueta queda en git —qué
+# commit salió, y cuándo— y la pone quien integra. El disparo manual queda para
+# volver a poner un release que ya salió (volver a uno bueno, retomar un primer
+# despliegue a medias), y pide el NOMBRE del release, no un SHA: lo que llega a
+# producción es siempre un release. En los dos casos el commit tiene que estar en
+# master: un release sale de lo integrado, no de una rama.
+#
+# Un gate (`DeployPipelineTests`) se pone rojo si esto vuelve a desplegar en un push.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 # EL ORDEN, Y POR QUÉ CADA PIEZA ESTÁ DONDE ESTÁ
 #
-#   push a master → gates + imágenes a GHCR (#17) → ESTO
+#   push a master → gates + imágenes a GHCR (#17) + ensayo
+#   etiqueta release-* (sobre un commit de master) → ESTO
 #
+#   0. release  — que sea un release, y que su commit esté en master
 #   1. puerta   — que los gates estén verdes PARA ESTE SHA, no "en general"
 #   2. servidor — parada antes de arranque (tools/deploy-remoto.sh)
 #   3. humo     — contra la URL PÚBLICA, desde el runner (tools/humo-publico.sh)
@@ -19,19 +40,17 @@ name: Despliegue
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  # Al terminar las imágenes: son lo que este workflow despliega, así que
-  # arrancar antes sería pedirle al servidor etiquetas que todavía no existen.
-  workflow_run:
-    workflows: ["Imágenes (GHCR)"]
-    types: [completed]
-    branches: [main, master]
+  # La etiqueta del release. Las imágenes de su commit ya existen: se construyeron
+  # con el push a master que lo integró, y la puerta de abajo exige sus gates en verde.
+  push:
+    tags: ['release-*']
 
-  # Para desplegar algo concreto — típicamente, volver a una versión buena.
+  # Para volver a poner un release que ya salió, sin inventar una etiqueta nueva.
   workflow_dispatch:
     inputs:
-      sha:
-        description: "SHA a desplegar (vacío = el commit de este ref)"
-        required: false
+      release:
+        description: "Etiqueta del release a desplegar (p. ej. release-2026-11-20)"
+        required: true
 
 # NUNCA en paralelo, y NUNCA cancelando al que está corriendo: dos despliegues a
 # la vez son dos `down`/`up` pisándose sobre los mismos volúmenes. Se encolan.
@@ -77,11 +96,31 @@ jobs:
       - if: steps.config.outputs.listo == 'si'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.sha || github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.inputs.release || github.ref }}
+          fetch-depth: 0
 
+      # ── 0.bis ¿Es un release, y está en master? ──────────────────────────
       - id: sha
         if: steps.config.outputs.listo == 'si'
-        run: echo "valor=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        name: Es un release, y su commit está en master
+        env:
+          RELEASE: ${{ github.event.inputs.release || github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE" in
+            release-*) ;;
+            *) echo "✗ «$RELEASE» no es una etiqueta de release (release-AAAA-MM-DD): producción sólo despliega releases (R-2)."
+               exit 1 ;;
+          esac
+          git rev-parse -q --verify "refs/tags/$RELEASE" >/dev/null \
+            || { echo "✗ no existe la etiqueta $RELEASE."; exit 1; }
+          SHA="$(git rev-parse "refs/tags/$RELEASE^{commit}")"
+          git fetch --no-tags --quiet origin master
+          git merge-base --is-ancestor "$SHA" FETCH_HEAD \
+            || { echo "✗ $RELEASE apunta a ${SHA:0:7}, que no está en master: un release sale de lo integrado."; exit 1; }
+          echo "valor=$SHA" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "✓ $RELEASE → ${SHA:0:7}, en master"
 
       # ── 1. La puerta: los gates, para ESTE commit ────────────────────────
       #
@@ -253,7 +292,8 @@ jobs:
           if [ -z "$ANTERIOR" ]; then
             echo "✗ El despliegue falló y NO hay versión anterior a la que volver."
             echo "  Es el primer despliegue: el sitio queda como quedó. Volver a correr este"
-            echo "  workflow (Run workflow) retoma el import del contenido si quedó a medias."
+            echo "  workflow (Run workflow, con el mismo release) retoma el import del contenido"
+            echo "  si quedó a medias."
             exit 1
           fi
 
@@ -270,11 +310,12 @@ jobs:
         env:
           DOMINIO: ${{ vars.SYNERGOS_DOMAIN }}
           SHA: ${{ steps.sha.outputs.valor }}
+          RELEASE: ${{ steps.sha.outputs.release }}
         run: |
           {
             echo "### Desplegado"
             echo
-            echo "- **Versión**: \`${SHA:0:7}\`"
+            echo "- **Release**: \`$RELEASE\` (\`${SHA:0:7}\`)"
             echo "- **URL**: https://$DOMINIO"
             echo "- En el servidor: las piezas sanas en esa versión, el schema de uSync importado (el contenido, sólo si la base era nueva) y lo que las capacidades exigen, publicado y verificado."
             echo "- Humo público en verde: portada, versión que contesta, y el árbol de servicios cerrado."
