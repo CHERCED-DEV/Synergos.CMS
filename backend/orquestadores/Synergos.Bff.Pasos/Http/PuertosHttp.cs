@@ -22,7 +22,7 @@ namespace Synergos.Bff.Pasos.Http;
 /// </remarks>
 public sealed class PuertosHttp : CapabilityClients,
     IPricingPort, IOfertaPort, IInventoryPort, IPaymentsPort, INotificationsPort, IBookingPort,
-    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort, IAuditPort, ISigningPort, IDocumentsPort,
+    IConsentPort, ICartPort, IOrdersPort, IFulfillmentPort, IWorkflowPort, IAuditPort, ISigningPort, IDocumentsPort, IAvisosProgramados,
     IDeshacerExistencias, IDeshacerCobros, IDeshacerAgenda, IDeshacerPedidos, IDeshacerPermisos, IDeshacerDocumentos
 {
     public const string Pricing = "pricing";
@@ -321,6 +321,42 @@ public sealed class PuertosHttp : CapabilityClients,
         Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores,
         IdempotencyKey llave, CancellationToken ct)
         => (await PedirAvisoAsync(destinatario, direccion, plantilla, valores, llave, ct)).Map(d => d.Id);
+
+    /// <summary>Pide el aviso para que no salga antes de <paramref name="cuando"/> (NN-26 de 003, P13 = A).</summary>
+    public Task<Result<EntregaDto>> ProgramarAvisoAsync(
+        Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores, DateTimeOffset cuando,
+        IdempotencyKey llave, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(destinatario);
+        return Post<EntregaDto>(Notifications, "v1/deliveries", new
+        {
+            toKind = destinatario.Kind,
+            toId = destinatario.Id,
+            address = direccion,
+            templateKey = plantilla,
+            values = valores,
+            notBeforeUtc = cuando,
+        }, llave, ct);
+    }
+
+    /// <summary>Retira una entrega que no salió: la capacidad lo anota como abandonada, con el motivo.</summary>
+    public Task<Result<EntregaDto>> RetirarAvisoAsync(string entrega, CancellationToken ct)
+        => Post<EntregaDto>(Notifications, $"v1/deliveries/{Uri.EscapeDataString(entrega)}/give-up",
+            new { reason = "retirado por el flujo que lo programó" }, null, ct);
+
+    async Task<Result<string>> IAvisosProgramados.ProgramarAsync(
+        Ref destinatario, string direccion, string plantilla, IReadOnlyDictionary<string, string> valores, DateTimeOffset cuando,
+        IdempotencyKey llave, CancellationToken ct)
+        => (await ProgramarAvisoAsync(destinatario, direccion, plantilla, valores, cuando, llave, ct)).Map(d => d.Id);
+
+    async Task<Result<string>> IAvisosProgramados.RetirarAsync(string entrega, CancellationToken ct)
+    {
+        var retirada = await RetirarAvisoAsync(entrega, ct);
+        // Ya salió: no hay nada que retirar, y no es un error de quien lo pide.
+        return retirada.IsOk || retirada.Rejection!.Code == "notifications.not_retryable"
+            ? Result.Ok(entrega)
+            : Result.Rejected<string>(retirada.Rejection);
+    }
 
     // ── Consent ─────────────────────────────────────────────────────────────
 

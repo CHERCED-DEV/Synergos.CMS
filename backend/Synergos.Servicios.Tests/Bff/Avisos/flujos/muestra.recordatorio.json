@@ -1,0 +1,20 @@
+{
+  "clave": "muestra.recordatorio",
+  "entrada": ["paciente", "ventana", "antelacion"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "ventana": "ventana",
+    "antelacion": "entero",
+    "contacto": { "de": "contacto" }
+  },
+  "salida": ["entregaId"],
+  "efimera": { "agendar": ["contacto"] },
+  "fases": { "abrir": ["anotar"], "agendar": ["recordar"] },
+  "pasos": {
+    "anotar": { "tipo": "audit.anotar", "lee": ["paciente"], "llave": "audit", "accion": "muestra.cita.abrir" },
+    "recordar": {
+      "tipo": "notifications.programar", "lee": ["paciente", "contacto", "ventana", "antelacion"], "escribe": ["entregaId"],
+      "llave": "recordatorio", "plantilla": "muestra.recordatorio", "valores": ["ventana"]
+    }
+  }
+}
