@@ -206,6 +206,34 @@ internal sealed class CitaDeSaludReal : IDisposable
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Cancelar(string id, string sujeto = "u-1")
         => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/salud.cita/{id}/cancelar", sujeto));
 
+    /// <summary>
+    /// La lectura «disponibilidad» como la pide la puerta para un invitado: SIN la cabecera del sujeto (I1 de producción,
+    /// T046; la puerta la abre a invitados, núcleo NB-3).
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> Disponibilidad(
+        DateTimeOffset desde, DateTimeOffset hasta, string profesionalId = ConAgenda, string profesionalKind = "salud.profesional")
+        => Enviar(new HttpRequestMessage(HttpMethod.Post, "v1/flujos/salud.cita/disponibilidad")
+        {
+            Content = JsonContent.Create(new { profesional = new { kind = profesionalKind, id = profesionalId }, desde, hasta }),
+        });
+
+    /// <summary>
+    /// El profesional con horario: todos los días de 15:00 a 18:00 UTC por franjas de 30 minutos, así que
+    /// <see cref="Inicio"/> es su segunda franja. Lo registra <see cref="RegistrarAgenda"/>.
+    /// </summary>
+    public const string ConAgenda = "dra-agenda";
+
+    /// <summary>Registra en la agenda a <see cref="ConAgenda"/>, con su horario y su franja.</summary>
+    public Task RegistrarAgenda() => Post("booking", "v1/resources", new
+    {
+        subjectKind = "salud.profesional",
+        subjectId = ConAgenda,
+        capacity = 1,
+        timeZoneId = "UTC",
+        opening = Enum.GetValues<DayOfWeek>().Select(d => new { day = d.ToString(), from = "15:00", to = "18:00" }).ToList(),
+        slotMinutes = 30,
+    }, "agenda-con-horario");
+
     /// <summary>Una vuelta del barrido de la saga genérica, como la da el proceso cada minuto.</summary>
     public Task Barrer()
     {

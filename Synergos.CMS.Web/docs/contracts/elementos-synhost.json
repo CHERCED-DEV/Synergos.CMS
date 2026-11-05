@@ -1247,7 +1247,8 @@
       "tipo": "funcionalidad",
       "record": "EhrProps",
       "diccionario": [
-        "Health.Appointment"
+        "Health.Appointment",
+        "Health.Consent"
       ],
       "claves": [
         "Health.Appointment.BadRequest",
@@ -1262,6 +1263,7 @@
         "Health.Appointment.Loading",
         "Health.Appointment.NoAgenda",
         "Health.Appointment.NoCopay",
+        "Health.Appointment.NoSlots",
         "Health.Appointment.NotCancellable",
         "Health.Appointment.NotConfirmable",
         "Health.Appointment.NotFound",
@@ -1274,11 +1276,25 @@
         "Health.Appointment.StatePending",
         "Health.Appointment.StateReview",
         "Health.Appointment.StateUndone",
-        "Health.Appointment.Unavailable"
+        "Health.Appointment.Unavailable",
+        "Health.Consent.Accept",
+        "Health.Consent.Granted",
+        "Health.Consent.Purpose",
+        "Health.Consent.Responsible",
+        "Health.Consent.Revoke",
+        "Health.Consent.Revoked",
+        "Health.Consent.Title",
+        "Health.Consent.Use"
       ],
       "campos": [
         {
           "nombre": "apiBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "lecturasBase",
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
@@ -1299,6 +1315,7 @@
       "ejemplo": {
         "culture": "es-CO",
         "apiBase": "/api/ehr",
+        "lecturasBase": "/api/lecturas/salud",
         "appointmentPath": "directa",
         "zona": "America/Bogota"
       }
