@@ -273,6 +273,44 @@ public sealed class DeployPipelineTests
         Assert.Contains("El paso a paso está en", deploy, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Producción se despliega sólo con la etiqueta de un release, o a mano con el nombre de uno; nunca con un push
+    /// (R-2, lote 19). Y el release tiene que estar en master.
+    /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-11-04 este workflow corría al terminar «Imágenes (GHCR)» en master: cada push desplegaba. El
+    /// arquitecto pidió un único release con todo completo. Se mira el bloque <c>on:</c> sin sus comentarios: un
+    /// <c>workflow_run</c>, una rama, un <c>pull_request</c> o un <c>schedule</c> volverían a desplegar sin release.
+    /// Y el humo programado no puede buscar los despliegues «de master»: una corrida de etiqueta no tiene rama.
+    /// </remarks>
+    [Fact]
+    public void Produccion_se_despliega_solo_con_una_etiqueta_de_release()
+    {
+        var deploy = Leer(".github", "workflows", "deploy.yml");
+        var disparos = string.Join('\n', Regex.Match(deploy, @"(?ms)^on:\s*\n(.*?)^(?=\S)").Groups[1].Value
+            .Split('\n').Select(l => l.Split('#')[0].TrimEnd()).Where(l => l.Length > 0));
+        Assert.False(string.IsNullOrEmpty(disparos), "No se encontró el bloque `on:` de deploy.yml.");
+
+        Assert.Matches(@"(?m)^  push:\n    tags: \['release-\*'\]$", disparos);
+        foreach (var prohibido in new[] { "workflow_run", "branches", "pull_request", "schedule", "paths" })
+        {
+            Assert.False(disparos.Contains(prohibido, StringComparison.Ordinal),
+                $"deploy.yml se dispara con «{prohibido}»: producción volvería a desplegar sin un release (R-2).");
+        }
+        Assert.Matches(@"(?m)^  workflow_dispatch:\n    inputs:\n      release:$", disparos);
+        Assert.DoesNotContain("      sha:", disparos, StringComparison.Ordinal);
+
+        // El release se comprueba antes de tocar nada: es una etiqueta release-*, existe, y su commit está en master.
+        var comprobar = deploy.IndexOf("name: Es un release, y su commit está en master", StringComparison.Ordinal);
+        Assert.True(comprobar > 0 && comprobar < deploy.IndexOf("name: Copiar y ejecutar", StringComparison.Ordinal),
+            "deploy.yml no comprueba el release antes de copiar y ejecutar.");
+        Assert.Contains("release-*) ;;", deploy, StringComparison.Ordinal);
+        Assert.Contains("git merge-base --is-ancestor \"$SHA\" FETCH_HEAD", deploy, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("--workflow deploy.yml --branch", Leer(".github", "workflows", "humo-programado.yml"),
+            StringComparison.Ordinal);
+    }
+
     // ── Los scripts, como ficheros ──────────────────────────────────────────
 
     [Fact]

@@ -322,4 +322,78 @@ public sealed class NotificationRetryTests
 
         Assert.False(ctx.Svc.GiveUp(r.Value.Id, "porque sí").IsOk);
     }
+
+    // ── El envío programado: «no antes de» (NN-26 de 003, el recordatorio) ──
+
+    /// <summary>
+    /// Un envío con hora espera en <c>Queued</c> sin salir, ni al repetir la llave ni al pedir un reintento; el barrido no
+    /// lo ve hasta que llega su hora, y entonces lo manda con el reintento de siempre.
+    /// </summary>
+    [Fact]
+    public async Task Un_envio_programado_espera_su_hora_y_el_barrido_lo_manda_cuando_llega()
+    {
+        var ctx = Nuevo();
+        var hora = Ahora.AddHours(24);
+
+        var programado = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("rec-1"), hora);
+        var repetido = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("rec-1"), hora);
+
+        Assert.True(programado.IsOk, programado.Rejection?.ToString());
+        Assert.Equal(DeliveryStatus.Queued, programado.Value.Status);
+        Assert.Equal(hora, programado.Value.NotBeforeUtc);
+        Assert.Equal(programado.Value.Id, repetido.Value.Id);
+        Assert.Equal(0, ctx.Transporte.Salidas);
+        Assert.Empty(ctx.Svc.ListQueued(0, 50).Value.Items);
+        Assert.Equal("notifications.not_due", (await ctx.Svc.RetryAsync(programado.Value.Id)).Rejection?.Code);
+        Assert.Equal(0, ctx.Transporte.Salidas);
+
+        ctx.Reloj.Avanzar(TimeSpan.FromHours(24));
+        var colgado = Assert.Single(ctx.Svc.ListQueued(0, 50).Value.Items);
+        var salio = await ctx.Svc.RetryAsync(colgado.Id);
+
+        Assert.True(salio.IsOk, salio.Rejection?.ToString());
+        Assert.Equal(DeliveryStatus.Accepted, salio.Value.Status);
+        Assert.Equal(1, ctx.Transporte.Salidas);
+    }
+
+    [Fact]
+    public async Task Sin_hora_o_con_una_hora_que_ya_paso_sale_en_el_acto_y_sin_hora_la_respuesta_es_la_de_siempre()
+    {
+        var ctx = Nuevo();
+
+        var sinHora = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("a"));
+        var pasada = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("b"), Ahora.AddMinutes(-5));
+
+        Assert.Equal(DeliveryStatus.Accepted, sinHora.Value.Status);
+        Assert.Equal(DeliveryStatus.Accepted, pasada.Value.Status);
+        Assert.Equal(2, ctx.Transporte.Salidas);
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            Synergos.Api.Notifications.Contracts.DeliveryResponse.From(sinHora.Value), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.DoesNotContain("notBeforeUtc", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Un_envio_programado_se_retira_antes_de_su_hora_y_ya_no_sale()
+    {
+        var ctx = Nuevo();
+        var programado = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("rec-1"), Ahora.AddHours(24));
+
+        var retirado = ctx.Svc.GiveUp(programado.Value.Id, "la cita se canceló");
+        ctx.Reloj.Avanzar(TimeSpan.FromHours(25));
+
+        Assert.Equal(DeliveryStatus.GivenUp, retirado.Value.Status);
+        Assert.Empty(ctx.Svc.ListQueued(0, 50).Value.Items);
+        Assert.Equal(0, ctx.Transporte.Salidas);
+    }
+
+    [Fact]
+    public async Task Mas_de_un_anio_no_se_programa()
+    {
+        var ctx = Nuevo();
+
+        var r = await ctx.Svc.SendAsync(Ana, Correo, "cita.recordatorio", null, IdempotencyKey.Of("lejos"), Ahora.AddDays(400));
+
+        Assert.Equal("notifications.bad_not_before", r.Rejection?.Code);
+        Assert.Empty(ctx.Svc.ListQueued(0, 50).Value.Items);
+    }
 }

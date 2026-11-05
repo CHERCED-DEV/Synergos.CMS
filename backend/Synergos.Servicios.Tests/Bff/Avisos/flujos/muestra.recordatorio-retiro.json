@@ -1,0 +1,10 @@
+{
+  "clave": "muestra.recordatorio-retiro",
+  "entrada": ["paciente", "entrega"],
+  "tipos": { "paciente": { "de": "sujeto" }, "entrega": "texto" },
+  "salida": [],
+  "fases": { "retirar": ["retirar"] },
+  "pasos": {
+    "retirar": { "tipo": "notifications.retirar", "lee": ["entrega"] }
+  }
+}

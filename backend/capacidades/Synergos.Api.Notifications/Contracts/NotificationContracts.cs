@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Synergos.Api.Notifications.Domain;
 
 namespace Synergos.Api.Notifications.Contracts;
@@ -8,9 +9,10 @@ namespace Synergos.Api.Notifications.Contracts;
 public sealed record SaveTemplateRequest(string? Key, string? Channel, string? Subject, string? Body);
 
 /// <summary>Mandar un aviso.</summary>
+/// <param name="NotBeforeUtc">Opcional (NN-26 de 003): no sale antes de esta hora. Sin él, sale en el acto.</param>
 public sealed record SendRequest(
     string? ToKind, string? ToId, string? Address, string? TemplateKey,
-    IReadOnlyDictionary<string, string>? Values);
+    IReadOnlyDictionary<string, string>? Values, DateTimeOffset? NotBeforeUtc = null);
 
 /// <summary>Cómo sale una plantilla.</summary>
 public sealed record TemplateResponse(
@@ -40,12 +42,14 @@ public sealed record DeliveryResponse(
     // cuándo rendirse, y sin LastError «se rindió» no es accionable.
     int Attempts, string? LastError,
     // La versión de la plantilla con la que salió (#179): GET /v1/templates/{id} la devuelve.
-    string? TemplateId)
+    string? TemplateId,
+    // No antes de (NN-26 de 003). Sólo sale si lo tiene: la respuesta de un envío sin hora es la de siempre.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? NotBeforeUtc = null)
 {
     public static DeliveryResponse From(Delivery d) => new(
         d.Id, d.To.Kind, d.To.Id, d.Address, d.Channel.ToString(),
         d.TemplateKey, d.Subject, d.Status.ToString(), d.AtUtc, d.ProviderMessageId, d.StatusAtUtc,
-        d.Attempts, d.LastError, d.TemplateId);
+        d.Attempts, d.LastError, d.TemplateId, d.NotBeforeUtc);
 }
 
 /// <summary>

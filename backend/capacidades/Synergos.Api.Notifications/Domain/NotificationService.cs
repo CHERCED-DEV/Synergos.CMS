@@ -168,18 +168,28 @@ public sealed class NotificationService
     /// de que «no mandar dos veces» y «un fallo transitorio se puede reintentar» sean verdad a la
     /// vez.</para>
     /// </remarks>
-    public async Task<Result<Delivery>> SendAsync(
+    public Task<Result<Delivery>> SendAsync(
         Ref to, string? address, string? templateKey,
         IReadOnlyDictionary<string, string>? values, IdempotencyKey idem, CancellationToken ct = default)
+        => SendAsync(to, address, templateKey, values, idem, notBeforeUtc: null, ct);
+
+    /// <summary>
+    /// Igual que el envío de siempre, pero sin salir antes de <paramref name="notBeforeUtc"/> (NN-26 de 003): con una hora
+    /// futura el registro queda en <c>Queued</c> y lo manda el barrido cuando llega. La dirección ya está donde estaba.
+    /// </summary>
+    public async Task<Result<Delivery>> SendAsync(
+        Ref to, string? address, string? templateKey,
+        IReadOnlyDictionary<string, string>? values, IdempotencyKey idem, DateTimeOffset? notBeforeUtc, CancellationToken ct = default)
     {
         Delivery reservada;
         Channel canal;
 
         lock (_gate)
         {
-            var reserva = Reservar(to, address, templateKey, values, idem);
+            var reserva = Reservar(to, address, templateKey, values, idem, notBeforeUtc);
             if (!reserva.IsOk) return Result.Rejected<Delivery>(reserva.Rejection!);
             if (reserva.Value.Status != DeliveryStatus.Queued) return reserva;   // ya salió
+            if (!Vence(reserva.Value)) return reserva;   // programado: espera su hora, también si se repite la llave
 
             reservada = reserva.Value;
             canal = reservada.Channel;
@@ -237,7 +247,7 @@ public sealed class NotificationService
     /// </remarks>
     private Result<Delivery> Reservar(
         Ref to, string? address, string? templateKey,
-        IReadOnlyDictionary<string, string>? values, IdempotencyKey idem)
+        IReadOnlyDictionary<string, string>? values, IdempotencyKey idem, DateTimeOffset? notBeforeUtc)
     {
         if (_idempotency.Find("delivery", idem) is { } yaEra)
         {
@@ -258,7 +268,8 @@ public sealed class NotificationService
                 $"La plantilla '{templateKey}' se retiró: hay que publicarla de nuevo para volver a usarla.");
         }
 
-        var motivo = NotificationRules.CheckAddress(template.Channel, address);
+        var motivo = NotificationRules.CheckAddress(template.Channel, address)
+            ?? NotificationRules.CheckNotBefore(notBeforeUtc, Now);
         if (motivo is not null) return Result.Rejected<Delivery>(motivo);
 
         // Se pregunta antes de registrar nada: un envío por un canal que este despliegue no sabe
@@ -280,7 +291,7 @@ public sealed class NotificationService
         var id = Guid.NewGuid().ToString("n");
         var delivery = new Delivery(id, to, address!, template.Channel, template.Key,
             relleno.Value.Subject, relleno.Value.Body, DeliveryStatus.Queued, Now, ProviderMessageId: null, StatusAtUtc: Now,
-            TemplateId: template.Id);
+            TemplateId: template.Id, NotBeforeUtc: notBeforeUtc);
 
         _deliveries.Put(delivery);
         _idempotency.Remember("delivery", idem, id);
@@ -362,7 +373,9 @@ public sealed class NotificationService
     {
         lock (_gate)
         {
+            // Uno programado que todavía no vence no está colgado: está esperando su hora (NN-26 de 003).
             var todos = _deliveries.WithStatus(DeliveryStatus.Queued)
+                .Where(Vence)
                 .OrderBy(d => d.AtUtc)
                 .ThenBy(d => d.Id, StringComparer.Ordinal)
                 .ToList();
@@ -402,6 +415,11 @@ public sealed class NotificationService
                 // Ya salió, ya rebotó o ya se rindió: reintentarlo mandaría un segundo aviso.
                 return Rejection.Conflict($"{NotificationRules.CodePrefix}.not_retryable",
                     $"El envío {id} está en {hallado.Status} y no se reintenta.");
+            }
+            if (!Vence(hallado))
+            {
+                return Rejection.Conflict($"{NotificationRules.CodePrefix}.not_due",
+                    $"El envío {id} está programado para {hallado.NotBeforeUtc:O} y no sale antes.");
             }
             if (!_enVuelo.Add(hallado.Id))
             {
@@ -500,6 +518,9 @@ public sealed class NotificationService
             return Result.Ok(rendido);
         }
     }
+
+    /// <summary>Si ya le llegó la hora: sin «no antes de», siempre.</summary>
+    private bool Vence(Delivery d) => d.NotBeforeUtc is not { } hora || hora <= Now;
 
     public Result<Delivery> GetDelivery(string id)
         => _deliveries.Find(id) is { } d

@@ -49,7 +49,7 @@ public static class NotificationEndpoints
             var to = Ref.TryCreate(req.ToKind, req.ToId);
             if (to is null) return Invalid("bad_recipient", "Hacen falta toKind y toId.");
 
-            var r = await svc.SendAsync(to, req.Address, req.TemplateKey, req.Values, key, ct);
+            var r = await svc.SendAsync(to, req.Address, req.TemplateKey, req.Values, key, req.NotBeforeUtc, ct);
             return r.Match(
                 d => Results.Created($"/v1/deliveries/{d.Id}", DeliveryResponse.From(d)),
                 bad => bad.ToProblem());

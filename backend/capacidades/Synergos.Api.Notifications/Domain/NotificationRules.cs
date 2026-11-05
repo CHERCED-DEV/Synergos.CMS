@@ -16,6 +16,15 @@ public static class NotificationRules
     /// <summary>Ventana del tope de frecuencia.</summary>
     public static readonly TimeSpan RateWindow = TimeSpan.FromHours(1);
 
+    /// <summary>Lo más lejos que se puede programar un envío (NN-26 de 003): un año. Más allá es una errata.</summary>
+    public static readonly TimeSpan MaxNotBefore = TimeSpan.FromDays(366);
+
+    /// <summary>Un «no antes de» que se puede cumplir: nulo, pasado o dentro del año.</summary>
+    public static Rejection? CheckNotBefore(DateTimeOffset? notBefore, DateTimeOffset now)
+        => notBefore is { } hora && hora > now + MaxNotBefore
+            ? Rejection.Invalid($"{CodePrefix}.bad_not_before", $"Un envío se programa con {MaxNotBefore.TotalDays:0} días de antelación como mucho.")
+            : null;
+
     private static readonly Regex Marcador = new(@"\{(\w+)\}", RegexOptions.Compiled);
 
     /// <summary>Con qué se codifica un valor que entra a un cuerpo HTML.</summary>

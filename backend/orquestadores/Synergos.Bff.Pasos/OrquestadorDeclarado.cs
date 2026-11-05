@@ -61,6 +61,9 @@ public static class OrquestadorDeclarado
         // Deshacer documents.guardar (NN-25 de 003): borrar el documento que guardó.
         builder.Services.AddSingleton<IDeshacerDocumentos>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerDocumento(sp.GetRequiredService<IDeshacerDocumentos>()));
+        // El aviso programado y su deshacer (NN-26 de 003, P13 = A): retirarlo antes de que salga.
+        builder.Services.AddSingleton<IAvisosProgramados>(sp => sp.GetRequiredService<PuertosHttp>());
+        builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerAviso(sp.GetRequiredService<IAvisosProgramados>()));
         // Deshacer consent.otorgar (NN-23 de 003): retirar el permiso que dio. Va junto a los estándar del deshacer común.
         builder.Services.AddSingleton<IDeshacerPermisos>(sp => sp.GetRequiredService<PuertosHttp>());
         builder.Services.AddSingleton<IDeshaceUnTipo>(sp => new DeshacerPermiso(sp.GetRequiredService<IDeshacerPermisos>()));
@@ -106,7 +109,8 @@ public static class PasosComunes
             new PasoAgendaHallar(puertos), new PasoAgendaApartar(puertos), new PasoAgendaApartarPorItem(puertos),
             new PasoAgendaConfirmar(puertos), new PasoAgendaConfirmarPorItem(puertos), new PasoAgendaLiberar(puertos),
             new PasoAgendaApartarPorIndice(puertos), new PasoAgendaConfirmarPorIndice(puertos), new PasoAgendaFranjas(puertos),
-            new PasoAvisar(puertos, zona), new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
+            new PasoAvisar(puertos, zona), new PasoProgramarAviso(puertos, zona), new PasoRetirarAviso(puertos),
+            new PasoUnaLinea(), new PasoUnaLineaDeOferta(),
             new PasoConsentimientoVerificar(puertos), new PasoConsentimientoOtorgar(puertos), new PasoConsentimientoRevocar(puertos),
             new PasoRegistroAnotar(puertos), new PasoFirmaSellar(puertos), new PasoDocumentoGuardar(puertos),
             new PasoCanastaLeer(puertos), new PasoCanastaCerrar(puertos),

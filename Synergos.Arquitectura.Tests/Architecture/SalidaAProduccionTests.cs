@@ -577,6 +577,33 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("<Path>/SynergosLabs/Synergos/Apps/", ensayo, StringComparison.Ordinal);
     }
 
+    // ── La bitácora en producción va a Api.Audit (D-003-I2-3, 2026-11-04) ─
+
+    /// <summary>
+    /// En producción la auditoría va a <c>Api.Audit</c> para todas las verticales: el compose de producción la deja en
+    /// <c>Api</c> por defecto, el esqueleto del <c>.env</c> no la vuelve a <c>Local</c>, y el ensayo lo comprueba. El
+    /// CMS sigue en <c>Local</c> por defecto, que es lo que corren el desarrollo y las pilotos.
+    /// </summary>
+    [Fact]
+    public void En_produccion_la_bitacora_va_a_Api_Audit()
+    {
+        var compose = Leer("compose.prod.yml");
+        Assert.Contains("Synergos__Audit__Mode: ${SYNERGOS_AUDIT_MODE:-Api}", compose, StringComparison.Ordinal);
+        Assert.Contains("Synergos__Audit__BaseUrl: \"http://api-audit:8080\"", compose, StringComparison.Ordinal);
+
+        Assert.Matches(@"(?m)^SYNERGOS_AUDIT_MODE=Api\r?$", Leer(".env.example"));
+        Assert.True(!EsqueletoDelEnv().TryGetValue("SYNERGOS_AUDIT_MODE", out var delEsqueleto) || delEsqueleto == "Api",
+            $"El esqueleto del .env de bootstrap-servidor.sh pone SYNERGOS_AUDIT_MODE={delEsqueleto}: pisaría el Api del compose.");
+
+        // El default del CMS, leído de la fuente como el resto de esta clase: el desarrollo y las pilotos siguen en Local.
+        Assert.Contains("public string Mode { get; init; } = \"Local\";",
+            Leer("Synergos.CMS.Application", "Configuration", "AuditSettings.cs"), StringComparison.Ordinal);
+
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        Assert.Contains("grep -q '^Synergos__Audit__Mode=Api$'", ensayo, StringComparison.Ordinal);
+        Assert.Contains("http://api-audit:8080/v1/entries", ensayo, StringComparison.Ordinal);
+    }
+
     // ── El levantado entero, sin pasos a mano (salida a Hetzner, 2026-11-01) ─
 
     /// <summary>Un script de shell sin sus líneas de comentario: lo que corre, no lo que explica.</summary>

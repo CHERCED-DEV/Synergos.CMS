@@ -68,6 +68,9 @@ public sealed class ContratoConsumidorPasosTests
         ["OtorgarPermisoAsync"] = p => p.OtorgarPermisoAsync(Alguien, "muestra.datos", "texto-v3", Llave, Ct),
         ["LeerPermisoAsync"] = p => p.LeerPermisoAsync("gr-1", Ct),
         ["RevocarPermisoAsync"] = p => p.RevocarPermisoAsync(Alguien, "muestra.datos", Ct),
+        ["ProgramarAvisoAsync"] = p => p.ProgramarAvisoAsync(
+            Alguien, "ana@ejemplo.co", "muestra.recordatorio", new Dictionary<string, string> { ["nombre"] = "Ana" }, Ventana.Start, Llave, Ct),
+        ["RetirarAvisoAsync"] = p => p.RetirarAvisoAsync("en-1", Ct),
         ["SellarContenidoAsync"] = p => p.SellarContenidoAsync("muestra.consultorio.c-1", "la nota", Ct),
         ["GuardarDocumentoAsync"] = p => p.GuardarDocumentoAsync(
             Alguien, new Synergos.Bff.Pasos.DocumentoAdjunto("informe.pdf", "application/pdf", "JVBERi0xLjQ="), Llave, Ct),

@@ -1,0 +1,19 @@
+{
+  "clave": "muestra.recordatorio-en-dos",
+  "entrada": ["paciente", "ventana"],
+  "tipos": { "paciente": { "de": "sujeto" }, "ventana": "ventana", "contacto": { "de": "contacto" } },
+  "salida": ["entregaId"],
+  "efimera": { "agendar": ["contacto"] },
+  "fases": { "abrir": ["anotar"], "agendar": ["recordar"], "confirmar": ["confirmar"] },
+  "pasos": {
+    "anotar": { "tipo": "audit.anotar", "lee": ["paciente"], "llave": "audit", "accion": "muestra.cita.abrir" },
+    "recordar": {
+      "tipo": "notifications.programar", "lee": ["paciente", "contacto", "ventana"], "escribe": ["entregaId"],
+      "llave": "recordatorio", "plantilla": "muestra.recordatorio", "valores": ["ventana"],
+      "reserva": { "consumado_por": "confirmar", "antes": "notifications.retirar", "motivo": "la cita no se confirmó" }
+    },
+    "confirmar": {
+      "tipo": "audit.anotar", "lee": ["paciente"], "llave": "audit-confirmar", "accion": "muestra.cita.confirmar", "cierra_reserva": "recordar"
+    }
+  }
+}

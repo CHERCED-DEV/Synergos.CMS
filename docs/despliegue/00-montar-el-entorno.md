@@ -1,7 +1,8 @@
 # Montar el entorno — lo que hace el arquitecto a mano, una sola vez
 
-> Épica [#16](../../../../issues/16). Todo lo de acá se hace **una vez**; después cada `git push`
-> a `master` despliega solo.
+> Épica [#16](../../../../issues/16). Todo lo de acá se hace **una vez**; después cada release
+> —una etiqueta `release-AAAA-MM-DD` que pone el director sobre un commit de `master`— despliega
+> solo. Un `git push` a `master` corre la CI y el ensayo, y **no** despliega (R-2, lote 19).
 >
 > **Lo que un agente NO puede hacer y por eso está escrito acá:** crear cuentas, pagar, y tener
 > las credenciales. El resto lo hace el pipeline.
@@ -404,12 +405,19 @@ el webhook apunta a `https://<tu-dominio>/v1/webhooks/resend`.
 
 ## 5. Qué pasa después
 
-Con eso, un `git push` a `master`:
+Con eso, un `git push` a `master` corre los gates, construye las imágenes en GHCR y ensaya el
+despliegue en una máquina desechable, y **no toca el servidor**. Lo que llega a producción es un
+release (R-2, lote 19):
 
 ```
-gates (2080 tests + 8 workflows) → 23 imágenes a GHCR → el servidor las baja
-  → parada antes de arranque → humo contra la URL pública → verde
+git tag release-2026-11-20 <commit de master> && git push origin release-2026-11-20
+  → ¿es un release, y su commit está en master? → los gates de ese commit, en verde
+  → el servidor baja sus imágenes → parada antes de arranque → humo contra la URL pública → verde
 ```
+
+Para volver a poner un release que ya salió (volver a uno bueno, o retomar un primer despliegue
+que quedó a medias): Actions → «Despliegue» → *Run workflow* con el nombre del release. Pide el
+nombre, no un SHA: lo que llega a producción es siempre un release, y siempre de `master`.
 
 Y si el humo falla: vuelve a la imagen anterior y **el action se pone rojo**. Un deploy verde con
 el sitio caído es peor que uno rojo, porque nadie lo mira.

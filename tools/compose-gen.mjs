@@ -851,7 +851,11 @@ services:
       # lo que se para es que el asiento salga. Si el reenvio no llega, queda
       # escrito localmente que no llego. El correo de quien actuo no viaja:
       # viaja un seudonimo.
-      Synergos__Audit__Mode: \${SYNERGOS_AUDIT_MODE:-Local}
+      #
+      # En produccion va a Api.Audit para todas las verticales (D-003-I2-3,
+      # 2026-11-04): por eso el default de ESTE compose es Api. El desarrollo y
+      # las pilotos no corren este compose y siguen en Local (el default del CMS).
+      Synergos__Audit__Mode: \${SYNERGOS_AUDIT_MODE:-Api}
       Synergos__Audit__BaseUrl: "http://api-audit:8080"
       Synergos__Audit__ApiKey: \${SYNERGOS_API_KEY}
       Synergos__Audit__ActorKind: \${SYNERGOS_AUDIT_ACTOR_KIND:-cms.actor}

@@ -34,6 +34,9 @@ public static class TiposDeDeshacer
 
     /// <summary>Borrar el documento que guardó <c>documents.guardar</c> (NN-25 de 003).</summary>
     public const string BorrarDocumento = "documents.borrar";
+
+    /// <summary>Retirar el aviso que programó <c>notifications.programar</c> antes de que salga (NN-26 de 003).</summary>
+    public const string RetirarAviso = "notifications.retirar";
 }
 
 /// <summary>

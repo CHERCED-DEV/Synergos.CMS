@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Synergos.Core;
 
 namespace Synergos.Api.Notifications.Domain;
@@ -116,6 +117,10 @@ public enum DeliveryStatus
 /// <param name="TemplateId">
 /// Qué versión de la plantilla se usó (#179); <c>null</c> en los envíos de antes de versionar.
 /// </param>
+/// <param name="NotBeforeUtc">
+/// No sale antes de esta hora (NN-26 de 003, el recordatorio): espera en <c>Queued</c> y el barrido la manda cuando llega.
+/// <c>null</c>, sale en el acto, como siempre; y entonces no se escribe, así que un envío de antes no cambia de forma.
+/// </param>
 /// <remarks>
 /// <para><b><c>ProviderMessageId</c> es lo que hace posible saber si llegó.</b> El proveedor
 /// avisa del rebote citando <i>su</i> id, no el nuestro. Sin guardarlo, «entregado» y «rebotado»
@@ -136,7 +141,8 @@ public sealed record Delivery(
     DateTimeOffset? StatusAtUtc = null,
     int Attempts = 0,
     string? LastError = null,
-    string? TemplateId = null);
+    string? TemplateId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? NotBeforeUtc = null);
 
 /// <summary>
 /// Por dónde sale de verdad un aviso.

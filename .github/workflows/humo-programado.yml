@@ -63,8 +63,10 @@ jobs:
 
           # La versión que está corriendo: el último «Despliegue» verde que de
           # verdad copió y ejecutó (no uno que se saltó por falta de servidor).
+          # Sin filtro de rama: desde R-2 un despliegue lo dispara la etiqueta de un
+          # release (o un disparo manual con ella), y su corrida no es «de master».
           VERSION=""
-          for id in $(gh run list -R "$REPO" --workflow deploy.yml --branch master --status success \
+          for id in $(gh run list -R "$REPO" --workflow deploy.yml --status success \
                         --limit 20 --json databaseId --jq '.[].databaseId'); do
             copio="$(gh run view "$id" -R "$REPO" --json jobs \
                       --jq '[.jobs[].steps[] | select(.name == "Copiar y ejecutar") | .conclusion][0] // ""')"
