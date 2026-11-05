@@ -103,6 +103,34 @@ public sealed class BlogsCommentsControllerTests : IDisposable
         reacciones.Dispose();
     }
 
+    // 012-blogs-social, I3: la URL de un artículo del CMS es su identidad, y su tarjeta abre esa página.
+    [Fact]
+    public async Task Un_articulo_del_CMS_lleva_la_url_de_su_pagina_y_lo_de_un_miembro_no()
+    {
+        var fuente = Substitute.For<ICatalogSource<AuthoredPost>>();
+        fuente.GetAllAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new AuthoredPost("arquitectura", "Arquitectura", "Un resumen.", "/blogs/ingenieria/arquitectura/", null, null, null,
+                "article", new AuthoredPostAuthor("autor-equipo", "equipo", "Equipo", null), NodeId: 4242),
+        });
+        var grafo = new StubSocialGraphService(null, null, SemillaDeLaRed.Apagada);
+        var reacciones = new StubReactionService(null, null, SemillaDeLaRed.Apagada);
+        var stream = new CatalogContentStream(fuente, new InMemoryJsonEntityStore(),
+            new StubContentStream(grafo, reacciones, null, null, null, SemillaDeLaRed.Apagada));
+        var red = Red(stream: stream);
+        var articulo = Assert.Single((await stream.GetFeedAsync(new FeedQuery())).Items);
+
+        var leido = RedDePrueba.Cuerpo<BlogsController.PostDetailResponse>(await red.Como(null).Red.Post(articulo.Id, CancellationToken.None));
+        Assert.Equal("/blogs/ingenieria/arquitectura/", leido.Post.PageUrl);
+
+        var delMiembro = await Publicar(red);
+        var suyo = RedDePrueba.Cuerpo<BlogsController.PostDetailResponse>(await red.Como(null).Red.Post(delMiembro.Id, CancellationToken.None));
+        Assert.Null(suyo.Post.PageUrl);
+        stream.Dispose();
+        grafo.Dispose();
+        reacciones.Dispose();
+    }
+
     [Fact]
     public async Task Con_moderacion_previa_queda_pendiente_no_se_ve_y_se_avisa()
     {

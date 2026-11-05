@@ -575,13 +575,82 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "vista",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "rutas",
+          "tipo": "RutaDeUnaVista[]",
+          "opcional": false,
+          "origen": "sitio"
+        }
+      ],
+      "selectores": [
+        {
+          "propiedad": "vista",
+          "dataType": "DTSelectVistaDeBlogs",
+          "multiple": false,
+          "campo": "vista",
+          "valores": [
+            {
+              "editor": "inicio",
+              "viaja": "inicio"
+            },
+            {
+              "editor": "explorar",
+              "viaja": "explorar"
+            },
+            {
+              "editor": "publicacion",
+              "viaja": "publicacion"
+            },
+            {
+              "editor": "perfil",
+              "viaja": "perfil"
+            },
+            {
+              "editor": "notificaciones",
+              "viaja": "notificaciones"
+            },
+            {
+              "editor": "mensajes",
+              "viaja": "mensajes"
+            },
+            {
+              "editor": "guardados",
+              "viaja": "guardados"
+            },
+            {
+              "editor": "escribir",
+              "viaja": "escribir"
+            },
+            {
+              "editor": "estudio",
+              "viaja": "estudio"
+            }
+          ]
         }
       ],
       "ejemplo": {
         "culture": "es-CO",
         "heading": "Conecta, publica y crece tu audiencia",
         "subheading": "Sigue autores, publica historias y reacciona en tiempo real",
-        "apiBase": "/api/blogs"
+        "apiBase": "/api/blogs",
+        "vista": "explorar",
+        "rutas": [
+          {
+            "vista": "inicio",
+            "url": "/tienda/"
+          },
+          {
+            "vista": "carrito",
+            "url": "/tienda/carrito/"
+          }
+        ]
       }
     },
     {

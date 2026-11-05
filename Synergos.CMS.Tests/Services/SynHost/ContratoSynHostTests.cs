@@ -103,6 +103,7 @@ public sealed class ContratoSynHostTests
             {
                 ("heading", "Conecta, publica y crece tu audiencia"),
                 ("subheading", "Sigue autores, publica historias y reacciona en tiempo real"),
+                ("vista", "explorar"),
             },
             ["booking-wizard"] = new (string, object?)[]
             {
