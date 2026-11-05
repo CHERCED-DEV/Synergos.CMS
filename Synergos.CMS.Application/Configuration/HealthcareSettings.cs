@@ -28,8 +28,25 @@ public sealed class HealthcareSettings
     /// <summary>Vigencia por defecto de una receta, en días. Default 365.</summary>
     public int PrescriptionValidityDays { get; init; } = 365;
 
-    /// <summary>Retención de registros clínicos en días. Default 2190 (6 años). 0 = nunca purgar.</summary>
-    public int RecordRetentionDays { get; init; } = 2190;
+    /// <summary>
+    /// Lo mínimo que la ley pide conservar la historia clínica, en días: 15 años desde la última atención
+    /// (Resolución 839 de 2017, art. 3; ADR 0142). 15 × 365 + los 4 bisiestos que caben como mucho.
+    /// </summary>
+    public const int RetencionMinimaDias = (15 * 365) + 4;
+
+    /// <summary>
+    /// Desde cuándo un documento clínico es CANDIDATO a eliminarse, en días. Default <see cref="RetencionMinimaDias"/>
+    /// (15 años). Se puede subir, nunca bajar: un valor menor —el 2190 de antes, 6 años, o un 0— cuenta como el
+    /// mínimo (<see cref="RetencionEfectivaDias"/>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Ya no purga nada.</b> Pasado el término, la eliminación sigue el trámite del art. 4 de esa resolución, que no
+    /// es automático; la política de retención sólo cuenta los candidatos y lo avisa (ADR 0142).
+    /// </remarks>
+    public int RecordRetentionDays { get; init; } = RetencionMinimaDias;
+
+    /// <summary>El término que se aplica: lo configurado, pero nunca menos que la ley.</summary>
+    public int RetencionEfectivaDias => Math.Max(RecordRetentionDays, RetencionMinimaDias);
 
     /// <summary>Si true, los roles de staff (doctor/nurse/reception) requieren 2FA. Default true.</summary>
     public bool RequireTwoFactorStaff { get; init; } = true;

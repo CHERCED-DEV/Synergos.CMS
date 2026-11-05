@@ -4,6 +4,10 @@
 - **Date:** 2026-06-25
 - **Deciders:** Arquitecto + agente, fase SynergosLabs. Diseño verificado por workflow multi-agente con lente PHI/regulatorio contra código vivo.
 - **Depende de:** ADR 0096 (module-mount). Frontera regulatoria análoga a ADR 0095.
+- **Enmendada por:** [ADR 0142](0142-la-historia-clinica-no-se-suprime-mientras-dure-su-retencion-legal.md) en
+  §4 y §5 (2026-11-05). La historia clínica no se suprime mientras dure su retención legal: la supresión desliga al
+  miembro de la versión vigente y de las archivadas, que quedan completas; la retención es de 15 años desde la última
+  atención, nunca menos; y la eliminación es el trámite del art. 4 de la Resolución 839 de 2017, no una purga.
 
 ## Context
 

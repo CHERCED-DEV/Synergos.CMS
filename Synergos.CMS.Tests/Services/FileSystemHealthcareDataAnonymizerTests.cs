@@ -5,11 +5,15 @@ using Synergos.CMS.Web.Services;
 namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
-/// Tests para <see cref="FileSystemHealthcareDataAnonymizer"/> (ADR 0098 H3).
-/// Usa un <see cref="IPhiStore"/> en memoria. Verifica que de-identifica los
-/// registros del miembro (nombre, fecha → año, desliga MemberKey) conservando el
-/// contenido clínico, y deja intactos los de otros miembros.
+/// Tests para <see cref="FileSystemHealthcareDataAnonymizer"/> (ADR 0098 §5, enmendada por la ADR 0142). Usa un
+/// <see cref="IPhiStore"/> en memoria. La supresión DESLIGA al miembro de su historia —la vigente y todas las
+/// archivadas— y la historia queda completa: se conserva por ley mientras dure su retención. Los de otros miembros
+/// no se tocan.
 /// </summary>
+/// <remarks>
+/// Las dos primeras pruebas decían lo contrario hasta la ADR 0142 (nombre «[de-identificado]», nacimiento sólo con el
+/// año, pre-registro borrado): cambiaron con la decisión D-003-I2-5, no para que el código pasara.
+/// </remarks>
 public sealed class FileSystemHealthcareDataAnonymizerTests
 {
     private readonly InMemoryPhiStore _store = new();
@@ -24,8 +28,8 @@ public sealed class FileSystemHealthcareDataAnonymizerTests
         return record;
     }
 
-    [Fact]
-    public async Task Anonymize_DeIdentifiesMembersPatient_KeepsClinicalContent()
+    [Fact] // ADR 0142: la historia se conserva completa; sólo deja de estar ligada a la cuenta que se borra.
+    public async Task Anonymize_DesligaAlMiembro_YLaHistoriaQuedaCompleta()
     {
         var member = Guid.NewGuid();
         var seeded = await SeedPatient(member, "Juan Pérez");
@@ -35,15 +39,40 @@ public sealed class FileSystemHealthcareDataAnonymizerTests
         Assert.Equal(1, count);
         var raw = await _store.ReadAsync("patients", seeded.PatientKey, CancellationToken.None);
         var after = JsonSerializer.Deserialize<PatientRecord>(raw!)!;
-        Assert.Equal("[de-identificado]", after.DisplayName);            // nombre blanqueado
-        Assert.Equal(Guid.Empty, after.MemberKey);                       // desligado del Member
-        Assert.Equal(new DateTime(1985, 1, 1, 0, 0, 0, DateTimeKind.Utc), after.DateOfBirth);  // solo año
-        Assert.Equal("migraña", after.AssessmentNotes);                  // contenido clínico conservado
-        Assert.Equal(seeded.PatientKey, after.PatientKey);               // PatientKey intacto
+        Assert.Equal(Guid.Empty, after.MemberKey);                       // desligada de la cuenta
+        Assert.Equal(seeded with { MemberKey = Guid.Empty }, after);     // y lo demás, tal cual
     }
 
-    [Fact] // 003-salud-cita, I2 T057: lo que el paciente declaró lleva su clave y lo que lo identifica.
-    public async Task Anonymize_ElPreRegistroYLoDeclarado_PierdenLoQueIdentifica_YConservanLoClinico()
+    [Fact] // las versiones archivadas también: antes seguían ligadas a una cuenta que ya no existía.
+    public async Task Anonymize_DesligaTambienLasVersionesArchivadas_YLasConservaCompletas()
+    {
+        var member = Guid.NewGuid();
+        var repo = new FileSystemPatientRepository(_store);
+        var key = await repo.UpsertAsync(new PatientRecord(
+            Guid.Empty, member, "Juan Pérez", new DateTime(1985, 7, 15, 0, 0, 0, DateTimeKind.Utc),
+            "dolor de cabeza", null, null, default, Guid.NewGuid(), 0, false), CancellationToken.None);
+        var v1 = (await repo.GetAsync(key, CancellationToken.None))!;
+        await repo.UpsertAsync(v1 with { FindingsNotes = "presión normal" }, CancellationToken.None);
+        var v2 = (await repo.GetAsync(key, CancellationToken.None))!;
+        await repo.UpsertAsync(v2 with { AssessmentNotes = "migraña" }, CancellationToken.None);
+
+        var count = await BuildSut().AnonymizeForMemberAsync(member, CancellationToken.None);
+
+        Assert.Equal(3, count); // la vigente y las dos archivadas
+        var archivadas = await _store.ListAsync("patient-history", CancellationToken.None);
+        Assert.Equal(2, archivadas.Count);
+        Assert.All(archivadas.Select(j => JsonSerializer.Deserialize<PatientRecord>(j)!), r =>
+        {
+            Assert.Equal(Guid.Empty, r.MemberKey);
+            Assert.Equal("Juan Pérez", r.DisplayName);
+            Assert.Equal(new DateTime(1985, 7, 15, 0, 0, 0, DateTimeKind.Utc), r.DateOfBirth);
+        });
+        var todo = string.Concat(archivadas.Concat(await _store.ListAsync("patients", CancellationToken.None)));
+        Assert.DoesNotContain(member.ToString(), todo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact] // 003-salud-cita, I2: el pre-registro es parte de la historia; lo que se va es la clave del miembro.
+    public async Task Anonymize_ElPreRegistroYElResumenQuedanCompletos_SinLaClaveDelMiembro()
     {
         var member = Guid.NewGuid();
         var medico = Guid.NewGuid();
@@ -62,10 +91,12 @@ public sealed class FileSystemHealthcareDataAnonymizerTests
         var raw = await _store.ReadAsync("patients", record.PatientKey, CancellationToken.None);
         var after = JsonSerializer.Deserialize<PatientRecord>(raw!)!;
         var pre = after.PreRegistro!;
-        Assert.All(new[] { pre.Documento, pre.Telefono, pre.Direccion, pre.ContactoDeEmergencia, pre.NumeroDeAfiliacion },
-            campo => Assert.Equal("[de-identificado]", campo));
-        Assert.Equal(("EPS Sura", "Control"), (pre.Aseguradora, pre.MotivoDeLaVisita));
+        Assert.Equal(
+            ("CC 52.123.456", "300 123 4567", "Calle 1 # 2-3", "Ana, 300 765 4321", "EPS Sura", "AF-998", "Control"),
+            (pre.Documento, pre.Telefono, pre.Direccion, pre.ContactoDeEmergencia, pre.Aseguradora, pre.NumeroDeAfiliacion,
+                pre.MotivoDeLaVisita));
         Assert.Equal(new[] { "Losartán 50 mg" }, pre.Medicamentos);
+        Assert.Equal("Juan Pérez", after.DisplayName);
         var dato = Assert.Single(after.Resumen!.Datos);
         Assert.Equal(("Penicilina", Guid.Empty, (Guid?)medico), (dato.Descripcion, dato.RegistradoPor, dato.ValidadoPor));
         Assert.DoesNotContain(member.ToString(), raw!, StringComparison.OrdinalIgnoreCase);
@@ -112,6 +143,12 @@ public sealed class FileSystemHealthcareDataAnonymizerTests
             Task.FromResult((IReadOnlyList<string>)_data
                 .Where(kv => kv.Key.StartsWith(resourceType + "/", StringComparison.Ordinal))
                 .Select(kv => kv.Value).ToList());
+
+        public Task<IReadOnlyList<KeyValuePair<Guid, string>>> ListEntriesAsync(string resourceType, CancellationToken ct) =>
+            Task.FromResult((IReadOnlyList<KeyValuePair<Guid, string>>)_data
+                .Where(kv => kv.Key.StartsWith(resourceType + "/", StringComparison.Ordinal))
+                .Select(kv => new KeyValuePair<Guid, string>(Guid.Parse(kv.Key[(resourceType.Length + 1)..]), kv.Value))
+                .ToList());
 
         public Task<bool> DeleteAsync(string resourceType, Guid key, CancellationToken ct) =>
             Task.FromResult(_data.Remove(K(resourceType, key)));

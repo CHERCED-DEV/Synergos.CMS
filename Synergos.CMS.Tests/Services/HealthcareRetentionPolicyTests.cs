@@ -8,8 +8,9 @@ using Synergos.CMS.Web.Services.Retention;
 namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
-/// Tests para <see cref="HealthcareRetentionPolicy"/> (ADR 0098 H3). Purga
-/// archivos PHI <c>.phi</c> por última modificación más allá de la retención.
+/// Tests para <see cref="HealthcareRetentionPolicy"/> (ADR 0098 H3, enmendada por la ADR 0142). Los documentos
+/// clínicos NO se purgan: pasado el término legal (15 años como mínimo) son candidatos, y su eliminación es el trámite
+/// del art. 4 de la Resolución 839 de 2017. La prueba que decía «purga lo viejo» cambió con la decisión D-003-I2-5.
 /// </summary>
 public sealed class HealthcareRetentionPolicyTests : IDisposable
 {
@@ -51,17 +52,48 @@ public sealed class HealthcareRetentionPolicyTests : IDisposable
     [Fact]
     public void Name_IsHealthcare() => Assert.Equal("healthcare", BuildSut(2190).Name);
 
-    [Fact]
-    public async Task Sweep_PurgesOldKeepsRecent()
+    [Fact] // ADR 0142: ninguna historia se borra sola, ni pasado el término.
+    public async Task Sweep_NoBorraNingunDocumentoClinico_AunquePaseElTermino()
     {
-        var old = WritePhi("viejo", DateTime.UtcNow.AddDays(-3000));   // > 6 años
-        var recent = WritePhi("reciente", DateTime.UtcNow.AddDays(-10));
+        var viejisimo = WritePhi("viejisimo", DateTime.UtcNow.AddDays(-7000)); // > 15 años
+        var viejo = WritePhi("viejo", DateTime.UtcNow.AddDays(-3000));         // > 6 años, < 15
+        var reciente = WritePhi("reciente", DateTime.UtcNow.AddDays(-10));
 
         var purged = await BuildSut(retentionDays: 2190).SweepAsync(CancellationToken.None);
 
-        Assert.Equal(1, purged);
-        Assert.False(File.Exists(old));
-        Assert.True(File.Exists(recent));
+        Assert.Equal(0, purged);
+        Assert.True(File.Exists(viejisimo));
+        Assert.True(File.Exists(viejo));
+        Assert.True(File.Exists(reciente));
+    }
+
+    [Theory] // el término se puede subir, nunca bajar: lo configurado por debajo de 15 años cuenta como 15.
+    [InlineData(2190)]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Candidatos_ElTerminoNuncaEsMenorQueElLegal(int configurado)
+    {
+        WritePhi("viejisimo", DateTime.UtcNow.AddDays(-7000));
+        WritePhi("viejo", DateTime.UtcNow.AddDays(-3000));
+        WritePhi("reciente", DateTime.UtcNow.AddDays(-10));
+
+        Assert.Equal(1, BuildSut(configurado).AvisarLosCandidatos(configurado, CancellationToken.None));
+    }
+
+    [Fact]
+    public void Candidatos_UnTerminoMasLargoQueElLegal_Se_respeta()
+    {
+        WritePhi("viejisimo", DateTime.UtcNow.AddDays(-7000));
+        Assert.Equal(0, BuildSut(8000).AvisarLosCandidatos(8000, CancellationToken.None));
+    }
+
+    [Fact]
+    public void Settings_LaRetencionPorDefectoEsLaLegal_YNuncaMenor()
+    {
+        Assert.Equal(HealthcareSettings.RetencionMinimaDias, new HealthcareSettings().RetencionEfectivaDias);
+        Assert.Equal(HealthcareSettings.RetencionMinimaDias, new HealthcareSettings { RecordRetentionDays = 2190 }.RetencionEfectivaDias);
+        Assert.Equal(8000, new HealthcareSettings { RecordRetentionDays = 8000 }.RetencionEfectivaDias);
+        Assert.True(HealthcareSettings.RetencionMinimaDias >= 15 * 365);
     }
 
     [Fact]

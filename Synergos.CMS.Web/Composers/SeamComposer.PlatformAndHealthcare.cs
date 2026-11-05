@@ -138,8 +138,9 @@ public sealed partial class SeamComposer
         // ADR 0098 H2c — recetas (RECORD-KEEPER, sobre el PHI store).
         services.AddSingleton<IPrescriptionService, FileSystemPrescriptionService>();
 
-        // ADR 0098 H3 — de-identificador PHI (lo invoca el coordinador RTBF
-        // antes del hard-delete del Member).
+        // ADR 0098 H3, enmendada por la ADR 0142 — desliga al miembro de su historia
+        // (lo invoca el coordinador RTBF antes del hard-delete del Member); la historia
+        // se conserva completa por su retención legal.
         services.AddSingleton<IHealthcareDataAnonymizer, FileSystemHealthcareDataAnonymizer>();
 
         // OLA 5 Healthcare EHR-lite — dashboard clínico de DEMO (doc healthcare-app-spec).

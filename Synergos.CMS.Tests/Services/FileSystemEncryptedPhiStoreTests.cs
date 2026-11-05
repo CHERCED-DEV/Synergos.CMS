@@ -49,6 +49,23 @@ public sealed class FileSystemEncryptedPhiStoreTests : IDisposable
         Assert.Equal("{\"dx\":\"hipertensión\"}", json);
     }
 
+    [Fact] // ADR 0142: la supresión reescribe las versiones archivadas, que sólo se conocen por su contenido.
+    public async Task ListEntries_DevuelveCadaDocumentoConSuClave_YSaltaLoQueNoEsDelAlmacen()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        await _sut.WriteAsync(Rt, a, "{\"v\":1}", CancellationToken.None);
+        await _sut.WriteAsync(Rt, b, "{\"v\":2}", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(PhiPath(a))!, "no-es-una-clave.phi"), "x");
+
+        var entradas = await _sut.ListEntriesAsync(Rt, CancellationToken.None);
+
+        Assert.Equal(
+            new[] { (a, "{\"v\":1}"), (b, "{\"v\":2}") }.OrderBy(e => e.Item1),
+            entradas.Select(e => (e.Key, e.Value)).OrderBy(e => e.Item1));
+        Assert.Empty(await _sut.ListEntriesAsync("otro-recurso", CancellationToken.None));
+    }
+
     [Fact]
     public async Task Write_FileOnDisk_IsEncrypted_NotPlaintext()
     {
