@@ -73,11 +73,14 @@ public sealed class EhrController : ControllerBase
     /// Los roles de la superficie clínica (#197): médico, enfermería y el superusuario transversal.
     /// </summary>
     /// <remarks>
-    /// Son grupos que crea <c>DevMemberRoleSeeder</c>. Ojo: el núcleo PHI de producción
-    /// (<c>DefaultPhiAccessGuard</c>) pide <c>doctor,nurse,reception</c> —otro vocabulario para
-    /// las mismas personas—; unificarlos es una decisión aparte.
+    /// <para>Es el vocabulario del núcleo PHI de producción (<c>DefaultPhiAccessGuard</c>:
+    /// <c>doctor,nurse,reception</c>), uno solo para las mismas personas (Q5 de 003, I2 T055). Antes
+    /// eran <c>medico,enfermeria,admin</c>, los grupos de desarrollo, y en producción no existía
+    /// ninguno de los dos.</para>
+    /// <para><c>reception</c> no entra acá a propósito: esta superficie sirve la ficha y las notas
+    /// clínicas, y recepción ve la agenda, la llegada y abre la historia, sin las notas.</para>
     /// </remarks>
-    internal const string RolesClinicos = "medico,enfermeria,admin";
+    internal const string RolesClinicos = "doctor,nurse,admin";
 
     private readonly IPatientRegistry _patients;
     private readonly IDoctorDirectory _doctors;

@@ -33,19 +33,22 @@ public sealed class DevMemberRoleSeeder
     /// en config— porque son el CONTRATO con el código: <c>GovController</c> pide
     /// "funcionario,admin", <c>EventosController</c> "organizador,admin" y
     /// <c>DefaultPhiAccessGuard</c> "doctor,nurse,reception" y <c>EhrController</c>
-    /// "medico,enfermeria,admin" (#197). Cambiar uno aquí sin cambiarlo allá no arreglaría nada.
+    /// "doctor,nurse,admin" (#197). Cambiar uno aquí sin cambiarlo allá no arreglaría nada.
     /// </summary>
+    /// <remarks>
+    /// Salud tiene un solo vocabulario, el de producción (Q5 de 003, I2 T055): <c>medico</c> y
+    /// <c>enfermeria</c> salieron de esta lista. Los grupos que ya se crearon con esos nombres no se
+    /// tocan; sólo dejan de darle entrada a nada.
+    /// </remarks>
     public static readonly IReadOnlyList<string> DomainRoles = new[]
     {
         "funcionario",  // Gobierno — cola/expediente/decisión (T2-Gobierno)
         "organizador",  // Eventos — consola, crear evento, check-in, feed en vivo (T2-Eventos, T7)
         "agente",       // Propiedades — leads (PII) + publicar al catálogo (T2-Realty)
         "instructor",   // Educación — panel de autoría + métricas de matrícula (T2-Academy)
-        "doctor",       // Healthcare — PHI (ADR 0098)
+        "doctor",       // Salud — PHI (ADR 0098) y la superficie clínica de /api/ehr (#197, Q5)
         "nurse",
         "reception",
-        "medico",       // Salud EHR-lite — la superficie clínica de /api/ehr (#197)
-        "enfermeria",
         "admin",        // superusuario transversal
     };
 

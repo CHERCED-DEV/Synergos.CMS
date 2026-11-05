@@ -27,11 +27,15 @@ public interface IPhiAccessGuard
 /// <param name="TargetPatientKey">Paciente cuyo dato se accede (si aplica).</param>
 /// <param name="TargetOwnerMemberKey">MemberKey dueño del recurso, cuando el
 ///   caller lo conoce — habilita el auto-acceso del paciente a lo suyo.</param>
+/// <param name="Proposito">Para qué se entra, cuando el llamador lo declara (p. ej.
+///   <c>salud.historia</c>, <c>salud.check-in</c>). Va a la auditoría como el «por qué» del acceso
+///   (003-salud-cita, I2 T064); no decide nada: la base con que se deja pasar la pone la guardia.</param>
 public sealed record AccessCheckRequest(
     string ResourceType,
     string Action,
     Guid? TargetPatientKey = null,
-    Guid? TargetOwnerMemberKey = null);
+    Guid? TargetOwnerMemberKey = null,
+    string? Proposito = null);
 
 /// <summary>Resultado de la decisión, con el id del evento de auditoría emitido.</summary>
 /// <param name="IsAllowed">Si el acceso se permite.</param>

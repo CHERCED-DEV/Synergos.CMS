@@ -42,6 +42,35 @@ public sealed class FileSystemHealthcareDataAnonymizerTests
         Assert.Equal(seeded.PatientKey, after.PatientKey);               // PatientKey intacto
     }
 
+    [Fact] // 003-salud-cita, I2 T057: lo que el paciente declaró lleva su clave y lo que lo identifica.
+    public async Task Anonymize_ElPreRegistroYLoDeclarado_PierdenLoQueIdentifica_YConservanLoClinico()
+    {
+        var member = Guid.NewGuid();
+        var medico = Guid.NewGuid();
+        var declarado = new DatoDeSalud("d-1", TiposDeDatoDeSalud.Alergia, "Penicilina", null, EstadosDelDato.Validado,
+            "paciente", DateTime.UtcNow, member, DateTime.UtcNow, medico);
+        var record = (await SeedPatient(member, "Juan Pérez")) with
+        {
+            Resumen = new ResumenDeSalud(new[] { declarado }),
+            PreRegistro = new PreRegistro("CC 52.123.456", "300 123 4567", "Calle 1 # 2-3", "Ana, 300 765 4321", "EPS Sura",
+                "AF-998", new[] { "Losartán 50 mg" }, "Control", DateTime.UtcNow),
+        };
+        await _store.WriteAsync("patients", record.PatientKey, JsonSerializer.Serialize(record), CancellationToken.None);
+
+        await BuildSut().AnonymizeForMemberAsync(member, CancellationToken.None);
+
+        var raw = await _store.ReadAsync("patients", record.PatientKey, CancellationToken.None);
+        var after = JsonSerializer.Deserialize<PatientRecord>(raw!)!;
+        var pre = after.PreRegistro!;
+        Assert.All(new[] { pre.Documento, pre.Telefono, pre.Direccion, pre.ContactoDeEmergencia, pre.NumeroDeAfiliacion },
+            campo => Assert.Equal("[de-identificado]", campo));
+        Assert.Equal(("EPS Sura", "Control"), (pre.Aseguradora, pre.MotivoDeLaVisita));
+        Assert.Equal(new[] { "Losartán 50 mg" }, pre.Medicamentos);
+        var dato = Assert.Single(after.Resumen!.Datos);
+        Assert.Equal(("Penicilina", Guid.Empty, (Guid?)medico), (dato.Descripcion, dato.RegistradoPor, dato.ValidadoPor));
+        Assert.DoesNotContain(member.ToString(), raw!, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Anonymize_OtherMembers_Untouched()
     {

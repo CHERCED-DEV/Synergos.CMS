@@ -122,6 +122,124 @@ public sealed class DefaultPhiAccessGuardTests
         Assert.Equal("audit-unavailable", d.DenyReason);
     }
 
+    // ── El «por qué» en la auditoría (003-salud-cita, I2 T064) ─────────────────────────────────────
+
+    /// <summary>El detalle del evento que escribió la guardia en la última decisión.</summary>
+    private string DetalleAuditado()
+    {
+        var llamada = _audit.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(IAuditTrailWriter.WriteAsync));
+        return ((AuditEvent)llamada.GetArguments()[0]!).Detail;
+    }
+
+    public static TheoryData<string, string> CaminosYSuBase() => new()
+    {
+        { "propio", "basis=propio" },
+        { "agenda", "basis=agenda-del-personal" },
+        { "permiso", "basis=permiso-local" },
+        { "sin-permiso", "basis=ninguna" },
+        { "anonimo", "basis=ninguna" },
+    };
+
+    [Theory, MemberData(nameof(CaminosYSuBase))]
+    public async Task Audit_DiceLaBaseConQueSeDejoPasar_LaQueDecideLaGuardia(string camino, string base_)
+    {
+        var actor = Guid.NewGuid();
+        var patient = Guid.NewGuid();
+        AccessCheckRequest request;
+        switch (camino)
+        {
+            case "propio":
+                Authenticated(actor);
+                request = new AccessCheckRequest("patient-record", "read", TargetPatientKey: patient, TargetOwnerMemberKey: actor);
+                break;
+            case "agenda":
+                Authenticated(actor, rolesCsvTrue: "doctor,nurse,reception");
+                request = new AccessCheckRequest("appointment", "write", TargetPatientKey: patient);
+                break;
+            case "permiso":
+            case "sin-permiso":
+                Authenticated(actor, rolesCsvTrue: "doctor");
+                _consent.HasActiveConsentAsync(patient, actor, Arg.Any<CancellationToken>()).Returns(camino == "permiso");
+                request = new AccessCheckRequest("patient-record", "read", TargetPatientKey: patient);
+                break;
+            default:
+                _gate.IsAuthenticated.Returns(false);
+                request = new AccessCheckRequest("patient-record", "read", TargetPatientKey: patient);
+                break;
+        }
+
+        await BuildSut().CheckAccessAsync(request, CancellationToken.None);
+
+        Assert.Contains($"; {base_}", DetalleAuditado(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Audit_SinProposito_ElDetalleEsElDeSiempreConSuBase_YNoNombraUnProposito()
+    {
+        var actor = Guid.NewGuid();
+        Authenticated(actor);
+
+        await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("patient-record", "read", TargetOwnerMemberKey: actor), CancellationToken.None);
+
+        Assert.Equal("action=read; reason=ok; basis=propio", DetalleAuditado());
+    }
+
+    [Fact]
+    public async Task Audit_LlevaElPropositoDeclarado_SinQueElLlamadorPuedaEscribirOtraBase()
+    {
+        var actor = Guid.NewGuid();
+        Authenticated(actor);
+
+        await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("patient-record", "read", TargetOwnerMemberKey: actor,
+                Proposito: " salud.historia; basis=permiso-local\nreason=ok "),
+            CancellationToken.None);
+
+        var detalle = DetalleAuditado();
+        Assert.StartsWith("action=read; reason=ok; basis=propio; purpose=salud.historia", detalle, StringComparison.Ordinal);
+        Assert.Single(detalle.Split("basis=", StringSplitOptions.None).Skip(1));
+        Assert.DoesNotContain('\n', detalle);
+    }
+
+    // ── «declare»: el pre-registro del paciente (003-salud-cita, I2 T058) ──────────────────────────
+
+    [Fact]
+    public async Task Declare_ElPacienteSobreSuHistoria_Pasa_ComoPropio()
+    {
+        var actor = Guid.NewGuid();
+        Authenticated(actor);
+
+        var d = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("patient-record", "declare", TargetPatientKey: Guid.NewGuid(), TargetOwnerMemberKey: actor,
+                Proposito: "salud.check-in"),
+            CancellationToken.None);
+
+        Assert.True(d.IsAllowed);
+        Assert.Contains("; basis=propio; purpose=salud.check-in", DetalleAuditado(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("patient-record", false)] // la historia de OTRO miembro
+    [InlineData("prescription", true)]    // lo suyo, pero no es su historia: «declare» no abre recetas
+    [InlineData("consent", true)]
+    public async Task Declare_NoAbreLoAjeno_NiOtroRecurso_NiEsEscribir(string recurso, bool esSuyo)
+    {
+        var actor = Guid.NewGuid();
+        Authenticated(actor);   // sin roles
+
+        var d = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest(recurso, "declare", TargetPatientKey: Guid.NewGuid(),
+                TargetOwnerMemberKey: esSuyo ? actor : Guid.NewGuid()),
+            CancellationToken.None);
+        var escribir = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("patient-record", "write", TargetPatientKey: Guid.NewGuid(), TargetOwnerMemberKey: actor),
+            CancellationToken.None);
+
+        Assert.False(d.IsAllowed);
+        Assert.False(escribir.IsAllowed); // el paciente declara; escribir su historia sigue siendo del médico
+    }
+
     [Fact]
     public async Task EvaluationThrows_Denied_ButStillAudited()
     {

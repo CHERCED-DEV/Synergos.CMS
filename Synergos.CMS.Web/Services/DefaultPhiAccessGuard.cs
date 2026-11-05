@@ -42,13 +42,30 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
         _patients = patients;
     }
 
+    /// <summary>Con qué base se dejó pasar: lo que la auditoría dice como el «por qué» (I2 T064).</summary>
+    internal static class Bases
+    {
+        /// <summary>El paciente sobre lo suyo, sólo para leer.</summary>
+        public const string Propio = "propio";
+
+        /// <summary>El personal sobre la agenda, que no pide el permiso clínico.</summary>
+        public const string AgendaDelPersonal = "agenda-del-personal";
+
+        /// <summary>El médico con el consentimiento del libro local, médico por médico.</summary>
+        public const string PermisoLocal = "permiso-local";
+
+        /// <summary>No se dejó pasar.</summary>
+        public const string Ninguna = "ninguna";
+    }
+
     public async Task<AccessDecision> CheckAccessAsync(AccessCheckRequest request, CancellationToken cancellationToken)
     {
         bool allowed;
         string? reason;
+        string basis;
         try
         {
-            (allowed, reason) = await EvaluateAsync(request, cancellationToken).ConfigureAwait(false);
+            (allowed, reason, basis) = await EvaluateAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -59,10 +76,20 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
                 request.ResourceType);
             allowed = false;
             reason = "evaluation-error";
+            basis = Bases.Ninguna;
         }
 
         // Auditar SIEMPRE (permiso o negación). Fail-closed: si el audit falla,
         // se deniega aunque la política permitiera.
+        //
+        // El detalle dice quién, qué y POR QUÉ (P21 de 003, I2 T064): la base con que se dejó
+        // pasar —la decide la guardia, no el llamador— y, si el llamador lo declaró, para qué se
+        // entró. El prefijo `action=…; reason=…` es el de siempre: quien ya lo lee no cambia.
+        var detalle = $"action={request.Action}; reason={reason ?? "ok"}; basis={basis}";
+        if (Limpio(request.Proposito) is { } proposito)
+        {
+            detalle += $"; purpose={proposito}";
+        }
         var evt = new AuditEvent(
             Guid.NewGuid().ToString("N"),
             DateTime.UtcNow,
@@ -71,7 +98,7 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
             allowed ? "phi.access-granted" : "phi.access-denied",
             $"{request.ResourceType}:{request.TargetPatientKey?.ToString("N") ?? "-"}",
             allowed ? "success" : "failure",
-            $"action={request.Action}; reason={reason ?? "ok"}");
+            detalle);
 
         try
         {
@@ -88,11 +115,25 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
         return new AccessDecision(allowed, allowed ? null : reason, evt.Id);
     }
 
-    private async Task<(bool allowed, string? reason)> EvaluateAsync(AccessCheckRequest request, CancellationToken ct)
+    /// <summary>
+    /// El propósito declarado, sin lo que rompería el detalle (<c>;</c> y <c>=</c> separan sus campos,
+    /// y un salto de línea partiría el registro). <c>null</c> si no queda nada.
+    /// </summary>
+    private static string? Limpio(string? proposito)
+    {
+        if (string.IsNullOrWhiteSpace(proposito))
+        {
+            return null;
+        }
+        var limpio = new string(proposito.Trim().Where(c => c is not (';' or '=') && !char.IsControl(c)).ToArray());
+        return limpio.Length == 0 ? null : limpio;
+    }
+
+    private async Task<(bool allowed, string? reason, string basis)> EvaluateAsync(AccessCheckRequest request, CancellationToken ct)
     {
         if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid actorKey)
         {
-            return (false, "not-authenticated");
+            return (false, "not-authenticated", Bases.Ninguna);
         }
 
         // ── Auto-acceso: el paciente sobre su propio recurso, y SÓLO PARA LEER.
@@ -117,7 +158,14 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
         // tiene derecho a VER lo suyo; el criterio clínico lo firma quien lo
         // emite. Como la rama nunca se alcanzaba, estrecharla no le quita
         // permiso a nadie que hoy lo tenga.
-        if (string.Equals(request.Action, "read", StringComparison.OrdinalIgnoreCase))
+        //
+        // «declare» (003-salud-cita, I2 T058) es la otra cosa que el paciente hace sobre lo suyo: su
+        // pre-registro. Sólo sobre su historia, y quien escribe lo confina a lo DECLARADO
+        // (HistoriaClinica.Declarar no toca lo validado ni las notas). No es «write»: ese sigue siendo
+        // del médico con el permiso.
+        if (string.Equals(request.Action, "read", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(request.Action, "declare", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(request.ResourceType, "patient-record", StringComparison.OrdinalIgnoreCase)))
         {
             var owner = request.TargetOwnerMemberKey;
 
@@ -131,7 +179,7 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
 
             if (owner is Guid ownerKey && ownerKey == actorKey)
             {
-                return (true, null);
+                return (true, null, Bases.Propio);
             }
         }
 
@@ -139,7 +187,7 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
         if (string.Equals(request.ResourceType, "appointment", StringComparison.OrdinalIgnoreCase)
             && _gate.HasAnyRole(SchedulingRolesCsv))
         {
-            return (true, null);
+            return (true, null, Bases.AgendaDelPersonal);
         }
 
         // Datos clínicos (historia/recetas/consentimiento): doctor CON consentimiento.
@@ -147,12 +195,12 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
         {
             if (request.TargetPatientKey is not Guid patientKey)
             {
-                return (false, "no-target-patient");
+                return (false, "no-target-patient", Bases.Ninguna);
             }
             var hasConsent = await _consent.HasActiveConsentAsync(patientKey, actorKey, ct).ConfigureAwait(false);
-            return hasConsent ? (true, null) : (false, "no-active-consent");
+            return hasConsent ? (true, null, Bases.PermisoLocal) : (false, "no-active-consent", Bases.Ninguna);
         }
 
-        return (false, "insufficient-role");
+        return (false, "insufficient-role", Bases.Ninguna);
     }
 }

@@ -125,6 +125,11 @@ public sealed partial class SeamComposer
         // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
         services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
 
+        // 003-salud-cita, I2 T057 — el editor de la historia: lee, cambia y guarda bajo un candado por
+        // paciente, para que el pre-registro y la validación del médico no se pisen. Singleton: el candado
+        // tiene que ser el mismo para todas las peticiones.
+        services.AddSingleton<EditorDeLaHistoriaClinica>();
+
         // ADR 0098 H2b — agenda de citas: lógica pura (Application) + scheduler Web
         // con lock async por-doctor (anti-overbooking) sobre el PHI store.
         services.AddSingleton<Synergos.CMS.Application.Services.AppointmentSchedulingService>();

@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Salud;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -25,13 +29,33 @@ public sealed class HealthcareApiController : ControllerBase
     private readonly IConsentLedger _consent;
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>Lee, cambia y guarda la historia bajo su candado (I2 T057).</summary>
+    private readonly EditorDeLaHistoriaClinica _editor;
+
+    /// <summary>El reloj y la zona del sitio: de ahí sale el «hoy» de una vacuna declarada.</summary>
+    private readonly TimeProvider _reloj;
+    private readonly TimeZoneInfo _zona;
+
+    /// <summary>Para qué se entra a la historia en cada operación de I2: va a la auditoría (T064).</summary>
+    internal static class Propositos
+    {
+        public const string CheckIn = "salud.check-in";
+        public const string ResumenPropio = "salud.resumen";
+        public const string Historia = "salud.historia";
+    }
+
+    /// <param name="editor">Opcional: sin él se usa uno sobre el mismo repositorio (las pruebas que construyen el
+    ///   controlador a mano no cambian). En el sitio es el singleton, con su candado compartido.</param>
     public HealthcareApiController(
         IPhiAccessGuard guard,
         IPatientRepository patients,
         IAppointmentScheduler appointments,
         IPrescriptionService prescriptions,
         IConsentLedger consent,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        EditorDeLaHistoriaClinica? editor = null,
+        TimeProvider? reloj = null,
+        IOptions<ListadosSettings>? listados = null)
     {
         _guard = guard;
         _patients = patients;
@@ -39,6 +63,9 @@ public sealed class HealthcareApiController : ControllerBase
         _prescriptions = prescriptions;
         _consent = consent;
         _gate = gate;
+        _editor = editor ?? new EditorDeLaHistoriaClinica(patients);
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
     }
 
     /// <summary>
@@ -110,9 +137,147 @@ public sealed class HealthcareApiController : ControllerBase
     {
         if (record is null) return BadRequest();
         if (await DenyAsync("patient-record", "write", record.PatientKey, ct) is { } denied) return denied;
+
+        // Una historia que ya existe se cambia con su candado, y lo que el cuerpo no trae no se borra: con el
+        // resumen y el pre-registro dentro (I2 T057), un cliente que manda la historia de antes —sin esos dos—
+        // dejaba la versión vigente sin las alergias del paciente.
+        if (record.PatientKey != Guid.Empty)
+        {
+            var cambiada = await _editor.ModificarAsync(
+                record.PatientKey,
+                actual => record with
+                {
+                    Resumen = record.Resumen ?? actual.Resumen,
+                    PreRegistro = record.PreRegistro ?? actual.PreRegistro,
+                },
+                ct);
+            if (cambiada is not null)
+            {
+                return Ok(new { patientKey = cambiada.PatientKey });
+            }
+        }
+
         var key = await _patients.UpsertAsync(record, ct);
         return Ok(new { patientKey = key });
     }
+
+    // ── El resumen de salud y el pre-registro (003-salud-cita, I2 T058–T060) ──────────
+
+    /// <summary>
+    /// El pre-registro del paciente de la sesión: lo que declara de sí mismo antes de la cita. Entra como DECLARADO; el
+    /// médico lo valida (T059).
+    /// </summary>
+    /// <remarks>
+    /// La historia sale de la SESIÓN, como en <see cref="Me"/>: no hay parámetro donde escribir la de otro. Sin
+    /// historia abierta, 404 (la abre la recepción del consultorio). La guardia audita con el propósito del check-in.
+    /// </remarks>
+    [HttpPost("me/check-in")]
+    public async Task<IActionResult> CheckIn([FromBody] CheckInDelPaciente body, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta el pre-registro." });
+        }
+
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+
+        if (await DenyAsync("patient-record", "declare", patientKey, ct, memberKey, Propositos.CheckIn) is { } denied)
+        {
+            return denied;
+        }
+
+        var ahora = _reloj.GetUtcNow();
+        if (HistoriaClinica.ErrorDelCheckIn(body, Hoy(ahora)) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+
+        var historia = await _editor.ModificarAsync(
+            patientKey.Value,
+            actual => HistoriaClinica.Declarar(actual, body, memberKey, ahora.UtcDateTime),
+            ct);
+        return historia is null ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>El resumen de salud del paciente de la sesión: lo validado y lo suyo declarado, como pendiente.</summary>
+    [HttpGet("me/resumen")]
+    public async Task<IActionResult> MiResumen(CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+
+        if (await DenyAsync("patient-record", "read", patientKey, ct, memberKey, Propositos.ResumenPropio) is { } denied)
+        {
+            return denied;
+        }
+
+        var historia = await _patients.GetAsync(patientKey.Value, ct);
+        return historia is null ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>El resumen de salud de un paciente, para el médico con su permiso.</summary>
+    [HttpGet("patients/{patientKey:guid}/resumen")]
+    public async Task<IActionResult> Resumen(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+
+        var historia = await _patients.GetAsync(patientKey, ct);
+        return historia is null || historia.IsDeleted ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>
+    /// El médico valida un dato que declaró el paciente (T059). Idempotente: validar uno ya validado contesta lo mismo
+    /// y no crea versión.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/resumen/{datoId}/validar")]
+    public async Task<IActionResult> ValidarDato(Guid patientKey, string datoId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_gate.CurrentMemberKey is not Guid medico)
+        {
+            return Unauthorized();
+        }
+
+        var resultado = ResultadoDeValidar.NoExiste;
+        var historia = await _editor.ModificarAsync(
+            patientKey,
+            actual =>
+            {
+                var (cambiada, r) = HistoriaClinica.Validar(actual, datoId, medico, _reloj.GetUtcNow().UtcDateTime);
+                resultado = r;
+                return cambiada;
+            },
+            ct);
+
+        return historia is null || resultado == ResultadoDeValidar.NoExiste
+            ? NotFound()
+            : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>«Hoy» en el sitio: con el de UTC, desde las siete de la noche en Bogotá una vacuna de hoy sería futura.</summary>
+    private DateOnly Hoy(DateTimeOffset ahora) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ahora, _zona).DateTime);
 
     // ── Citas ──────────────────────────────────────────────────
     [HttpGet("appointments")]
@@ -181,7 +346,16 @@ public sealed class HealthcareApiController : ControllerBase
 
     // Guard-first: audita + decide. Devuelve el IActionResult de rechazo (401
     // si no autenticado, 403 si denegado) o null si pasa.
-    private async Task<IActionResult?> DenyAsync(string resourceType, string action, Guid? targetPatientKey, CancellationToken ct)
+    //
+    // `owner` y `proposito` son de I2 (T058 y T064): el dueño sólo lo pasa quien lo sacó de la SESIÓN (el portal
+    // del paciente), nunca de un parámetro; el propósito va a la auditoría como el «por qué».
+    private async Task<IActionResult?> DenyAsync(
+        string resourceType,
+        string action,
+        Guid? targetPatientKey,
+        CancellationToken ct,
+        Guid? owner = null,
+        string? proposito = null)
     {
         // El dueño NO se resuelve acá. Este controller mantiene la propiedad
         // "guard primero, sin tocar PHI antes de autorizar" — que el test
@@ -193,7 +367,7 @@ public sealed class HealthcareApiController : ControllerBase
         // (DefaultPhiAccessGuard.EvaluateAsync). Un anónimo sigue sin provocar
         // una sola lectura.
         var decision = await _guard.CheckAccessAsync(
-            new AccessCheckRequest(resourceType, action, targetPatientKey), ct);
+            new AccessCheckRequest(resourceType, action, targetPatientKey, owner, proposito), ct);
         if (decision.IsAllowed) return null;
         return string.Equals(decision.DenyReason, "not-authenticated", StringComparison.Ordinal)
             ? Unauthorized()
