@@ -1,9 +1,10 @@
 # ADR 0142 — La historia clínica no se suprime mientras dure su retención legal: la supresión borra la cuenta y desliga al miembro, la retención es de 15 años desde la última atención y la eliminación es un trámite (enmienda la 0098 §4 y §5)
 
 - **Estado:** **Aceptada (2026-11-05)**. La decidió el director como D-003-I2-5 (`DECISIONES.md`), con la
-  recomendación A de la línea 003. Las citas legales las leyeron 002 y 003 el 2026-11-05 (ver el contexto, con lo que
-  cada uno leyó y dónde). Queda **una condición abierta**: el aviso al paciente (§4) lo aprueba el arquitecto antes del
-  release, como los corchetes de las legales.
+  recomendación A de la línea 003. Las citas legales las leyeron 002 y 003 en su texto oficial el 2026-11-05 (ver el
+  contexto, con lo que cada uno leyó y dónde); sólo el proyecto de MinSalud de 2026 queda en fuentes secundarias, porque
+  no tiene texto oficial publicado. Queda **una condición abierta**: el aviso al paciente (§4) lo aprueba el arquitecto
+  antes del release, como los corchetes de las legales.
 - **Fecha:** 2026-11-05
 - **Propone:** la línea 003-salud-cita, en I2 (la historia clínica). El hallazgo lo midió en el código
   (`specs/003-salud-cita/bitacora.md`, 2026-11-05).
@@ -21,7 +22,6 @@
 
 > Marcas de certeza:
 > - ✔ comprobado en el código, o leído en una publicación oficial al escribir esta ADR;
-> - ◐ leído entero en una compilación normativa (la de Colpensiones, de Avance Jurídico), no en el Diario Oficial;
 > - ○ sólo en fuentes secundarias.
 >
 > Código: CMS `ac94ad04` (`linea/salud-cita`).
@@ -52,11 +52,11 @@ Salud es un consultorio en Colombia: EPS, es-CO y la Ley 1581 de 2012 en la pol�
 
 | Norma | Qué dice | Estado |
 |---|---|---|
-| Resolución 839 de 2017 (MinSalud y MinCultura, 23 de marzo de 2017; Diario Oficial 50.185 del 24 de marzo), art. 3 «Retención y tiempos de conservación documental del expediente de la historia clínica» | conservarla «por un periodo mínimo de quince (15) años, contados a partir de la fecha de la última atención»: los cinco primeros en el archivo de gestión y los diez siguientes en el central. Los términos «se duplicarán» para víctimas de violaciones de DDHH o infracciones graves al DIH, y la conservación es permanente si la historia hace parte de un proceso por lesa humanidad. Cumplidos los términos, y «con miras a propender por la entrega de la historia clínica al usuario», van dos avisos en un diario de amplia circulación nacional, con ocho días de intervalo | ◐ lo leyó 002 en la compilación de Colpensiones; la página no muestra modificación ni derogatoria (última actualización 31-mar-2018). El PDF de minsalud.gov.co es un escaneado que ni 002 ni 003 pudieron leer, y no hay OCR del original |
-| Resolución 839 de 2017, art. 4 «Disposición final del expediente de historia clínica» | la eliminación procede «por parte del responsable de su custodia, siempre que concurran» tres condiciones: 4.1, que se haya cumplido el tiempo del art. 3; 4.2, la publicación del art. 3; 4.3, la valoración de si tiene «valor secundario (científico, histórico o cultural)», con un acta firmada por el representante legal (y el revisor fiscal cuando haya lugar) y un inventario. Parágrafo: la que tiene valor secundario se conserva | ◐ como el art. 3 |
+| Resolución 839 de 2017 (MinSalud y MinCultura, 23 de marzo de 2017; Diario Oficial 50.185 del 24 de marzo), art. 3 «Retención y tiempos de conservación documental del expediente de la historia clínica» | conservarla «por un periodo mínimo de quince (15) años, contados a partir de la fecha de la última atención»: los cinco primeros en el archivo de gestión y los diez siguientes en el central. Los términos «se duplicarán» para víctimas de violaciones de DDHH o infracciones graves al DIH, y la conservación es permanente si la historia hace parte de un proceso por lesa humanidad. Cumplidos los términos, y «con miras a propender por la entrega de la historia clínica al usuario», van dos avisos en un diario de amplia circulación nacional, con ocho días de intervalo | ✔ lo leyó 002 en el texto oficial del Régimen Legal de Bogotá (SISJUR, `alcaldiabogota.gov.co/sisjur/normas/Norma1.jsp?i=87208`): expedida el 23/03/2017, vigente desde el 24/03/2017, sin modificaciones registradas (la ficha aclara que es informativa). Antes la había leído en la compilación de Colpensiones, y dice lo mismo palabra por palabra. El PDF de minsalud.gov.co es un escaneado sin OCR |
+| Resolución 839 de 2017, art. 4 «Disposición final del expediente de historia clínica» | la eliminación procede «por parte del responsable de su custodia, siempre que concurran» tres condiciones: 4.1, que se haya cumplido el tiempo del art. 3; 4.2, la publicación del art. 3; 4.3, la valoración de si tiene «valor secundario (científico, histórico o cultural)», con un acta firmada por el representante legal (y el revisor fiscal cuando haya lugar) y un inventario. Parágrafo: la que tiene valor secundario se conserva | ✔ como el art. 3 |
 | Decreto 1377 de 2013, art. 9 | la supresión y la revocatoria «no procederán cuando el Titular tenga un deber legal o contractual de permanecer en la base de datos» | ✔ lo leyó 003 en el Gestor Normativo de Función Pública (`norma.php?i=53646`). Esa página lo marca «Derogado Parcialmente por el Decreto 1081 de 2015» |
-| Decreto 1074 de 2015, cap. 25, sección 2, art. **2.2.2.25.2.6** «Revocatoria de la autorización y/o supresión del dato» | compila el art. 9 del 1377, con la misma frase literal | ◐ lo leyó 002 en la compilación de Colpensiones. El mapa: los arts. 2.2.2.25.2.1 a .2.9 son los arts. 4 a 12 del 1377. La SIC invoca el .2.6 para la revocatoria en una resolución de 2020. La página oficial de Función Pública (`norma.php?i=76608`) se corta antes de ese capítulo |
-| Decreto 1074 de 2015, art. 2.2.2.25.2.8 «Limitaciones temporales al tratamiento de los datos personales» (art. 11 del 1377) | pasado el término del tratamiento, «deberán proceder a la supresión de los datos personales en su posesión», salvo que los datos «deberán ser conservados cuando así se requiera para el cumplimiento de una obligación legal o contractual» | ◐ como el anterior |
+| Decreto 1074 de 2015, cap. 25, sección 2, art. **2.2.2.25.2.6** «Revocatoria de la autorización y/o supresión del dato» | compila el art. 9 del 1377, con la misma frase literal | ✔ lo leyó 002 en el Gestor Normativo de Función Pública (`norma.php?i=76608`, que con curl sí resuelve), con la nota «(Decreto 1377 de 2013, art. 9)» y la frase «La solicitud de supresión de la información y la revocatoria de la autorización no procederán cuando el Titular tenga un deber legal o contractual de permanecer en la base de datos.». El mapa: los arts. 2.2.2.25.2.1 a .2.9 son los arts. 4 a 12 del 1377. La SIC invoca el .2.6 para la revocatoria en una resolución de 2020 |
+| Decreto 1074 de 2015, art. 2.2.2.25.2.8 «Limitaciones temporales al tratamiento de los datos personales» (art. 11 del 1377) | pasado el término del tratamiento, «deberán proceder a la supresión de los datos personales en su posesión», salvo que los datos «deberán ser conservados cuando así se requiera para el cumplimiento de una obligación legal o contractual» | ✔ como el anterior, con la misma redacción |
 | Proyecto de resolución de MinSalud «Por la cual se establecen las disposiciones aplicables a la historia clínica y sus modalidades» (julio de 2026) | derogaría la 1995 de 1999 y la 839 de 2017, que quedarían «absorbidas e integradas». Mantiene los 15 años desde la última atención, la duplicación y la permanencia, y **agrega una condición**: no se elimina mientras haya un proceso judicial, disciplinario o administrativo relacionado con la atención, aunque el plazo haya vencido | ○ sigue siendo PROYECTO según lo que encontró 002: consulta pública del 24 de julio al 4 u 8 de agosto de 2026, sin número ni fecha de expedición al 12 de septiembre. El PDF oficial da 404; lo dicen fuentes secundarias (softwaremedico.com.co, Fenalco y Cerlatam) |
 
 **Lo que eso cambia:**
@@ -178,6 +178,7 @@ decisión, y lo dicen en su propio comentario.
 - Resolución 839 de 2017:
   - en el sitio de MinSalud, https://www.minsalud.gov.co/Normatividad_Nuevo/Resolucion%20No%20839%20de%202017.pdf
     (imagen escaneada, sin OCR);
-  - leída por 002 en el normograma de Colpensiones (compilación de Avance Jurídico),
-    `normativa.colpensiones.gov.co`.
-- Decreto 1074 de 2015, cap. 25, sección 2: leído por 002 en la misma compilación.
+  - texto oficial leído por 002 en el Régimen Legal de Bogotá (SISJUR):
+    https://www.alcaldiabogota.gov.co/sisjur/normas/Norma1.jsp?i=87208
+- Decreto 1074 de 2015, cap. 25, sección 2, texto oficial leído por 002 en el Gestor Normativo de Función Pública:
+  https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=76608
