@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 
 namespace Synergos.CMS.Web.Services;
@@ -30,6 +31,13 @@ public sealed class DevContenidoDeVerticales
     public static readonly Guid Propiedades = Guid.Parse("5b2d7960-2cc3-4dad-9514-f7d0bbdcacf7");
     public static readonly Guid Booking = Guid.Parse("37bf2ce2-76e7-402e-b3b0-f2b93c447c86");
     public static readonly Guid Hoteles = Guid.Parse("64304927-0464-4231-968b-08f39393ffbc");
+
+    /// <summary>Eventos, Educación, Gobierno, la raíz Synergos y su página Casos, por su Key de uSync.</summary>
+    public static readonly Guid Eventos = Guid.Parse("7a675dad-b6d2-473b-99aa-9958f61f27d0");
+    public static readonly Guid Educacion = Guid.Parse("5e1b13c8-de7f-4517-b1dd-e8bedbe806f9");
+    public static readonly Guid Gobierno = Guid.Parse("e373b166-8e33-4e70-979b-799553a047e0");
+    public static readonly Guid Synergos = Guid.Parse("71976524-5053-4127-a677-adf2c5e078e7");
+    public static readonly Guid Casos = Guid.Parse("017b3ae2-b39f-4120-82d6-96ef984048bc");
 
     private static readonly Guid AreaDeLaSeccion = LayoutComposerKeys.SectionContentArea;
     private static readonly Guid[] AreasDeTresColumnas =
@@ -73,28 +81,46 @@ public sealed class DevContenidoDeVerticales
             ["propiedades"] = (Propiedades, RecetaPropiedades),
             ["booking"] = (Booking, RecetaBooking),
             ["hoteles"] = (Hoteles, RecetaHoteles),
+            ["educacion"] = (Educacion, RecetaEducacion),
         };
 
-    /// <summary>Aplica la receta de <paramref name="vertical"/> sobre el cuerpo de su página. Idempotente.</summary>
+    /// <summary>
+    /// Aplica a <paramref name="vertical"/> su receta (si tiene) y su atribución (si tiene): la descripción del sitio y
+    /// los testimonios por rol y ciudad. Idempotente.
+    /// </summary>
     public Resultado Componer(string vertical)
     {
-        if (!Verticales.TryGetValue(vertical, out var receta))
+        var tieneReceta = Verticales.TryGetValue(vertical, out var receta);
+        var tieneAtribucion = Atribuciones.TryGetValue(vertical, out var atribucion);
+        if (!tieneReceta && !tieneAtribucion)
         {
             return new Resultado(false, vertical, "vertical-desconocida", 0);
         }
 
-        var pagina = _contentService.GetById(receta.Pagina);
+        var pagina = _contentService.GetById(tieneReceta ? receta.Pagina : atribucion!.Pagina);
         if (pagina is null) { return new Resultado(false, vertical, "pagina-no-encontrada", 0); }
 
         var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
-        var detalle = receta.Receta(cuerpo);
-        if (!cuerpo.Cambio)
+        var detalle = tieneReceta ? receta.Receta(cuerpo) : "sin-receta";
+        var descripcionNueva = false;
+        if (tieneAtribucion)
+        {
+            detalle += $";testimonios:{Reatribuir(cuerpo, atribucion!.Testimonios)}";
+            if (atribucion.Descripcion is { } descripcion && pagina.HasProperty("seoDescription")
+                && !string.Equals(pagina.GetValue<string>("seoDescription", Cultura), descripcion, StringComparison.Ordinal))
+            {
+                pagina.SetValue("seoDescription", descripcion, Cultura);
+                descripcionNueva = true;
+                detalle += ";descripcion:1";
+            }
+        }
+        if (!cuerpo.Cambio && !descripcionNueva)
         {
             _logger.LogInformation("Contenido {Vertical}: nada que cambiar — no se toca.", vertical);
             return new Resultado(true, vertical, "sin-cambios", 0);
         }
 
-        pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
+        if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
         var save = _contentService.SaveAndPublish(pagina, new[] { Cultura });
         if (!save.Success)
         {
@@ -304,6 +330,150 @@ public sealed class DevContenidoDeVerticales
             ("Habitación Familiar", "Hasta 5 huéspedes, para viajar con los niños."));
         var nuevas = cuerpo.InsertarSeccionesAntesDe(mision, b.Build());
         return $"pasos:{n};habitaciones:{nuevas}";
+    }
+
+    // ───────────────────────────── Fotos de la Tienda ─────────────────────────────
+
+    private static readonly System.Text.Json.JsonSerializerOptions LecturaDelManifiesto = new() { PropertyNameCaseInsensitive = true };
+
+    /// <summary>Una foto del manifiesto: a qué producto va (por su nombre), el fichero bajado y su crédito y licencia.</summary>
+    public sealed record FotoDeProducto(string Producto, string Archivo, string Alt, string Licencia, string Credito);
+
+    /// <summary>
+    /// Pone las fotos reales de <paramref name="carpeta"/> (su <c>manifiesto.json</c>) en los nodos de Media que ya usa
+    /// cada producto de la Tienda: misma Key, así que sus páginas y el catálogo siguen apuntando bien; luego republica
+    /// la página para que su oferta tome la URL nueva. Un producto que no está en el manifiesto queda como está.
+    /// </summary>
+    public Resultado FotosDeLaTienda(string carpeta)
+    {
+        var manifiesto = Path.Combine(carpeta, "manifiesto.json");
+        if (!System.IO.File.Exists(manifiesto)) { return new Resultado(false, "tienda", "sin-manifiesto", 0); }
+        var fotos = System.Text.Json.JsonSerializer.Deserialize<List<FotoDeProducto>>(
+            System.IO.File.ReadAllText(manifiesto), LecturaDelManifiesto) ?? [];
+
+        var tienda = _contentService.GetById(DevTiendaPorPaginas.Tienda);
+        if (tienda is null) { return new Resultado(false, "tienda", "tienda-no-encontrada", 0); }
+        var productos = _contentService.GetPagedDescendants(tienda.Id, 0, 1000, out _)
+            .Where(c => c.ContentType.Alias == "productPage")
+            .ToDictionary(c => c.GetCultureName(Cultura) ?? c.Name ?? string.Empty, StringComparer.Ordinal);
+
+        int cambiados = 0, sinProducto = 0, republicados = 0;
+        foreach (var foto in fotos)
+        {
+            if (!productos.TryGetValue(foto.Producto, out var pagina)) { sinProducto++; continue; }
+            var ruta = Path.Combine(carpeta, foto.Archivo);
+            var claves = ClavesDeMedios(pagina);
+            var cambioAqui = false;
+            foreach (var clave in claves)
+            {
+                cambioAqui |= _media.ReplacePhoto(clave, ruta, $"producto {foto.Producto}", foto.Alt, foto.Licencia, foto.Credito);
+            }
+            if (!cambioAqui) { continue; }
+            cambiados++;
+            if (_contentService.SaveAndPublish(pagina, new[] { Cultura }).Success) { republicados++; }
+        }
+        var detalle = $"fotos:{fotos.Count};productos-con-foto-nueva:{cambiados};republicados:{republicados};sin-producto:{sinProducto}";
+        _logger.LogInformation("Fotos de la Tienda: {Detalle}.", detalle);
+        return new Resultado(sinProducto == 0, "tienda", detalle, cambiados);
+    }
+
+    /// <summary>Las Keys de los medios que referencia una página (cualquier MediaPicker3 de sus propiedades o bloques).</summary>
+    private static IReadOnlyList<Guid> ClavesDeMedios(IContentBase pagina) =>
+        pagina.Properties
+            .SelectMany(p => p.Values)
+            .Select(v => v.EditedValue?.ToString())
+            .Where(v => v is not null && v.Contains("mediaKey", StringComparison.Ordinal))
+            .SelectMany(v => System.Text.RegularExpressions.Regex.Matches(v!, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})""")
+                .Select(m => Guid.Parse(m.Groups[1].Value)))
+            .Distinct()
+            .ToList();
+
+    // ───────────────────────────── Educación (I5) ─────────────────────────────
+
+    private sealed record Curso(string Id, string Titulo, string Linea, string Resumen, string Archivo, string Alt);
+
+    /// <summary>Tres cursos del catálogo de la app (<c>/api/academy/courses</c>), con su foto CC0 de <c>media/academy/courses</c>.</summary>
+    private static readonly Curso[] CursosDestacados =
+    [
+        new("data-ml-applied", "Machine Learning Aplicado", "Datos · Avanzado · $ 480.000",
+            "Del dato sucio al modelo en producción, sin humo.", "ml-applied.jpg",
+            "Persona frente a varios monitores con gráficas de datos"),
+        new("dev-clean-architecture", "Arquitectura Limpia en .NET", "Desarrollo · Intermedio · $ 320.000",
+            "Diseña sistemas mantenibles con Clean Architecture, SOLID y seams que se pueden probar.", "clean-architecture.jpg",
+            "Código fuente en una pantalla, en primer plano"),
+        new("design-systems-atomic", "Design Systems con Atomic Design", "Diseño · Principiante · $ 240.000",
+            "Construye un design system escalable: tokens, átomos, moléculas y organismos.", "design-systems.jpg",
+            "Lámina antigua de alfabetos con letras de distintos estilos"),
+    ];
+
+    private string RecetaEducacion(CuerpoEditable cuerpo)
+    {
+        // Los «Cursos destacados» hablaban del motor (plataformas componibles, tokens) y no estaban en el catálogo de
+        // la app: la sección se desconecta (no se borra la pieza) y en su lugar van tres cursos reales con su foto.
+        if (cuerpo.Contiene(Marca("educacion"))) { return "destacados:ya"; }
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var esLaDeDestacados = CuerpoEditable.Donde("headingText", "Cursos destacados");
+
+        var b = new BlockGridJsonBuilder();
+        var s = Seccion(b, null, Marca("educacion"));
+        Encabezado(s, "Cursos destacados");
+        FilasDeTarjetas(s, CursosDestacados.Select(c => new Tarjeta(
+            c.Titulo, c.Linea, c.Resumen,
+            _media.GetOrCreatePhotoPickerValue($"Foto Educación {c.Titulo}", c.Alt, Path.Combine(_env.WebRootPath, "media", "academy", "courses", c.Archivo), LicenciaCc0),
+            c.Alt, "Ver el curso", $"/educacion/#/academy/curso/{c.Id}")).ToArray());
+
+        var nuevas = cuerpo.InsertarSeccionesAntesDe(rejilla, b.Build(), esLaDeDestacados);
+        var fuera = cuerpo.DesconectarSeccionesCon(rejilla, esLaDeDestacados);
+        return $"destacados:{CursosDestacados.Length};secciones-nuevas:{nuevas};desconectadas:{fuera}";
+    }
+
+    // ───────────────────────────── Atribuciones (I6) ─────────────────────────────
+
+    /// <summary>
+    /// Lo que cada sitio dice de sí (su <c>seoDescription</c>, que el pie usa como frase) y a quién atribuye sus
+    /// testimonios: rol y ciudad, nunca un nombre inventado (decisión del director, 2026-11-13).
+    /// </summary>
+    private sealed record Atribucion(Guid Pagina, string? Descripcion, (string Autor, string Ciudad)[] Testimonios);
+
+    private static readonly Dictionary<string, Atribucion> Atribuciones = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["viajes"] = new(Viajes, "Estadías, vuelos y autos en un solo carrito, con tarifas que dicen si son reembolsables.", []),
+        ["propiedades"] = new(Propiedades, "Apartamentos, casas y locales en venta y arriendo: busca en lista o mapa y agenda una visita.",
+            [("Compradora", "Bogotá"), ("Comprador", "Medellín"), ("Vendedora", "Cali")]),
+        ["booking"] = new(Booking, "Consultoría, espacios y bienestar: elige el servicio y la hora, y te contactan para confirmar.",
+            [("Gerente de operaciones", "Bogotá"), ("Director de servicio", "Medellín"), ("Coordinadora de espacios", "Cali")]),
+        ["hoteles"] = new(Hoteles, "Habitaciones para dos a cinco huéspedes, con la disponibilidad al día y la reserva en cuatro pasos.",
+            [("Huésped frecuente", "Bogotá"), ("Huésped en viaje de negocios", "Medellín"), ("Huésped de fin de semana", "Cartagena")]),
+        ["tienda"] = new(DevTiendaPorPaginas.Tienda, "Ropa, accesorios, escritorio y tecnología, con carrito y pago en un solo lugar.",
+            [("Clienta verificada", "Bogotá"), ("Cliente verificado", "Medellín"), ("Clienta verificada", "Cali")]),
+        ["eventos"] = new(Eventos, "Conciertos, conferencias y teatro: encuentra tu evento y asegura tu entrada.",
+            [("Líder de producto", "Bogotá"), ("Ingeniero de plataforma", "Medellín"), ("Directora de diseño", "Cali")]),
+        ["educacion"] = new(Educacion, "Cursos de datos, desarrollo y diseño para aprender a tu ritmo, con proyecto y certificado.",
+            [("Estudiante de frontend", "Medellín"), ("Estudiante de backend", "Bogotá"), ("Egresada", "Cali")]),
+        ["gobierno"] = new(Gobierno, "Trámites en línea en lenguaje claro: radica, paga la tasa si aplica y sigue tu expediente.", []),
+        ["synergos"] = new(Synergos, null,
+            [("CTO de un grupo empresarial", "Bogotá"), ("Líder de producto", "Medellín"), ("Directora digital", "Cali")]),
+        ["casos"] = new(Casos, null,
+            [("COO de una cadena de retail", "Barranquilla"), ("Gerente de e-commerce", "Cali"), ("Director de tecnología", "Bogotá")]),
+    };
+
+    /// <summary>Cambia autor y rol de cada testimonio por rol y ciudad; la cita y la calificación se quedan.</summary>
+    private int Reatribuir(CuerpoEditable cuerpo, (string Autor, string Ciudad)[] testimonios)
+    {
+        if (testimonios.Length == 0) { return 0; }
+        return cuerpo.TransformarLista(KeyOf("elementSynTestimonialCarousel"), "testimonialsJson", lista =>
+        {
+            var nueva = new JsonArray();
+            for (var i = 0; i < lista.Count; i++)
+            {
+                var t = (JsonObject)lista[i]!.DeepClone();
+                var (autor, ciudad) = testimonios[i % testimonios.Length];
+                t["author"] = autor;
+                t["role"] = ciudad;
+                nueva.Add(t);
+            }
+            return nueva;
+        });
     }
 
     // ───────────────────────────── Piezas de composición ─────────────────────────────

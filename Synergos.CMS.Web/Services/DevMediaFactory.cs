@@ -168,6 +168,31 @@ public sealed class DevMediaFactory
         return _mediaService.GetById(key)?.GetUrl("umbracoFile", _mediaUrlGenerators) ?? string.Empty;
     }
 
+    /// <summary>
+    /// Pone una foto real en un nodo de Media que YA existe (misma Key: las páginas y el catálogo que lo referencian
+    /// siguen apuntando bien) y deja su crédito y su licencia en la metadata. Idempotente: si el nodo ya tiene esa
+    /// licencia y ese crédito, no lo toca. Devuelve si cambió.
+    /// </summary>
+    public bool ReplacePhoto(Guid mediaKey, string absolutePath, string fileBaseName, string altText, string license, string credit)
+    {
+        var media = _mediaService.GetById(mediaKey)
+            ?? throw new InvalidOperationException($"El medio {mediaKey} no existe.");
+        if (string.Equals(media.GetValue<string>("license"), license, StringComparison.Ordinal)
+            && string.Equals(media.GetValue<string>("creditLabel"), credit, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        using var stream = System.IO.File.OpenRead(absolutePath);
+        media.SetValue(_mediaFileManager, _mediaUrlGenerators, _shortStringHelper, _contentTypeBaseServiceProvider,
+            "umbracoFile", Slug(fileBaseName) + Path.GetExtension(absolutePath), stream);
+        media.SetValue("altDefault", altText);
+        if (media.HasProperty("license")) { media.SetValue("license", license); }
+        if (media.HasProperty("creditLabel")) { media.SetValue("creditLabel", credit); }
+        _mediaService.Save(media);
+        _logger.LogInformation("[DevMedia] foto real en '{Name}' ({Path}).", media.Name, absolutePath);
+        return true;
+    }
+
     /// <summary>La ruta en disco de una ilustración del kit (<c>_archive/multimedia/...</c>), o null si no está.</summary>
     public static string? KitPath(string relative)
     {

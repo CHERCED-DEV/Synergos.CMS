@@ -35,4 +35,21 @@ public sealed class DevContenidoController : ControllerBase
         var resultado = _contenido.Componer(vertical);
         return resultado.Ok ? Ok(resultado) : Conflict(resultado);
     }
+
+    /// <summary>
+    /// Pone las fotos reales de una carpeta local (con su <c>manifiesto.json</c>) en los productos de la Tienda.
+    /// <c>POST /dev/fotos-de-la-tienda?carpeta=C:\...</c>
+    /// </summary>
+    /// <remarks>Idempotente: un medio que ya tiene esa licencia y ese crédito no se toca. Se exporta con uSync.</remarks>
+    [HttpPost("fotos-de-la-tienda")]
+    public IActionResult FotosDeLaTienda([FromQuery] string carpeta)
+    {
+        _logger.LogInformation("Dev endpoint fotos-de-la-tienda invocado.");
+        if (string.IsNullOrWhiteSpace(carpeta) || !Directory.Exists(carpeta))
+        {
+            return BadRequest(new { error = "La carpeta no existe." });
+        }
+        var resultado = _contenido.FotosDeLaTienda(carpeta);
+        return resultado.Ok ? Ok(resultado) : Conflict(resultado);
+    }
 }
