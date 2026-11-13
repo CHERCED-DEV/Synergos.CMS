@@ -240,6 +240,54 @@ public sealed class DefaultPhiAccessGuardTests
         Assert.False(escribir.IsAllowed); // el paciente declara; escribir su historia sigue siendo del médico
     }
 
+    // ── El permiso del consultorio en Api.Consent (003-salud-cita, I2 T054) ───────────────────────
+
+    private readonly IConsentReader _permisos = Substitute.For<IConsentReader>();
+    private readonly IPatientRepository _historias = Substitute.For<IPatientRepository>();
+
+    private DefaultPhiAccessGuard ConLector() =>
+        new(_gate, _consent, _audit, NullLogger<DefaultPhiAccessGuard>.Instance, _historias, _permisos);
+
+    private Guid HistoriaDe(Guid miembro)
+    {
+        var key = Guid.NewGuid();
+        _historias.GetAsync(key, Arg.Any<CancellationToken>()).Returns(new PatientRecord(
+            key, miembro, "Camila", DateTime.UtcNow, null, null, null, DateTime.UtcNow, Guid.NewGuid(), 1, false));
+        return key;
+    }
+
+    [Theory]
+    [InlineData(EstadoDelPermiso.Vigente, true, null)]
+    [InlineData(EstadoDelPermiso.NoVigente, false, "no-active-consent")]
+    [InlineData(EstadoDelPermiso.NoSePudoLeer, false, "consent-unavailable")]
+    public async Task ConLector_ElMedicoEntraSoloConElPermisoDelPacienteLeidoEnApiConsent(
+        EstadoDelPermiso estado, bool entra, string? razon)
+    {
+        var miembro = Guid.NewGuid();
+        var paciente = HistoriaDe(miembro);
+        Authenticated(Guid.NewGuid(), rolesCsvTrue: "doctor");
+        _permisos.LeerAsync("salud.paciente", miembro.ToString("N"), "salud.historia", Arg.Any<CancellationToken>())
+            .Returns(new PermisoLeido(estado, estado == EstadoDelPermiso.Vigente ? "g-1" : null));
+
+        var d = await ConLector().CheckAccessAsync(new AccessCheckRequest("patient-record", "read", paciente), CancellationToken.None);
+
+        Assert.Equal((entra, razon), (d.IsAllowed, d.DenyReason));
+        await _consent.DidNotReceive().HasActiveConsentAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        if (entra) Assert.Contains("; basis=permiso:salud.historia", DetalleAuditado(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConLector_UnaHistoriaSinMiembro_NoTieneQuienDeElPermiso_YNoSeAbre()
+    {
+        var desligada = HistoriaDe(Guid.Empty);
+        Authenticated(Guid.NewGuid(), rolesCsvTrue: "doctor");
+
+        var d = await ConLector().CheckAccessAsync(new AccessCheckRequest("patient-record", "read", desligada), CancellationToken.None);
+
+        Assert.False(d.IsAllowed);
+        await _permisos.DidNotReceive().LeerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task EvaluationThrows_Denied_ButStillAudited()
     {

@@ -103,6 +103,26 @@ public sealed partial class SeamComposer
         services.AddSingleton<IConsentLedger, FileSystemConsentLedger>();
         services.AddScoped<IPhiAccessGuard, DefaultPhiAccessGuard>();
 
+        // 003-salud-cita, I2 T054 — con Mode=Api la guardia lee el permiso del paciente en Api.Consent (Q4,
+        // Q7) y el libro local deja de decidir. Sin BaseUrl no se adivina un puerto: el lector niega todo.
+        // Sin el modo, la guardia sigue con el libro local (la vuelta atrás y el desarrollo).
+        var consent = builder.Config.GetSection("Synergos:Consent");
+        services.Configure<ConsentSettings>(consent);
+        if (Interruptor.Encendido(builder.Config, "Synergos:Consent:Mode", "Api", new ConsentSettings().Mode))
+        {
+            if (!string.IsNullOrWhiteSpace(consent["BaseUrl"]))
+            {
+                services.AddClienteDelArbolDeServicios(
+                    HttpConsentReader.ClientName,
+                    DestinoDelArbol.De(consent, consent["BaseUrl"]!, new ConsentSettings().TimeoutSeconds));
+                services.AddSingleton<IConsentReader, HttpConsentReader>();
+            }
+            else
+            {
+                services.AddSingleton<IConsentReader, LectorDePermisosSinDestino>();
+            }
+        }
+
         // T6 — almacén de ficheros PRIVADOS (bytes subidos por usuarios): cifrado
         // at-rest y bajo App_Data/, donde NINGÚN middleware de estáticos llega. Es el
         // contrapeso de wwwroot/media, que es público por construcción: ahí van las
