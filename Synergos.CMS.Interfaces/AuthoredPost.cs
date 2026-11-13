@@ -40,6 +40,8 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="Author">Quién lo firma.</param>
 /// <param name="NodeId">El id del nodo en el CMS: el del hilo de comentarios de su página, que la app comparte
 ///   (012-blogs-social, I0). <c>null</c> si quien lo produce no lo sabe.</param>
+/// <param name="Category">El nombre de la página de categoría que lo contiene (<c>postCategoryPage</c>), o <c>null</c> si
+///   no cuelga de una: la faceta «categoría» del catálogo de la red (012-blogs-social, I4).</param>
 public sealed record AuthoredPost(
     string Id,
     string Title,
@@ -50,7 +52,8 @@ public sealed record AuthoredPost(
     DateTime? PublishedUtc,
     string Kind,
     AuthoredPostAuthor Author,
-    int? NodeId = null);
+    int? NodeId = null,
+    string? Category = null);
 
 /// <summary>
 /// Quien firma un post autorado: la proyección del <c>authorPage</c> que su <c>authorRef</c>

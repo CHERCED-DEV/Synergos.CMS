@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
@@ -31,7 +32,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     private static readonly TimeSpan Colombia = TimeSpan.FromHours(-5);
 
     /// <summary>
-    /// El cierre de una ventana «hasta el <paramref name="dia"/>»: el instante en que ese día
+    /// El cierre de una ventana «hasta el día ancla + <paramref name="dias"/>»: el instante en que ese día
     /// TERMINA en Colombia, exclusivo (#195).
     /// </summary>
     /// <remarks>
@@ -39,8 +40,27 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     /// noche del día que la tarjeta todavía promete. Es la medianoche de Bogotá, cinco horas más
     /// tarde en UTC.
     /// </remarks>
-    private static DateTimeOffset AlTerminarElDia(int anio, int mes, int dia)
-        => new DateTimeOffset(anio, mes, dia, 0, 0, 0, Colombia).AddDays(1);
+    private static DateTimeOffset AlTerminarElDia(DateTimeOffset ancla, int dias)
+        => ancla.AddDays(dias + 1);
+
+    private static readonly CultureInfo EsCo = CultureInfo.GetCultureInfo("es-CO");
+
+    /// <summary>«14 de agosto de 2026»: el día <paramref name="dias"/> después del ancla, como se lee en Colombia.</summary>
+    private static string Dia(DateTimeOffset ancla, int dias)
+        => ancla.AddDays(dias).ToString("d 'de' MMMM 'de' yyyy", EsCo);
+
+    /// <summary>
+    /// El ancla del catálogo: la medianoche de HOY en Colombia (016-contenido-piezas). Las fechas del catálogo de muestra
+    /// eran fijas y en noviembre de 2026 tres de los cuatro eventos ya habían pasado: ahora cada fecha es «ancla + N
+    /// días», con la misma separación de siempre. Con el reloj en el 26 de julio de 2026 salen exactamente las fechas
+    /// de antes, que es lo que fijan las pruebas.
+    /// </summary>
+    internal static DateTimeOffset AnclaDe(TimeProvider reloj)
+    {
+        ArgumentNullException.ThrowIfNull(reloj);
+        var hoy = reloj.GetUtcNow().ToOffset(Colombia);
+        return new DateTimeOffset(hoy.Year, hoy.Month, hoy.Day, 0, 0, 0, Colombia);
+    }
 
     // Catálogo sembrado (4 eventos, mezcla general/reserved) + eventos publicados
     // por organizadores en runtime (PublishEventAsync). ConcurrentDictionary
@@ -53,7 +73,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     // los tests de catálogo hacía divergir las secuencias de ids. Fallaba ~1 de cada 16
     // corridas completas, y solo entre las dos búsquedas —después el listado extra salía en
     // ambas y la igualdad volvía a cumplirse—, que es justo por qué era tan esquivo.
-    private readonly ConcurrentDictionary<string, EventDetail> _catalog = BuildCatalog();
+    private readonly ConcurrentDictionary<string, EventDetail> _catalog;
 
     // Contador monotónico para el id de eventos publicados por organizadores.
     private int _publishedCounter;
@@ -62,12 +82,26 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
 
     /// <summary>Ctor por defecto: el motor, sin tope de página (esta seam devuelve todo).</summary>
     public StubEventCatalogProvider()
-        : this(new InMemoryCatalogIndex<EventSummary>(Descriptor, CatalogSettings.Unpaged))
+        : this(TimeProvider.System)
+    {
+    }
+
+    /// <summary>Con el reloj dado: las fechas del catálogo se cuentan desde su «hoy» (ver <see cref="AnclaDe"/>).</summary>
+    public StubEventCatalogProvider(TimeProvider reloj)
+        : this(new InMemoryCatalogIndex<EventSummary>(Descriptor, CatalogSettings.Unpaged), reloj)
     {
     }
 
     internal StubEventCatalogProvider(ICatalogIndex<EventSummary> index)
-        => _index = index ?? throw new ArgumentNullException(nameof(index));
+        : this(index, TimeProvider.System)
+    {
+    }
+
+    internal StubEventCatalogProvider(ICatalogIndex<EventSummary> index, TimeProvider reloj)
+    {
+        _index = index ?? throw new ArgumentNullException(nameof(index));
+        _catalog = BuildCatalog(AnclaDe(reloj));
+    }
 
     /// <summary>
     /// Lo que Eventos DECLARA sobre su catálogo. Cero lógica.
@@ -147,20 +181,33 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
     private string NextPublishedId()
         => $"evt-org-{Interlocked.Increment(ref _publishedCounter)}";
 
-    private static ConcurrentDictionary<string, EventDetail> BuildCatalog()
+    private static ConcurrentDictionary<string, EventDetail> BuildCatalog(DateTimeOffset ancla)
     {
+        // Los instantes, contados desde el ancla con la separación de siempre (en UTC, como antes).
+        var inicioFestival = ancla.AddDays(20).AddHours(14).ToUniversalTime();
+        var inicioSinfonico = ancla.AddDays(70).AddHours(19).ToUniversalTime();
+        var inicioCumbre = ancla.AddDays(58).AddHours(8).AddMinutes(30).ToUniversalTime();
+        // La obra es «Cuento de Navidad»: el próximo 14 de diciembre que quede al menos 20 días por delante, a las 15:30.
+        var diciembre = new DateTimeOffset(ancla.Year, 12, 14, 0, 0, 0, Colombia);
+        if (diciembre < ancla.AddDays(20)) { diciembre = diciembre.AddYears(1); }
+        var diasHastaLaObra = (int)(diciembre - ancla).TotalDays;
+        var inicioObra = diciembre.AddHours(15).AddMinutes(30).ToUniversalTime();
+        static int Anio(DateTimeOffset instante) => instante.ToOffset(Colombia).Year;
+        var mesDelSinfonico = inicioSinfonico.ToOffset(Colombia).ToString("MMMM", EsCo);
+        mesDelSinfonico = EsCo.TextInfo.ToUpper(mesDelSinfonico[0]) + mesDelSinfonico[1..];
+
         var festival = new EventDetail(
             Summary: new EventSummary(
                 Id: "evt-festival-estereo",
                 Slug: "festival-estereo-2026",
-                Title: "Festival Estéreo 2026",
+                Title: $"Festival Estéreo {Anio(inicioFestival)}",
                 Category: "Música",
                 City: "Bogotá",
                 Venue: "Parque Simón Bolívar",
                 // 14:00 Bogotá (UTC-5) = la primera fila de la agenda. La pantalla
                 // formatea con Intl en la zona del navegador, así que el instante se
                 // elige por cómo se LEE en Colombia, no por cómo se escribe en UTC.
-                StartUtc: new DateTimeOffset(2026, 8, 15, 19, 0, 0, TimeSpan.Zero),
+                StartUtc: inicioFestival,
                 ImageUrl: "/media/eventos/festival-estereo.jpg",
                 PriceFrom: 180_000m,
                 Currency: Currency,
@@ -179,8 +226,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Más de 20 puestos de comida y bebida en el predio",
                         "Puntos de agua potable gratuitos en todo el recinto",
                     },
-                    SaleWindow: "Hasta el 14 de agosto de 2026",
-                    SaleClosesUtc: AlTerminarElDia(2026, 8, 14)),
+                    SaleWindow: $"Hasta el {Dia(ancla, 19)}",
+                    SaleClosesUtc: AlTerminarElDia(ancla, 19)),
                 new EventTier(
                     "VIP", "VIP", 420_000m, Currency, Capacity: 800, Remaining: 95, MaxPerOrder: 4,
                     Description: "Zona vallada frente al Escenario Sur, con aforo reducido y servicios aparte.",
@@ -191,9 +238,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Ingreso por la puerta 1, sin pasar por taquilla",
                         "Casillero con carga para el celular",
                     },
-                    SaleWindow: "Hasta el 10 de agosto de 2026",
+                    SaleWindow: $"Hasta el {Dia(ancla, 15)}",
                     Featured: true,
-                    SaleClosesUtc: AlTerminarElDia(2026, 8, 10)),
+                    SaleClosesUtc: AlTerminarElDia(ancla, 15)),
                 new EventTier(
                     "EARLY", "Preventa", 140_000m, Currency, Capacity: 1000, Remaining: 0, MaxPerOrder: 6,
                     Description: "Tarifa de lanzamiento de diciembre, con las mismas condiciones que la entrada General.",
@@ -203,8 +250,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Cupo limitado a 1.000 boletas, sin reposición",
                         "Manilla enviada a domicilio la semana previa al festival",
                     },
-                    SaleWindow: "Cerró el 28 de febrero de 2026",
-                    SaleClosesUtc: AlTerminarElDia(2026, 2, 28)),
+                    SaleWindow: $"Cerró el {Dia(ancla, -148)}",
+                    SaleClosesUtc: AlTerminarElDia(ancla, -148)),
             },
             SeatMap: null,
             Artist: new EventArtist("Cordillera Eléctrica", "Headliner · fusión andina y electrónica en vivo", 328_000),
@@ -230,7 +277,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             Summary: new EventSummary(
                 Id: "evt-concierto-sinfonico",
                 Slug: "concierto-sinfonico-octubre",
-                Title: "Concierto Sinfónico de Octubre",
+                Title: $"Concierto Sinfónico de {mesDelSinfonico}",
                 Category: "Música",
                 City: "Medellín",
                 Venue: "Teatro Metropolitano",
@@ -238,7 +285,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 // OJO: estaba como 4-oct 00:00Z, y medianoche UTC RETROCEDE UN DÍA en
                 // toda América — la ficha decía "sábado 3 de octubre" mientras la venta
                 // de Balcón cerraba "hasta el 3 de octubre", el mismo día que pintaba.
-                StartUtc: new DateTimeOffset(2026, 10, 5, 0, 0, 0, TimeSpan.Zero),
+                StartUtc: inicioSinfonico,
                 ImageUrl: "/media/eventos/sinfonico.jpg",
                 PriceFrom: 90_000m,
                 Currency: Currency,
@@ -257,9 +304,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Programa de mano impreso con las notas del repertorio",
                         "Copa de vino en el intermedio",
                     },
-                    SaleWindow: "Hasta el 2 de octubre de 2026",
+                    SaleWindow: $"Hasta el {Dia(ancla, 68)}",
                     Featured: true,
-                    SaleClosesUtc: AlTerminarElDia(2026, 10, 2)),
+                    SaleClosesUtc: AlTerminarElDia(ancla, 68)),
                 new EventTier(
                     "BALCON", "Balcón", 90_000m, Currency, Capacity: 12, Remaining: 12, MaxPerOrder: 6, ZoneId: "balcon",
                     Description: "Segundo nivel, con el escenario completo a la vista.",
@@ -270,8 +317,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Ascensor directo desde el vestíbulo, sin escaleras",
                         "Guardarropa sin costo durante la función",
                     },
-                    SaleWindow: "Hasta el 3 de octubre de 2026",
-                    SaleClosesUtc: AlTerminarElDia(2026, 10, 3)),
+                    SaleWindow: $"Hasta el {Dia(ancla, 69)}",
+                    SaleClosesUtc: AlTerminarElDia(ancla, 69)),
             },
             SeatMap: new EventSeatMap(
                 VenueName: "Teatro Metropolitano",
@@ -323,12 +370,12 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             Summary: new EventSummary(
                 Id: "evt-cumbre-tech",
                 Slug: "cumbre-tech-2026",
-                Title: "Cumbre Tech 2026",
+                Title: $"Cumbre Tech {Anio(inicioCumbre)}",
                 Category: "Conferencia",
                 City: "Bogotá",
                 Venue: "Ágora Centro de Convenciones",
                 // 08:30 Bogotá = registro y acreditación (primera fila de la agenda).
-                StartUtc: new DateTimeOffset(2026, 9, 22, 13, 30, 0, TimeSpan.Zero),
+                StartUtc: inicioCumbre,
                 ImageUrl: "/media/eventos/cumbre-tech.jpg",
                 PriceFrom: 250_000m,
                 Currency: Currency,
@@ -351,8 +398,8 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Almuerzo y estación de café incluidos",
                         "Directorio de asistentes para agendar reuniones",
                     },
-                    SaleWindow: "Hasta el 18 de septiembre de 2026",
-                    SaleClosesUtc: AlTerminarElDia(2026, 9, 18)),
+                    SaleWindow: $"Hasta el {Dia(ancla, 54)}",
+                    SaleClosesUtc: AlTerminarElDia(ancla, 54)),
                 new EventTier(
                     "PRO", "Pro", 480_000m, Currency, Capacity: 300, Remaining: 58, MaxPerOrder: 5,
                     Description: "Todo lo del plan Estándar más los cuatro talleres prácticos de la tarde.",
@@ -363,9 +410,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Mesa de trabajo con los ponentes al cierre",
                         "Silla numerada en las primeras cinco filas",
                     },
-                    SaleWindow: "Hasta el 12 de septiembre de 2026",
+                    SaleWindow: $"Hasta el {Dia(ancla, 48)}",
                     Featured: true,
-                    SaleClosesUtc: AlTerminarElDia(2026, 9, 12)),
+                    SaleClosesUtc: AlTerminarElDia(ancla, 48)),
             },
             SeatMap: null,
             Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 41_200),
@@ -398,7 +445,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 // 15:30 Bogotá = apertura de puertas (primera fila de la agenda). Estaba
                 // en 19:00Z = 14:00 local: la ficha anunciaba el evento HORA Y MEDIA
                 // antes de que, según su propia agenda, se abrieran las puertas.
-                StartUtc: new DateTimeOffset(2026, 12, 14, 20, 30, 0, TimeSpan.Zero),
+                StartUtc: inicioObra,
                 ImageUrl: "/media/eventos/obra-infantil.jpg",
                 PriceFrom: 45_000m,
                 Currency: Currency,
@@ -424,9 +471,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                         "Devolución del 100% hasta 48 horas antes de la función",
                         "Acceso para silla de ruedas y dos puestos reservados",
                     },
-                    SaleWindow: "Hasta el 13 de diciembre de 2026",
+                    SaleWindow: $"Hasta el {Dia(ancla, diasHastaLaObra - 1)}",
                     Featured: true,
-                    SaleClosesUtc: AlTerminarElDia(2026, 12, 13)),
+                    SaleClosesUtc: AlTerminarElDia(ancla, diasHastaLaObra - 1)),
             },
             SeatMap: null,
             Artist: new EventArtist("Compañía Teatral La Ronda", "Compañía residente · teatro familiar y música en vivo", 8_730),

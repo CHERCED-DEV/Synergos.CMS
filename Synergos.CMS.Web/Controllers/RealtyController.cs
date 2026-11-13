@@ -867,11 +867,39 @@ public sealed class RealtyController : ControllerBase
         Name: f.Name,
         // La UI lee `facets[].key` + `values[].label`; se conservan Name/Value legacy.
         Key: f.Name,
-        Values: f.Values.Select(v => new FacetValueDto(v.Value, v.Label ?? v.Value, v.Count)).ToList(),
+        // Una etiqueta que repite el valor crudo («apartamento») es una etiqueta ausente: se escribe como se lee.
+        Values: f.Values.Select(v => new FacetValueDto(
+            v.Value,
+            string.IsNullOrWhiteSpace(v.Label) || v.Label == v.Value ? EtiquetaDeValor(f.Name, v.Value) : v.Label,
+            v.Count)).ToList(),
         // La UI lee `facets[].kind` (realty-api.client.ts normalizeFacets) para saber si la
         // faceta es de valor único. Sin esto, `beds` llegaba sin kind → checkbox → el usuario
         // marcaba "4+ habitaciones" y "1+ habitación" y veía el catálogo entero.
-        Kind: f.Kind);
+        Kind: f.Kind,
+        // La UI lee `facets[].label` y, si falta, pinta la clave cruda («type», «operation»): 016-contenido-piezas.
+        Label: EtiquetaDeFaceta(f.Name));
+
+    /// <summary>El nombre visible de una faceta. Una clave que no está aquí sale tal cual, como antes.</summary>
+    private static string EtiquetaDeFaceta(string clave) => clave switch
+    {
+        "type" => "Tipo",
+        "operation" => "Operación",
+        "city" => "Ciudad",
+        "beds" => "Habitaciones",
+        "baths" => "Baños",
+        "price" => "Precio",
+        "stratum" => "Estrato",
+        _ => clave,
+    };
+
+    /// <summary>
+    /// El texto visible de un valor sin etiqueta propia: el del vocabulario del dominio («apartamento», «venta») con
+    /// mayúscula inicial. Las ciudades ya llegan escritas como se leen y no se tocan.
+    /// </summary>
+    private static string EtiquetaDeValor(string faceta, string valor) =>
+        faceta is "type" or "operation" && valor.Length > 0
+            ? char.ToUpper(valor[0], System.Globalization.CultureInfo.GetCultureInfo("es-CO")) + valor[1..]
+            : valor;
 
     // ── Helpers de reshape (vocabulario + derivaciones para la UI) ──────
 
@@ -1148,7 +1176,8 @@ public sealed class RealtyController : ControllerBase
         string Name,
         string Key,
         IReadOnlyList<FacetValueDto> Values,
-        string Kind = "MultiSelect");
+        string Kind = "MultiSelect",
+        string? Label = null);
 
     public sealed record ListingsResponse(
         IReadOnlyList<ListingDto> Listings,

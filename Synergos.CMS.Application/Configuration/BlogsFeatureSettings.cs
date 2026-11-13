@@ -1,3 +1,4 @@
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 
 namespace Synergos.CMS.Application.Configuration;
@@ -18,13 +19,27 @@ public sealed class BlogsFeatureSettings : SeccionDeNegocio<BlogsFeatureSitio, N
     /// <summary>Dónde vive la API de la funcionalidad: relativa al sitio o absoluta.</summary>
     public string ApiBase { get; init; } = "/api/blogs";
 
+    /// <summary>
+    /// La base de las lecturas genéricas de Blogs (012-blogs-social, I4): el catálogo de la red, los guardados y los
+    /// mensajes directos con forma neutra, como la tienda y Salud.
+    /// </summary>
+    /// <remarks>
+    /// Vacía, la app vuelve a leer las rutas interinas de <see cref="ApiBase"/>: es la vuelta atrás sin desplegar.
+    /// </remarks>
+    public string LecturasBase { get; init; } = "/api/lecturas/" + CatalogoDeBlogs.Vertical;
+
     /// <inheritdoc />
     protected override NegocioDeBlogs Fusionar(BlogsFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase);
+        => new(ApiBase: propio?.ApiBase ?? ApiBase, LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeBlogs negocio)
-        => new[] { ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase) }.OfType<string>();
+        => new[]
+        {
+            ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
+            // Vacía vale: es la vuelta atrás.
+            string.IsNullOrWhiteSpace(negocio.LecturasBase) ? null : ReglasDeNegocio.ApiBase("LecturasBase", negocio.LecturasBase),
+        }.OfType<string>();
 }
 
 /// <summary>
@@ -34,4 +49,7 @@ public sealed class BlogsFeatureSitio
 {
     /// <inheritdoc cref="BlogsFeatureSettings.ApiBase"/>
     public string? ApiBase { get; init; }
+
+    /// <inheritdoc cref="BlogsFeatureSettings.LecturasBase"/>
+    public string? LecturasBase { get; init; }
 }

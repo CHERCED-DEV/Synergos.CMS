@@ -247,6 +247,19 @@
   min-width: 0;
 }
 
+/* Una tarjeta sola en su celda llena el alto de la fila: las tarjetas de una fila quedan parejas
+   y su pie (el enlace) cae alineado, aunque los textos tengan largos distintos. */
+.syn-layout__area > .umb-block-grid__layout-container:has(> .umb-block-grid__layout-item:only-child > .syn-card:only-child),
+.syn-layout__area > .umb-block-grid__layout-container > .umb-block-grid__layout-item:only-child:has(> .syn-card:only-child) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.syn-layout__area .umb-block-grid__layout-item:only-child > .syn-card:only-child {
+  flex: 1;
+}
+
 /* Presets estructurales (sin padding-block — ver nota de cabecera). */
 .syn-layout--section,
 .syn-layout--container,

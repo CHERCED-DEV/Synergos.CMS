@@ -126,6 +126,12 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
                     // «sí». Ver AuthoredPostAuthor.
                     Verified: false),
                 CmsNodeId = post.NodeId,
+                // La página del post: la tarjeta de un artículo la abre (012-blogs-social, I3).
+                CmsUrl = string.IsNullOrWhiteSpace(post.Url) ? null : post.Url,
+                // El título y la categoría de su página: el catálogo de la red los busca y los filtra
+                // (012-blogs-social, I4).
+                CmsTitle = string.IsNullOrWhiteSpace(post.Title) ? null : post.Title,
+                Category = string.IsNullOrWhiteSpace(post.Category) ? null : post.Category,
             }
             : item;
 

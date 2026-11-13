@@ -124,6 +124,14 @@ public sealed record ContentStreamPage(
 /// <param name="CmsNodeId">El id del nodo del CMS cuando el item es un post que alguien
 ///   autoró (<c>postPage</c>), o <c>null</c>. Lo repone al leer quien lo sembró: con él,
 ///   la app y la página del post comentan en el MISMO hilo (012-blogs-social, I0).</param>
+/// <param name="CmsUrl">La URL de la página del post en el sitio, cuando el item es un post que alguien autoró, o
+///   <c>null</c>. Lo repone al leer quien lo sembró, como <paramref name="CmsNodeId"/>: la tarjeta de un artículo
+///   abre su página, que es su identidad (012-blogs-social, I3).</param>
+/// <param name="CmsTitle">El título de la página del post, cuando el item es un post que alguien autoró, o <c>null</c>.
+///   Lo repone al leer quien lo sembró: el cuerpo del item es su resumen, y el título es lo que se busca y se nombra en
+///   el catálogo de la red (012-blogs-social, I4).</param>
+/// <param name="Category">La categoría del post que alguien autoró (su página de categoría), o <c>null</c>. Lo de un
+///   miembro no la tiene. Es la faceta «categoría» del catálogo de la red (012-blogs-social, I4).</param>
 public sealed record ContentStreamItem(
     string Id,
     string Kind,
@@ -133,7 +141,10 @@ public sealed record ContentStreamItem(
     DateTime CreatedUtc,
     ContentMetrics Metrics,
     string? MediaAlt = null,
-    int? CmsNodeId = null);
+    int? CmsNodeId = null,
+    string? CmsUrl = null,
+    string? CmsTitle = null,
+    string? Category = null);
 
 /// <summary>
 /// Autor de un item — proyección liviana del Member para el feed (lo rico vive

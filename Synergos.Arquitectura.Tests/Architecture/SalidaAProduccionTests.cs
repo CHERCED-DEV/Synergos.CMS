@@ -604,6 +604,35 @@ public sealed class SalidaAProduccionTests
         Assert.Contains("http://api-audit:8080/v1/entries", ensayo, StringComparison.Ordinal);
     }
 
+    // ── El permiso del paciente en producción se lee en Api.Consent (D-003-I2-6, 2026-11-13) ─
+
+    /// <summary>
+    /// En producción la guardia clínica lee el permiso del paciente en <c>Api.Consent</c>: el compose de producción la
+    /// deja en <c>Api</c> por defecto CON su dirección y su llave (sin dirección el lector niega todo), el esqueleto del
+    /// <c>.env</c> no la vuelve a <c>Local</c>, y el ensayo comprueba que el CMS alcanza la capacidad y que ésta contesta
+    /// a su llave y su forma. El desarrollo y las pilotos no corren este compose.
+    /// </summary>
+    [Fact]
+    public void En_produccion_el_permiso_del_paciente_se_lee_en_Api_Consent()
+    {
+        var compose = Leer("compose.prod.yml");
+        Assert.Contains("Synergos__Consent__Mode: ${SYNERGOS_CONSENT_MODE:-Api}", compose, StringComparison.Ordinal);
+        Assert.Contains("Synergos__Consent__BaseUrl: \"http://api-consent:8080\"", compose, StringComparison.Ordinal);
+        Assert.Contains("Synergos__Consent__ApiKey: ${SYNERGOS_API_KEY}", compose, StringComparison.Ordinal);
+
+        Assert.Matches(@"(?m)^SYNERGOS_CONSENT_MODE=Api\r?$", Leer(".env.example"));
+        Assert.True(!EsqueletoDelEnv().TryGetValue("SYNERGOS_CONSENT_MODE", out var delEsqueleto) || delEsqueleto == "Api",
+            $"El esqueleto del .env de bootstrap-servidor.sh pone SYNERGOS_CONSENT_MODE={delEsqueleto}: pisaría el Api del compose.");
+
+        var ensayo = Leer(".github", "workflows", "ensayo-despliegue.yml");
+        Assert.Contains("grep -q '^Synergos__Consent__Mode=Api$'", ensayo, StringComparison.Ordinal);
+        Assert.Contains("exec 3<>/dev/tcp/api-consent/8080", ensayo, StringComparison.Ordinal);
+        Assert.Contains("http://api-consent:8080/v1/grants/check", ensayo, StringComparison.Ordinal);
+        Assert.Contains("\\\"subjectKind\\\":\\\"salud.paciente\\\"", ensayo, StringComparison.Ordinal);
+        Assert.Contains("\\\"purpose\\\":\\\"salud.historia\\\"", ensayo, StringComparison.Ordinal);
+        Assert.Contains("'\"code\":\"consent.not_granted\"'", ensayo, StringComparison.Ordinal);
+    }
+
     // ── El levantado entero, sin pasos a mano (salida a Hetzner, 2026-11-01) ─
 
     /// <summary>Un script de shell sin sus líneas de comentario: lo que corre, no lo que explica.</summary>

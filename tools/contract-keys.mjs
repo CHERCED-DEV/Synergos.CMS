@@ -83,14 +83,27 @@ const PARES = [
         ],
         registros: ['Synergos.CMS.Interfaces/Lecturas'],
         dominio: { nombre: 'tienda' },
+        // Los lectores de las formas neutras subieron a `libs/core` (012-blogs-social, I4): la tienda lee con ellos.
+        nucleo: ['lecturas'],
     },
     { app: 'eventos', controllers: ['EventosController.cs'] },
     { app: 'gov', controllers: ['GovController.cs'] },
     { app: 'ehr', controllers: ['EhrController.cs', 'HealthcareApiController.cs'] },
     { app: 'realty', controllers: ['RealtyController.cs'] },
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
-    // Sus clientes viven en `libs/dominio/blogs`, uno por capacidad (012-blogs-social, I2, T014).
-    { app: 'blogs', controllers: ['BlogsController.cs'], dominio: { nombre: 'blogs' } },
+    // Sus clientes viven en `libs/dominio/blogs`, uno por capacidad (012-blogs-social, I2, T014). Desde I4, Explorar,
+    // los guardados y los mensajes leen las lecturas genéricas con los lectores de `libs/core`; las de BlogsController
+    // quedan interinas.
+    {
+        app: 'blogs',
+        controllers: [
+            'BlogsController.cs',
+            'LecturaDelCatalogoController.cs', 'LecturaDeColeccionesController.cs', 'LecturaDeMensajesController.cs',
+        ],
+        registros: ['Synergos.CMS.Interfaces/Lecturas'],
+        dominio: { nombre: 'blogs' },
+        nucleo: ['lecturas'],
+    },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
     // La consola del vendedor (013-seller-operaciones, T012): la bandeja y el detalle salen de las rutas del personal.
     // Sus clientes viven en `libs/dominio/tienda/src/lib/consola`, la carpeta que reclama (014-despiece-tienda, T009).
@@ -100,6 +113,8 @@ const PARES = [
         controllers: ['VendedorDeLaTiendaController.cs', 'LecturaDeMensajesController.cs'],
         registros: ['Synergos.CMS.Interfaces/Lecturas'],
         dominio: { nombre: 'tienda', carpetas: ['consola'] },
+        // De los lectores comunes, sólo el de la bandeja: la consola no lee el catálogo ni las colecciones.
+        nucleo: ['lecturas/bandeja.ts'],
     },
 ];
 
@@ -143,6 +158,24 @@ function clavesQueLeeLaUi(par) {
     };
     walk(dir);
     for (const capacidad of carpetasDelDominio(PARES, par, UI)) walk(capacidad);
+    // **Y los lectores comunes de `libs/core` que el par declara en `nucleo`** (012-blogs-social, I4): las formas neutras
+    // de las lecturas genéricas se leen allí, una vez para todos los verticales. Sin esto, mudar un lector a la
+    // librería común se veía como que el borde había dejado de emitir lo que la app sigue leyendo. Cada entrada es una
+    // carpeta (todos sus `.ts` salvo las specs) o un fichero, relativos a `libs/core/src`.
+    for (const entrada of par.nucleo ?? []) {
+        const nucleo = path.join(UI, 'platforms', 'angular', 'libs', 'core', 'src', entrada);
+        if (!fs.existsSync(nucleo)) {
+            problemas.push(`«libs/core/src/${entrada}» no existe: el par «${par.app}» lo declara en nucleo y no se leyó.`);
+            continue;
+        }
+        if (fs.statSync(nucleo).isFile()) {
+            clientes.push(nucleo);
+            continue;
+        }
+        for (const e of fs.readdirSync(nucleo).filter((n) => n.endsWith('.ts') && !n.endsWith('.spec.ts'))) {
+            clientes.push(path.join(nucleo, e));
+        }
+    }
     if (clientes.length === 0) return null;
 
     const claves = new Set();

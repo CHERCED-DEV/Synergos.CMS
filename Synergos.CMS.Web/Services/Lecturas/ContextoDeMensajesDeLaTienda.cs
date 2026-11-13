@@ -8,9 +8,10 @@ namespace Synergos.CMS.Web.Services.Lecturas;
 /// Los hilos de la tienda en la bandeja genérica (014-despiece-tienda, I4). Son los de contexto <c>tienda:</c>
 /// (<c>tienda:pedido:{ref}</c>, <c>tienda:producto:{id}</c>) y los que abrió <c>POST api/shop/messages</c> con la
 /// referencia de un pedido (<c>ord_…</c>). Los demás hilos del mismo correo (los mensajes directos de Blogs, los
-/// radicados de Gobierno) no son de la tienda: la bandeja de <c>GET api/shop/messages</c>, interina, los traía.
+/// radicados de Gobierno) no son de la tienda: la bandeja de <c>GET api/shop/messages</c>, interina, los traía. Es el
+/// contexto genérico por prefijo (012-blogs-social, I4) con la referencia de un pedido de más.
 /// </summary>
-public sealed class ContextoDeMensajesDeLaTienda : IContextoDeMensajes
+public sealed class ContextoDeMensajesDeLaTienda : ContextoDeMensajesPorPrefijo
 {
     /// <summary>El prefijo del contexto de un hilo de la tienda.</summary>
     public const string Prefijo = "tienda:";
@@ -24,22 +25,19 @@ public sealed class ContextoDeMensajesDeLaTienda : IContextoDeMensajes
 
     /// <summary>Sobre los pedidos y el catálogo de la tienda, de donde salen los asuntos.</summary>
     public ContextoDeMensajesDeLaTienda(IShopOrderService pedidos, IEnumerable<ILecturaDelCatalogo> catalogos)
+        : base(CatalogoDeLaTienda.Vertical, Prefijo)
     {
         _pedidos = pedidos ?? throw new ArgumentNullException(nameof(pedidos));
         _catalogos = catalogos ?? throw new ArgumentNullException(nameof(catalogos));
     }
 
     /// <inheritdoc />
-    public string Vertical => CatalogoDeLaTienda.Vertical;
+    public override bool EsDelVertical(string contexto)
+        => base.EsDelVertical(contexto)
+            || (!string.IsNullOrWhiteSpace(contexto) && contexto.StartsWith(ReferenciaDeUnPedido, StringComparison.Ordinal));
 
     /// <inheritdoc />
-    public bool EsDelVertical(string contexto)
-        => !string.IsNullOrWhiteSpace(contexto)
-            && (contexto.StartsWith(Prefijo, StringComparison.OrdinalIgnoreCase)
-                || contexto.StartsWith(ReferenciaDeUnPedido, StringComparison.Ordinal));
-
-    /// <inheritdoc />
-    public async Task<string> AsuntoAsync(string contexto, CancellationToken cancellationToken = default)
+    public override async Task<string> AsuntoAsync(string contexto, CancellationToken cancellationToken = default)
     {
         var resto = contexto.StartsWith(Prefijo, StringComparison.OrdinalIgnoreCase)
             ? contexto[Prefijo.Length..]
