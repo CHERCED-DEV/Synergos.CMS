@@ -117,6 +117,12 @@ public sealed class LockingAppointmentSchedulerTests
                 .Where(kv => kv.Key.StartsWith(resourceType + "/", StringComparison.Ordinal))
                 .Select(kv => kv.Value).ToList());
 
+        public Task<IReadOnlyList<KeyValuePair<Guid, string>>> ListEntriesAsync(string resourceType, CancellationToken ct) =>
+            Task.FromResult((IReadOnlyList<KeyValuePair<Guid, string>>)_data
+                .Where(kv => kv.Key.StartsWith(resourceType + "/", StringComparison.Ordinal))
+                .Select(kv => new KeyValuePair<Guid, string>(Guid.Parse(kv.Key[(resourceType.Length + 1)..]), kv.Value))
+                .ToList());
+
         public Task<bool> DeleteAsync(string resourceType, Guid key, CancellationToken ct) =>
             Task.FromResult(_data.Remove(K(resourceType, key)));
     }

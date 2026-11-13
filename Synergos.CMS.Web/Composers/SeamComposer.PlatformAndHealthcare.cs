@@ -103,6 +103,28 @@ public sealed partial class SeamComposer
         services.AddSingleton<IConsentLedger, FileSystemConsentLedger>();
         services.AddScoped<IPhiAccessGuard, DefaultPhiAccessGuard>();
 
+        // 003-salud-cita, I2 T054 — con Mode=Api la guardia lee el permiso del paciente en Api.Consent (Q4,
+        // Q7) y el libro local deja de decidir. Sin BaseUrl no se adivina un puerto: el lector niega todo.
+        // Sin el modo, la guardia sigue con el libro local (la vuelta atrás y el desarrollo).
+        // La sección se ENLAZA (como Synergos:Audit): sin esto el lector recibe un ConsentSettings recién construido y
+        // lo que no viaja por el HttpClient se queda en su default en silencio. Gate: ConsentWiringTests.
+        services.Configure<ConsentSettings>(builder.Config.GetSection("Synergos:Consent"));
+        if (Interruptor.Encendido(builder.Config, "Synergos:Consent:Mode", "Api", new ConsentSettings().Mode))
+        {
+            var consent = builder.Config.GetSection("Synergos:Consent");
+            if (!string.IsNullOrWhiteSpace(consent["BaseUrl"]))
+            {
+                services.AddClienteDelArbolDeServicios(
+                    HttpConsentReader.ClientName,
+                    DestinoDelArbol.De(consent, consent["BaseUrl"]!, new ConsentSettings().TimeoutSeconds));
+                services.AddSingleton<IConsentReader, HttpConsentReader>();
+            }
+            else
+            {
+                services.AddSingleton<IConsentReader, LectorDePermisosSinDestino>();
+            }
+        }
+
         // T6 — almacén de ficheros PRIVADOS (bytes subidos por usuarios): cifrado
         // at-rest y bajo App_Data/, donde NINGÚN middleware de estáticos llega. Es el
         // contrapeso de wwwroot/media, que es público por construcción: ahí van las
@@ -125,6 +147,14 @@ public sealed partial class SeamComposer
         // ADR 0098 H2 — repositorio de historia clínica (versionado, sobre el PHI store).
         services.AddSingleton<IPatientRepository, FileSystemPatientRepository>();
 
+        // 003-salud-cita, I2 T057 — el editor de la historia: lee, cambia y guarda bajo un candado por
+        // paciente, para que el pre-registro y la validación del médico no se pisen. Singleton: el candado
+        // tiene que ser el mismo para todas las peticiones.
+        services.AddSingleton<EditorDeLaHistoriaClinica>();
+
+        // I2 T056 — la clave del miembro por su correo, para que recepción le abra la historia.
+        services.AddScoped<IBuscadorDeMiembros, UmbracoBuscadorDeMiembros>();
+
         // ADR 0098 H2b — agenda de citas: lógica pura (Application) + scheduler Web
         // con lock async por-doctor (anti-overbooking) sobre el PHI store.
         services.AddSingleton<Synergos.CMS.Application.Services.AppointmentSchedulingService>();
@@ -133,8 +163,9 @@ public sealed partial class SeamComposer
         // ADR 0098 H2c — recetas (RECORD-KEEPER, sobre el PHI store).
         services.AddSingleton<IPrescriptionService, FileSystemPrescriptionService>();
 
-        // ADR 0098 H3 — de-identificador PHI (lo invoca el coordinador RTBF
-        // antes del hard-delete del Member).
+        // ADR 0098 H3, enmendada por la ADR 0142 — desliga al miembro de su historia
+        // (lo invoca el coordinador RTBF antes del hard-delete del Member); la historia
+        // se conserva completa por su retención legal.
         services.AddSingleton<IHealthcareDataAnonymizer, FileSystemHealthcareDataAnonymizer>();
 
         // OLA 5 Healthcare EHR-lite — dashboard clínico de DEMO (doc healthcare-app-spec).
@@ -203,6 +234,21 @@ public sealed partial class SeamComposer
             services.AddClienteDelArbolDeServicios(
                 Services.Salud.PublicadorDeOfertasDeProfesionales.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
         }
+        // 003-salud-cita, I3: la consulta en el orquestador de Salud —la agenda del día (P9), la llegada (P10) y el sello
+        // de la nota (P6)—, en el mismo destino. Sin él, la consulta contesta 503 y la agenda no inventa nada. Las notas
+        // viven en el almacén PHI cifrado; al orquestador sólo viaja su huella.
+        if (hayOrquestadorDeSalud)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpConsultaDeSalud.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
+            services.AddSingleton<IConsultaDeSalud, HttpConsultaDeSalud>();
+        }
+        else
+        {
+            services.AddSingleton<IConsultaDeSalud, ConsultaDeSaludSinDestino>();
+        }
+        services.AddSingleton<INotasDeLaConsulta, FileSystemNotasDeLaConsulta>();
+
         services.AddSingleton<Services.Salud.IPublicadorDeOfertasDeProfesionales>(sp => new Services.Salud.PublicadorDeOfertasDeProfesionales(
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<Services.Salud.PublicadorDeOfertasDeProfesionales>>(),

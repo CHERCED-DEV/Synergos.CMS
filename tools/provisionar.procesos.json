@@ -25,5 +25,16 @@
       { "name": "request-info", "from": "in-review", "to": "info-requested", "requiredRoles": ["funcionario"] },
       { "name": "resubmit", "from": "info-requested", "to": "in-review", "requiredRoles": ["ciudadano"] }
     ]
+  },
+  {
+    "key": "salud.llegada.v1",
+    "initialState": "agendada",
+    "finalStates": ["atendido", "no-vino"],
+    "transitions": [
+      { "name": "llegar", "from": "agendada", "to": "llego", "requiredRoles": ["consultorio"] },
+      { "name": "pasar", "from": "llego", "to": "en-sala", "requiredRoles": ["consultorio"] },
+      { "name": "atender", "from": "en-sala", "to": "atendido", "requiredRoles": ["consultorio"] },
+      { "name": "no-vino", "from": "agendada", "to": "no-vino", "requiredRoles": ["consultorio"] }
+    ]
   }
 ]

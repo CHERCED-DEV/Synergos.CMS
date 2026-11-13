@@ -3,8 +3,9 @@
   "entrada": ["paciente"],
   "tipos": { "paciente": { "de": "sujeto" } },
   "salida": [],
-  "fases": { "abrir": ["revocar"] },
+  "fases": { "abrir": ["revocar", "revocarHistoria"] },
   "pasos": {
-    "revocar": { "tipo": "consent.revocar", "proposito": "salud.agenda" }
+    "revocar": { "tipo": "consent.revocar", "proposito": "salud.agenda" },
+    "revocarHistoria": { "tipo": "consent.revocar", "proposito": "salud.historia", "al_fallar": "seguir" }
   }
 }

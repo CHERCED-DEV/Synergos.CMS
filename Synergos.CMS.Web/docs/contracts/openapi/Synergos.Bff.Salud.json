@@ -5,6 +5,211 @@
     "version": "v1"
   },
   "paths": {
+    "/v1/agenda": {
+      "get": {
+        "operationId": "AgendaDelDia",
+        "parameters": [
+          {
+            "name": "profesional",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaDelDiaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agenda/{reservaId}/llegada": {
+      "post": {
+        "operationId": "MarcarLlegada",
+        "parameters": [
+          {
+            "name": "reservaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasoDeLlegadaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlegadaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/appointments": {
       "post": {
         "operationId": "ScheduleAppointment",
@@ -2752,6 +2957,186 @@
           }
         }
       }
+    },
+    "/v1/sellos": {
+      "post": {
+        "operationId": "SellarNota",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SellarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelloResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sellos/comprobar": {
+      "post": {
+        "operationId": "ComprobarSelloDeNota",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComprobarSelloRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelloComprobadoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2794,6 +3179,20 @@
               "integer"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "AgendaDelDiaResponse": {
+        "required": [
+          "citas"
+        ],
+        "type": "object",
+        "properties": {
+          "citas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CitaDeLaAgenda"
+            }
           }
         }
       },
@@ -2884,6 +3283,39 @@
           }
         }
       },
+      "CitaDeLaAgenda": {
+        "required": [
+          "reservaId",
+          "inicio",
+          "fin",
+          "pacienteKind",
+          "pacienteId",
+          "llegada"
+        ],
+        "type": "object",
+        "properties": {
+          "reservaId": {
+            "type": "string"
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fin": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pacienteKind": {
+            "type": "string"
+          },
+          "pacienteId": {
+            "type": "string"
+          },
+          "llegada": {
+            "type": "string"
+          }
+        }
+      },
       "CompensacionDeFlujo": {
         "required": [
           "sagaId",
@@ -2936,6 +3368,44 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "ComprobarSelloRequest": {
+        "type": "object",
+        "properties": {
+          "llave": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contenido": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sello": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LlegadaResponse": {
+        "required": [
+          "reservaId",
+          "llegada"
+        ],
+        "type": "object",
+        "properties": {
+          "reservaId": {
+            "type": "string"
+          },
+          "llegada": {
+            "type": "string"
           }
         }
       },
@@ -3056,6 +3526,29 @@
           },
           "hasMore": {
             "type": "boolean"
+          }
+        }
+      },
+      "PasoDeLlegadaRequest": {
+        "type": "object",
+        "properties": {
+          "paso": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "actorKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "actorId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3789,6 +4282,49 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "SellarRequest": {
+        "type": "object",
+        "properties": {
+          "llave": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contenido": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SelloComprobadoResponse": {
+        "required": [
+          "llaveId"
+        ],
+        "type": "object",
+        "properties": {
+          "llaveId": {
+            "type": "string"
+          }
+        }
+      },
+      "SelloResponse": {
+        "required": [
+          "sello",
+          "llaveId"
+        ],
+        "type": "object",
+        "properties": {
+          "sello": {
+            "type": "string"
+          },
+          "llaveId": {
+            "type": "string"
           }
         }
       },

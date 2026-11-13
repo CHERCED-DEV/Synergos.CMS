@@ -96,8 +96,9 @@ public sealed class FileSystemGdprRtbfCoordinator : IGdprRtbfCoordinator
         // puede reintentar el delete por separado).
         var commentsCount = await AnonymizeCommentsAsync(memberKeyString, cancellationToken);
         var formsCount = await AnonymizeFormSubmissionsAsync(originalEmail, cancellationToken);
-        // ADR 0098 — de-identifica la PHI clínica del paciente ANTES del hard-delete
-        // (para no dejar PHI huérfana ni violar la retención legal de 6 años).
+        // ADR 0098 §5, enmendada por la ADR 0142 — desliga al miembro de su historia clínica
+        // (vigente y archivadas) ANTES del hard-delete: la historia se conserva completa por ley
+        // (15 años desde la última atención) y la supresión no la alcanza.
         var phiCount = await _healthcare.AnonymizeForMemberAsync(memberKey, cancellationToken);
 
         var deleted = await _rosterWriter.DeleteAsync(memberKey, cancellationToken);

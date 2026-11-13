@@ -90,6 +90,28 @@ public sealed class FileSystemEncryptedPhiStore : IPhiStore
         return results;
     }
 
+    public async Task<IReadOnlyList<KeyValuePair<Guid, string>>> ListEntriesAsync(
+        string resourceType,
+        CancellationToken cancellationToken)
+    {
+        var dir = Path.Combine(_hostEnvironment.ContentRootPath, "App_Data", RootDir, Sanitize(resourceType));
+        if (!Directory.Exists(dir)) return Array.Empty<KeyValuePair<Guid, string>>();
+
+        var results = new List<KeyValuePair<Guid, string>>();
+        foreach (var file in Directory.EnumerateFiles(dir, "*" + Extension))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // Sólo los que se llaman como los escribe WriteAsync: un fichero ajeno al almacén no tiene clave.
+            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(file), "N", out var key)) continue;
+            string content;
+            try { content = await File.ReadAllTextAsync(file, Encoding.UTF8, cancellationToken).ConfigureAwait(false); }
+            catch (IOException) { continue; }
+            var json = Decrypt(content);
+            if (json is not null) results.Add(new KeyValuePair<Guid, string>(key, json));
+        }
+        return results;
+    }
+
     public Task<bool> DeleteAsync(string resourceType, Guid key, CancellationToken cancellationToken)
     {
         var path = ResolvePath(resourceType, key);

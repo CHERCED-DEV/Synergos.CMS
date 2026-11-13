@@ -28,6 +28,13 @@ public interface IPhiStore
     /// <summary>Lee y descifra todos los documentos de un resourceType. Vacío si no hay.</summary>
     Task<IReadOnlyList<string>> ListAsync(string resourceType, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Como <see cref="ListAsync"/>, pero cada documento con su clave: para reescribir uno que sólo se conoce por su
+    /// contenido. Lo usa la supresión para desligar al miembro de las versiones archivadas de una historia, que se
+    /// guardan con una clave al azar (ADR 0142).
+    /// </summary>
+    Task<IReadOnlyList<KeyValuePair<Guid, string>>> ListEntriesAsync(string resourceType, CancellationToken cancellationToken);
+
     /// <summary>Borra el documento. True si existía y se borró.</summary>
     Task<bool> DeleteAsync(string resourceType, Guid key, CancellationToken cancellationToken);
 }

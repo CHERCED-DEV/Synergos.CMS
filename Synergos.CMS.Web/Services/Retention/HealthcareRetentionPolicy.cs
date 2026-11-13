@@ -9,8 +9,11 @@ namespace Synergos.CMS.Web.Services.Retention;
 /// AUDITORÍA de acceso a PHI <c>App_Data/syn-audit/{fecha}.phi.jsonl</c> (ADR 0098, ADR 0121).
 /// </summary>
 /// <remarks>
-/// <para>Los registros se purgan según <see cref="HealthcareSettings.RecordRetentionDays"/>
-/// (default 2190 = 6 años); la auditoría, según
+/// <para><b>Los registros clínicos no se purgan</b> (ADR 0142). Pasado el término legal
+/// (<see cref="HealthcareSettings.RetencionEfectivaDias"/>, 15 años como mínimo), un documento es CANDIDATO a
+/// eliminarse, y su eliminación sigue el trámite del art. 4 de la Resolución 839 de 2017, que no es automático: esta
+/// policy los cuenta y lo avisa, y no borra ninguno. Antes borraba todo <c>.phi</c> sin escribir en 6 años (la cifra
+/// de HIPAA), por debajo del mínimo colombiano. La auditoría se purga según
 /// <see cref="HealthcareSettings.AccessAuditRetentionDays"/> (default 0 = nunca).</para>
 ///
 /// <para><b>Esta clase decía que la auditoría "la gestiona otra policy" y era falso.</b> Los
@@ -44,44 +47,46 @@ public sealed class HealthcareRetentionPolicy : IRetentionPolicy
     public Task<int> SweepAsync(CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
-        var purged = PurgeRecords(settings.RecordRetentionDays, cancellationToken);
-        purged += PurgeAccessAudit(settings.AccessAuditRetentionDays, cancellationToken);
+        AvisarLosCandidatos(settings.RetencionEfectivaDias, cancellationToken);
+        var purged = PurgeAccessAudit(settings.AccessAuditRetentionDays, cancellationToken);
         return Task.FromResult(purged);
     }
 
-    private int PurgeRecords(int retentionDays, CancellationToken cancellationToken)
+    /// <summary>
+    /// Cuántos documentos clínicos pasaron el término legal. NO los borra: su eliminación es el trámite del art. 4
+    /// (ADR 0142). Devuelve la cuenta, y si hay alguno lo avisa en el log para quien lleva ese trámite.
+    /// </summary>
+    /// <remarks>
+    /// La fecha de la última escritura es una cota inferior de la última atención: un documento sin escribir en el
+    /// término es candidato, y el trámite confirma la fecha de la última atención antes de eliminar nada.
+    /// </remarks>
+    internal int AvisarLosCandidatos(int retentionDays, CancellationToken cancellationToken)
     {
-        if (retentionDays <= 0)
-        {
-            return 0;
-        }
-
         var dir = Path.Combine(_hostEnvironment.ContentRootPath, "App_Data", RootDir);
         if (!Directory.Exists(dir))
         {
             return 0;
         }
 
-        var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
-        var purged = 0;
+        var cutoff = DateTime.UtcNow.AddDays(-Math.Max(retentionDays, HealthcareSettings.RetencionMinimaDias));
+        var candidatos = 0;
         foreach (var file in Directory.EnumerateFiles(dir, "*.phi", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            try
+            if (File.GetLastWriteTimeUtc(file) < cutoff)
             {
-                if (File.GetLastWriteTimeUtc(file) < cutoff)
-                {
-                    File.Delete(file);
-                    purged++;
-                }
-            }
-            catch (IOException ex)
-            {
-                _logger.LogWarning(ex, "HealthcareRetentionPolicy: no se pudo borrar {File}", file);
+                candidatos++;
             }
         }
 
-        return purged;
+        if (candidatos > 0)
+        {
+            _logger.LogWarning(
+                "HealthcareRetentionPolicy: {Candidatos} documentos clínicos pasaron el término legal de conservación. " +
+                "No se borran: su eliminación sigue el trámite del art. 4 de la Resolución 839 de 2017 (ADR 0142).",
+                candidatos);
+        }
+        return candidatos;
     }
 
     /// <summary>

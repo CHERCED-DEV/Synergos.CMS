@@ -60,7 +60,9 @@ var vocabulario = new SagaVocabulary("salud", "la cita");
 builder.AddSagaMachinery<AppointmentSaga, SaludCompensationExecutor>(
     vocabulario,
     SaludCapabilities.Consent, SaludCapabilities.Booking,
-    SaludCapabilities.Pricing, SaludCapabilities.Payments);
+    SaludCapabilities.Pricing, SaludCapabilities.Payments,
+    // La consulta (I3): la llegada en Workflow y el sello de la nota en Signing.
+    SaludCapabilities.Workflow, SaludCapabilities.Signing);
 
 builder.Services.AddSingleton<SaludCapabilities>();
 builder.Services.AddSingleton<AppointmentFlow>();
@@ -73,6 +75,7 @@ var app = builder.Build();
 app.UseCorrelation();
 app.UseSharedKeyAuth(app.Configuration["Salud:ApiKey"]);
 app.MapSaludEndpoints();
+app.MapConsultaEndpoints();
 if (declarado)
 {
     app.MapFlujosDeclarados();

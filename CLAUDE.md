@@ -53,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **64 de los 92 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **65 de los 93 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -225,7 +225,7 @@ Synergos.CMS/
 │   ├── Services/                Umbraco-dependent services (LayoutCssBuilder, FlowResolver, etc.)
 │   ├── Views/                   Razor templates + partials + blockgrid components
 │   ├── docs/
-│   │   ├── adr/                 140 ADRs (0001-0141, sin 0016) — SOURCE OF TRUTH
+│   │   ├── adr/                 141 ADRs (0001-0142, sin 0016) — SOURCE OF TRUTH
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (DESBLOQUEADO, HU #20 · ADR 0132)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
@@ -317,9 +317,9 @@ Synergos.CMS/
 > una lista vacía.
 
 > **El árbol de servicios está construido y el producto ya lo consume**, aunque
-> con todos los interruptores apagados por defecto. El CMS habla hoy con **nueve**
+> con todos los interruptores apagados por defecto. El CMS habla hoy con **diez**
 > capacidades —`Sessions`, `Booking`, `Workflow`, `Messaging`, `Signing`,
-> `Identity`, `Audit`, `Cart` y `Payments`— y con los cinco orquestadores. Esta
+> `Identity`, `Audit`, `Cart`, `Payments` y `Consent`— y con los cinco orquestadores. Esta
 > línea decía «UNA» desde antes de las HU #24, #25, #33a, #35, #36, #40, #44,
 > #45, #46, #62 y #15: un agente que la leyera concluía que no había nada
 > cableado y proponía de cero lo que ya existe. Ver §11, que es donde está el
@@ -1573,7 +1573,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **64 de los 92 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **65 de los 93 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.

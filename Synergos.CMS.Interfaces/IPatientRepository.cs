@@ -68,6 +68,9 @@ public interface IPatientRepository
 /// <param name="CreatedByDoctorKey">Doctor que creó/edita.</param>
 /// <param name="VersionNumber">Versión (incremental).</param>
 /// <param name="IsDeleted">Borrado lógico (oculto de los listados).</param>
+/// <param name="Resumen">El resumen de salud (condiciones, alergias y vacunas), con lo declarado y lo validado
+///   (003-salud-cita, I2 T057). <c>null</c> en una historia que nunca lo tuvo: no es «sin alergias».</param>
+/// <param name="PreRegistro">Lo último que el paciente declaró en su pre-registro (I2 T058), o <c>null</c>.</param>
 public sealed record PatientRecord(
     Guid PatientKey,
     Guid MemberKey,
@@ -79,7 +82,9 @@ public sealed record PatientRecord(
     DateTime CreatedAtUtc,
     Guid CreatedByDoctorKey,
     int VersionNumber,
-    bool IsDeleted);
+    bool IsDeleted,
+    ResumenDeSalud? Resumen = null,
+    PreRegistro? PreRegistro = null);
 
 /// <summary>Resumen seguro para listados — sin diagnósticos ni notas clínicas.</summary>
 public sealed record PatientSummary(

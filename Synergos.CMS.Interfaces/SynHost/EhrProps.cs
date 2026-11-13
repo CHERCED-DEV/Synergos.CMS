@@ -30,10 +30,15 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y de dónde lee</b> (<c>LecturasBase</c>, 003-salud-cita, I1 de producción): la base de las lecturas
 /// genéricas de Salud (<c>/api/lecturas/salud</c>), con forma neutra de vertical, como la tienda. Vacía, el portal lee
 /// las rutas de <c>ApiBase</c>, como antes. Es del despliegue.</para>
+///
+/// <para><b>Y dónde vive la historia</b> (<c>HistoriaBase</c>, I2 T062): <c>/api/healthcare</c>, la historia clínica de
+/// producción, de donde salen «Mi salud», el check-in y las vistas del personal. Vacía, el portal vuelve a lo de
+/// <c>ApiBase</c>.</para>
 /// </remarks>
-[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent"])]
+[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent", "Health.Record"])]
 public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string Zona);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string Zona,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string HistoriaBase);

@@ -98,7 +98,7 @@ public sealed class EhrControllerTests
             .Any(r => roles.Contains(r, StringComparer.OrdinalIgnoreCase)));
     }
 
-    private void Clinico(string rol = "medico", string correo = "medica@clinica.co") => SesionDe(correo, rol);
+    private void Clinico(string rol = "doctor", string correo = "medica@clinica.co") => SesionDe(correo, rol);
 
     private void Anonimo()
     {
@@ -804,7 +804,7 @@ public sealed class EhrControllerTests
     [Fact] // …y el clínico agenda a nombre del paciente que dice el cuerpo.
     public async Task Appointment_ElClinico_AgendaAlPacienteDelCuerpo()
     {
-        Clinico("enfermeria");
+        Clinico("nurse");
         _scheduling.BookAsync(Arg.Any<BookAppointmentRequest>(), Arg.Any<CancellationToken>())
             .Returns(ci => Cita(patientId: ci.Arg<BookAppointmentRequest>().PatientId));
 
@@ -881,13 +881,16 @@ public sealed class EhrControllerTests
     }
 
     [Theory] // quién entra a la clínica: médico, enfermería, admin — y nadie más.
-    [InlineData("medico", true)]
-    [InlineData("enfermeria", true)]
+    // Un solo vocabulario, el del núcleo PHI de producción (`DefaultPhiAccessGuard`), por Q5 de 003
+    // (I2 T055). Los grupos de desarrollo de antes ya no entran, y recepción tampoco: aquí están la
+    // ficha y las notas clínicas.
+    [InlineData("doctor", true)]
+    [InlineData("nurse", true)]
     [InlineData("admin", true)]
+    [InlineData("reception", false)]
+    [InlineData("medico", false)]
+    [InlineData("enfermeria", false)]
     [InlineData("organizador", false)]
-    // El vocabulario del núcleo PHI (`DefaultPhiAccessGuard`: doctor,nurse,reception) NO entra
-    // acá: queda fijado para que unificarlos sea una decisión y no un accidente.
-    [InlineData("doctor", false)]
     public async Task Clinica_LosRolesQueEntran(string rol, bool entra)
     {
         Clinico(rol);
@@ -956,7 +959,7 @@ public sealed class EhrControllerTests
     [Theory, MemberData(nameof(SinSujeto))] // un clínico sin médico vinculado tiene que decir de quién es la bandeja.
     public async Task InBasket_SinProveedor_400(string provider)
     {
-        Clinico("enfermeria");
+        Clinico("nurse");
         Assert.IsType<BadRequestObjectResult>(await BuildSut().InBasket(provider, null, default));
     }
 

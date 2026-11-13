@@ -57,6 +57,13 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
     /// </remarks>
     public string VersionDelPermiso { get; init; } = "2026-11-borrador";
 
+    /// <summary>
+    /// La base de la historia clínica de producción (003-salud-cita, I2 T062): «Mi salud», el check-in y las vistas del
+    /// personal leen y escriben en <c>/api/healthcare</c>. Vacía, el portal vuelve a lo de <see cref="ApiBase"/> (la
+    /// vuelta atrás sin desplegar).
+    /// </summary>
+    public string HistoriaBase { get; init; } = "/api/healthcare";
+
     /// <inheritdoc />
     protected override NegocioDeEhr Fusionar(EhrFeatureSitio? propio)
         => new(
@@ -64,7 +71,8 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
             Servicio: new ServicioAgendable(propio?.ServiceKind ?? ServiceKind, propio?.ServiceId ?? ServiceId),
             AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath),
             LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim(),
-            VersionDelPermiso: (propio?.VersionDelPermiso ?? VersionDelPermiso).Trim());
+            VersionDelPermiso: (propio?.VersionDelPermiso ?? VersionDelPermiso).Trim(),
+            HistoriaBase: (propio?.HistoriaBase ?? HistoriaBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEhr negocio)
@@ -73,6 +81,7 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             // Vacía vale: es la vuelta atrás.
             string.IsNullOrWhiteSpace(negocio.LecturasBase) ? null : ReglasDeNegocio.ApiBase("LecturasBase", negocio.LecturasBase),
+            string.IsNullOrWhiteSpace(negocio.HistoriaBase) ? null : ReglasDeNegocio.ApiBase("HistoriaBase", negocio.HistoriaBase),
             ReglasDeNegocio.Camino("AppointmentPath", negocio.AppointmentPath),
             string.IsNullOrWhiteSpace(negocio.VersionDelPermiso)
                 ? "VersionDelPermiso: no puede quedar vacía (sin ella, un permiso no dice qué texto se aceptó)."
@@ -105,4 +114,7 @@ public sealed class EhrFeatureSitio
 
     /// <inheritdoc cref="EhrFeatureSettings.VersionDelPermiso"/>
     public string? VersionDelPermiso { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.HistoriaBase"/>
+    public string? HistoriaBase { get; init; }
 }

@@ -433,6 +433,8 @@ public sealed class ProvisionWiringTests
         capacidades.Definiciones = new HashSet<string>(StringComparer.Ordinal)
         {
             "gov.tramite", "tracking.shop", "tracking.travel", "tracking.events", "tracking.academy",
+            // La llegada a la consulta de Salud (003, I3): ya publicada, para que lo que falte sea sólo la v2.
+            "salud.llegada.v1",
         };
 
         // Sin plantillas (`[]`, que el guion admite para quien trae su propio fichero): lo que se mira son las

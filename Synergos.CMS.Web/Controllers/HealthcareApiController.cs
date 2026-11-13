@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Synergos.CMS.Application.Configuration;
+using Synergos.CMS.Application.Salud;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -25,20 +29,73 @@ public sealed class HealthcareApiController : ControllerBase
     private readonly IConsentLedger _consent;
     private readonly IMemberAccessGate _gate;
 
+    /// <summary>Lee, cambia y guarda la historia bajo su candado (I2 T057).</summary>
+    private readonly EditorDeLaHistoriaClinica _editor;
+
+    /// <summary>El reloj y la zona del sitio: de ahí sale el «hoy» de una vacuna declarada.</summary>
+    private readonly TimeProvider _reloj;
+    private readonly TimeZoneInfo _zona;
+
+    /// <summary>Para qué se entra a la historia en cada operación de I2: va a la auditoría (T064).</summary>
+    internal static class Propositos
+    {
+        public const string CheckIn = "salud.check-in";
+        public const string ResumenPropio = "salud.resumen";
+        public const string Historia = "salud.historia";
+        public const string Apertura = "salud.apertura";
+        public const string Busqueda = "salud.busqueda";
+        public const string Agenda = "salud.agenda-del-dia";
+        public const string Llegada = "salud.llegada";
+        public const string Firma = "salud.firma";
+    }
+
+    /// <summary>La consulta en el orquestador: la agenda del día, la llegada y el sello de la nota (I3).</summary>
+    private readonly IConsultaDeSalud? _consulta;
+
+    /// <summary>Las notas de la consulta, en el almacén PHI (I3 P6).</summary>
+    private readonly INotasDeLaConsulta? _notas;
+
+    /// <summary>El propósito de la llave del consultorio en <c>Api.Signing</c> (Q14).</summary>
+    private readonly string _llaveDeFirma;
+
+    /// <summary>La clave del miembro por su correo, para abrirle la historia (T056).</summary>
+    private readonly IBuscadorDeMiembros? _miembros;
+
+    /// <summary>El permiso del paciente para el consultorio, en <c>Api.Consent</c>: «Mi salud» le pide darlo si falta (T062).</summary>
+    private readonly IConsentReader? _permisos;
+
+    /// <param name="editor">Opcional: sin él se usa uno sobre el mismo repositorio (las pruebas que construyen el
+    ///   controlador a mano no cambian). En el sitio es el singleton, con su candado compartido.</param>
     public HealthcareApiController(
         IPhiAccessGuard guard,
         IPatientRepository patients,
         IAppointmentScheduler appointments,
         IPrescriptionService prescriptions,
         IConsentLedger consent,
-        IMemberAccessGate gate)
+        IMemberAccessGate gate,
+        EditorDeLaHistoriaClinica? editor = null,
+        TimeProvider? reloj = null,
+        IOptions<ListadosSettings>? listados = null,
+        IBuscadorDeMiembros? miembros = null,
+        IConsentReader? permisos = null,
+        IConsultaDeSalud? consulta = null,
+        INotasDeLaConsulta? notas = null,
+        IOptions<HealthcareSettings>? salud = null)
     {
+        _miembros = miembros;
+        _permisos = permisos;
+        _consulta = consulta;
+        _notas = notas;
+        _llaveDeFirma = salud?.Value.LlaveDeFirma ?? new HealthcareSettings().LlaveDeFirma;
         _guard = guard;
         _patients = patients;
         _appointments = appointments;
         _prescriptions = prescriptions;
         _consent = consent;
         _gate = gate;
+        _editor = editor ?? new EditorDeLaHistoriaClinica(patients);
+        _reloj = reloj ?? TimeProvider.System;
+        _zona = listados?.Value.Zona() ?? TimeZoneInfo.Utc;
     }
 
     /// <summary>
@@ -110,9 +167,461 @@ public sealed class HealthcareApiController : ControllerBase
     {
         if (record is null) return BadRequest();
         if (await DenyAsync("patient-record", "write", record.PatientKey, ct) is { } denied) return denied;
+
+        // Una historia que ya existe se cambia con su candado, y lo que el cuerpo no trae no se borra: con el
+        // resumen y el pre-registro dentro (I2 T057), un cliente que manda la historia de antes —sin esos dos—
+        // dejaba la versión vigente sin las alergias del paciente.
+        if (record.PatientKey != Guid.Empty)
+        {
+            var cambiada = await _editor.ModificarAsync(
+                record.PatientKey,
+                actual => record with
+                {
+                    Resumen = record.Resumen ?? actual.Resumen,
+                    PreRegistro = record.PreRegistro ?? actual.PreRegistro,
+                },
+                ct);
+            if (cambiada is not null)
+            {
+                return Ok(new { patientKey = cambiada.PatientKey });
+            }
+        }
+
         var key = await _patients.UpsertAsync(record, ct);
         return Ok(new { patientKey = key });
     }
+
+    /// <summary>
+    /// Recepción (o el médico) abre la historia de un miembro por su correo, sólo con lo demográfico (I2 T056). Si ya
+    /// tiene una, devuelve esa y no crea otra.
+    /// </summary>
+    /// <remarks>La guardia va primero: sin el rol no se busca ni el correo.</remarks>
+    [HttpPost("patients/abrir")]
+    public async Task<IActionResult> AbrirHistoria([FromBody] AperturaDeLaHistoria body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "open", null, ct, proposito: Propositos.Apertura) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Correo))
+        {
+            return BadRequest(new { error = "correo: falta." });
+        }
+        if (_miembros is null || _gate.CurrentMemberKey is not Guid quienAbre)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var ahora = _reloj.GetUtcNow();
+        if (await _miembros.ClaveDelCorreoAsync(body.Correo, ct) is not Guid memberKey)
+        {
+            return NotFound(new { error = "No hay un miembro con ese correo." });
+        }
+        var (nueva, error) = HistoriaClinica.Abrir(body, memberKey, quienAbre, ahora.UtcDateTime, Hoy(ahora));
+        if (nueva is null)
+        {
+            return BadRequest(new { error });
+        }
+
+        var (patientKey, yaExistia) = await _editor.AbrirAsync(memberKey, nueva, ct);
+        return yaExistia
+            ? Ok(new { patientKey, yaExistia })
+            : StatusCode(StatusCodes.Status201Created, new { patientKey, yaExistia });
+    }
+
+    // ── El resumen de salud y el pre-registro (003-salud-cita, I2 T058–T060) ──────────
+
+    /// <summary>
+    /// El pre-registro del paciente de la sesión: lo que declara de sí mismo antes de la cita. Entra como DECLARADO; el
+    /// médico lo valida (T059).
+    /// </summary>
+    /// <remarks>
+    /// La historia sale de la SESIÓN, como en <see cref="Me"/>: no hay parámetro donde escribir la de otro. Sin
+    /// historia abierta, 404 (la abre la recepción del consultorio). La guardia audita con el propósito del check-in.
+    /// </remarks>
+    [HttpPost("me/check-in")]
+    public async Task<IActionResult> CheckIn([FromBody] CheckInDelPaciente body, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta el pre-registro." });
+        }
+
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+
+        if (await DenyAsync("patient-record", "declare", patientKey, ct, memberKey, Propositos.CheckIn) is { } denied)
+        {
+            return denied;
+        }
+
+        var ahora = _reloj.GetUtcNow();
+        if (HistoriaClinica.ErrorDelCheckIn(body, Hoy(ahora)) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+
+        var historia = await _editor.ModificarAsync(
+            patientKey.Value,
+            actual => HistoriaClinica.Declarar(actual, body, memberKey, ahora.UtcDateTime),
+            ct);
+        return historia is null ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>El resumen de salud del paciente de la sesión: lo validado y lo suyo declarado, como pendiente.</summary>
+    [HttpGet("me/resumen")]
+    public async Task<IActionResult> MiResumen(CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+
+        if (await DenyAsync("patient-record", "read", patientKey, ct, memberKey, Propositos.ResumenPropio) is { } denied)
+        {
+            return denied;
+        }
+
+        var historia = await _patients.GetAsync(patientKey.Value, ct);
+        if (historia is null)
+        {
+            return NotFound();
+        }
+
+        var resumen = HistoriaClinica.ParaLeer(historia);
+        if (_permisos is not null)
+        {
+            var permiso = await _permisos.LeerAsync(
+                DefaultPhiAccessGuard.SujetoDelPaciente, memberKey.ToString("N"), DefaultPhiAccessGuard.PropositoDeLaHistoria, ct);
+            resumen = resumen with
+            {
+                PermisoDeLaHistoria = permiso.Estado switch
+                {
+                    EstadoDelPermiso.Vigente => "vigente",
+                    EstadoDelPermiso.NoVigente => "falta",
+                    _ => "desconocido",
+                },
+            };
+        }
+        return Ok(resumen);
+    }
+
+    /// <summary>
+    /// Recepción (o el médico) encuentra la historia de un miembro por su correo (I2 T063): sólo su clave y si ya hizo el
+    /// pre-registro, nada clínico. El correo va en el cuerpo, no en la dirección, para que no quede en ningún registro.
+    /// </summary>
+    [HttpPost("patients/buscar")]
+    public async Task<IActionResult> BuscarHistoria([FromBody] BusquedaDeLaHistoria body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "open", null, ct, proposito: Propositos.Busqueda) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Correo))
+        {
+            return BadRequest(new { error = "correo: falta." });
+        }
+        if (_miembros is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (await _miembros.ClaveDelCorreoAsync(body.Correo, ct) is not Guid memberKey)
+        {
+            return NotFound(new { error = "No hay un miembro con ese correo." });
+        }
+        // El miembro existe y no tiene historia: 200 sin clave, que es «ábrasela», no un 404 que se confunda con un
+        // correo que no es de nadie.
+        if (await _patients.FindKeyByMemberAsync(memberKey, ct) is not Guid patientKey
+            || await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false } historia)
+        {
+            return Ok(new { patientKey = (Guid?)null, nombre = (string?)null, preRegistrado = false });
+        }
+        return Ok(new { patientKey = (Guid?)patientKey, nombre = (string?)historia.DisplayName, preRegistrado = historia.PreRegistro is not null });
+    }
+
+    /// <summary>El resumen de salud de un paciente, para el médico con su permiso.</summary>
+    [HttpGet("patients/{patientKey:guid}/resumen")]
+    public async Task<IActionResult> Resumen(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+
+        var historia = await _patients.GetAsync(patientKey, ct);
+        return historia is null || historia.IsDeleted ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    /// <summary>
+    /// El médico valida un dato que declaró el paciente (T059). Idempotente: validar uno ya validado contesta lo mismo
+    /// y no crea versión.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/resumen/{datoId}/validar")]
+    public async Task<IActionResult> ValidarDato(Guid patientKey, string datoId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_gate.CurrentMemberKey is not Guid medico)
+        {
+            return Unauthorized();
+        }
+
+        var resultado = ResultadoDeValidar.NoExiste;
+        var historia = await _editor.ModificarAsync(
+            patientKey,
+            actual =>
+            {
+                var (cambiada, r) = HistoriaClinica.Validar(actual, datoId, medico, _reloj.GetUtcNow().UtcDateTime);
+                resultado = r;
+                return cambiada;
+            },
+            ct);
+
+        return historia is null || resultado == ResultadoDeValidar.NoExiste
+            ? NotFound()
+            : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    // ── La consulta (003-salud-cita, I3: P9 la agenda del día, P10 la llegada, P6 la nota firmada) ──────────
+
+    /// <summary>
+    /// La agenda del día de un profesional, desde Booking por el orquestador, con el nombre de cada paciente desde su
+    /// historia (P9). Es del personal: la guardia lo decide como agenda, sin el permiso clínico.
+    /// </summary>
+    [HttpGet("agenda")]
+    public async Task<IActionResult> AgendaDelDia([FromQuery] string? profesional, [FromQuery] string? dia, CancellationToken ct)
+    {
+        if (await DenyAsync("appointment", "read", null, ct, proposito: Propositos.Agenda) is { } denied)
+        {
+            return denied;
+        }
+        if (string.IsNullOrWhiteSpace(profesional)
+            || !DateOnly.TryParseExact(dia, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var fecha))
+        {
+            return BadRequest(new { error = "Hacen falta el profesional y el día (aaaa-mm-dd)." });
+        }
+
+        var medianoche = fecha.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var desde = new DateTimeOffset(medianoche, _zona.GetUtcOffset(medianoche));
+        var citas = _consulta is null ? null : await _consulta.AgendaAsync(profesional.Trim(), desde, desde.AddDays(1), ct);
+        if (citas is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var filas = new List<object>(citas.Count);
+        foreach (var cita in citas)
+        {
+            Guid? patientKey = null;
+            string? nombre = null;
+            if (cita.PacienteKind == DefaultPhiAccessGuard.SujetoDelPaciente
+                && Guid.TryParseExact(cita.PacienteId, "N", out var miembro)
+                && await _patients.FindKeyByMemberAsync(miembro, ct) is Guid key
+                && await _patients.GetAsync(key, ct) is { IsDeleted: false } historia)
+            {
+                patientKey = key;
+                nombre = historia.DisplayName;
+            }
+            filas.Add(new { cita.ReservaId, cita.Inicio, cita.Fin, cita.Llegada, paciente = new { nombre, patientKey } });
+        }
+        return Ok(new { citas = filas });
+    }
+
+    /// <summary>Marca un paso de la llegada de una cita: llegó, en sala, atendido o no vino (P10).</summary>
+    [HttpPost("agenda/{reservaId}/llegada")]
+    public async Task<IActionResult> MarcarLlegada(string reservaId, [FromBody] PasoDeLlegada body, CancellationToken ct)
+    {
+        if (await DenyAsync("appointment", "write", null, ct, proposito: Propositos.Llegada) is { } denied)
+        {
+            return denied;
+        }
+        if (body?.Paso is not { } paso || !LlegadaALaConsulta.Pasos.Contains(paso))
+        {
+            return BadRequest(new { error = "El paso es llegar, pasar, atender o no-vino." });
+        }
+        if (_consulta is null || _gate.CurrentMemberKey is not Guid quien)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var r = await _consulta.MarcarLlegadaAsync(reservaId, paso, quien, ct);
+        return r.Estado switch
+        {
+            EstadoDeLaConsulta.Hecho => Ok(new { reservaId, llegada = r.Valor }),
+            EstadoDeLaConsulta.Rechazado => Conflict(new { error = r.Codigo }),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable),
+        };
+    }
+
+    /// <summary>Las notas de la consulta de un paciente: el médico con el permiso, o el paciente sobre lo suyo (P6).</summary>
+    [HttpGet("patients/{patientKey:guid}/notas")]
+    public async Task<IActionResult> Notas(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        return Ok((await _notas.ListAsync(patientKey, ct)).Select(NotaClinica.ParaLeer).ToList());
+    }
+
+    /// <summary>
+    /// El médico escribe o cambia su nota mientras no la firma (P6). Firmada no se cambia: una corrección es otra nota.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/notas")]
+    public async Task<IActionResult> EscribirNota(Guid patientKey, [FromBody] NotaEscrita body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta la nota." });
+        }
+        if (NotaClinica.Error(body) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+        if (_notas is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false })
+        {
+            return NotFound();
+        }
+
+        var actual = body.Id is Guid id ? await _notas.GetAsync(id, ct) : null;
+        if (body.Id is not null && (actual is null || actual.PatientKey != patientKey))
+        {
+            return NotFound();
+        }
+        if (actual is not null && actual.AutorKey != medico)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        var nueva = NotaClinica.Escribir(actual, body, patientKey, medico, _reloj.GetUtcNow().UtcDateTime);
+        if (nueva is null)
+        {
+            return Conflict(new { error = "La nota está firmada: una corrección es otra nota." });
+        }
+        await _notas.GuardarAsync(nueva, ct);
+        return Ok(NotaClinica.ParaLeer(nueva));
+    }
+
+    /// <summary>
+    /// El autor firma su nota: su huella, sellada con la llave del consultorio en <c>Api.Signing</c> (P6, Q14). Firmar dos
+    /// veces da la misma firma. Sin la llave del consultorio, el no de la capacidad y la nota sigue en borrador.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/notas/{notaId:guid}/firmar")]
+    public async Task<IActionResult> FirmarNota(Guid patientKey, Guid notaId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Firma) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null || _consulta is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var nota = await _notas.GetAsync(notaId, ct);
+        if (nota is null || nota.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (nota.Firma is not null)
+        {
+            return Ok(NotaClinica.ParaLeer(nota));
+        }
+        if (nota.AutorKey != medico)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        var huella = NotaClinica.Huella(nota);
+        var sello = await _consulta.SellarAsync(_llaveDeFirma, huella, ct);
+        if (sello.Estado == EstadoDeLaConsulta.Rechazado)
+        {
+            return Conflict(new { error = sello.Codigo });
+        }
+        if (sello.Estado != EstadoDeLaConsulta.Hecho || sello.Valor is null || sello.Extra is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var firmada = nota with
+        {
+            Firma = new FirmaDeLaNota(huella, sello.Valor, sello.Extra, _llaveDeFirma, medico, _reloj.GetUtcNow().UtcDateTime),
+        };
+        await _notas.GuardarAsync(firmada, ct);
+        return Ok(NotaClinica.ParaLeer(firmada));
+    }
+
+    /// <summary>
+    /// Si la firma de una nota sigue valiendo: la huella de lo que hay hoy en el almacén, contra el sello (P6). Una nota
+    /// cambiada después de firmar no cuadra.
+    /// </summary>
+    [HttpGet("patients/{patientKey:guid}/notas/{notaId:guid}/comprobar")]
+    public async Task<IActionResult> ComprobarNota(Guid patientKey, Guid notaId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null || _consulta is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var nota = await _notas.GetAsync(notaId, ct);
+        if (nota is null || nota.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (nota.Firma is not { } firma)
+        {
+            return Ok(new { firmada = false, valida = false });
+        }
+
+        var huella = NotaClinica.Huella(nota);
+        if (!string.Equals(huella, firma.Huella, StringComparison.Ordinal))
+        {
+            return Ok(new { firmada = true, valida = false });
+        }
+        var r = await _consulta.ComprobarSelloAsync(firma.Llave, huella, firma.Sello, ct);
+        return r.Estado switch
+        {
+            EstadoDeLaConsulta.Hecho => Ok(new { firmada = true, valida = true, llaveId = r.Valor }),
+            EstadoDeLaConsulta.Rechazado => Ok(new { firmada = true, valida = false }),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable),
+        };
+    }
+
+    /// <summary>«Hoy» en el sitio: con el de UTC, desde las siete de la noche en Bogotá una vacuna de hoy sería futura.</summary>
+    private DateOnly Hoy(DateTimeOffset ahora) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ahora, _zona).DateTime);
 
     // ── Citas ──────────────────────────────────────────────────
     [HttpGet("appointments")]
@@ -181,7 +690,16 @@ public sealed class HealthcareApiController : ControllerBase
 
     // Guard-first: audita + decide. Devuelve el IActionResult de rechazo (401
     // si no autenticado, 403 si denegado) o null si pasa.
-    private async Task<IActionResult?> DenyAsync(string resourceType, string action, Guid? targetPatientKey, CancellationToken ct)
+    //
+    // `owner` y `proposito` son de I2 (T058 y T064): el dueño sólo lo pasa quien lo sacó de la SESIÓN (el portal
+    // del paciente), nunca de un parámetro; el propósito va a la auditoría como el «por qué».
+    private async Task<IActionResult?> DenyAsync(
+        string resourceType,
+        string action,
+        Guid? targetPatientKey,
+        CancellationToken ct,
+        Guid? owner = null,
+        string? proposito = null)
     {
         // El dueño NO se resuelve acá. Este controller mantiene la propiedad
         // "guard primero, sin tocar PHI antes de autorizar" — que el test
@@ -193,7 +711,7 @@ public sealed class HealthcareApiController : ControllerBase
         // (DefaultPhiAccessGuard.EvaluateAsync). Un anónimo sigue sin provocar
         // una sola lectura.
         var decision = await _guard.CheckAccessAsync(
-            new AccessCheckRequest(resourceType, action, targetPatientKey), ct);
+            new AccessCheckRequest(resourceType, action, targetPatientKey, owner, proposito), ct);
         if (decision.IsAllowed) return null;
         return string.Equals(decision.DenyReason, "not-authenticated", StringComparison.Ordinal)
             ? Unauthorized()

@@ -21,8 +21,12 @@ public sealed class PermisoDeSaludTests
 {
     private const string Version = "2026-11-borrador";
 
+    /// <summary>
+    /// El mismo «Autorizo» da los dos permisos, cada uno con su propósito para poder revocarlo o auditarlo aparte
+    /// (D-003-I2-2, I2 T061): la agenda de la cita y la historia para el consultorio.
+    /// </summary>
     [Fact]
-    public async Task Otorgar_da_el_permiso_de_agenda_del_miembro_con_la_version_que_manda_el_CMS_y_la_afirmacion_de_la_sesion()
+    public async Task Otorgar_da_los_permisos_de_agenda_y_de_historia_del_miembro_con_la_version_del_CMS_y_la_afirmacion_de_la_sesion()
     {
         using var s = new PermisoDeSaludReal();
 
@@ -33,11 +37,14 @@ public sealed class PermisoDeSaludTests
         Assert.Equal("Completed", saga.GetProperty("estado").GetString());
         Assert.Equal(HttpStatusCode.Created, otra);
         Assert.Equal(saga.GetProperty("id").GetString(), repetida.GetProperty("id").GetString());
-        var permiso = Assert.Single(await s.Permisos("u-1"));
-        Assert.Equal("salud.agenda", permiso.GetProperty("purpose").GetString());
-        Assert.Equal(Version, permiso.GetProperty("policyVersion").GetString());
-        Assert.Equal("CmsSession", permiso.GetProperty("grantedWith").GetString());
-        Assert.True(permiso.GetProperty("active").GetBoolean());
+        var permisos = await s.Permisos("u-1");
+        Assert.Equal(new[] { "salud.agenda", "salud.historia" }, permisos.Select(p => p.GetProperty("purpose").GetString()).Order());
+        Assert.All(permisos, permiso =>
+        {
+            Assert.Equal(Version, permiso.GetProperty("policyVersion").GetString());
+            Assert.Equal("CmsSession", permiso.GetProperty("grantedWith").GetString());
+            Assert.True(permiso.GetProperty("active").GetBoolean());
+        });
         Assert.Empty(await s.Permisos("u-2"));
     }
 
@@ -51,7 +58,7 @@ public sealed class PermisoDeSaludTests
         var (sinVersion, rechazo) = await s.Otorgar("u-2", "p-2", version: null);
 
         Assert.Equal(HttpStatusCode.Created, estado);
-        Assert.Equal(Version, Assert.Single(await s.Permisos("u-1")).GetProperty("policyVersion").GetString());
+        Assert.All(await s.Permisos("u-1"), p => Assert.Equal(Version, p.GetProperty("policyVersion").GetString()));
         Assert.Equal(HttpStatusCode.BadRequest, sinVersion);
         Assert.StartsWith("salud.", rechazo.GetProperty("code").GetString());
         Assert.Empty(await s.Permisos("u-2"));
@@ -69,9 +76,30 @@ public sealed class PermisoDeSaludTests
         Assert.True(estado == HttpStatusCode.Created, saga.ToString());
         Assert.Equal("Completed", saga.GetProperty("estado").GetString());
         Assert.Equal(HttpStatusCode.Created, otra);
-        var permiso = Assert.Single(await s.Permisos("u-1"));
-        Assert.False(permiso.GetProperty("active").GetBoolean());
-        Assert.Equal("CmsSession", permiso.GetProperty("revokedWith").GetString());
+        var permisos = await s.Permisos("u-1");
+        Assert.Equal(2, permisos.Count);
+        Assert.All(permisos, permiso =>
+        {
+            Assert.False(permiso.GetProperty("active").GetBoolean());
+            Assert.Equal("CmsSession", permiso.GetProperty("revokedWith").GetString());
+        });
+    }
+
+    /// <summary>
+    /// Quien dio su permiso antes de T061 sólo tiene el de la agenda. Retirarlo lo retira, y el «no» del de la historia, que
+    /// nunca se dio, se anota y la saga termina (<c>al_fallar: seguir</c>): el retiro empieza por la agenda.
+    /// </summary>
+    [Fact]
+    public async Task Retirar_a_quien_solo_tenia_el_de_agenda_se_lo_retira_aunque_el_de_historia_no_exista()
+    {
+        using var s = new PermisoDeSaludReal();
+        await s.SoloAgenda("u-7");
+
+        var (estado, saga) = await s.Retirar("u-7", "r-1");
+
+        Assert.True(estado == HttpStatusCode.Created, saga.ToString());
+        Assert.Equal("Completed", saga.GetProperty("estado").GetString());
+        Assert.False(Assert.Single(await s.Permisos("u-7")).GetProperty("active").GetBoolean());
     }
 
     [Fact]
@@ -128,6 +156,23 @@ public sealed class PermisoDeSaludTests
             var peticion = DeLaPuerta("v1/flujos/salud.consentimiento-retiro", miembro, new { });
             peticion.Headers.Add("Idempotency-Key", llave);
             return Enviar(peticion);
+        }
+
+        /// <summary>El permiso de agenda de antes de T061, dado directo en la capacidad.</summary>
+        public async Task SoloAgenda(string miembro)
+        {
+            using var consent = Capacidades.CreateClient("consent");
+            using var peticion = new HttpRequestMessage(HttpMethod.Post, "v1/grants")
+            {
+                Content = JsonContent.Create(new
+                {
+                    subjectKind = "salud.paciente", subjectId = miembro, purpose = "salud.agenda", policyVersion = Version,
+                    assertion = "CmsSession",
+                }),
+            };
+            peticion.Headers.Add("Idempotency-Key", "antes-de-t061-" + miembro);
+            using var r = await consent.SendAsync(peticion);
+            Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
         }
 
         public async Task<IReadOnlyList<JsonElement>> Permisos(string miembro)
