@@ -333,58 +333,222 @@ public sealed class DevContenidoDeVerticales
         return $"pasos:{n};habitaciones:{nuevas}";
     }
 
-    // ───────────────────────────── Fotos de la Tienda ─────────────────────────────
+    // ───────────────────────────── Fotos reales (I9 y extras) ─────────────────────────────
 
     private static readonly System.Text.Json.JsonSerializerOptions LecturaDelManifiesto = new() { PropertyNameCaseInsensitive = true };
 
-    /// <summary>Una foto del manifiesto: a qué producto va (por su nombre), el fichero bajado y su crédito y licencia.</summary>
-    public sealed record FotoDeProducto(string Producto, string Archivo, string Alt, string Licencia, string Credito);
+    /// <summary>
+    /// Una foto ya en disco y a dónde va: a un producto (por el nombre de su página), al ambiente de la galería de una
+    /// ficha de inmueble, o a un nodo de Media por su nombre. Con su crédito y su licencia.
+    /// </summary>
+    public sealed record FotoImportada(
+        string Archivo, string Alt, string Licencia, string Credito,
+        string? Producto = null, string? Ambiente = null, string? Medio = null, string? Rotulo = null);
 
     /// <summary>
-    /// Pone las fotos reales de <paramref name="carpeta"/> (su <c>manifiesto.json</c>) en los nodos de Media que ya usa
-    /// cada producto de la Tienda: misma Key, así que sus páginas y el catálogo siguen apuntando bien; luego republica
-    /// la página para que su oferta tome la URL nueva. Un producto que no está en el manifiesto queda como está.
+    /// Importa las fotos de <paramref name="carpeta"/> según sus manifiestos (<c>tienda.json</c>, <c>booking.json</c>,
+    /// <c>propiedades.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
+    /// usa su destino —misma Key, así que páginas y catálogo siguen apuntando bien— y la página se republica. Idempotente:
+    /// un medio que ya tiene esa licencia y ese crédito no se toca.
     /// </summary>
-    public Resultado FotosDeLaTienda(string carpeta)
+    public Resultado ImportarFotos(string carpeta)
     {
-        var manifiesto = Path.Combine(carpeta, "manifiesto.json");
-        if (!System.IO.File.Exists(manifiesto)) { return new Resultado(false, "tienda", "sin-manifiesto", 0); }
-        var fotos = System.Text.Json.JsonSerializer.Deserialize<List<FotoDeProducto>>(
-            System.IO.File.ReadAllText(manifiesto), LecturaDelManifiesto) ?? [];
+        var partes = new List<string>();
+        var cambios = 0;
+        var ok = true;
 
-        var tienda = _contentService.GetById(DevTiendaPorPaginas.Tienda);
-        if (tienda is null) { return new Resultado(false, "tienda", "tienda-no-encontrada", 0); }
-        var productos = _contentService.GetPagedDescendants(tienda.Id, 0, 1000, out _)
-            .Where(c => c.ContentType.Alias == "productPage")
-            .ToDictionary(c => c.GetCultureName(Cultura) ?? c.Name ?? string.Empty, StringComparer.Ordinal);
-
-        int cambiados = 0, sinProducto = 0, republicados = 0;
-        foreach (var foto in fotos)
+        if (Leer(carpeta, "tienda.json") is { } tienda)
         {
-            if (!productos.TryGetValue(foto.Producto, out var pagina)) { sinProducto++; continue; }
-            var ruta = Path.Combine(carpeta, foto.Archivo);
-            var claves = ClavesDeMedios(pagina);
-            var cambioAqui = false;
-            foreach (var clave in claves)
-            {
-                cambioAqui |= _media.ReplacePhoto(clave, ruta, $"producto {foto.Producto}", foto.Alt, foto.Licencia, foto.Credito);
-            }
-            if (!cambioAqui) { continue; }
-            cambiados++;
-            if (_contentService.SaveAndPublish(pagina, new[] { Cultura }).Success) { republicados++; }
+            var (n, sinPagina) = FotosDeProductos(DevTiendaPorPaginas.Tienda, tienda, carpeta);
+            partes.Add($"tienda:{n}"); cambios += n; ok &= sinPagina == 0;
+            if (sinPagina > 0) { partes.Add($"tienda-sin-pagina:{sinPagina}"); }
         }
-        var detalle = $"fotos:{fotos.Count};productos-con-foto-nueva:{cambiados};republicados:{republicados};sin-producto:{sinProducto}";
-        _logger.LogInformation("Fotos de la Tienda: {Detalle}.", detalle);
-        return new Resultado(sinProducto == 0, "tienda", detalle, cambiados);
+        if (Leer(carpeta, "booking.json") is { } booking)
+        {
+            var (n, sinPagina) = FotosDeProductos(Booking, booking, carpeta);
+            partes.Add($"booking:{n}"); cambios += n; ok &= sinPagina == 0;
+            if (sinPagina > 0) { partes.Add($"booking-sin-pagina:{sinPagina}"); }
+            partes.Add($"tarjeta-bienestar:{TarjetaConLaFotoDe("Bienestar", "Masaje terapéutico · 60 min")}");
+        }
+        if (Leer(carpeta, "propiedades.json") is { } propiedades)
+        {
+            var (n, faltan) = FotosDeFichas(propiedades, carpeta);
+            partes.Add($"fichas:{n}"); cambios += n; ok &= faltan == 0;
+            if (faltan > 0) { partes.Add($"ambientes-no-encontrados:{faltan}"); }
+        }
+        if (Leer(carpeta, "laureles.json") is { } medios)
+        {
+            var n = 0;
+            foreach (var f in medios.Where(f => f.Medio is not null))
+            {
+                var clave = _media.KeyByName(f.Medio!);
+                if (clave is null) { ok = false; partes.Add($"medio-no-encontrado:{f.Medio}"); continue; }
+                if (_media.ReplacePhoto(clave.Value, Path.Combine(carpeta, f.Archivo), f.Medio!, f.Alt, f.Licencia, f.Credito)) { n++; }
+            }
+            partes.Add($"medios:{n}"); cambios += n;
+            // El carrusel de Propiedades guarda URLs: con la foto nueva, su receta vuelve a escribirlas.
+            if (n > 0) { partes.Add($"propiedades:{Componer("propiedades").Detalle}"); }
+        }
+
+        var detalle = string.Join(";", partes);
+        _logger.LogInformation("Fotos importadas: {Detalle}.", detalle);
+        return new Resultado(ok, "fotos", detalle, cambios);
     }
 
-    /// <summary>Las Keys de los medios que referencia una página (cualquier MediaPicker3 de sus propiedades o bloques).</summary>
+    /// <summary>Compatibilidad: <c>/dev/fotos-de-la-tienda</c> importa sólo el manifiesto de la Tienda.</summary>
+    public Resultado FotosDeLaTienda(string carpeta)
+    {
+        var fotos = Leer(carpeta, "tienda.json") ?? Leer(carpeta, "manifiesto.json");
+        if (fotos is null) { return new Resultado(false, "tienda", "sin-manifiesto", 0); }
+        var (n, sinPagina) = FotosDeProductos(DevTiendaPorPaginas.Tienda, fotos, carpeta);
+        return new Resultado(sinPagina == 0, "tienda", $"productos-con-foto-nueva:{n};sin-producto:{sinPagina}", n);
+    }
+
+    private static List<FotoImportada>? Leer(string carpeta, string nombre)
+    {
+        var ruta = Path.Combine(carpeta, nombre);
+        return System.IO.File.Exists(ruta)
+            ? System.Text.Json.JsonSerializer.Deserialize<List<FotoImportada>>(System.IO.File.ReadAllText(ruta), LecturaDelManifiesto)
+            : null;
+    }
+
+    private Dictionary<string, IContent> PaginasDeProducto(Guid raiz)
+    {
+        var nodo = _contentService.GetById(raiz)
+            ?? throw new InvalidOperationException($"No existe la raíz {raiz}.");
+        return _contentService.GetPagedDescendants(nodo.Id, 0, 1000, out _)
+            .Where(c => c.ContentType.Alias == "productPage")
+            .ToDictionary(c => c.GetCultureName(Cultura) ?? c.Name ?? string.Empty, StringComparer.Ordinal);
+    }
+
+    /// <summary>La foto de cada producto en TODOS los medios que referencia su página (tarjeta y detalle).</summary>
+    private (int Cambiados, int SinPagina) FotosDeProductos(Guid raiz, IReadOnlyList<FotoImportada> fotos, string carpeta)
+    {
+        var productos = PaginasDeProducto(raiz);
+        int cambiados = 0, sinPagina = 0;
+        foreach (var foto in fotos.Where(f => f.Producto is not null))
+        {
+            if (!productos.TryGetValue(foto.Producto!, out var pagina)) { sinPagina++; continue; }
+            var ruta = Path.Combine(carpeta, foto.Archivo);
+            var cambio = false;
+            foreach (var clave in ClavesDeMedios(pagina))
+            {
+                cambio |= _media.ReplacePhoto(clave, ruta, $"producto {foto.Producto}", foto.Alt, foto.Licencia, foto.Credito);
+            }
+            if (!cambio) { continue; }
+            cambiados++;
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+        }
+        return (cambiados, sinPagina);
+    }
+
+    /// <summary>
+    /// Las fichas de inmueble del CMS: cada foto va al nodo de su AMBIENTE en la galería (<c>imagesJson</c> guarda URLs,
+    /// así que la galería se reescribe con la URL nueva) y la fachada —o, sin ella, la sala— va además a la tarjeta.
+    /// </summary>
+    private (int Cambiados, int AmbientesNoEncontrados) FotosDeFichas(IReadOnlyList<FotoImportada> fotos, string carpeta)
+    {
+        var fichas = PaginasDeProducto(Propiedades);
+        var galeria = KeyOf("elementSynLightboxGallery");
+        int cambiados = 0, faltan = 0;
+
+        foreach (var grupo in fotos.Where(f => f.Producto is not null && f.Ambiente is not null).GroupBy(f => f.Producto!))
+        {
+            if (!fichas.TryGetValue(grupo.Key, out var pagina)) { faltan += grupo.Count(); continue; }
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            var cambioAqui = false;
+
+            foreach (var foto in grupo)
+            {
+                var ruta = Path.Combine(carpeta, foto.Archivo);
+                var marca = $"-{foto.Ambiente}.";
+                var encontrado = false;
+                cuerpo.TransformarLista(galeria, "imagesJson", lista =>
+                {
+                    var nueva = new JsonArray();
+                    foreach (var item in lista)
+                    {
+                        var copia = (JsonObject)item!.DeepClone();
+                        var url = copia["fullUrl"]?.GetValue<string>() ?? string.Empty;
+                        if (url.Contains(marca, StringComparison.OrdinalIgnoreCase) && _media.KeyByUrl(url) is { } clave)
+                        {
+                            encontrado = true;
+                            cambioAqui |= _media.ReplacePhoto(clave, ruta, $"propiedad {grupo.Key} {foto.Ambiente}", foto.Alt, foto.Licencia, foto.Credito);
+                            var nuevaUrl = _media.UrlOf(clave);
+                            copia["fullUrl"] = nuevaUrl;
+                            copia["thumbUrl"] = nuevaUrl;
+                            copia["alt"] = foto.Alt;
+                            if (foto.Rotulo is not null) { copia["caption"] = foto.Rotulo; }
+                        }
+                        nueva.Add(copia);
+                    }
+                    return nueva;
+                });
+                if (!encontrado) { faltan++; }
+            }
+
+            var tarjeta = grupo.FirstOrDefault(f => f.Ambiente == "exterior") ?? grupo.FirstOrDefault(f => f.Ambiente == "sala");
+            var imagenesDeLaFicha = pagina.HasProperty("productImages")
+                ? (pagina.Properties["productImages"]!.PropertyType.VariesByCulture()
+                    ? pagina.GetValue<string>("productImages", Cultura)
+                    : pagina.GetValue<string>("productImages"))
+                : null;
+            if (tarjeta is not null && imagenesDeLaFicha is { } imagenes)
+            {
+                foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(imagenes, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})"""))
+                {
+                    cambioAqui |= _media.ReplacePhoto(Guid.Parse(m.Groups[1].Value), Path.Combine(carpeta, tarjeta.Archivo),
+                        $"producto {grupo.Key}", tarjeta.Alt, tarjeta.Licencia, tarjeta.Credito);
+                }
+            }
+
+            if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+            if (cuerpo.Cambio || cambioAqui)
+            {
+                _contentService.SaveAndPublish(pagina, new[] { Cultura });
+                cambiados++;
+            }
+        }
+        return (cambiados, faltan);
+    }
+
+    /// <summary>
+    /// La tarjeta <paramref name="categoria"/> de la portada de Booking toma el medio que ya usa el producto
+    /// <paramref name="producto"/> (no se duplica el fichero). Sólo si la tarjeta no tiene imagen.
+    /// </summary>
+    private int TarjetaConLaFotoDe(string categoria, string producto)
+    {
+        if (!PaginasDeProducto(Booking).TryGetValue(producto, out var paginaDelProducto)) { return 0; }
+        var claves = ClavesDeMedios(paginaDelProducto);
+        if (claves.Count == 0) { return 0; }
+        var clave = claves[0];
+        var portada = _contentService.GetById(Booking);
+        if (portada is null) { return 0; }
+
+        var cuerpo = new CuerpoEditable(portada.GetValue<string>(Cuerpo, Cultura));
+        var tarjeta = KeyOf("elementCompCard");
+        var sinImagen = (Func<JsonObject, bool>)(d =>
+            CuerpoEditable.Donde("headingTitle", categoria)(d)
+            && (d["mediaReference"] is not JsonArray a || a.Count == 0));
+        var picker = JsonNode.Parse($"[{{\"key\":\"{Guid.NewGuid()}\",\"mediaKey\":\"{clave}\",\"crops\":[],\"focalPoint\":null}}]")!;
+        var n = cuerpo.Reemplazar(tarjeta, "mediaReference", picker, sinImagen);
+        if (n == 0) { return 0; }
+        portada.SetValue(Cuerpo, cuerpo.Json, Cultura);
+        _contentService.SaveAndPublish(portada, new[] { Cultura });
+        return n;
+    }
+
+    /// <summary>
+    /// Las Keys de los medios que referencia una página (cualquier MediaPicker3 de sus propiedades o bloques). Dentro de
+    /// un Block Grid el valor anidado puede venir como texto con las comillas escapadas (<c>\"</c> o <c>"</c>).
+    /// </summary>
     private static IReadOnlyList<Guid> ClavesDeMedios(IContentBase pagina) =>
         pagina.Properties
             .SelectMany(p => p.Values)
             .Select(v => v.EditedValue?.ToString())
             .Where(v => v is not null && v.Contains("mediaKey", StringComparison.Ordinal))
-            .SelectMany(v => System.Text.RegularExpressions.Regex.Matches(v!, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})""")
+            .Select(v => v!.Replace("\\u0022", "\"", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal))
+            .SelectMany(v => System.Text.RegularExpressions.Regex.Matches(v, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})")
                 .Select(m => Guid.Parse(m.Groups[1].Value)))
             .Distinct()
             .ToList();
