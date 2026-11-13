@@ -538,13 +538,17 @@ public sealed class DevContenidoDeVerticales
         return n;
     }
 
-    /// <summary>Las Keys de los medios que referencia una página (cualquier MediaPicker3 de sus propiedades o bloques).</summary>
+    /// <summary>
+    /// Las Keys de los medios que referencia una página (cualquier MediaPicker3 de sus propiedades o bloques). Dentro de
+    /// un Block Grid el valor anidado puede venir como texto con las comillas escapadas (<c>\"</c> o <c>"</c>).
+    /// </summary>
     private static IReadOnlyList<Guid> ClavesDeMedios(IContentBase pagina) =>
         pagina.Properties
             .SelectMany(p => p.Values)
             .Select(v => v.EditedValue?.ToString())
             .Where(v => v is not null && v.Contains("mediaKey", StringComparison.Ordinal))
-            .SelectMany(v => System.Text.RegularExpressions.Regex.Matches(v!, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})""")
+            .Select(v => v!.Replace("\\u0022", "\"", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal))
+            .SelectMany(v => System.Text.RegularExpressions.Regex.Matches(v, @"""mediaKey""\s*:\s*""([0-9a-fA-F-]{36})")
                 .Select(m => Guid.Parse(m.Groups[1].Value)))
             .Distinct()
             .ToList();
