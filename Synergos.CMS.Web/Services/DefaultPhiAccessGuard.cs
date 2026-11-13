@@ -18,6 +18,7 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
     private const string DoctorRole = "doctor";
     private const string SchedulingRolesCsv = "doctor,nurse,reception";
     private const string AperturaRolesCsv = "doctor,reception";
+    private const string CargaDeResultadosRolesCsv = "doctor,nurse";
 
     private readonly IMemberAccessGate _gate;
     private readonly IConsentLedger _consent;
@@ -226,6 +227,20 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
             return (true, null, Bases.AgendaDelPersonal);
         }
 
+        // Cargar el resultado de un examen (003-salud-cita, I4 P12): el médico o enfermería, con el mismo permiso del
+        // paciente que pide el médico. Cargar no es liberar: el paciente lo ve cuando el médico lo libera («write»).
+        if (string.Equals(request.Action, "load", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(request.ResourceType, "lab-result", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_gate.HasAnyRole(CargaDeResultadosRolesCsv))
+            {
+                return (false, "insufficient-role", Bases.Ninguna);
+            }
+            return request.TargetPatientKey is Guid paciente
+                ? await PermisoClinicoAsync(paciente, actorKey, ct).ConfigureAwait(false)
+                : (false, "no-target-patient", Bases.Ninguna);
+        }
+
         // Datos clínicos (historia/recetas/consentimiento): doctor CON consentimiento.
         if (_gate.HasAnyRole(DoctorRole))
         {
@@ -234,16 +249,25 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
                 return (false, "no-target-patient", Bases.Ninguna);
             }
 
-            if (_permisos is not null)
-            {
-                return await PermisoDelConsultorioAsync(patientKey, ct).ConfigureAwait(false);
-            }
-
-            var hasConsent = await _consent.HasActiveConsentAsync(patientKey, actorKey, ct).ConfigureAwait(false);
-            return hasConsent ? (true, null, Bases.PermisoLocal) : (false, "no-active-consent", Bases.Ninguna);
+            return await PermisoClinicoAsync(patientKey, actorKey, ct).ConfigureAwait(false);
         }
 
         return (false, "insufficient-role", Bases.Ninguna);
+    }
+
+    /// <summary>
+    /// El permiso clínico del paciente: con lector, el del consultorio en <c>Api.Consent</c>; sin él, el libro local de
+    /// antes, médico por médico.
+    /// </summary>
+    private async Task<(bool allowed, string? reason, string basis)> PermisoClinicoAsync(Guid patientKey, Guid actorKey, CancellationToken ct)
+    {
+        if (_permisos is not null)
+        {
+            return await PermisoDelConsultorioAsync(patientKey, ct).ConfigureAwait(false);
+        }
+
+        var hasConsent = await _consent.HasActiveConsentAsync(patientKey, actorKey, ct).ConfigureAwait(false);
+        return hasConsent ? (true, null, Bases.PermisoLocal) : (false, "no-active-consent", Bases.Ninguna);
     }
 
     /// <summary>
