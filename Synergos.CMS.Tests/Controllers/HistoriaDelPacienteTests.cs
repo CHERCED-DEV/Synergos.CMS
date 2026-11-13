@@ -304,12 +304,15 @@ public sealed class HistoriaDelPacienteTests
     }
 
     [Fact]
-    public async Task BuscarHistoria_Da_la_clave_y_si_ya_hizo_el_pre_registro_y_sin_historia_es_404()
+    public async Task BuscarHistoria_Da_la_clave_y_si_ya_hizo_el_pre_registro_y_sin_historia_ninguna_clave()
     {
         SesionDe(Recepcion);
         GuardiaDice(true);
         _buscador.ClaveDelCorreoAsync(Correo, Arg.Any<CancellationToken>()).Returns(Miembro);
-        Assert.IsType<NotFoundObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));
+        var sinHistoria = Assert.IsType<OkObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));
+        Assert.Null(sinHistoria.Value!.GetType().GetProperty("patientKey")!.GetValue(sinHistoria.Value));
+        _buscador.ClaveDelCorreoAsync("nadie@ejemplo.co", Arg.Any<CancellationToken>()).Returns((Guid?)null);
+        Assert.IsType<NotFoundObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria("nadie@ejemplo.co"), CancellationToken.None));
 
         var key = await HistoriaDe(Miembro);
         var antes = Assert.IsType<OkObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));

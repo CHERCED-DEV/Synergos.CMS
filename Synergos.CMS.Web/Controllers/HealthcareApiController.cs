@@ -325,12 +325,14 @@ public sealed class HealthcareApiController : ControllerBase
         {
             return NotFound(new { error = "No hay un miembro con ese correo." });
         }
+        // El miembro existe y no tiene historia: 200 sin clave, que es «ábrasela», no un 404 que se confunda con un
+        // correo que no es de nadie.
         if (await _patients.FindKeyByMemberAsync(memberKey, ct) is not Guid patientKey
             || await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false } historia)
         {
-            return NotFound(new { error = "Ese miembro todavía no tiene historia." });
+            return Ok(new { patientKey = (Guid?)null, nombre = (string?)null, preRegistrado = false });
         }
-        return Ok(new { patientKey, nombre = historia.DisplayName, preRegistrado = historia.PreRegistro is not null });
+        return Ok(new { patientKey = (Guid?)patientKey, nombre = (string?)historia.DisplayName, preRegistrado = historia.PreRegistro is not null });
     }
 
     /// <summary>El resumen de salud de un paciente, para el médico con su permiso.</summary>
