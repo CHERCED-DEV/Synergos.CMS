@@ -35,7 +35,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// producción, de donde salen «Mi salud», el check-in y las vistas del personal. Vacía, el portal vuelve a lo de
 /// <c>ApiBase</c>.</para>
 /// </remarks>
-[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent"])]
+[ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent", "Health.Record"])]
 public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
