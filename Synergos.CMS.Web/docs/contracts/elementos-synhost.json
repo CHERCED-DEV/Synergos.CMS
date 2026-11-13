@@ -577,6 +577,12 @@
           "origen": "negocio"
         },
         {
+          "nombre": "lecturasBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
           "nombre": "vista",
           "tipo": "string",
           "opcional": true,
@@ -640,6 +646,7 @@
         "heading": "Conecta, publica y crece tu audiencia",
         "subheading": "Sigue autores, publica historias y reacciona en tiempo real",
         "apiBase": "/api/blogs",
+        "lecturasBase": "/api/lecturas/blogs",
         "vista": "explorar",
         "rutas": [
           {

@@ -12,6 +12,19 @@ public interface IContextoDeMensajes : ILecturaDeUnVertical
 
     /// <summary>El asunto del hilo, leído de lo que lo motivó (un pedido, un producto).</summary>
     Task<string> AsuntoAsync(string contexto, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// El asunto del hilo con <paramref name="contraparte"/> (tal como la guarda la mensajería): el de un mensaje
+    /// directo es el nombre público de con quién es (012-blogs-social, I4). Quien no lo necesita da el de su contexto.
+    /// </summary>
+    Task<string> AsuntoAsync(string contexto, string contraparte, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cómo sale en la bandeja quien participa en un hilo del vertical (la contraparte y quien escribió cada mensaje).
+    /// La mensajería guarda a un miembro por su correo, y un vertical donde los participantes son miembros lo nombra
+    /// por su cara pública, nunca por el correo (012-blogs-social, I0 e I4).
+    /// </summary>
+    Task<string> ParticipanteAsync(string participante, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Un mensaje del hilo. <see cref="Mio"/>: lo escribió quien lee.</summary>

@@ -394,6 +394,7 @@ public sealed class BlogsController : ControllerBase
 
     // ── 8. DMs (mensajería directa — SH-7 v2) ──────────────────────
     // GET /api/blogs/messages?user= → inbox { threads:[...] }
+    // Interina (012-blogs-social, I4): la lectura genérica es GET api/lecturas/{vertical}/mensajes.
     [HttpGet("messages")]
     public async Task<IActionResult> Messages(CancellationToken cancellationToken)
     {
@@ -423,6 +424,8 @@ public sealed class BlogsController : ControllerBase
     }
 
     // GET /api/blogs/thread/{id} → { thread }
+    // Interina (012-blogs-social, I4): la lectura genérica es GET api/lecturas/{vertical}/mensajes, con los mensajes de
+    // cada hilo.
     [HttpGet("thread/{id}")]
     public async Task<IActionResult> Thread(string id, CancellationToken cancellationToken)
     {
@@ -557,6 +560,8 @@ public sealed class BlogsController : ControllerBase
     // GET /api/blogs/explore?q=&tag= → { posts:[...], trending:[...] }
     // Posts que matchean el texto/hashtag + hashtags trending derivados del stream
     // (frecuencia de #tag ponderada por las reacciones de cada post).
+    // Interina (012-blogs-social, I4): la lectura genérica es GET api/lecturas/{vertical}/catalogo, con la faceta
+    // «etiqueta».
     [HttpGet("explore")]
     public async Task<IActionResult> Explore(
         [FromQuery] string? q,
@@ -609,6 +614,7 @@ public sealed class BlogsController : ControllerBase
 
     // ── 11. Guardados ──────────────────────────────────────────────
     // GET /api/blogs/saved?user= → { posts:[...] }
+    // Interina (012-blogs-social, I4): la lectura genérica es GET api/lecturas/{vertical}/colecciones/saved.
     [HttpGet("saved")]
     public async Task<IActionResult> Saved(CancellationToken cancellationToken)
     {
@@ -878,12 +884,8 @@ public sealed class BlogsController : ControllerBase
         var other => other ?? "mention",
     };
 
-    private static string BuildMediaAlt(string? body)
-    {
-        var text = (body ?? string.Empty).Trim();
-        if (text.Length == 0) return "Imagen del post";
-        return text.Length <= 80 ? text : text[..80].TrimEnd() + "…";
-    }
+    // El mismo que pone el catálogo de la red (012-blogs-social, I4).
+    private static string BuildMediaAlt(string? body) => PublicacionesDeLaRed.TextoAlternativo(body);
 
     private static ReactionsDto ToReactionsDto(ReactionState state) => new(
         Total: state.Total,
@@ -1160,41 +1162,13 @@ public sealed class BlogsController : ControllerBase
             .ToList();
     }
 
-    // Extrae los hashtags (#tag) del cuerpo, sin el prefijo #, en minúsculas.
-    private static IReadOnlyList<string> ExtractTags(string body)
-    {
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return Array.Empty<string>();
-        }
+    // Los hashtags (#tag) del cuerpo, sin el prefijo #, en minúsculas: los mismos que filtra el catálogo de la red
+    // (012-blogs-social, I4).
+    private static IReadOnlyList<string> ExtractTags(string body) => PublicacionesDeLaRed.Etiquetas(body);
 
-        var tags = new List<string>();
-        var matches = System.Text.RegularExpressions.Regex.Matches(body, @"#(\w[\w-]*)");
-        foreach (System.Text.RegularExpressions.Match m in matches)
-        {
-            tags.Add(m.Groups[1].Value.ToLowerInvariant());
-        }
-        return tags;
-    }
-
-    // Extrae las menciones (@handle) del cuerpo, sin el prefijo @, en minúsculas.
-    // Gemelo exacto de ExtractTags: el contrato declara las dos y el borde derivaba
-    // una sola.
-    private static IReadOnlyList<string> ExtractMentions(string body)
-    {
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return Array.Empty<string>();
-        }
-
-        var handles = new List<string>();
-        var matches = System.Text.RegularExpressions.Regex.Matches(body, @"@(\w[\w-]*)");
-        foreach (System.Text.RegularExpressions.Match m in matches)
-        {
-            handles.Add(m.Groups[1].Value.ToLowerInvariant());
-        }
-        return handles;
-    }
+    // Las menciones (@handle) del cuerpo, sin el prefijo @, en minúsculas. Gemelo exacto de ExtractTags: el contrato
+    // declara las dos y el borde derivaba una sola.
+    private static IReadOnlyList<string> ExtractMentions(string body) => PublicacionesDeLaRed.Menciones(body);
 
     // Normaliza un tag de entrada: sin #, trim, minúsculas.
     private static string NormalizeTag(string? tag)

@@ -41,11 +41,13 @@ public sealed class BlogsResolutor : IResolutorSynHost<BlogsProps>
     public ElementoResuelto<BlogsProps> Resolver(IPublishedElement elemento)
     {
         var editor = new LectorDelEditor(elemento, _fallback, _log);
+        var negocio = _negocio.Actual();
 
         return new ElementoResuelto<BlogsProps>(new BlogsProps(
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
-            ApiBase: _negocio.Actual().ApiBase,
+            ApiBase: negocio.ApiBase,
+            LecturasBase: negocio.LecturasBase,
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
             Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));
     }

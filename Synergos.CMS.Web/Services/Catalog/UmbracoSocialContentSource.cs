@@ -36,6 +36,7 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
 {
     internal const string Vertical = "Social";
     private const string PostPageAlias = "postPage";
+    private const string PostCategoryPageAlias = "postCategoryPage";
     private const string SiteRootAlias = "siteRoot";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
@@ -190,7 +191,11 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
                 DisplayName: nombre!,
                 AvatarUrl: autorNodo?.Value<IPublishedContent>("authorAvatar")?.Url()),
             // El hilo de comentarios de la página del post es el de su nodo: la app comenta en ése.
-            NodeId: node.Id);
+            NodeId: node.Id,
+            // La página de categoría de la que cuelga, si cuelga de una: la faceta «categoría» del catálogo de la red
+            // (012-blogs-social, I4).
+            Category: node.Ancestors().FirstOrDefault(a =>
+                string.Equals(a.ContentType.Alias, PostCategoryPageAlias, StringComparison.Ordinal))?.Name);
     }
 
     private void Report(IReadOnlyList<SocialContentIssue> issues)

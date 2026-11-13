@@ -47,7 +47,7 @@ public sealed class BlogsResolutorTests
     private static BlogsProps Resuelto(IRutasDeLasVistas rutas, params (string Alias, object? Valor)[] propiedades)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeBlogs>>();
-        negocio.Actual().Returns(new NegocioDeBlogs("/api/blogs"));
+        negocio.Actual().Returns(new NegocioDeBlogs("/api/blogs", "/api/lecturas/blogs"));
         return new BlogsResolutor(ElementoFalso.Fallback, negocio, rutas, NullLogger<BlogsResolutor>.Instance)
             .Resolver(ElementoFalso.Con(propiedades))
             .Props;
