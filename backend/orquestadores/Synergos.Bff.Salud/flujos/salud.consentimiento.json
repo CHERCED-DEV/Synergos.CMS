@@ -6,8 +6,9 @@
     "version": { "de": "negocio", "campo": "versionDelPermiso", "tipo": "texto" }
   },
   "salida": [],
-  "fases": { "abrir": ["otorgar"] },
+  "fases": { "abrir": ["otorgar", "otorgarHistoria"] },
   "pasos": {
-    "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "salud.agenda" }
+    "otorgar": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoId"], "llave": "grant", "proposito": "salud.agenda" },
+    "otorgarHistoria": { "tipo": "consent.otorgar", "lee": ["version"], "escribe": ["permisoHistoriaId"], "llave": "grant-historia", "proposito": "salud.historia" }
   }
 }
