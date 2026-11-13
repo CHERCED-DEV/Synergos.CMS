@@ -106,10 +106,12 @@ public sealed partial class SeamComposer
         // 003-salud-cita, I2 T054 — con Mode=Api la guardia lee el permiso del paciente en Api.Consent (Q4,
         // Q7) y el libro local deja de decidir. Sin BaseUrl no se adivina un puerto: el lector niega todo.
         // Sin el modo, la guardia sigue con el libro local (la vuelta atrás y el desarrollo).
-        var consent = builder.Config.GetSection("Synergos:Consent");
-        services.Configure<ConsentSettings>(consent);
+        // La sección se ENLAZA (como Synergos:Audit): sin esto el lector recibe un ConsentSettings recién construido y
+        // lo que no viaja por el HttpClient se queda en su default en silencio. Gate: ConsentWiringTests.
+        services.Configure<ConsentSettings>(builder.Config.GetSection("Synergos:Consent"));
         if (Interruptor.Encendido(builder.Config, "Synergos:Consent:Mode", "Api", new ConsentSettings().Mode))
         {
+            var consent = builder.Config.GetSection("Synergos:Consent");
             if (!string.IsNullOrWhiteSpace(consent["BaseUrl"]))
             {
                 services.AddClienteDelArbolDeServicios(
