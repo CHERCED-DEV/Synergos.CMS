@@ -43,7 +43,7 @@
    |---|---:|---|
    | `Synergos.CMS.Tests` | 4042 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 2082 | Core, Shared, las 20 `Api.*` y los 10 `Bff.*` |
-   | `Synergos.Arquitectura.Tests` | 571 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
+   | `Synergos.Arquitectura.Tests` | 572 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
    **El reparto ES la regla, no organización.** Antes había un solo proyecto con
    **28** referencias, y era el ÚNICO sitio del repo que unía los dos árboles: el
@@ -3096,7 +3096,7 @@ dotnet test Synergos.CMS.sln -v quiet
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
 dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 4042
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 2082
-dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 571
+dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 572
 
 # El contrato HTTP publicado (ADR 0140): Synergos.CMS.Web/docs/contracts/openapi/<Ensamblado>.json
 # de Bff.Eventos, Api.Pricing, Api.Inventory y Api.Payments. Se GENERA del host real en
