@@ -83,6 +83,8 @@ public sealed class DevContenidoDeVerticales
             ["hoteles"] = (Hoteles, RecetaHoteles),
             ["educacion"] = (Educacion, RecetaEducacion),
             ["eventos"] = (Eventos, RecetaEventos),
+            ["gobierno"] = (Gobierno, RecetaGobierno),
+            ["tienda"] = (DevTiendaPorPaginas.Tienda, RecetaTienda),
         };
 
     /// <summary>
@@ -91,6 +93,17 @@ public sealed class DevContenidoDeVerticales
     /// </summary>
     public Resultado Componer(string vertical)
     {
+        if (string.Equals(vertical, "tienda-fichas", StringComparison.OrdinalIgnoreCase)) { return FichasDeLaTienda(); }
+        if (string.Equals(vertical, "hoteles-promesas", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "hoteles-promesas", RecetaPromesasDeHoteles(), 0);
+        }
+        if (string.Equals(vertical, "propiedades-fichas", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaFichasDePropiedades();
+            return new Resultado(hecho.Contains("sin-datos:0", StringComparison.Ordinal), "propiedades-fichas", hecho, 0);
+        }
+
         var tieneReceta = Verticales.TryGetValue(vertical, out var receta);
         var tieneAtribucion = Atribuciones.TryGetValue(vertical, out var atribucion);
         if (!tieneReceta && !tieneAtribucion)
@@ -616,6 +629,331 @@ public sealed class DevContenidoDeVerticales
         return $"proximos:listado;secciones-nuevas:{nuevas};desconectadas:{fuera}";
     }
 
+    // ───────────────────────────── Gobierno (I7) ─────────────────────────────
+
+    private sealed record Tramite(string Id, string Nombre, string Linea, string Resumen);
+
+    /// <summary>Tres trámites del catálogo de la app (<c>/api/gov/services</c>): entidad, tasa y plazo como los pinta la app.</summary>
+    private static readonly Tramite[] TramitesMasConsultados =
+    [
+        new("trm-cedula", "Renovación de cédula de ciudadanía", "Registraduría Nacional · $ 65.500 · unos 15 días hábiles",
+            "Renueva tu cédula por deterioro, pérdida o actualización de datos."),
+        new("trm-pasaporte", "Expedición de pasaporte", "Cancillería · $ 189.000 · unos 8 días hábiles",
+            "Pide la expedición de tu pasaporte colombiano para viajar al exterior."),
+        new("trm-licencia-conduccion", "Renovación de licencia de conducción", "Secretaría de Movilidad · $ 95.000 · unos 5 días hábiles",
+            "Renueva tu licencia vigente o vencida. Necesitas el examen médico aprobado."),
+    ];
+
+    private string RecetaGobierno(CuerpoEditable cuerpo)
+    {
+        // La portada era la app y «Cómo funciona». Debajo: los trámites más pedidos con enlace a su ficha, las entidades
+        // que atienden aquí, las preguntas de siempre (radicado, tasa, plazos, subsanar) y el cierre a «Mis solicitudes».
+        if (cuerpo.Contiene(Marca("gobierno"))) { return "ya-compuesta"; }
+
+        var b = new BlockGridJsonBuilder();
+        var destacados = Seccion(b, null, Marca("gobierno"));
+        Encabezado(destacados, "Trámites más consultados");
+        FilasDeTarjetas(destacados, TramitesMasConsultados.Select(t => new Tarjeta(
+            t.Nombre, t.Linea, t.Resumen, null, t.Nombre, "Ver el trámite", $"/gobierno/#/gov/tramite/{t.Id}")).ToArray());
+
+        Rejilla(b, "surface", "Entidades que atienden aquí", 4,
+            ("Registraduría Nacional", "Renovación de la cédula de ciudadanía."),
+            ("Cancillería", "Expedición del pasaporte."),
+            ("Secretaría de Movilidad", "Renovación de la licencia de conducción."),
+            ("Secretaría de Salud", "Afiliación al régimen subsidiado de salud."),
+            ("Alcaldía Municipal", "Certificado de residencia."),
+            ("Cámara de Comercio", "Registro mercantil de tu empresa."),
+            ("Ministerio de Vivienda", "Solicitud del subsidio de vivienda."));
+
+        Preguntas(b, "Preguntas frecuentes",
+            ("¿Qué es el número de radicado?", "Es el código que recibe tu solicitud al enviarla. Con él la encuentras en «Mis solicitudes» y la identifica la entidad."),
+            ("¿Cuánto tarda un trámite?", "Cada trámite dice su plazo en días hábiles. Se cuentan desde que radicas; los fines de semana y festivos no cuentan."),
+            ("¿Cómo pago la tasa?", "Si el trámite tiene tasa, la pagas en línea al radicar. Los trámites gratuitos lo dicen en su ficha."),
+            ("¿Qué pasa si falta un documento?", "La entidad te pide subsanar y te avisamos en «Notificaciones». Completas lo que falta y el trámite sigue."),
+            ("¿Se realizan cobros reales?", "No. Este es un sitio de demostración: las solicitudes y los pagos no tienen efecto ante ninguna entidad."));
+
+        Cierre(b, "¿Ya radicaste?", "Consulta en qué etapa va tu expediente y lo que te ha pedido la entidad.",
+            "Ver mis solicitudes", "/gobierno/#/gov/mis-solicitudes");
+
+        var n = cuerpo.Sumar(b.Build());
+        return $"mas-consultados:{TramitesMasConsultados.Length};entidades:7;preguntas:5;cierre:1;secciones:{n}";
+    }
+
+    // ───────────────────────────── Tienda (I8) ─────────────────────────────
+
+    /// <summary>Las páginas del flujo de compra: se llega a ellas desde la tienda, no desde el pie.</summary>
+    private static readonly string[] PaginasDelFlujo = ["Catálogo", "Producto", "Carrito", "Pago", "Confirmación", "Mi cuenta"];
+
+    private string RecetaTienda(CuerpoEditable cuerpo)
+    {
+        // 1. La rejilla SSR de productos repetía, debajo, lo que ya muestra la app arriba: se desconecta (la pieza sigue).
+        var fuera = cuerpo.DesconectarSeccionesCon(KeyOf("elementShopProductGrid"));
+
+        // 2. El cierre hablaba en voseo («Lanzá») y su botón llevaba al catálogo de ropa: ahora invita a vender y lleva
+        //    a la consola del vendedor.
+        var cierre = KeyOf("elementCompCtaBanner");
+        var esElDeVender = CuerpoEditable.Donde("headingTitle", "¿Listo para vender online?");
+        var n = cuerpo.Reemplazar(cierre, "headingSubtitle", "Lanza tu tienda esta semana: publica tus productos desde la consola del vendedor.", esElDeVender);
+        n += cuerpo.Reemplazar(cierre, "ctaLabel", "Empieza a vender", esElDeVender);
+        n += cuerpo.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Empieza a vender", "/tienda/vender/"))!, esElDeVender);
+
+        // 3. El pie listaba las páginas internas del flujo de compra.
+        var ocultas = OcultarDelPie(DevTiendaPorPaginas.Tienda, PaginasDelFlujo);
+        return $"rejilla-repetida:{fuera};cierre:{n};ocultas-del-pie:{ocultas}";
+    }
+
+    private int OcultarDelPie(Guid raiz, IReadOnlyCollection<string> nombres)
+    {
+        var padre = _contentService.GetById(raiz);
+        if (padre is null) { return 0; }
+        var n = 0;
+        foreach (var hija in _contentService.GetPagedChildren(padre.Id, 0, 200, out _))
+        {
+            var nombre = hija.GetCultureName(Cultura) ?? hija.Name ?? string.Empty;
+            if (!nombres.Contains(nombre) || !hija.HasProperty("hideFromFooter")) { continue; }
+            if (hija.GetValue<bool>("hideFromFooter")) { continue; }
+            hija.SetValue("hideFromFooter", true);
+            _contentService.SaveAndPublish(hija, new[] { Cultura });
+            n++;
+        }
+        return n;
+    }
+
+    private sealed record Ficha(string Uso, string[] Detalles);
+
+    /// <summary>
+    /// Lo que cada ficha añade a su descripción (para qué sirve) y su lista de detalles, sacados de lo que el producto ya
+    /// declara (subtítulo y descripción del catálogo). Nada de promesas nuevas: ni garantías ni envíos.
+    /// </summary>
+    private static readonly Dictionary<string, Ficha> Fichas = new(StringComparer.Ordinal)
+    {
+        ["Audífonos de diadema"] = new("Para concentrarte en la oficina, estudiar o viajar sin el ruido de fondo.",
+            ["Cancelación activa de ruido", "Hasta 30 horas de batería", "Diseño de diadema, sobre la oreja"]),
+        ["Base para celular"] = new("Deja el teléfono a la vista en el escritorio para videollamadas, recetas o mensajes.",
+            ["Cuerpo de aluminio", "Ángulo ajustable", "Base con peso que no se desliza"]),
+        ["Bolígrafo de aluminio"] = new("Un bolígrafo de todos los días que se siente firme en la mano.",
+            ["Aluminio anodizado", "Peso equilibrado", "Recarga estándar fácil de conseguir"]),
+        ["Botella térmica"] = new("Lleva agua fría al gimnasio o café caliente a la oficina en la misma botella.",
+            ["Acero inoxidable de doble pared", "Capacidad de 750 ml", "12 horas frío y 6 horas caliente"]),
+        ["Buzo con cierre"] = new("La capa que te pones y te quitas según cambie el clima durante el día.",
+            ["Cierre completo", "Bolsillos laterales", "Uso como capa intermedia"]),
+        ["Camiseta esencial negra"] = new("El básico para combinar con jeans, chaqueta o lo que tengas a mano.",
+            ["Algodón premium de 180 g", "Corte regular", "Color negro"]),
+        ["Camiseta oversize blanca"] = new("Una silueta suelta para el día a día, sola o debajo de una chaqueta.",
+            ["Algodón peinado", "Corte amplio con hombro caído", "Color blanco"]),
+        ["Chaqueta cortavientos"] = new("Va en el morral doblada y sale cuando el cielo cambia de opinión.",
+            ["Tejido repelente al agua", "Se pliega en su propio bolsillo", "Capucha para la lluvia"]),
+        ["Funda para laptop"] = new("Protege el portátil dentro del morral o cuando lo llevas en la mano.",
+            ["Neopreno de 5 mm", "Interior afelpado", "Para portátiles de 14 pulgadas"]),
+        ["Gorra clásica"] = new("Para el sol de mediodía o para completar el atuendo de fin de semana.",
+            ["Correa ajustable", "Bordado al frente", "Visera curva"]),
+        ["Hoodie gris premium"] = new("Abriga en las mañanas frías sin verse como ropa de casa.",
+            ["Felpa pesada con interior perchado", "Capucha forrada", "Color gris"]),
+        ["Hub USB-C"] = new("Conecta pantalla, memorias y cargador a un portátil que sólo trae puertos USB-C.",
+            ["7 puertos en uno", "HDMI 4K y tres USB-A", "Lector SD y carga passthrough de 100 W"]),
+        ["Libreta de puntos"] = new("Sirve para listas, bocetos, diarios o planes: la retícula guía sin imponer renglones.",
+            ["Tamaño A5", "Retícula de puntos cada 5 mm", "Para escribir o dibujar"]),
+        ["Libreta de tapa dura"] = new("Para tomar notas en reuniones o llevar un diario que aguante el uso diario.",
+            ["Tamaño A5", "160 páginas de papel de 100 g", "Abre plana y no traspasa la tinta"]),
+        ["Llavero de cuero"] = new("Un llavero sencillo que gana carácter con el uso.",
+            ["Cuero curtido al vegetal", "Herraje macizo", "Para llaves de casa, carro o moto"]),
+        ["Morral urbano"] = new("Para ir al trabajo o a clase con el portátil y lo del día en un solo morral.",
+            ["Capacidad de 22 litros", "Compartimento acolchado para laptop de 15 pulgadas", "Espalda ventilada"]),
+        ["Mouse inalámbrico"] = new("Cambia entre el portátil y el computador de escritorio sin volver a emparejar.",
+            ["Clic silencioso", "Conexión 2.4 GHz y Bluetooth", "Botón para cambiar de equipo"]),
+        ["Mousepad de tela"] = new("Ordena el escritorio debajo del teclado y del mouse a la vez.",
+            ["90 × 40 cm", "Tela con borde cosido", "Base antideslizante"]),
+        ["Organizador de cables"] = new("Mantiene los cables del cargador y los audífonos al borde del escritorio.",
+            ["Set de 6 piezas", "Silicona", "Se pegan al escritorio"]),
+        ["Organizador de escritorio"] = new("Un sitio para bolígrafos, notas y el celular, para que el escritorio respire.",
+            ["Bambú macizo", "5 compartimentos", "Para lápices, notas y celular"]),
+        ["Pack de stickers"] = new("Para personalizar la laptop, la agenda o la botella.",
+            ["10 unidades", "Vinilo resistente al agua", "Para superficies lisas"]),
+        ["Set de notas adhesivas"] = new("Para recordatorios, lluvias de ideas o marcar páginas.",
+            ["5 blocs", "Adhesivo reposicionable", "No deja residuo"]),
+        ["Taza cerámica"] = new("La taza del café de la mañana, en casa o en la oficina.",
+            ["Cerámica de 350 ml", "Apta para microondas", "Apta para lavavajillas"]),
+        ["Tote bag de lona"] = new("Para el mercado, la playa o el día a día, en lugar de las bolsas plásticas.",
+            ["Lona resistente", "Asas reforzadas", "Reutilizable"]),
+    };
+
+    /// <summary>
+    /// Las 24 fichas de la Tienda: la descripción suma para qué sirve el producto, «Detalles» deja el texto genérico
+    /// (igual en todas) por la lista de lo que el producto declara, y el cierre deja el voseo («Agregá… completá»).
+    /// Idempotente: una ficha que ya dice lo nuevo no se toca.
+    /// </summary>
+    public Resultado FichasDeLaTienda()
+    {
+        var productos = PaginasDeProducto(DevTiendaPorPaginas.Tienda);
+        var mision = KeyOf("elementCorpMissionBlock");
+        var split = KeyOf("elementCompMediaTextSplit");
+        var cierre = KeyOf("elementCompCtaBanner");
+        int cambiadas = 0, sinFicha = 0;
+
+        foreach (var (nombre, pagina) in productos)
+        {
+            if (!Fichas.TryGetValue(nombre, out var ficha)) { sinFicha++; continue; }
+            var descripcion = (pagina.GetValue<string>("productDescriptionText", Cultura) ?? pagina.GetValue<string>("productDescriptionText") ?? string.Empty)
+                .Replace("Personalizá", "Personaliza", StringComparison.Ordinal);
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            Func<string, string> html = TextoHtml;
+
+            cuerpo.Reemplazar(mision, "textBody", $"<p>{html(descripcion)}</p><p>{html(ficha.Uso)}</p>",
+                CuerpoEditable.Donde("headingTitle", "Descripción"));
+            cuerpo.Reemplazar(split, "textBody",
+                "<ul>" + string.Concat(ficha.Detalles.Select(d => $"<li>{html(d)}</li>")) + "</ul>",
+                CuerpoEditable.Donde("headingTitle", "Detalles"));
+            cuerpo.Reemplazar(cierre, "headingSubtitle", "Agrega al carrito y completa tu compra en minutos.",
+                CuerpoEditable.Donde("headingTitle", "¿Listo para comprar?"));
+
+            var descripcionCambio = false;
+            foreach (var cultura in new string?[] { Cultura, null })
+            {
+                if (!pagina.HasProperty("productDescriptionText")) { break; }
+                var actual = pagina.GetValue<string>("productDescriptionText", cultura);
+                if (actual is not null && actual.Contains("Personalizá", StringComparison.Ordinal))
+                {
+                    pagina.SetValue("productDescriptionText", actual.Replace("Personalizá", "Personaliza", StringComparison.Ordinal), cultura);
+                    descripcionCambio = true;
+                }
+            }
+
+            if (!cuerpo.Cambio && !descripcionCambio) { continue; }
+            if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+
+        var detalle = $"fichas:{cambiadas};sin-ficha:{sinFicha}";
+        _logger.LogInformation("Fichas de la Tienda: {Detalle}.", detalle);
+        return new Resultado(sinFicha == 0, "tienda-fichas", detalle, cambiadas);
+    }
+
+    // ───────────────────────────── Fichas de Propiedades (2.ª medición, punto 1) ─────────────────────────────
+
+    /// <summary>
+    /// La ficha técnica de cada inmueble con SUS datos, sacados de lo que su ficha ya dice en «Sobre la propiedad».
+    /// Antes era la misma en las seis, y en el local y la oficina hablaba de «Dormitorios con buena iluminación».
+    /// </summary>
+    private static readonly Dictionary<string, (string Rotulo, string Valor)[]> FichasTecnicas = new(StringComparer.Ordinal)
+    {
+        ["Apartamento de lujo en Chicó"] =
+            [("Área", "120 m²"), ("Habitaciones", "3"), ("Parqueaderos", "2"), ("Destacado", "Balcón con vista panorámica")],
+        ["Apartamento familiar en Cedritos"] =
+            [("Área", "78 m²"), ("Habitaciones", "2"), ("Cocina", "Integral"), ("Conjunto", "Piscina y gimnasio")],
+        ["Casa campestre en Los Lagos"] =
+            [("Área", "180 m²"), ("Habitaciones", "3"), ("Exteriores", "Terraza y BBQ"), ("Lote", "Amplio y arborizado")],
+        ["Casa con jardín en Usaquén"] =
+            [("Área", "240 m² en dos niveles"), ("Habitaciones", "4 y estudio"), ("Jardín", "Privado"), ("Garaje", "Doble")],
+        ["Local comercial en Zona T"] =
+            [("Área", "140 m²"), ("Ubicación", "A pie de calle, en la Zona T"), ("Vitrina", "Amplia, con alto flujo peatonal"), ("Uso", "Retail o gastronomía")],
+        ["Oficina en torre empresarial"] =
+            [("Área", "95 m²"), ("Edificio", "Torre AAA con recepción"), ("Salas de reunión", "2"), ("Vista", "A la ciudad")],
+    };
+
+    private string RecetaFichasDePropiedades()
+    {
+        var fichas = PaginasDeProducto(Propiedades);
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var esLaFichaTecnica = CuerpoEditable.Donde("headingText", "Ficha técnica");
+        int cambiadas = 0, sinDatos = 0;
+
+        foreach (var (nombre, pagina) in fichas)
+        {
+            if (!FichasTecnicas.TryGetValue(nombre, out var datos)) { sinDatos++; continue; }
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.TransformarLista(rejilla, "itemsJson",
+                _ => new JsonArray(datos.Select(d => (JsonNode)new JsonObject { ["heading"] = d.Rotulo, ["body"] = d.Valor }).ToArray()),
+                esLaFichaTecnica);
+            if (!cuerpo.Cambio) { continue; }
+            pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+        return $"fichas-tecnicas:{cambiadas};sin-datos:{sinDatos}";
+    }
+
+    // ───────────────────────────── Promesas de Hoteles (2.ª medición, punto 2) ─────────────────────────────
+
+    /// <summary>La página Reservar de Hoteles, por su Key de uSync.</summary>
+    public static readonly Guid ReservarHoteles = Guid.Parse("cd926cac-d872-4acd-bd51-9b6764ad7625");
+
+    /// <summary>
+    /// Cambia, en los elementos de una lista JSON de los bloques del tipo dado, los campos de <paramref name="cambios"/>
+    /// de los elementos cuyo <paramref name="clave"/> vale <paramref name="valorClave"/>.
+    /// </summary>
+    private static int CambiarEnLista(CuerpoEditable cuerpo, Guid tipo, string propiedad, string clave, string valorClave,
+        params (string Campo, string Valor)[] cambios) =>
+        cuerpo.TransformarLista(tipo, propiedad, lista =>
+        {
+            var nueva = new JsonArray();
+            foreach (var item in lista)
+            {
+                var copia = (JsonObject)item!.DeepClone();
+                if (copia[clave] is JsonValue v && v.TryGetValue<string>(out var texto) && texto == valorClave)
+                {
+                    foreach (var (campo, valor) in cambios) { copia[campo] = valor; }
+                }
+                nueva.Add(copia);
+            }
+            return nueva;
+        });
+
+    /// <summary>
+    /// Hoteles prometía lo que su asistente no hace: «Mejor precio garantizado», confirmación y recordatorios «por
+    /// correo», «Cancelación gratuita hasta 48 horas». El asistente muestra el comprobante con el número de la reserva y,
+    /// por habitación, si la tarifa es reembolsable y su política; el correo sólo sale con Bff.Viajes encendido, que no es
+    /// el modo por defecto. Los textos dicen eso.
+    /// </summary>
+    private string RecetaPromesasDeHoteles()
+    {
+        var n = 0;
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var portada = _contentService.GetById(Hoteles);
+        if (portada is not null)
+        {
+            var cuerpo = new CuerpoEditable(portada.GetValue<string>(Cuerpo, Cultura));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Confirmación inmediata",
+                ("body", "Al confirmar ves tu comprobante con el número de la reserva, sin esperar una llamada."));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Mejor precio garantizado",
+                ("heading", "Tarifas claras"),
+                ("body", "Cada habitación muestra su precio y si la tarifa es reembolsable antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                portada.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(portada, new[] { Cultura });
+                n++;
+            }
+        }
+
+        var reservar = _contentService.GetById(ReservarHoteles);
+        if (reservar is not null)
+        {
+            var cuerpo = new CuerpoEditable(reservar.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
+                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Al confirmar ves tu comprobante con el número de la reserva.</p>");
+            cuerpo.Reemplazar(KeyOf("elementCorpMissionBlock"), "textBody",
+                "<p>El asistente te guía paso a paso y te muestra las habitaciones libres para tus fechas. Antes de confirmar ves el total y si la tarifa es reembolsable.</p>",
+                CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
+            CambiarEnLista(cuerpo, KeyOf("elementSynAccordion"), "itemsJson", "title", "Política de cancelación",
+                ("content", "Depende de la tarifa: el asistente te muestra si es reembolsable y su política de cancelación antes de confirmar."));
+            var preguntas = KeyOf("elementSynFaqSection");
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo modificar mi reserva?",
+                ("answer", "Escríbenos con el número de tu reserva. Los cambios dependen de la política de la tarifa que elegiste."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Recibo recordatorios?",
+                ("answer", "Por ahora no enviamos recordatorios. Guarda el número de reserva que ves al confirmar."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo se cobra la estadía?",
+                ("answer", "El precio se muestra en pesos colombianos y el total aparece antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                reservar.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(reservar, new[] { Cultura });
+                n++;
+            }
+        }
+        return $"paginas:{n}";
+    }
+
     // ───────────────────────────── Atribuciones (I6) ─────────────────────────────
 
     /// <summary>
@@ -708,7 +1046,7 @@ public sealed class DevContenidoDeVerticales
                     {
                         c.Set("headingTitle", t.Titulo)
                          .Set("headingSubtitle", t.Subtitulo)
-                         .Set("textBody", $"<p>{System.Net.WebUtility.HtmlEncode(t.Texto)}</p>")
+                         .Set("textBody", $"<p>{TextoHtml(t.Texto)}</p>")
                          .Set("mediaAlt", t.Alt)
                          .Set("ctaLabel", t.Cta)
                          .Set("ctaLink", Enlace(t.Cta, t.Url));
@@ -805,6 +1143,12 @@ public sealed class DevContenidoDeVerticales
             .Set("ctaItems", lista.Build())
             .ApplyDefaults(_defaults.DefaultsFor(heroKey)));
     }
+
+    /// <summary>Texto plano dentro de HTML: escapa lo que rompe el marcado y deja las tildes como se leen en el editor.</summary>
+    private static string TextoHtml(string texto) =>
+        texto.Replace("&", "&amp;", StringComparison.Ordinal)
+             .Replace("<", "&lt;", StringComparison.Ordinal)
+             .Replace(">", "&gt;", StringComparison.Ordinal);
 
     private static string Enlace(string nombre, string url) =>
         new JsonArray(new JsonObject

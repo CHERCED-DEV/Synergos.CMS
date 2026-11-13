@@ -125,6 +125,24 @@ public sealed class CuerpoEditableTests
         Assert.Null(datos["Espacios"]["columns"]);
     }
 
+    [Fact]
+    public void Transformar_con_filtro_toca_solo_la_lista_del_bloque_que_casa()
+    {
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Ficha técnica").Set("itemsJson", "[{\"heading\":\"Dormitorios\"}]"));
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Por qué buscar con nosotros").Set("itemsJson", "[{\"heading\":\"Listado curado\"}]"));
+        var c = new CuerpoEditable(b.Build());
+
+        var n = c.TransformarLista(Rejilla, "itemsJson",
+            _ => new JsonArray(new JsonObject { ["heading"] = "Área", ["body"] = "140 m²" }),
+            CuerpoEditable.Donde("headingText", "Ficha técnica"));
+
+        Assert.Equal(1, n);
+        Assert.DoesNotContain("Dormitorios", c.Json, StringComparison.Ordinal);
+        Assert.Contains("140 m²", c.Json, StringComparison.Ordinal);
+        Assert.Contains("Listado curado", c.Json, StringComparison.Ordinal);
+    }
+
     private static string[] OrdenDeSecciones(CuerpoEditable c)
     {
         var cuerpo = JsonNode.Parse(c.Json)!;
