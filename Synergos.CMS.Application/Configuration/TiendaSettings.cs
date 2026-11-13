@@ -70,6 +70,18 @@ public sealed class TiendaSettings
     /// </remarks>
     public List<string> RolesDelPersonal { get; init; } = [];
 
+    /// <summary>
+    /// Lo que la tienda promete en la ficha de cada producto (016-contenido-piezas): <c>Envio</c>, <c>Devoluciones</c>,
+    /// <c>Garantia</c>. El texto de cada promesa lo escribe el editor en el diccionario (<c>Shop.Product.Trust.*</c>);
+    /// esto dice cuáles son VERDAD para esta tienda.
+    /// </summary>
+    /// <remarks>
+    /// <b>Sin declarar, la ficha no promete nada.</b> Antes pintaba siempre «Envío gratis a todo el país · Devoluciones en
+    /// 30 días · Garantía del fabricante», en un sitio que avisa que no hace envíos. Un nombre que no se conoce no
+    /// pinta nada.
+    /// </remarks>
+    public List<string> Promesas { get; init; } = [];
+
     /// <summary>Los roles que valen: los declarados o, sin declarar, <see cref="RolPorDefecto"/>.</summary>
     public IReadOnlyList<string> Personal() => RolesDelPersonal.Count > 0 ? RolesDelPersonal : [RolPorDefecto];
 

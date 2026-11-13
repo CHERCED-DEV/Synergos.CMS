@@ -78,10 +78,10 @@ public sealed class CuerpoEditable
     /// Transforma una propiedad que guarda una LISTA en JSON (como texto o como arreglo) en cada bloque del tipo dado.
     /// La forma de guardarla se respeta. Devuelve cuántos bloques cambiaron.
     /// </summary>
-    public int TransformarLista(Guid tipo, string propiedad, Func<JsonArray, JsonArray> transformar)
+    public int TransformarLista(Guid tipo, string propiedad, Func<JsonArray, JsonArray> transformar, Func<JsonObject, bool>? filtro = null)
     {
         var n = 0;
-        foreach (var dato in DatosDe(tipo))
+        foreach (var dato in DatosDe(tipo, filtro))
         {
             var actual = dato[propiedad];
             var comoTexto = actual is JsonValue v && v.TryGetValue<string>(out _);

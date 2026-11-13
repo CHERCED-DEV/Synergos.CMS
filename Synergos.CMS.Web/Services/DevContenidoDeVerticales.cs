@@ -94,6 +94,15 @@ public sealed class DevContenidoDeVerticales
     public Resultado Componer(string vertical)
     {
         if (string.Equals(vertical, "tienda-fichas", StringComparison.OrdinalIgnoreCase)) { return FichasDeLaTienda(); }
+        if (string.Equals(vertical, "hoteles-promesas", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "hoteles-promesas", RecetaPromesasDeHoteles(), 0);
+        }
+        if (string.Equals(vertical, "propiedades-fichas", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaFichasDePropiedades();
+            return new Resultado(hecho.Contains("sin-datos:0", StringComparison.Ordinal), "propiedades-fichas", hecho, 0);
+        }
 
         var tieneReceta = Verticales.TryGetValue(vertical, out var receta);
         var tieneAtribucion = Atribuciones.TryGetValue(vertical, out var atribucion);
@@ -818,6 +827,131 @@ public sealed class DevContenidoDeVerticales
         var detalle = $"fichas:{cambiadas};sin-ficha:{sinFicha}";
         _logger.LogInformation("Fichas de la Tienda: {Detalle}.", detalle);
         return new Resultado(sinFicha == 0, "tienda-fichas", detalle, cambiadas);
+    }
+
+    // ───────────────────────────── Fichas de Propiedades (2.ª medición, punto 1) ─────────────────────────────
+
+    /// <summary>
+    /// La ficha técnica de cada inmueble con SUS datos, sacados de lo que su ficha ya dice en «Sobre la propiedad».
+    /// Antes era la misma en las seis, y en el local y la oficina hablaba de «Dormitorios con buena iluminación».
+    /// </summary>
+    private static readonly Dictionary<string, (string Rotulo, string Valor)[]> FichasTecnicas = new(StringComparer.Ordinal)
+    {
+        ["Apartamento de lujo en Chicó"] =
+            [("Área", "120 m²"), ("Habitaciones", "3"), ("Parqueaderos", "2"), ("Destacado", "Balcón con vista panorámica")],
+        ["Apartamento familiar en Cedritos"] =
+            [("Área", "78 m²"), ("Habitaciones", "2"), ("Cocina", "Integral"), ("Conjunto", "Piscina y gimnasio")],
+        ["Casa campestre en Los Lagos"] =
+            [("Área", "180 m²"), ("Habitaciones", "3"), ("Exteriores", "Terraza y BBQ"), ("Lote", "Amplio y arborizado")],
+        ["Casa con jardín en Usaquén"] =
+            [("Área", "240 m² en dos niveles"), ("Habitaciones", "4 y estudio"), ("Jardín", "Privado"), ("Garaje", "Doble")],
+        ["Local comercial en Zona T"] =
+            [("Área", "140 m²"), ("Ubicación", "A pie de calle, en la Zona T"), ("Vitrina", "Amplia, con alto flujo peatonal"), ("Uso", "Retail o gastronomía")],
+        ["Oficina en torre empresarial"] =
+            [("Área", "95 m²"), ("Edificio", "Torre AAA con recepción"), ("Salas de reunión", "2"), ("Vista", "A la ciudad")],
+    };
+
+    private string RecetaFichasDePropiedades()
+    {
+        var fichas = PaginasDeProducto(Propiedades);
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var esLaFichaTecnica = CuerpoEditable.Donde("headingText", "Ficha técnica");
+        int cambiadas = 0, sinDatos = 0;
+
+        foreach (var (nombre, pagina) in fichas)
+        {
+            if (!FichasTecnicas.TryGetValue(nombre, out var datos)) { sinDatos++; continue; }
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.TransformarLista(rejilla, "itemsJson",
+                _ => new JsonArray(datos.Select(d => (JsonNode)new JsonObject { ["heading"] = d.Rotulo, ["body"] = d.Valor }).ToArray()),
+                esLaFichaTecnica);
+            if (!cuerpo.Cambio) { continue; }
+            pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+        return $"fichas-tecnicas:{cambiadas};sin-datos:{sinDatos}";
+    }
+
+    // ───────────────────────────── Promesas de Hoteles (2.ª medición, punto 2) ─────────────────────────────
+
+    /// <summary>La página Reservar de Hoteles, por su Key de uSync.</summary>
+    public static readonly Guid ReservarHoteles = Guid.Parse("cd926cac-d872-4acd-bd51-9b6764ad7625");
+
+    /// <summary>
+    /// Cambia, en los elementos de una lista JSON de los bloques del tipo dado, los campos de <paramref name="cambios"/>
+    /// de los elementos cuyo <paramref name="clave"/> vale <paramref name="valorClave"/>.
+    /// </summary>
+    private static int CambiarEnLista(CuerpoEditable cuerpo, Guid tipo, string propiedad, string clave, string valorClave,
+        params (string Campo, string Valor)[] cambios) =>
+        cuerpo.TransformarLista(tipo, propiedad, lista =>
+        {
+            var nueva = new JsonArray();
+            foreach (var item in lista)
+            {
+                var copia = (JsonObject)item!.DeepClone();
+                if (copia[clave] is JsonValue v && v.TryGetValue<string>(out var texto) && texto == valorClave)
+                {
+                    foreach (var (campo, valor) in cambios) { copia[campo] = valor; }
+                }
+                nueva.Add(copia);
+            }
+            return nueva;
+        });
+
+    /// <summary>
+    /// Hoteles prometía lo que su asistente no hace: «Mejor precio garantizado», confirmación y recordatorios «por
+    /// correo», «Cancelación gratuita hasta 48 horas». El asistente muestra el comprobante con el número de la reserva y,
+    /// por habitación, si la tarifa es reembolsable y su política; el correo sólo sale con Bff.Viajes encendido, que no es
+    /// el modo por defecto. Los textos dicen eso.
+    /// </summary>
+    private string RecetaPromesasDeHoteles()
+    {
+        var n = 0;
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var portada = _contentService.GetById(Hoteles);
+        if (portada is not null)
+        {
+            var cuerpo = new CuerpoEditable(portada.GetValue<string>(Cuerpo, Cultura));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Confirmación inmediata",
+                ("body", "Al confirmar ves tu comprobante con el número de la reserva, sin esperar una llamada."));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Mejor precio garantizado",
+                ("heading", "Tarifas claras"),
+                ("body", "Cada habitación muestra su precio y si la tarifa es reembolsable antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                portada.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(portada, new[] { Cultura });
+                n++;
+            }
+        }
+
+        var reservar = _contentService.GetById(ReservarHoteles);
+        if (reservar is not null)
+        {
+            var cuerpo = new CuerpoEditable(reservar.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
+                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Al confirmar ves tu comprobante con el número de la reserva.</p>");
+            cuerpo.Reemplazar(KeyOf("elementCorpMissionBlock"), "textBody",
+                "<p>El asistente te guía paso a paso y te muestra las habitaciones libres para tus fechas. Antes de confirmar ves el total y si la tarifa es reembolsable.</p>",
+                CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
+            CambiarEnLista(cuerpo, KeyOf("elementSynAccordion"), "itemsJson", "title", "Política de cancelación",
+                ("content", "Depende de la tarifa: el asistente te muestra si es reembolsable y su política de cancelación antes de confirmar."));
+            var preguntas = KeyOf("elementSynFaqSection");
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo modificar mi reserva?",
+                ("answer", "Escríbenos con el número de tu reserva. Los cambios dependen de la política de la tarifa que elegiste."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Recibo recordatorios?",
+                ("answer", "Por ahora no enviamos recordatorios. Guarda el número de reserva que ves al confirmar."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo se cobra la estadía?",
+                ("answer", "El precio se muestra en pesos colombianos y el total aparece antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                reservar.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(reservar, new[] { Cultura });
+                n++;
+            }
+        }
+        return $"paginas:{n}";
     }
 
     // ───────────────────────────── Atribuciones (I6) ─────────────────────────────
