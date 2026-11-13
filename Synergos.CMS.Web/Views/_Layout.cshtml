@@ -30,6 +30,10 @@
     var siteRoot = currentPage?.AncestorOrSelf("siteRoot") ?? currentPage?.Root();
     var siteName = siteRoot?.Value<string>("siteDisplayName");
     if (string.IsNullOrWhiteSpace(siteName)) { siteName = "Synergos"; }
+    // La frase del pie es la descripción del sitio (016-contenido-piezas): cada vertical dice lo suyo. Un sitio sin
+    // descripción conserva la frase del motor, como antes.
+    var footerTagline = siteRoot?.Value<string>("seoDescription");
+    if (string.IsNullOrWhiteSpace(footerTagline)) { footerTagline = "Un código, un schema, infinitos productos."; }
     var yearNow = DateTime.UtcNow.Year;
     // Sólo PÁGINAS (#185): la carpeta de configuración cuelga del siteRoot y no se pinta.
     var navItems = Synergos.CMS.Web.Services.NavegacionDelSitio.Enlaces(siteRoot, "hideFromMainMenu", ValueFallback);
@@ -275,7 +279,7 @@
                                     <img class="syn-site-footer__logo" src="@logoUrl" alt="" width="36" height="36" loading="lazy" />
                                     <span class="syn-site-footer__brand-name">@siteName</span>
                                 </a>
-                                <p class="syn-site-footer__tagline">Un código, un schema, infinitos productos.</p>
+                                <p class="syn-site-footer__tagline">@footerTagline</p>
                             </div>
                             <nav class="syn-site-footer__nav" aria-label="@Umbraco.GetDictionaryValueOrDefault("Nav.FooterNavLabel", "Navegación del pie de página")">
                                 <p class="syn-site-footer__nav-title">@Umbraco.GetDictionaryValueOrDefault("Footer.NavigationTitle", "Navegación")</p>

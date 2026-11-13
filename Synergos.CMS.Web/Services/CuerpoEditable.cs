@@ -49,9 +49,9 @@ public sealed class CuerpoEditable
     /// Pone las secciones de <paramref name="nuevo"/> justo antes de la sección de arriba que contiene un bloque del
     /// tipo <paramref name="antesDe"/>; si no hay ninguna, al final. Devuelve cuántas.
     /// </summary>
-    public int InsertarSeccionesAntesDe(Guid antesDe, string nuevo)
+    public int InsertarSeccionesAntesDe(Guid antesDe, string nuevo, Func<JsonObject, bool>? filtro = null)
     {
-        var udis = DatosDe(antesDe).Select(d => d["udi"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var udis = DatosDe(antesDe, filtro).Select(d => d["udi"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
         var indice = Layout.Select((s, i) => (s, i)).FirstOrDefault(x => UdisDe(x.s!).Any(udis.Contains), (null, -1)).Item2;
         if (indice < 0) { return Sumar(nuevo); }
         return Pegar(nuevo, alPrincipio: false, en: indice);
@@ -73,6 +73,35 @@ public sealed class CuerpoEditable
         if (n > 0) { Cambios++; }
         return n;
     }
+
+    /// <summary>
+    /// Transforma una propiedad que guarda una LISTA en JSON (como texto o como arreglo) en cada bloque del tipo dado.
+    /// La forma de guardarla se respeta. Devuelve cuántos bloques cambiaron.
+    /// </summary>
+    public int TransformarLista(Guid tipo, string propiedad, Func<JsonArray, JsonArray> transformar)
+    {
+        var n = 0;
+        foreach (var dato in DatosDe(tipo))
+        {
+            var actual = dato[propiedad];
+            var comoTexto = actual is JsonValue v && v.TryGetValue<string>(out _);
+            var lista = comoTexto
+                ? JsonNode.Parse(actual!.GetValue<string>()) as JsonArray
+                : actual?.DeepClone() as JsonArray;
+            if (lista is null) { continue; }
+            var nueva = transformar(lista);
+            JsonNode valor = comoTexto ? JsonValue.Create(nueva.ToJsonString(Legible))! : nueva;
+            if (JsonNode.DeepEquals(actual, valor)) { continue; }
+            dato[propiedad] = valor;
+            n++;
+        }
+        if (n > 0) { Cambios++; }
+        return n;
+    }
+
+    /// <summary>Un filtro para las operaciones: los bloques cuya <paramref name="propiedad"/> vale <paramref name="valor"/>.</summary>
+    public static Func<JsonObject, bool> Donde(string propiedad, string valor) =>
+        d => d[propiedad] is JsonValue v && v.TryGetValue<string>(out var texto) && string.Equals(texto, valor, StringComparison.Ordinal);
 
     /// <summary>Lo mismo con un texto.</summary>
     public int Reemplazar(Guid tipo, string propiedad, string valor) => Reemplazar(tipo, propiedad, JsonValue.Create(valor)!);
@@ -107,9 +136,9 @@ public sealed class CuerpoEditable
     /// Desconecta de esta página cada sección de arriba que contiene un bloque del tipo dado: sale del layout y salen
     /// sus datos. El tipo sigue en el esquema. Devuelve cuántas secciones quitó.
     /// </summary>
-    public int DesconectarSeccionesCon(Guid tipo)
+    public int DesconectarSeccionesCon(Guid tipo, Func<JsonObject, bool>? filtro = null)
     {
-        var udis = DatosDe(tipo).Select(d => d["udi"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var udis = DatosDe(tipo, filtro).Select(d => d["udi"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
         if (udis.Count == 0) { return 0; }
 
         var quitadas = 0;
@@ -152,11 +181,12 @@ public sealed class CuerpoEditable
         return items.Count;
     }
 
-    private IEnumerable<JsonObject> DatosDe(Guid tipo)
+    private IEnumerable<JsonObject> DatosDe(Guid tipo, Func<JsonObject, bool>? filtro = null)
     {
         var clave = tipo.ToString("D");
         return Lista("contentData").OfType<JsonObject>()
             .Where(d => string.Equals(d["contentTypeKey"]?.GetValue<string>(), clave, StringComparison.OrdinalIgnoreCase))
+            .Where(d => filtro is null || filtro(d))
             .ToList();
     }
 

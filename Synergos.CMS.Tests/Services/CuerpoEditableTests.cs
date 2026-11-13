@@ -81,6 +81,34 @@ public sealed class CuerpoEditableTests
         Assert.Equal(new[] { "primera", "uno", "antes-de-la-rejilla", "dos", "ultima" }, OrdenDeSecciones(c));
     }
 
+    [Fact]
+    public void Transformar_una_lista_guardada_como_texto_la_deja_como_texto_y_no_repite()
+    {
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("itemsJson", "[{\"author\":\"Nombre Inventado\"}]"));
+        var c = new CuerpoEditable(b.Build());
+
+        static JsonArray PorRol(JsonArray l) => new(l.Select(t => (JsonNode)new JsonObject { ["author"] = "Compradora" }).ToArray());
+
+        Assert.Equal(1, c.TransformarLista(Rejilla, "itemsJson", PorRol));
+        Assert.Equal(0, c.TransformarLista(Rejilla, "itemsJson", PorRol));
+        Assert.Contains("Compradora", c.Json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Inventado", c.Json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Desconectar_con_filtro_quita_solo_la_seccion_que_casa()
+    {
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Cursos destacados"));
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Por qué aprender con nosotros"));
+        var c = new CuerpoEditable(b.Build());
+
+        Assert.Equal(1, c.DesconectarSeccionesCon(Rejilla, CuerpoEditable.Donde("headingText", "Cursos destacados")));
+        Assert.DoesNotContain("Cursos destacados", c.Json, StringComparison.Ordinal);
+        Assert.Contains("Por qué aprender con nosotros", c.Json, StringComparison.Ordinal);
+    }
+
     private static string[] OrdenDeSecciones(CuerpoEditable c)
     {
         var cuerpo = JsonNode.Parse(c.Json)!;
