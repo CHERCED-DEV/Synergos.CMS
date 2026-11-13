@@ -26,6 +26,11 @@ public sealed class DevContenidoDeVerticales
     /// <summary>La raíz de sitio Viajes (<c>/SynergosLabs/Viajes</c>), por su Key de uSync.</summary>
     public static readonly Guid Viajes = Guid.Parse("54097be5-a62e-4c93-b674-416751667009");
 
+    /// <summary>Las raíces de sitio Propiedades, Booking y Hoteles, por su Key de uSync.</summary>
+    public static readonly Guid Propiedades = Guid.Parse("5b2d7960-2cc3-4dad-9514-f7d0bbdcacf7");
+    public static readonly Guid Booking = Guid.Parse("37bf2ce2-76e7-402e-b3b0-f2b93c447c86");
+    public static readonly Guid Hoteles = Guid.Parse("64304927-0464-4231-968b-08f39393ffbc");
+
     private static readonly Guid AreaDeLaSeccion = LayoutComposerKeys.SectionContentArea;
     private static readonly Guid[] AreasDeTresColumnas =
     [
@@ -60,14 +65,17 @@ public sealed class DevContenidoDeVerticales
         _logger = logger;
     }
 
-    /// <summary>Las verticales que la herramienta sabe componer, con la página y el cuerpo de cada una.</summary>
-    public IReadOnlyDictionary<string, (Guid Pagina, Func<BlockGridJsonBuilder, string> Componer)> Verticales =>
-        new Dictionary<string, (Guid, Func<BlockGridJsonBuilder, string>)>(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Las verticales que la herramienta sabe componer: la página y la receta de cada una.</summary>
+    public IReadOnlyDictionary<string, (Guid Pagina, Func<CuerpoEditable, string> Receta)> Verticales =>
+        new Dictionary<string, (Guid, Func<CuerpoEditable, string>)>(StringComparer.OrdinalIgnoreCase)
         {
-            ["viajes"] = (Viajes, ComponerViajes),
+            ["viajes"] = (Viajes, RecetaViajes),
+            ["propiedades"] = (Propiedades, RecetaPropiedades),
+            ["booking"] = (Booking, RecetaBooking),
+            ["hoteles"] = (Hoteles, RecetaHoteles),
         };
 
-    /// <summary>Suma el contenido de <paramref name="vertical"/> al final de su página. Idempotente.</summary>
+    /// <summary>Aplica la receta de <paramref name="vertical"/> sobre el cuerpo de su página. Idempotente.</summary>
     public Resultado Componer(string vertical)
     {
         if (!Verticales.TryGetValue(vertical, out var receta))
@@ -78,20 +86,15 @@ public sealed class DevContenidoDeVerticales
         var pagina = _contentService.GetById(receta.Pagina);
         if (pagina is null) { return new Resultado(false, vertical, "pagina-no-encontrada", 0); }
 
-        var marca = Marca(vertical);
-        var actual = pagina.GetValue<string>(Cuerpo, Cultura) ?? string.Empty;
-        if (actual.Contains(marca, StringComparison.Ordinal))
+        var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+        var detalle = receta.Receta(cuerpo);
+        if (!cuerpo.Cambio)
         {
-            _logger.LogInformation("Contenido {Vertical}: la página ya tiene la marca {Marca} — no se toca.", vertical, marca);
-            return new Resultado(true, vertical, "ya-compuesta", 0);
+            _logger.LogInformation("Contenido {Vertical}: nada que cambiar — no se toca.", vertical);
+            return new Resultado(true, vertical, "sin-cambios", 0);
         }
 
-        var b = new BlockGridJsonBuilder();
-        var detalle = receta.Componer(b);
-        var nuevo = b.Build();
-        var (unido, secciones) = Sumar(actual, nuevo);
-
-        pagina.SetValue(Cuerpo, unido, Cultura);
+        pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
         var save = _contentService.SaveAndPublish(pagina, new[] { Cultura });
         if (!save.Success)
         {
@@ -100,8 +103,8 @@ public sealed class DevContenidoDeVerticales
             return new Resultado(false, vertical, $"save-failed:{save.Result}:[{invalidas}]", 0);
         }
 
-        _logger.LogInformation("Contenido {Vertical}: {N} secciones sumadas ({Detalle}).", vertical, secciones, detalle);
-        return new Resultado(true, vertical, detalle, secciones);
+        _logger.LogInformation("Contenido {Vertical}: {Detalle}.", vertical, detalle);
+        return new Resultado(true, vertical, detalle, cuerpo.Cambios);
     }
 
     public static string Marca(string vertical) => $"syn-contenido--{vertical.ToLowerInvariant()}";
@@ -111,33 +114,19 @@ public sealed class DevContenidoDeVerticales
     /// </summary>
     public static (string Json, int SeccionesNuevas) Sumar(string actual, string nuevo)
     {
-        var b = JsonNode.Parse(nuevo)!.AsObject();
-        if (string.IsNullOrWhiteSpace(actual)) { return (b.ToJsonString(), LayoutDe(b).Count); }
-
-        var a = JsonNode.Parse(actual)!.AsObject();
-        var layoutA = LayoutDe(a);
-        var layoutB = LayoutDe(b);
-        var n = layoutB.Count;
-        foreach (var item in layoutB.ToList()) { layoutB.Remove(item); layoutA.Add(item); }
-        foreach (var prop in new[] { "contentData", "settingsData" })
-        {
-            var destino = a[prop] as JsonArray ?? new JsonArray();
-            a[prop] = destino;
-            if (b[prop] is JsonArray origen)
-            {
-                foreach (var item in origen.ToList()) { origen.Remove(item); destino.Add(item); }
-            }
-        }
-        return (a.ToJsonString(), n);
+        var cuerpo = new CuerpoEditable(actual);
+        var n = cuerpo.Sumar(nuevo);
+        return (cuerpo.Json, n);
     }
 
-    private static JsonArray LayoutDe(JsonObject cuerpo)
+    /// <summary>Lo que la receta de Viajes deja: las secciones nuevas al final, una sola vez.</summary>
+    private string RecetaViajes(CuerpoEditable cuerpo)
     {
-        var layout = cuerpo["layout"] as JsonObject ?? new JsonObject();
-        cuerpo["layout"] = layout;
-        var grid = layout["Umbraco.BlockGrid"] as JsonArray ?? new JsonArray();
-        layout["Umbraco.BlockGrid"] = grid;
-        return grid;
+        if (cuerpo.Contiene(Marca("viajes"))) { return "ya-compuesta"; }
+        var b = new BlockGridJsonBuilder();
+        var detalle = ComponerViajes(b);
+        cuerpo.Sumar(b.Build());
+        return detalle;
     }
 
     // ───────────────────────────── Viajes ─────────────────────────────
@@ -200,9 +189,126 @@ public sealed class DevContenidoDeVerticales
         return $"estadias:{tarjetas.Length};por-que:3;como-funciona:3;preguntas:4;cierre:1";
     }
 
+    // ───────────────────────────── Propiedades ─────────────────────────────
+
+    private sealed record Inmueble(string Slug, string Titulo, string Ciudad, string Alt);
+
+    /// <summary>Los inmuebles del catálogo de la app (<c>/api/realty/listings</c>), con su foto CC0 de <c>media/realty</c>.</summary>
+    private static readonly Inmueble[] EnVenta =
+    [
+        new("apto-chico-norte-bogota", "Apartamento en Chicó Norte", "Bogotá", "Sala con sofá de cuero negro y un cuadro de letras en la pared"),
+        new("apto-bocagrande-cartagena", "Apartamento en Bocagrande", "Cartagena", "Sala blanca con chimenea y ventanales hacia el mar"),
+        new("casa-laureles-medellin", "Casa en Laureles", "Medellín", "Casa de madera amarilla de un piso con jardín al frente"),
+        new("apto-manga-cartagena", "Apartamento en Manga", "Cartagena", "Edificio de apartamentos con balcones y comercio en el primer piso"),
+    ];
+
+    private static readonly Inmueble[] EnArriendoYComercial =
+    [
+        new("apto-arriendo-poblado-medellin", "Apartamento en El Poblado", "Medellín", "Sala con sofás claros, chimenea y lámpara de araña"),
+        new("casa-arriendo-cedritos-bogota", "Casa en Cedritos", "Bogotá", "Casa blanca de madera con porche y jardín"),
+        new("oficina-santa-monica-cali", "Oficina en Santa Mónica", "Cali", "Persona trabajando en un portátil sobre planos en una oficina"),
+        new("local-comercial-centro-cali", "Local comercial en el Centro", "Cali", "Ropa colgada en los exhibidores de un local comercial"),
+    ];
+
+    private string RecetaPropiedades(CuerpoEditable cuerpo)
+    {
+        string Url(Inmueble i) => _media.GetOrCreatePhotoUrl($"Foto Propiedades {i.Titulo}", i.Alt, Foto("realty", i.Slug + ".jpg"), LicenciaCc0);
+        static string Ficha(Inmueble i) => $"/propiedades/#/realty/inmueble/{i.Slug}";
+
+        var carrusel = KeyOf("elementSynCarousel");
+        var galeria = KeyOf("elementSynLightboxGallery");
+
+        var diapositivas = new JsonArray(EnVenta.Select(i => (JsonNode)new JsonObject
+        {
+            ["imageUrl"] = Url(i), ["alt"] = i.Alt, ["caption"] = $"{i.Titulo} · {i.Ciudad}", ["linkUrl"] = Ficha(i),
+        }).ToArray());
+        var fotos = new JsonArray(EnArriendoYComercial.Select(i => (JsonNode)new JsonObject
+        {
+            ["thumbUrl"] = Url(i), ["fullUrl"] = Url(i), ["alt"] = i.Alt, ["caption"] = $"{i.Titulo} · {i.Ciudad}",
+        }).ToArray());
+
+        var n = cuerpo.Reemplazar(carrusel, "slidesJson", diapositivas.ToJsonString());
+        n += cuerpo.Reemplazar(galeria, "imagesJson", fotos.ToJsonString());
+        n += cuerpo.Reemplazar(galeria, "columns", "4");
+        var t1 = cuerpo.InsertarAntesDe(carrusel, UnEncabezado("Inmuebles destacados en venta"), "Inmuebles destacados en venta");
+        var t2 = cuerpo.InsertarAntesDe(galeria, UnEncabezado("En arriendo y para tu negocio"), "En arriendo y para tu negocio");
+        return $"carrusel:{EnVenta.Length};galeria:{EnArriendoYComercial.Length};propiedades-cambiadas:{n};titulos:{(t1 ? 1 : 0) + (t2 ? 1 : 0)}";
+    }
+
+    // ───────────────────────────── Booking ─────────────────────────────
+
+    private sealed record Categoria(string Nombre, string Servicios, string Texto, string Url, string? Ilustracion, string Alt);
+
+    /// <summary>Las tres categorías de <c>/booking/</c> con sus servicios (las páginas hijas del sitio).</summary>
+    private static readonly Categoria[] CategoriasDeBooking =
+    [
+        new("Consultoría", "Asesoría express · 30 min y consultoría estratégica · 60 min",
+            "Una sesión corta para resolver una duda puntual o una hora completa para revisar la estrategia de tu negocio.",
+            "/booking/consultoria/", "imgs/infofeat 4.png", "Ilustración de un bombillo con un engranaje y gráficas de análisis"),
+        new("Espacios", "Sala de reuniones · 2 h y auditorio · jornada",
+            "Pide la sala para tu equipo o el auditorio para un evento; te contactan para confirmar el horario.",
+            "/booking/espacios/", "imgs/infofeat 5.png", "Ilustración de un equipo reunido alrededor de una mesa de trabajo"),
+        new("Bienestar", "Masaje terapéutico · 60 min y plan nutricional · valoración",
+            "Agenda tu sesión de masaje o la valoración para empezar un plan nutricional a tu medida.",
+            "/booking/bienestar/", null, "Bienestar"),
+    ];
+
+    private string RecetaBooking(CuerpoEditable cuerpo)
+    {
+        // Desconectar, no borrar (decisión del director, 2026-11-13): el portal de viajes sale de ESTA portada; el bloque
+        // y su tipo siguen en el esquema y Viajes conserva su portal en /viajes/.
+        var fuera = cuerpo.DesconectarSeccionesCon(KeyOf("elementSynTravelShell"));
+        if (cuerpo.Contiene(Marca("booking"))) { return $"buscador-desconectado:{fuera};servicios:ya"; }
+
+        var b = new BlockGridJsonBuilder();
+        Portada(b, "Agenda tu cita en minutos",
+            "Consultoría, espacios y bienestar, sin llamadas.",
+            "<p>Elige el servicio, el día y la hora y deja tus datos: tu solicitud le llega al negocio al instante y te contactan para confirmarla.</p>",
+            "Booking Hero", "Portada de reservas de servicios", "#0F2A4A", "#1F7A8C",
+            ("Ver servicios", "/booking/servicios/"), ("Reservar", "/booking/reservar/"));
+
+        var servicios = Seccion(b, null, Marca("booking"));
+        Encabezado(servicios, "Lo que puedes reservar");
+        var tarjetas = CategoriasDeBooking.Select(c => new Tarjeta(
+            c.Nombre, c.Servicios, c.Texto,
+            c.Ilustracion is null ? null : IlustracionDelKit($"Ilustración Booking {c.Nombre}", c.Alt, c.Ilustracion),
+            c.Alt, $"Ver {c.Nombre.ToLowerInvariant()}", c.Url)).ToArray();
+        FilasDeTarjetas(servicios, tarjetas);
+
+        var nuevas = cuerpo.InsertarAlPrincipio(b.Build());
+        return $"buscador-desconectado:{fuera};secciones-arriba:{nuevas};categorias:{tarjetas.Length}";
+    }
+
+    // ───────────────────────────── Hoteles ─────────────────────────────
+
+    private string RecetaHoteles(CuerpoEditable cuerpo)
+    {
+        // El asistente de /hoteles/ tiene cuatro pasos (Fechas, Habitación, Huésped, Revisar): el bloque decía tres.
+        var mision = KeyOf("elementCorpMissionBlock");
+        var n = cuerpo.Reemplazar(mision, "headingTitle", "Reserva en cuatro pasos");
+        // El texto del hero hablaba del motor («sobre el mismo motor»): al huésped le habla de su estadía.
+        n += cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
+            "<p>Elige tus fechas, escoge la habitación que te sirve y confirma tu estadía con la disponibilidad al día.</p>");
+        n += cuerpo.Reemplazar(mision, "textBody",
+            "<p>Elige fechas y huéspedes, escoge la habitación, completa tus datos y revisa todo antes de confirmar. El asistente te guía paso a paso.</p>");
+
+        if (cuerpo.Contiene(Marca("hoteles"))) { return $"pasos:{n};habitaciones:ya"; }
+
+        // Las habitaciones que vende el asistente (StubRoomAvailabilityProvider): tipo y cuántos caben. El precio sale al
+        // elegir fechas, por eso no se promete aquí.
+        var b = new BlockGridJsonBuilder();
+        RejillaConMarca(b, null, Marca("hoteles"), "Nuestras habitaciones", 4,
+            ("Habitación Estándar", "Hasta 2 huéspedes. Para un viaje corto o de trabajo."),
+            ("Habitación Deluxe", "Hasta 3 huéspedes, con más espacio para descansar."),
+            ("Suite Junior", "Hasta 4 huéspedes, con zona de estar aparte."),
+            ("Habitación Familiar", "Hasta 5 huéspedes, para viajar con los niños."));
+        var nuevas = cuerpo.InsertarSeccionesAntesDe(mision, b.Build());
+        return $"pasos:{n};habitaciones:{nuevas}";
+    }
+
     // ───────────────────────────── Piezas de composición ─────────────────────────────
 
-    private sealed record Tarjeta(string Titulo, string Subtitulo, string Texto, string Foto, string Alt, string Cta, string Url);
+    private sealed record Tarjeta(string Titulo, string Subtitulo, string Texto, string? Foto, string Alt, string Cta, string Url);
 
     private string Foto(string dominio, string archivo) =>
         Path.Combine(_env.WebRootPath, "media", dominio, archivo);
@@ -239,24 +345,30 @@ public sealed class DevContenidoDeVerticales
                 for (var j = 0; j < fila.Length; j++)
                 {
                     var t = fila[j];
-                    col.AddChild(AreasDeTresColumnas[j], cardKey, c => c
-                        .Set("headingTitle", t.Titulo)
-                        .Set("headingSubtitle", t.Subtitulo)
-                        .Set("textBody", $"<p>{System.Net.WebUtility.HtmlEncode(t.Texto)}</p>")
-                        .Set("mediaReference", t.Foto)
-                        .Set("mediaAlt", t.Alt)
-                        .Set("ctaLabel", t.Cta)
-                        .Set("ctaLink", Enlace(t.Cta, t.Url))
-                        .ApplyDefaults(_defaults.DefaultsFor(cardKey)));
+                    col.AddChild(AreasDeTresColumnas[j], cardKey, c =>
+                    {
+                        c.Set("headingTitle", t.Titulo)
+                         .Set("headingSubtitle", t.Subtitulo)
+                         .Set("textBody", $"<p>{System.Net.WebUtility.HtmlEncode(t.Texto)}</p>")
+                         .Set("mediaAlt", t.Alt)
+                         .Set("ctaLabel", t.Cta)
+                         .Set("ctaLink", Enlace(t.Cta, t.Url));
+                        if (t.Foto is not null) { c.Set("mediaReference", t.Foto); }
+                        c.ApplyDefaults(_defaults.DefaultsFor(cardKey));
+                    });
                 }
             });
         }
     }
 
     private void Rejilla(BlockGridJsonBuilder b, string? tema, string titulo, int columnas, params (string titulo, string texto)[] items)
+        => RejillaConMarca(b, tema, null, titulo, columnas, items);
+
+    private void RejillaConMarca(BlockGridJsonBuilder b, string? tema, string? clase, string titulo, int columnas,
+        params (string titulo, string texto)[] items)
     {
         var key = KeyOf("elementSynFeatureGrid");
-        var s = Seccion(b, tema);
+        var s = Seccion(b, tema, clase);
         var json = new JsonArray(items.Select(i => (JsonNode)new JsonObject { ["heading"] = i.titulo, ["body"] = i.texto }).ToArray());
         s.AddChild(AreaDeLaSeccion, key, c => c
             .Set("headingText", titulo)
@@ -286,6 +398,53 @@ public sealed class DevContenidoDeVerticales
             .Set("ctaLabel", cta)
             .Set("ctaLink", Enlace(cta, url))
             .ApplyDefaults(_defaults.DefaultsFor(key)));
+    }
+
+    /// <summary>Un cuerpo de una sola pieza, un encabezado, para ponerlo antes de otro bloque.</summary>
+    private string UnEncabezado(string titulo)
+    {
+        var key = KeyOf("elementTextHeading");
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(key).Set("headingTitle", titulo).ApplyDefaults(_defaults.DefaultsFor(key));
+        return b.Build();
+    }
+
+    private string IlustracionDelKit(string nombre, string alt, string relativa) =>
+        DevMediaFactory.KitPath(relativa) is { } ruta
+            ? _media.GetOrCreatePhotoPickerValue(nombre, alt, ruta, null, DevMediaFactory.FolderIlustraciones)
+            : throw new FileNotFoundException($"No encuentro la ilustración del kit '{relativa}' (_archive/multimedia; SYNERGOS_ARCHIVE_ROOT).");
+
+    /// <summary>
+    /// La portada de una página: <c>elementCompHero</c> pegado al encabezado, con botones. El fondo es el gradiente
+    /// limpio de marca de la carpeta Heroes (la regla de imágenes: los heroes oscuros no llevan ilustración).
+    /// </summary>
+    private void Portada(BlockGridJsonBuilder b, string titulo, string subtitulo, string cuerpo,
+        string imagen, string alt, string desde, string hasta, params (string texto, string url)[] botones)
+    {
+        var seccionKey = KeyOf("elementLayoutSection");
+        var heroKey = KeyOf("elementCompHero");
+        var botonKey = KeyOf("elementActionButton");
+        var s = b.AddTopLevelBlock(seccionKey);
+        s.Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]");
+        s.ApplyDefaults(_defaults.DefaultsFor(seccionKey));
+
+        var lista = new BlockListJsonBuilder();
+        for (var i = 0; i < botones.Length; i++)
+        {
+            var boton = lista.AddBlock(botonKey).Set("ctaLabel", botones[i].texto).Set("ctaLink", Enlace(botones[i].texto, botones[i].url));
+            if (i > 0) { boton.Set("variantKey", "[\"secondary\"]"); }
+            boton.ApplyDefaults(_defaults.DefaultsFor(botonKey));
+        }
+
+        var picker = _media.GetOrCreatePickerValue(imagen, alt, desde, hasta, 1600, 720);
+        s.AddChild(AreaDeLaSeccion, heroKey, h => h
+            .Set("headingTitle", titulo)
+            .Set("headingSubtitle", subtitulo)
+            .Set("textBody", cuerpo)
+            .Set("mediaReference", picker)
+            .Set("mediaAlt", alt)
+            .Set("ctaItems", lista.Build())
+            .ApplyDefaults(_defaults.DefaultsFor(heroKey)));
     }
 
     private static string Enlace(string nombre, string url) =>
