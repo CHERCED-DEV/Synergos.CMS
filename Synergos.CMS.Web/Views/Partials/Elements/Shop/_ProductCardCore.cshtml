@@ -34,6 +34,7 @@
    ejecución y estas vistas no se compilan en el build. *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<(Synergos.CMS.Interfaces.ProductSummary Product, string Classes, string Url, bool ShowPrice, bool ShowAddToCart, string HeadingTag)>
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@inject Microsoft.Extensions.Options.IOptionsMonitor<Synergos.CMS.Application.Configuration.CompraFeatureSettings> Compra
 @{
     var p = Model.Product;
     var heading = string.IsNullOrWhiteSpace(Model.HeadingTag) ? "h3" : Model.HeadingTag;
@@ -55,7 +56,10 @@
             <span class="syn-product-card__out-of-stock">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</span>
         }
     </a>
-    @if (Model.ShowAddToCart && p.InStock)
+    @* Sólo en un sitio que vende en línea (Synergos:Features:Compra), por el siteRoot de la página que pinta la
+       tarjeta: la base no tiene dominios. *@
+    @if (Model.ShowAddToCart && p.InStock
+         && Compra.CurrentValue.Para(UmbracoContext?.PublishedRequest?.PublishedContent?.AncestorOrSelf("siteRoot")?.Key).EnLinea)
     {
         <button type="button"
                 class="syn-product-card__add-to-cart"

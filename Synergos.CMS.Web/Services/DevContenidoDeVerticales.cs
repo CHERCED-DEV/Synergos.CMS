@@ -98,6 +98,15 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "hoteles-promesas", RecetaPromesasDeHoteles(), 0);
         }
+        if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaEntradasDeCategorias();
+            return new Resultado(hecho.EndsWith("faltan:0", StringComparison.Ordinal), "categorias", hecho, 0);
+        }
+        if (string.Equals(vertical, "evento-y-curso", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "evento-y-curso", RecetaEventoYCurso(), 0);
+        }
         if (string.Equals(vertical, "propiedades-fichas", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaFichasDePropiedades();
@@ -423,6 +432,200 @@ public sealed class DevContenidoDeVerticales
         return System.IO.File.Exists(ruta)
             ? System.Text.Json.JsonSerializer.Deserialize<List<FotoImportada>>(System.IO.File.ReadAllText(ruta), LecturaDelManifiesto)
             : null;
+    }
+
+    // ───────────────────────────── Evento y Curso del catálogo (2.ª medición, S3) ─────────────────────────────
+
+    /// <summary>La página «Evento» de Eventos, por su Key de uSync.</summary>
+    public static readonly Guid PaginaDelEvento = Guid.Parse("c90ae9cb-2cff-422a-837d-d54cc2b3e4fe");
+
+    /// <summary>La página «Curso» de Educación, por su Key de uSync.</summary>
+    public static readonly Guid PaginaDelCurso = Guid.Parse("46d6f33c-cd8c-463d-910d-5a5f6f4fb0ef");
+
+    /// <summary>La ficha de la Cumbre Tech en la app de eventos, que vive en la portada de Eventos (su id en el catálogo).</summary>
+    public const string EnlaceDelEvento = "/eventos/#/eventos/e/evt-cumbre-tech";
+
+    /// <summary>La ficha del curso de design systems en la app de cursos, que vive en la portada de Educación.</summary>
+    public const string EnlaceDelCurso = "/educacion/#/academy/curso/design-systems-atomic";
+
+    /// <summary>
+    /// «Evento» y «Curso» eran muestras sobre el motor: un «Synergos Summit» con un cartel de ponentes inventados y un
+    /// formulario de registro que no vende nada, y un curso con un instructor inventado, «acceso de por vida» y «14
+    /// días de garantía». Ahora cuentan un evento y un curso que SÍ están en el catálogo —la Cumbre Tech y «Design
+    /// Systems con Atomic Design»— y llevan a su ficha en la app, donde se compran y se inscriben de verdad. Lo que el
+    /// catálogo no respalda (grabaciones, factura, garantía) sale.
+    /// </summary>
+    private string RecetaEventoYCurso()
+    {
+        var n = 0;
+        var hero = KeyOf("elementCompHero");
+        var mision = KeyOf("elementCorpMissionBlock");
+        var preguntas = KeyOf("elementSynFaqSection");
+        var cierre = KeyOf("elementCompCtaBanner");
+        var formulario = KeyOf("elementSynFormStepper");
+
+        var evento = _contentService.GetById(PaginaDelEvento);
+        if (evento is not null)
+        {
+            var c = new CuerpoEditable(evento.GetValue<string>(Cuerpo, Cultura));
+            c.Reemplazar(hero, "headingTitle", "Cumbre Tech");
+            c.Reemplazar(hero, "headingSubtitle", "Conferencia · Bogotá · Ágora Centro de Convenciones");
+            c.Reemplazar(hero, "textBody",
+                "<p>Keynotes de líderes de la industria, talleres prácticos y networking. La fecha, los planes y los cupos están en la cartelera, donde compras tu entrada.</p>");
+            c.Reemplazar(hero, "mediaAlt", "Cumbre Tech, conferencia de tecnología en Bogotá");
+            c.CambiarBotones(hero, "ctaItems",
+                [("Comprar entradas", Enlace("Comprar entradas", EnlaceDelEvento)), ("Ver la cartelera", Enlace("Ver la cartelera", "/eventos/agenda"))]);
+            c.Reemplazar(mision, "textBody",
+                "<p>Una jornada en el Ágora Centro de Convenciones, en el corazón de Bogotá: keynotes de líderes de producto e ingeniería, demos en vivo de startups colombianas y networking. Con el plan Pro suman los talleres prácticos de la tarde.</p>",
+                CuerpoEditable.Donde("headingTitle", "Lo que vas a vivir"));
+            var programa = KeyOf("elementSynTimelineHorizontal");
+            // Sin el ajuste por franjas: al cargar, el carril se desplazaba a la primera y el rótulo fijo la tapaba.
+            c.Reemplazar(programa, "snapEnabled", "0");
+            c.TransformarLista(programa, "eventsJson", _ => new JsonArray(
+                Momento("08:30", "Registro y acreditación", "Recoges tu escarapela en la entrada del Ágora."),
+                Momento("09:30", "Keynote de apertura", "El futuro del software en Colombia."),
+                Momento("11:00", "Panel", "Escalar producto en mercados latinoamericanos."),
+                Momento("13:30", "Talleres prácticos", "Sesiones simultáneas, con acceso del plan Pro."),
+                Momento("16:00", "Networking y cierre", "Conversaciones abiertas para despedir la jornada.")));
+            var rejilla = KeyOf("elementSynFeatureGrid");
+            var esElCartel = Alguno("headingText", "Lineup de speakers", "Planes de entrada");
+            c.TransformarLista(rejilla, "itemsJson", _ => new JsonArray(
+                new JsonObject { ["heading"] = "Estándar", ["body"] = "La jornada completa en el auditorio principal, de la apertura al cierre: keynote, panel, zona de demos, almuerzo y café." },
+                new JsonObject { ["heading"] = "Pro", ["body"] = "Todo lo del plan Estándar más los talleres prácticos de la tarde, con cupo en el que elijas." }),
+                esElCartel);
+            c.Reemplazar(rejilla, "columns", "2", esElCartel);
+            c.Reemplazar(rejilla, "headingText", "Planes de entrada", esElCartel);
+            var esLaCompra = Alguno("headingTitle", "Registro y tickets", "Cómo compras tu entrada");
+            c.Reemplazar(mision, "textBody",
+                "<p>En la cartelera eliges el plan y la cantidad, pagas y ves tu entrada con su código QR en «Mis tickets». Desde ahí también la puedes transferir.</p>",
+                esLaCompra);
+            c.Reemplazar(mision, "headingTitle", "Cómo compras tu entrada", esLaCompra);
+            c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "registro-evento"));
+            var mapa = KeyOf("elementCorpMapEmbed");
+            c.Reemplazar(mapa, "mapTitle", "Ágora Centro de Convenciones, Bogotá");
+            // El Ágora queda junto a Corferias. La coordenada del catálogo (4.6280, -74.0644) cae en el Parque Nacional.
+            c.Reemplazar(mapa, "mapUrl",
+                "https://www.openstreetmap.org/export/embed.html?bbox=-74.1015%2C4.6221%2C-74.0815%2C4.6381&layer=mapnik&marker=4.6301%2C-74.0915");
+            var antesDeRegistrarte = Alguno("headingText", "Antes de registrarte", "Antes de comprar");
+            c.TransformarLista(preguntas, "itemsJson", _ => new JsonArray(
+                Pregunta("¿Qué incluye cada plan?", "El Estándar da la jornada completa en el auditorio principal; el Pro suma los talleres prácticos de la tarde. El detalle de cada plan está en la cartelera."),
+                Pregunta("¿Dónde queda mi entrada?", "En «Mis tickets», con su código QR. Preséntalo en el acceso el día del evento."),
+                Pregunta("¿Puedo comprar para otras personas?", "Sí. Eliges la cantidad al comprar, y si alguien más va a usar una entrada, se la transfieres desde «Mis tickets».")),
+                antesDeRegistrarte);
+            c.Reemplazar(preguntas, "headingText", "Antes de comprar", antesDeRegistrarte);
+            c.Reemplazar(cierre, "headingSubtitle", "Elige tu plan y compra tu entrada en la cartelera.");
+            c.Reemplazar(cierre, "ctaLabel", "Comprar entradas");
+            c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Comprar entradas", EnlaceDelEvento))!);
+            n += Guardar(evento, c, "Cumbre Tech", "Cumbre Tech · Eventos",
+                "Cumbre Tech en Bogotá: keynotes, panel, talleres prácticos y networking en el Ágora Centro de Convenciones.");
+        }
+
+        var curso = _contentService.GetById(PaginaDelCurso);
+        if (curso is not null)
+        {
+            var c = new CuerpoEditable(curso.GetValue<string>(Cuerpo, Cultura));
+            c.Reemplazar(hero, "headingTitle", "Design Systems con Atomic Design");
+            c.Reemplazar(hero, "headingSubtitle", "Diseño · Nivel principiante · 3 lecciones · Certificado al completar");
+            c.Reemplazar(hero, "textBody",
+                "<p>De los tokens semánticos a los organismos: cómo modelar un design system que sobreviva a un rebrand entero cambiando un solo archivo. Incluye la grilla de 8 puntos y el ritmo vertical.</p>");
+            c.Reemplazar(hero, "mediaAlt", "Curso Design Systems con Atomic Design");
+            c.CambiarBotones(hero, "ctaItems",
+                [("Ver el curso", Enlace("Ver el curso", EnlaceDelCurso)), ("Ver más cursos", Enlace("Ver más cursos", "/educacion/cursos"))]);
+            c.Reemplazar(mision, "textBody",
+                "<p>Al terminar vas a poder modelar tokens semánticos que aguanten un rebrand completo, aplicar la grilla de 8 puntos para un ritmo vertical consistente y componer átomos, moléculas y organismos reutilizables.</p>",
+                CuerpoEditable.Donde("headingTitle", "Lo que vas a lograr"));
+            c.TransformarLista(KeyOf("elementSynAccordion"), "itemsJson", _ => new JsonArray(
+                new JsonObject { ["title"] = "Módulo 1 · Tokens y fundamentos", ["content"] = "Tokens semánticos frente a literales y la grilla de 8 puntos, con una hoja de referencia de espaciados." },
+                new JsonObject { ["title"] = "Módulo 2 · Componiendo el sistema", ["content"] = "Átomos, moléculas y organismos: del botón a la tarjeta y al encabezado, y dónde trazar la frontera de cada nivel." }));
+            c.DesconectarSeccionesCon(KeyOf("elementSynMediaText"), CuerpoEditable.Donde("headingText", "Tu instructor"));
+            c.Reemplazar(mision, "textBody",
+                "<p>Te inscribes en la ficha del curso, con tu cuenta. Las lecciones quedan en «Mi aprendizaje» y, al completarlas, obtienes tu certificado.</p>",
+                CuerpoEditable.Donde("headingTitle", "Inscríbete al curso"));
+            c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "inscripcion-curso"));
+            c.TransformarLista(preguntas, "itemsJson", _ => new JsonArray(
+                Pregunta("¿Cuánto dura?", "Tres lecciones cortas, de 11 a 17 minutos cada una. Avanzas a tu ritmo."),
+                Pregunta("¿Recibo certificado?", "Sí, al completar el curso."),
+                Pregunta("¿Necesito experiencia previa?", "No. Es un curso de nivel principiante.")),
+                CuerpoEditable.Donde("headingText", "Antes de inscribirte"));
+            c.Reemplazar(cierre, "headingSubtitle", "Mira el temario en la ficha del curso y empieza por la primera lección.");
+            c.Reemplazar(cierre, "ctaLabel", "Ver el curso");
+            c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Ver el curso", EnlaceDelCurso))!);
+            n += Guardar(curso, c, "Design Systems con Atomic Design", "Design Systems con Atomic Design · Educación",
+                "Curso de nivel principiante: tokens semánticos, la grilla de 8 puntos y átomos, moléculas y organismos. Certificado al completar.");
+        }
+        return $"paginas:{n}";
+
+        // Un bloque se reconoce por su título de antes o por el de ahora: la receta se puede volver a pasar.
+        static Func<JsonObject, bool> Alguno(string propiedad, params string[] valores) =>
+            d => valores.Any(v => CuerpoEditable.Donde(propiedad, v)(d));
+        static JsonObject Momento(string hora, string titulo, string texto) =>
+            new() { ["date"] = hora, ["title"] = titulo, ["description"] = texto };
+        static JsonObject Pregunta(string pregunta, string respuesta) =>
+            new() { ["question"] = pregunta, ["answer"] = respuesta };
+    }
+
+    /// <summary>Guarda y publica el cuerpo y los títulos de la página si algo cambió. Devuelve 1 si la publicó.</summary>
+    private int Guardar(IContent pagina, CuerpoEditable cuerpo, string titulo, string seoTitulo, string seoDescripcion)
+    {
+        var cambio = cuerpo.Cambio;
+        foreach (var (alias, valor) in new[] { ("heading", titulo), ("seoTitle", seoTitulo), ("seoDescription", seoDescripcion) })
+        {
+            if (pagina.HasProperty(alias) && pagina.GetValue<string>(alias, Cultura) != valor)
+            {
+                pagina.SetValue(alias, valor, Cultura);
+                cambio = true;
+            }
+        }
+        if (!cambio) { return 0; }
+        if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+        _contentService.SaveAndPublish(pagina, new[] { Cultura });
+        return 1;
+    }
+
+    // ───────────────────────────── Entradas de las categorías (2.ª medición, S4) ─────────────────────────────
+
+    /// <summary>
+    /// La entrada de cada categoría, por la Key de uSync de su página: qué hay, para quién es y cómo se consigue. Antes
+    /// era una línea («Sesiones con especialistas.»). Comprar en línea en la Tienda, agendar la visita en Propiedades y
+    /// reservar en Booking: lo que de verdad hace la ficha de cada sitio.
+    /// </summary>
+    private static readonly (Guid Pagina, string Entrada)[] EntradasDeCategorias =
+    [
+        (Guid.Parse("a7275dec-c0a0-4dc2-ab65-6b473bab1491"),
+            "Termos, tazas, morrales, llaveros y otros detalles para el día a día o para regalar. Agregas al carrito lo que te guste y finalizas tu pedido en línea."),
+        (Guid.Parse("d12a749e-c0b6-4036-9de7-b942996035dd"),
+            "Libretas, bolígrafos, notas adhesivas y organizadores para quien trabaja o estudia en su escritorio. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
+        (Guid.Parse("3338ca4f-1b7c-48be-8ac5-ca56878ebb43"),
+            "Camisetas, buzos, una chaqueta cortavientos y gorras para el uso diario. Agregas al carrito lo que te guste y finalizas tu pedido en línea."),
+        (Guid.Parse("623ce787-89d7-49e8-803b-a8623c3c118e"),
+            "Audífonos, mouse, hubs USB-C, fundas y organizadores para tu escritorio y tus dispositivos. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
+        (Guid.Parse("10195c7f-440a-46c1-82b1-284ccc890206"),
+            "Apartamentos en Bogotá para vivir en familia o con las amenidades de un conjunto. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("6e68d98e-f370-4d81-bc08-ea7b47a685f6"),
+            "Casas con espacio propio: jardín, terraza o un lote amplio. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("abb93d6b-414f-44b7-91e0-669b93c90143"),
+            "Un local a pie de calle en la Zona T y una oficina en torre empresarial, para tu negocio. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("a5104fec-03c2-454a-adb3-3f5300a56cec"),
+            "Un masaje terapéutico de 60 minutos y una valoración con plan nutricional, para cuidarte. Eliges el servicio y lo reservas desde su ficha."),
+        (Guid.Parse("c3ba00e2-5d3a-49a3-a21e-8d1073f254d9"),
+            "Asesorías de 30 minutos y consultorías estratégicas de 60 con especialistas, para resolver una duda o planear tu próximo paso. Eliges la sesión y la reservas desde su ficha."),
+        (Guid.Parse("c61376b9-dafa-490a-89b6-16ab0dbb25bc"),
+            "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
+    ];
+
+    private string RecetaEntradasDeCategorias()
+    {
+        int cambiadas = 0, faltan = 0;
+        foreach (var (key, entrada) in EntradasDeCategorias)
+        {
+            var pagina = _contentService.GetById(key);
+            if (pagina is null || !pagina.HasProperty("categoryDescription")) { faltan++; continue; }
+            if (pagina.GetValue<string>("categoryDescription", Cultura) == entrada) { continue; }
+            pagina.SetValue("categoryDescription", entrada, Cultura);
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+        return $"categorias:{cambiadas};faltan:{faltan}";
     }
 
     private Dictionary<string, IContent> PaginasDeProducto(Guid raiz)

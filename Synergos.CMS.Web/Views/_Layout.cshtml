@@ -20,6 +20,7 @@
 @inject Synergos.CMS.Interfaces.IPageRenderContextResolver PageRenderContextResolver
 @inject Synergos.CMS.Interfaces.IGlobalComponentResolver GlobalComponentResolver
 @inject Synergos.CMS.Interfaces.ICartService CartService
+@inject Microsoft.Extensions.Options.IOptionsMonitor<Synergos.CMS.Application.Configuration.CompraFeatureSettings> Compra
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @inject Umbraco.Cms.Core.Models.PublishedContent.IPublishedValueFallback ValueFallback
 @{
@@ -48,6 +49,9 @@
     var isShop = siteRoot?.Children
         .Any(c => c.ContentType.Alias == "productCategoryPage") ?? false;
     var cartCount = isShop ? CartService.GetCart().ItemCount : 0;
+    // Un sitio que no vende en línea (Synergos:Features:Compra, 016-contenido-piezas) no lleva el ícono del carrito.
+    // El sitio es el siteRoot de la PÁGINA y no el del dominio (INegocioDelSitio): la base no tiene dominios.
+    var muestraCarrito = isShop && Compra.CurrentValue.Para(siteRoot?.Key).EnLinea;
     var cartLabel = Umbraco.GetDictionaryValueOrDefault("Shop.Cart.Title", "Carrito de compras");
     // El logo lleva al launcher de la plataforma, no al inicio del sitio: su nombre lo dice.
     var logoLabel = Umbraco.GetDictionaryValueOrDefault("Header.Aria.BackToPlatform", "Volver a la plataforma");
@@ -201,7 +205,7 @@
                             </ul>
                         </nav>
                     }
-                    @if (isShop)
+                    @if (muestraCarrito)
                     {
                         @* Fase 0 — botón de carrito: ícono + badge con ItemCount (SSR).
                            El aria-label ya anuncia la cantidad → el badge es decorativo

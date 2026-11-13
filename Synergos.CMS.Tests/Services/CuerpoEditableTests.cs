@@ -143,6 +143,36 @@ public sealed class CuerpoEditableTests
         Assert.Contains("Listado curado", c.Json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Cambiar_botones_cambia_rotulo_y_enlace_en_su_sitio_y_repetirlo_no_cambia_nada()
+    {
+        var botones = new JsonObject
+        {
+            ["layout"] = new JsonObject { ["Umbraco.BlockList"] = new JsonArray(new JsonObject { ["contentUdi"] = "umb://element/b1" }) },
+            ["contentData"] = new JsonArray(new JsonObject
+            {
+                ["udi"] = "umb://element/b1",
+                ["ctaLabel"] = "Registrarme",
+                ["ctaLink"] = new JsonArray(new JsonObject { ["name"] = "Registrarme", ["url"] = "/eventos/evento#registro" }),
+            }),
+        };
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Portal, p => p.Set("ctaItems", botones.ToJsonString()));
+        var c = new CuerpoEditable(b.Build());
+        var enlace = new JsonArray(new JsonObject { ["name"] = "Comprar entradas", ["url"] = "/eventos/#/eventos/e/evt-cumbre-tech" }).ToJsonString();
+
+        Assert.Equal(1, c.CambiarBotones(Portal, "ctaItems", [("Comprar entradas", enlace), ("De más", enlace)]));
+        Assert.Equal(0, c.CambiarBotones(Portal, "ctaItems", [("Comprar entradas", enlace)]));
+
+        var dato = ((JsonArray)JsonNode.Parse(c.Json)!["contentData"]!).Single(d => d!["ctaItems"] is not null)!;
+        var lista = JsonNode.Parse(dato["ctaItems"]!.GetValue<string>())!;
+        var boton = lista["contentData"]![0]!;
+        Assert.Equal("umb://element/b1", boton["udi"]!.GetValue<string>());
+        Assert.Equal("Comprar entradas", boton["ctaLabel"]!.GetValue<string>());
+        Assert.Equal("/eventos/#/eventos/e/evt-cumbre-tech", boton["ctaLink"]![0]!["url"]!.GetValue<string>());
+        Assert.Single((JsonArray)lista["contentData"]!);
+    }
+
     private static string[] OrdenDeSecciones(CuerpoEditable c)
     {
         var cuerpo = JsonNode.Parse(c.Json)!;

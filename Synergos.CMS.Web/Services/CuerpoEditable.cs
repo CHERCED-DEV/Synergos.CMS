@@ -99,6 +99,36 @@ public sealed class CuerpoEditable
         return n;
     }
 
+    /// <summary>
+    /// Cambia el rótulo y el enlace de los botones de una lista anidada (<c>ctaItems</c> de una portada), en orden y en
+    /// su sitio: los bloques de la lista conservan su UDI, así que repetirlo no cambia nada. Un botón de más se ignora.
+    /// </summary>
+    public int CambiarBotones(Guid tipo, string propiedad, IReadOnlyList<(string Rotulo, string Enlace)> botones,
+        Func<JsonObject, bool>? filtro = null)
+    {
+        var n = 0;
+        foreach (var dato in DatosDe(tipo, filtro))
+        {
+            var actual = dato[propiedad];
+            var comoTexto = actual is JsonValue v && v.TryGetValue<string>(out _);
+            var lista = (comoTexto ? JsonNode.Parse(actual!.GetValue<string>()) : actual?.DeepClone()) as JsonObject;
+            if (lista?["contentData"] is not JsonArray datos) { continue; }
+            for (var i = 0; i < Math.Min(datos.Count, botones.Count); i++)
+            {
+                var boton = (JsonObject)datos[i]!;
+                boton["ctaLabel"] = botones[i].Rotulo;
+                // El enlace llega como el JSON de un selector de enlaces; se guarda como lo guarda el bloque.
+                boton["ctaLink"] = boton["ctaLink"] is JsonArray ? JsonNode.Parse(botones[i].Enlace) : botones[i].Enlace;
+            }
+            JsonNode valor = comoTexto ? JsonValue.Create(lista.ToJsonString(Legible))! : lista;
+            if (JsonNode.DeepEquals(actual, valor)) { continue; }
+            dato[propiedad] = valor;
+            n++;
+        }
+        if (n > 0) { Cambios++; }
+        return n;
+    }
+
     /// <summary>Un filtro para las operaciones: los bloques cuya <paramref name="propiedad"/> vale <paramref name="valor"/>.</summary>
     public static Func<JsonObject, bool> Donde(string propiedad, string valor) =>
         d => d[propiedad] is JsonValue v && v.TryGetValue<string>(out var texto) && string.Equals(texto, valor, StringComparison.Ordinal);
