@@ -28,6 +28,7 @@
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.TiendaSettings> TiendaOpt
+@inject Microsoft.Extensions.Options.IOptionsMonitor<Synergos.CMS.Application.Configuration.CompraFeatureSettings> Compra
 @{
     var product = Model;
     if (product is null) { return; }
@@ -146,7 +147,10 @@
         Sin precio legible no hay botón: el carrito omitiría la línea de todos modos (#123),
         así que dejarlo sería un «Añadir» que no añade nada y no dice por qué.
     *@
-    @if (inStock && hasPrice)
+    @* El carrito sólo en un sitio que vende en línea (Synergos:Features:Compra): un inmueble se visita y un servicio
+       se reserva, con el botón que la ficha ya compone. El sitio es el siteRoot de la ficha: la base no tiene
+       dominios, y por dominio (INegocioDelSitio) regiría siempre la base. *@
+    @if (Compra.CurrentValue.Para(product.AncestorOrSelf("siteRoot")?.Key).EnLinea && inStock && hasPrice)
     {
         <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
             @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")

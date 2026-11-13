@@ -140,6 +140,11 @@ public sealed partial class SeamComposer
         services.AddOptions<TiendaSettings>().ValidateOnStart();
         services.AddSingleton<IValidateOptions<TiendaSettings>, ValidadorDeLaTienda>();
 
+        // Si cada sitio vende en línea (016-contenido-piezas): por defecto sí; Propiedades y Booking lo apagan en
+        // appsettings.json por la Key de su siteRoot. Lo leen el encabezado, la ficha y la tarjeta, por el siteRoot de
+        // la página (la base no tiene dominios), para condicionar el carrito, que no se borra.
+        services.AddSeccionDeNegocio<CompraFeatureSettings, NegocioDeCompra>(builder.Config.GetSection("Synergos:Features:Compra"));
+
         // El registro de las compras de la PUERTA (004-tienda-compra, US 6): las anota en el mismo almacén
         // de órdenes para que «Mis compras», el seguimiento, la devolución y las reseñas las vean, con el
         // motor que sea. Lee al orquestador si el despliegue dice dónde vive (BaseUrl) o si la compra ya va
