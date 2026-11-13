@@ -861,6 +861,19 @@ services:
       Synergos__Audit__ActorKind: \${SYNERGOS_AUDIT_ACTOR_KIND:-cms.actor}
       Synergos__Audit__TargetKind: \${SYNERGOS_AUDIT_TARGET_KIND:-cms.recurso}
 
+      # Donde lee la guardia clinica el permiso del paciente (003-salud-cita, I2
+      # T054). Con Api manda Api.Consent y el libro local deja de decidir; si la
+      # capacidad no contesta, el acceso a la historia se niega y el resto del
+      # sitio sigue. Sin BaseUrl el CMS no adivina un puerto y niega todo: por eso
+      # la direccion va escrita aqui y no en el .env.
+      #
+      # En produccion va a Api.Consent (D-003-I2-6, 2026-11-13): por eso el
+      # default de ESTE compose es Api. El desarrollo y las pilotos no corren este
+      # compose y siguen en Local (el default del CMS, la vuelta atras).
+      Synergos__Consent__Mode: \${SYNERGOS_CONSENT_MODE:-Api}
+      Synergos__Consent__BaseUrl: "http://api-consent:8080"
+      Synergos__Consent__ApiKey: \${SYNERGOS_API_KEY}
+
       # Contra que se valida el avance de un pedido (HU #46). Los cuatro dominios
       # comparten esta seccion y cada uno pide SU definicion: tracking.shop,
       # tracking.travel, tracking.events, tracking.academy. Una compartida leeria

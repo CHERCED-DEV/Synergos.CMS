@@ -457,6 +457,47 @@ jobs:
           echo "✓ el CMS corre con la bitácora en Api.Audit, la alcanza, y la capacidad guarda y devuelve un asiento suyo"
           echo "| la bitácora del CMS va a Api.Audit: modo Api, la alcanza, y un asiento con su forma se guarda y se lee | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
 
+      # ── 3.sexies. La guardia clínica lee el permiso en Api.Consent (D-003-I2-6) ──
+      #
+      # En producción la guardia de la historia clínica lee el permiso del paciente en Api.Consent
+      # (003-salud-cita, I2). Se mira que el CMS corre en ese modo y con esa dirección —sin ella
+      # niega todo—, que desde su contenedor alcanza la capacidad, y que la capacidad contesta a la
+      # llave y a la forma EXACTA que manda `HttpConsentReader` (`salud.paciente`, `salud.historia`)
+      # con el rechazo que el lector lee como «no vigente»: `consent.not_granted`, porque este
+      # paciente no dio permiso. La contraprueba es la llave: con otra, 401, que el lector leería
+      # como «no se pudo leer». Dar un permiso pediría el token de un miembro, y el ensayo no crea
+      # ninguno.
+      - name: La guardia clínica lee el permiso en Api.Consent
+        working-directory: /opt/synergos
+        run: |
+          set -euo pipefail
+          C="docker compose --file compose.prod.yml --project-directory ."
+          export SYNERGOS_TAG="$(cat tag.actual)"
+          ENTORNO="$($C exec -T cms printenv)"
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Consent__Mode=Api$' \
+            || { echo "✗ la guardia no lee en Api.Consent: Synergos__Consent__Mode no es Api"; exit 1; }
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Consent__BaseUrl=http://api-consent:8080$' \
+            || { echo "✗ el CMS no sabe dónde vive api-consent (sin dirección niega todo)"; exit 1; }
+          printf '%s\n' "$ENTORNO" | grep -q '^Synergos__Consent__ApiKey=.' \
+            || { echo "✗ el CMS no lleva llave para api-consent"; exit 1; }
+          $C exec -T cms bash -c "exec 3<>/dev/tcp/api-consent/8080 && printf 'GET /health HTTP/1.0\r\nHost: api-consent\r\n\r\n' >&3 && head -1 <&3" \
+            | grep -q ' 200' || { echo "✗ el CMS no alcanza api-consent"; exit 1; }
+          LLAVE="$(grep '^SYNERGOS_API_KEY=' .env | cut -d= -f2-)"
+          PACIENTE="ensayo$GITHUB_RUN_ID$GITHUB_RUN_ATTEMPT"
+          CUERPO="{\"subjectKind\":\"salud.paciente\",\"subjectId\":\"$PACIENTE\",\"purpose\":\"salud.historia\"}"
+          CURL="docker run --rm --network synergos_interna curlimages/curl:8.10.1 -s"
+          OTRA="$($CURL -o /dev/null -w '%{http_code}' -X POST http://api-consent:8080/v1/grants/check \
+            -H 'X-Synergos-Key: otra-llave' -H 'Content-Type: application/json' -d "$CUERPO")"
+          [ "$OTRA" = 401 ] || { echo "✗ Api.Consent no rechaza una llave equivocada ($OTRA): la contraprueba no vale"; exit 1; }
+          RESPUESTA="$($CURL -w '\n%{http_code}' -X POST http://api-consent:8080/v1/grants/check \
+            -H "X-Synergos-Key: $LLAVE" -H 'Content-Type: application/json' -d "$CUERPO")"
+          [ "$(printf '%s\n' "$RESPUESTA" | tail -1)" = 403 ] \
+            || { echo "✗ Api.Consent no contestó 403 a la llave y la forma del CMS: $(printf '%s\n' "$RESPUESTA" | tail -1)"; exit 1; }
+          printf '%s\n' "$RESPUESTA" | grep -q '"code":"consent.not_granted"' \
+            || { echo "✗ Api.Consent no contestó consent.not_granted, que es lo que el lector lee como «no vigente»"; exit 1; }
+          echo "✓ la guardia corre con el permiso en Api.Consent, la alcanza, y la capacidad contesta a su llave y su forma"
+          echo "| la guardia clínica lee el permiso en Api.Consent: modo Api, la alcanza, y su llave y su forma dan «no vigente» | ✓ | — |" >> "$GITHUB_STEP_SUMMARY"
+
       # ── 4. Un editor cambia una página ──────────────────────────────────
       #
       # Lo que un despliegue SIGUIENTE no puede revertir. Se cambia en la base, con
