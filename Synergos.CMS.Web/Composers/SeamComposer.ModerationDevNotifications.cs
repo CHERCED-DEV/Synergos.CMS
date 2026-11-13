@@ -98,6 +98,8 @@ public sealed partial class SeamComposer
         services.AddTransient<DevTiendaPorPaginas>();
         // 016-contenido-piezas: contenido real sumado al final de las portadas de las verticales (se exporta con uSync).
         services.AddTransient<DevContenidoDeVerticales>();
+        // 012-blogs-social, I3: la red por páginas, con la misma receta que la tienda.
+        services.AddTransient<DevBlogsPorPaginas>();
         // #119 — la portada de arranque. Es el único paso del despliegue que faltaba entre
         // «los 26 contenedores están sanos» y «el sitio enseña algo»: sin ella Umbraco sirve
         // su cartel «No published content» con 200. Nada corre en boot (ADR 0013): lo invoca

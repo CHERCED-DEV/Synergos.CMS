@@ -15,9 +15,16 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// 012-blogs-social, I0): que el comentario quedó en revisión, que no se publicó, que hace falta sesión. Son los
 /// primeros textos de la red en el diccionario; los demás siguen escritos en la app y su deuda la cuenta
 /// <c>gate:literales</c>.</para>
+///
+/// <para><b>Y qué parte de la red es esta página</b> (<c>Vista</c>, 012-blogs-social, I3): la elige el editor en el
+/// bloque; vacía, el inicio, que es la red entera de antes. Las <c>Rutas</c> dicen en qué página del sitio vive cada
+/// vista y salen de cómo está compuesto el sitio, no del bloque (<see cref="RutaDeUnaVista"/>, como la tienda): el
+/// elemento enlaza ahí, y la vista que no tiene página se sigue abriendo dentro de ésta.</para>
 /// </remarks>
 [ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios"])]
 public sealed record BlogsProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);
