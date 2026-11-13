@@ -109,6 +109,22 @@ public sealed class CuerpoEditableTests
         Assert.Contains("Por qué aprender con nosotros", c.Json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Reemplazar_con_filtro_cambia_solo_el_bloque_que_casa()
+    {
+        var b = new BlockGridJsonBuilder();
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Bienestar"));
+        b.AddTopLevelBlock(Seccion).AddChild(Area, Rejilla, r => r.Set("headingText", "Espacios"));
+        var c = new CuerpoEditable(b.Build());
+
+        Assert.Equal(1, c.Reemplazar(Rejilla, "columns", "4", CuerpoEditable.Donde("headingText", "Bienestar")));
+
+        var datos = ((JsonArray)JsonNode.Parse(c.Json)!["contentData"]!).OfType<JsonObject>()
+            .Where(d => d["headingText"] is not null).ToDictionary(d => d["headingText"]!.GetValue<string>());
+        Assert.Equal("4", datos["Bienestar"]["columns"]!.GetValue<string>());
+        Assert.Null(datos["Espacios"]["columns"]);
+    }
+
     private static string[] OrdenDeSecciones(CuerpoEditable c)
     {
         var cuerpo = JsonNode.Parse(c.Json)!;

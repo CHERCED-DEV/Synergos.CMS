@@ -193,6 +193,16 @@ public sealed class DevMediaFactory
         return true;
     }
 
+    /// <summary>La Key del nodo de Media con ese nombre, si existe (raíz o carpeta de primer nivel).</summary>
+    public Guid? KeyByName(string name) => FindMediaByName(name)?.Key;
+
+    /// <summary>La Key del nodo de Media que sirve esa URL (<c>/media/xxxx/fichero.png</c>), si existe.</summary>
+    public Guid? KeyByUrl(string url) => _mediaService.GetMediaByPath(url)?.Key;
+
+    /// <summary>La URL pública del fichero de un nodo de Media.</summary>
+    public string UrlOf(Guid mediaKey) =>
+        _mediaService.GetById(mediaKey)?.GetUrl("umbracoFile", _mediaUrlGenerators) ?? string.Empty;
+
     /// <summary>La ruta en disco de una ilustración del kit (<c>_archive/multimedia/...</c>), o null si no está.</summary>
     public static string? KitPath(string relative)
     {

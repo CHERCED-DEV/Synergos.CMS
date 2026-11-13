@@ -61,10 +61,10 @@ public sealed class CuerpoEditable
     /// Fija <paramref name="propiedad"/> = <paramref name="valor"/> en cada bloque del tipo dado. Devuelve cuántos
     /// cambiaron (los que ya tenían ese valor no cuentan).
     /// </summary>
-    public int Reemplazar(Guid tipo, string propiedad, JsonNode valor)
+    public int Reemplazar(Guid tipo, string propiedad, JsonNode valor, Func<JsonObject, bool>? filtro = null)
     {
         var n = 0;
-        foreach (var dato in DatosDe(tipo))
+        foreach (var dato in DatosDe(tipo, filtro))
         {
             if (JsonNode.DeepEquals(dato[propiedad], valor)) { continue; }
             dato[propiedad] = valor.DeepClone();
@@ -104,7 +104,8 @@ public sealed class CuerpoEditable
         d => d[propiedad] is JsonValue v && v.TryGetValue<string>(out var texto) && string.Equals(texto, valor, StringComparison.Ordinal);
 
     /// <summary>Lo mismo con un texto.</summary>
-    public int Reemplazar(Guid tipo, string propiedad, string valor) => Reemplazar(tipo, propiedad, JsonValue.Create(valor)!);
+    public int Reemplazar(Guid tipo, string propiedad, string valor, Func<JsonObject, bool>? filtro = null)
+        => Reemplazar(tipo, propiedad, JsonValue.Create(valor)!, filtro);
 
     /// <summary>
     /// Pone el primer bloque de <paramref name="bloque"/> (un cuerpo de una sola sección construida con

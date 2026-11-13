@@ -37,6 +37,23 @@ public sealed class DevContenidoController : ControllerBase
     }
 
     /// <summary>
+    /// Importa fotos reales ya en disco según los manifiestos de la carpeta (Tienda, Booking, fichas de inmueble y medios
+    /// por nombre). <c>POST /dev/fotos?carpeta=C:\...</c>. No descarga nada.
+    /// </summary>
+    /// <remarks>Idempotente: un medio que ya tiene esa licencia y ese crédito no se toca. Se exporta con uSync.</remarks>
+    [HttpPost("fotos")]
+    public IActionResult Fotos([FromQuery] string carpeta)
+    {
+        _logger.LogInformation("Dev endpoint fotos invocado.");
+        if (string.IsNullOrWhiteSpace(carpeta) || !Directory.Exists(carpeta))
+        {
+            return BadRequest(new { error = "La carpeta no existe." });
+        }
+        var resultado = _contenido.ImportarFotos(carpeta);
+        return resultado.Ok ? Ok(resultado) : Conflict(resultado);
+    }
+
+    /// <summary>
     /// Pone las fotos reales de una carpeta local (con su <c>manifiesto.json</c>) en los productos de la Tienda.
     /// <c>POST /dev/fotos-de-la-tienda?carpeta=C:\...</c>
     /// </summary>
