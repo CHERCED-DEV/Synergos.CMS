@@ -41,7 +41,14 @@ public sealed record DatoParaLeer(string Id, string Tipo, string Descripcion, st
 /// <param name="Datos">Las condiciones, las alergias y las vacunas, con su estado.</param>
 /// <param name="PreRegistro">Lo último que declaró el paciente, o <c>null</c>.</param>
 /// <param name="HayResumen">Si la historia tiene resumen: <c>false</c> es «nadie lo ha llenado», no «sin alergias».</param>
-public sealed record ResumenParaLeer(IReadOnlyList<DatoParaLeer> Datos, PreRegistro? PreRegistro, bool HayResumen);
+/// <param name="PermisoDeLaHistoria">Sólo en el del paciente (I2 T062): si dio el permiso para que el consultorio vea su
+/// historia (<c>vigente</c>), si falta (<c>falta</c>), o si no se pudo saber (<c>desconocido</c>). <c>null</c> donde no se
+/// lee en <c>Api.Consent</c>.</param>
+public sealed record ResumenParaLeer(
+    IReadOnlyList<DatoParaLeer> Datos, PreRegistro? PreRegistro, bool HayResumen, string? PermisoDeLaHistoria = null);
+
+/// <summary>Lo que recepción manda para encontrar la historia de un miembro (I2 T063).</summary>
+public sealed record BusquedaDeLaHistoria(string? Correo);
 
 /// <summary>
 /// Las reglas puras de la historia clínica de I2 (003-salud-cita): el pre-registro del paciente, la validación del

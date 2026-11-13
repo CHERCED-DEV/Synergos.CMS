@@ -1311,6 +1311,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "historiaBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -1318,7 +1324,8 @@
         "apiBase": "/api/ehr",
         "lecturasBase": "/api/lecturas/salud",
         "appointmentPath": "directa",
-        "zona": "America/Bogota"
+        "zona": "America/Bogota",
+        "historiaBase": "/api/healthcare"
       }
     },
     {

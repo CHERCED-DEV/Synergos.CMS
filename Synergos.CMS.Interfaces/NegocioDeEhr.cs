@@ -12,12 +12,15 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="VersionDelPermiso">La versión del texto del permiso de datos de salud que se muestra en el sitio (T048): la
 /// puerta la manda a <c>salud.consentimiento</c> como negocio y llega a <c>Api.Consent</c> con el permiso. El navegador
 /// no la elige.</param>
+/// <param name="HistoriaBase">La base de la historia clínica de producción (<c>/api/healthcare</c>, I2 T062); vacía, el portal
+/// vuelve a lo de <see cref="ApiBase"/>.</param>
 public sealed record NegocioDeEhr(
     string ApiBase,
     ServicioAgendable Servicio,
     string? AppointmentPath = null,
     string LecturasBase = "",
-    string VersionDelPermiso = "");
+    string VersionDelPermiso = "",
+    string HistoriaBase = "");
 
 /// <summary>
 /// El servicio que se agenda, con la forma de un <c>Ref</c> del backend (<c>{ kind, id }</c>): es como lo lee

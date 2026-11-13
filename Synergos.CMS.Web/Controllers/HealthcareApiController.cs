@@ -43,10 +43,14 @@ public sealed class HealthcareApiController : ControllerBase
         public const string ResumenPropio = "salud.resumen";
         public const string Historia = "salud.historia";
         public const string Apertura = "salud.apertura";
+        public const string Busqueda = "salud.busqueda";
     }
 
     /// <summary>La clave del miembro por su correo, para abrirle la historia (T056).</summary>
     private readonly IBuscadorDeMiembros? _miembros;
+
+    /// <summary>El permiso del paciente para el consultorio, en <c>Api.Consent</c>: «Mi salud» le pide darlo si falta (T062).</summary>
+    private readonly IConsentReader? _permisos;
 
     /// <param name="editor">Opcional: sin él se usa uno sobre el mismo repositorio (las pruebas que construyen el
     ///   controlador a mano no cambian). En el sitio es el singleton, con su candado compartido.</param>
@@ -60,9 +64,11 @@ public sealed class HealthcareApiController : ControllerBase
         EditorDeLaHistoriaClinica? editor = null,
         TimeProvider? reloj = null,
         IOptions<ListadosSettings>? listados = null,
-        IBuscadorDeMiembros? miembros = null)
+        IBuscadorDeMiembros? miembros = null,
+        IConsentReader? permisos = null)
     {
         _miembros = miembros;
+        _permisos = permisos;
         _guard = guard;
         _patients = patients;
         _appointments = appointments;
@@ -272,7 +278,59 @@ public sealed class HealthcareApiController : ControllerBase
         }
 
         var historia = await _patients.GetAsync(patientKey.Value, ct);
-        return historia is null ? NotFound() : Ok(HistoriaClinica.ParaLeer(historia));
+        if (historia is null)
+        {
+            return NotFound();
+        }
+
+        var resumen = HistoriaClinica.ParaLeer(historia);
+        if (_permisos is not null)
+        {
+            var permiso = await _permisos.LeerAsync(
+                DefaultPhiAccessGuard.SujetoDelPaciente, memberKey.ToString("N"), DefaultPhiAccessGuard.PropositoDeLaHistoria, ct);
+            resumen = resumen with
+            {
+                PermisoDeLaHistoria = permiso.Estado switch
+                {
+                    EstadoDelPermiso.Vigente => "vigente",
+                    EstadoDelPermiso.NoVigente => "falta",
+                    _ => "desconocido",
+                },
+            };
+        }
+        return Ok(resumen);
+    }
+
+    /// <summary>
+    /// Recepción (o el médico) encuentra la historia de un miembro por su correo (I2 T063): sólo su clave y si ya hizo el
+    /// pre-registro, nada clínico. El correo va en el cuerpo, no en la dirección, para que no quede en ningún registro.
+    /// </summary>
+    [HttpPost("patients/buscar")]
+    public async Task<IActionResult> BuscarHistoria([FromBody] BusquedaDeLaHistoria body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "open", null, ct, proposito: Propositos.Busqueda) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Correo))
+        {
+            return BadRequest(new { error = "correo: falta." });
+        }
+        if (_miembros is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (await _miembros.ClaveDelCorreoAsync(body.Correo, ct) is not Guid memberKey)
+        {
+            return NotFound(new { error = "No hay un miembro con ese correo." });
+        }
+        if (await _patients.FindKeyByMemberAsync(memberKey, ct) is not Guid patientKey
+            || await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false } historia)
+        {
+            return NotFound(new { error = "Ese miembro todavía no tiene historia." });
+        }
+        return Ok(new { patientKey, nombre = historia.DisplayName, preRegistrado = historia.PreRegistro is not null });
     }
 
     /// <summary>El resumen de salud de un paciente, para el médico con su permiso.</summary>

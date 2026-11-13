@@ -45,6 +45,7 @@ public sealed class EhrResolutor : IResolutorSynHost<EhrProps>
             ApiBase: negocio.ApiBase,
             LecturasBase: negocio.LecturasBase,
             AppointmentPath: CaminoDeCompra.Decidir(negocio.AppointmentPath, _puerta.Abre(FlujoDeLaCita)),
-            Zona: _listados.Value.ZonaHoraria));
+            Zona: _listados.Value.ZonaHoraria,
+            HistoriaBase: negocio.HistoriaBase));
     }
 }

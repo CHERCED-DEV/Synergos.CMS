@@ -268,6 +268,64 @@ public sealed class HistoriaDelPacienteTests
         Assert.Empty(await _store.ListAsync("patients", CancellationToken.None));
     }
 
+    // ── «Mi salud» dice si falta el permiso del consultorio; recepción busca la historia (I2 T062–T063) ─────────
+
+    [Theory]
+    [InlineData(EstadoDelPermiso.Vigente, "vigente")]
+    [InlineData(EstadoDelPermiso.NoVigente, "falta")]
+    [InlineData(EstadoDelPermiso.NoSePudoLeer, "desconocido")]
+    public async Task MiResumen_Dice_si_el_paciente_dio_el_permiso_de_la_historia_leido_en_Api_Consent(
+        EstadoDelPermiso estado, string dice)
+    {
+        await HistoriaDe(Miembro);
+        SesionDe(Miembro);
+        GuardiaDice(true);
+        var lector = Substitute.For<IConsentReader>();
+        lector.LeerAsync("salud.paciente", Miembro.ToString("N"), "salud.historia", Arg.Any<CancellationToken>())
+            .Returns(new PermisoLeido(estado));
+        var sut = new HealthcareApiController(_guard, _patients, Substitute.For<IAppointmentScheduler>(),
+            Substitute.For<IPrescriptionService>(), Substitute.For<IConsentLedger>(), _gate, permisos: lector);
+
+        var ok = Assert.IsType<OkObjectResult>(await sut.MiResumen(CancellationToken.None));
+
+        Assert.Equal(dice, Assert.IsType<ResumenParaLeer>(ok.Value).PermisoDeLaHistoria);
+    }
+
+    [Fact]
+    public async Task BuscarHistoria_Si_la_guardia_niega_no_busca_el_correo()
+    {
+        SesionDe(Miembro);
+        GuardiaDice(false);
+
+        var r = await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None);
+
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(r).StatusCode);
+        await _buscador.DidNotReceive().ClaveDelCorreoAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BuscarHistoria_Da_la_clave_y_si_ya_hizo_el_pre_registro_y_sin_historia_es_404()
+    {
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        _buscador.ClaveDelCorreoAsync(Correo, Arg.Any<CancellationToken>()).Returns(Miembro);
+        Assert.IsType<NotFoundObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));
+
+        var key = await HistoriaDe(Miembro);
+        var antes = Assert.IsType<OkObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));
+        SesionDe(Miembro);
+        await BuildSut().CheckIn(UnCheckIn, CancellationToken.None);
+        SesionDe(Recepcion);
+        var despues = Assert.IsType<OkObjectResult>(await ConBuscador().BuscarHistoria(new BusquedaDeLaHistoria(Correo), CancellationToken.None));
+
+        Assert.Equal((key, false), (Leer<Guid>(antes, "patientKey"), Leer<bool>(antes, "preRegistrado")));
+        Assert.True(Leer<bool>(despues, "preRegistrado"));
+        await _guard.Received().CheckAccessAsync(
+            Arg.Is<AccessCheckRequest>(r => r.Action == "open" && r.Proposito == "salud.busqueda"), Arg.Any<CancellationToken>());
+    }
+
+    private static T Leer<T>(OkObjectResult ok, string campo) => (T)ok.Value!.GetType().GetProperty(campo)!.GetValue(ok.Value)!;
+
     private sealed class InMemoryPhiStore : IPhiStore
     {
         private readonly Dictionary<string, string> _data = new();
