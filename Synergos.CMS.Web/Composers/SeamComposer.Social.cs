@@ -2,8 +2,10 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Interfaces.Lecturas;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
+using Synergos.CMS.Web.Services.Lecturas;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -136,5 +138,29 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<SemillaDeLaRed>(),
                 sp.GetRequiredService<IIdentidadPublica>()));
 
+        // 012-blogs-social, I4 — Blogs en las lecturas genéricas (api/lecturas/blogs/…), sobre los mismos seams que
+        // BlogsController, cuyas lecturas de Explorar, los guardados y los mensajes quedan interinas:
+        //   - el catálogo: el stream de la red (lo del CMS y lo de los miembros), con cada publicación por su cara
+        //     pública, los comentarios de su hilo y, por petición, sus reacciones y la de quien lee;
+        //   - las colecciones: la genérica con la clave de Blogs (los guardados son la colección «saved»);
+        //   - los mensajes: los hilos de contexto «dm», con la contraparte por su nombre público.
+        // Transient, como los de la tienda: cada uno envuelve servicios ya registrados.
+        services.AddTransient<ILecturaDelCatalogo>(sp => new LecturaDelCatalogoDeBlogs(
+            CatalogoDeBlogs.Lectura(
+                new FuenteDeLaRed(sp.GetRequiredService<IContentStream>()),
+                sp.GetRequiredService<IIdentidadPublica>(),
+                sp.GetRequiredService<IOptionsMonitor<CatalogSettings>>().CurrentValue,
+                ComentariosDelHilo(sp.GetRequiredService<ICommentReader>())),
+            sp.GetRequiredService<IReactionService>(),
+            sp.GetRequiredService<IMemberAccessGate>()));
+        services.AddTransient<ILecturaDeColecciones>(sp => new LecturaDeColeccionesDelVertical(
+            CatalogoDeBlogs.Vertical,
+            sp.GetRequiredService<IUserCollection>(),
+            sp.GetServices<ILecturaDelCatalogo>()));
+        services.AddTransient<IContextoDeMensajes, ContextoDeMensajesDeBlogs>();
     }
+
+    /// <summary>Cuántos comentarios aprobados tiene el hilo de una publicación, el mismo que cuenta la interina.</summary>
+    private static Func<ContentStreamItem, int> ComentariosDelHilo(ICommentReader comentarios)
+        => publicacion => comentarios.GetApprovedForNode(HiloDeUnaPublicacion.Nodo(publicacion)).Count;
 }

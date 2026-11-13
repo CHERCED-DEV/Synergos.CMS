@@ -51,24 +51,31 @@ public sealed class LecturaDeMensajesController : ControllerBase
                 continue;
             }
 
+            // Quien participa sale como lo nombra el vertical: un miembro de Blogs, por su alias y nunca por el correo
+            // con que lo guarda la mensajería (012-blogs-social, I4).
+            var otro = resumen.Participants.FirstOrDefault(p => !string.Equals(p, yo, StringComparison.OrdinalIgnoreCase))
+                ?? string.Empty;
             var hilo = await _mensajeria.GetThreadAsync(resumen.ThreadId, cancellationToken);
+            var mensajes = new List<MensajeDelHilo>();
+            foreach (var m in hilo?.Messages ?? [])
+            {
+                mensajes.Add(new MensajeDelHilo(
+                    Id: m.MessageId,
+                    De: await contexto.ParticipanteAsync(m.From, cancellationToken),
+                    Mio: string.Equals(m.From, yo, StringComparison.OrdinalIgnoreCase),
+                    Texto: m.Body,
+                    Fecha: m.SentAt));
+            }
+
             hilos.Add(new HiloDeLaBandeja(
                 Id: resumen.ThreadId,
                 Contexto: resumen.ContextRef,
-                Asunto: await contexto.AsuntoAsync(resumen.ContextRef, cancellationToken),
-                Contraparte: resumen.Participants.FirstOrDefault(p => !string.Equals(p, yo, StringComparison.OrdinalIgnoreCase))
-                    ?? string.Empty,
+                Asunto: await contexto.AsuntoAsync(resumen.ContextRef, otro, cancellationToken),
+                Contraparte: otro.Length == 0 ? string.Empty : await contexto.ParticipanteAsync(otro, cancellationToken),
                 Ultimo: resumen.LastMessagePreview,
                 Fecha: resumen.LastMessageAt,
                 Cantidad: resumen.MessageCount,
-                Mensajes: hilo?.Messages
-                    .Select(m => new MensajeDelHilo(
-                        Id: m.MessageId,
-                        De: m.From,
-                        Mio: string.Equals(m.From, yo, StringComparison.OrdinalIgnoreCase),
-                        Texto: m.Body,
-                        Fecha: m.SentAt))
-                    .ToList() ?? []));
+                Mensajes: mensajes));
         }
 
         return Ok(new BandejaDelVertical(hilos));

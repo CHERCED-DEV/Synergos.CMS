@@ -20,11 +20,16 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// bloque; vacía, el inicio, que es la red entera de antes. Las <c>Rutas</c> dicen en qué página del sitio vive cada
 /// vista y salen de cómo está compuesto el sitio, no del bloque (<see cref="RutaDeUnaVista"/>, como la tienda): el
 /// elemento enlaza ahí, y la vista que no tiene página se sigue abriendo dentro de ésta.</para>
+///
+/// <para><b>Y de dónde lee</b> (<c>LecturasBase</c>, 012-blogs-social, I4): la base de las lecturas genéricas de Blogs
+/// (<c>/api/lecturas/blogs</c>): Explorar, los guardados y los mensajes directos con forma neutra, como la tienda y
+/// Salud. Vacía, la app lee las rutas interinas de <c>ApiBase</c>, como antes. Es del despliegue.</para>
 /// </remarks>
 [ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios"])]
 public sealed record BlogsProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
     [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);
