@@ -190,6 +190,84 @@ public sealed class HistoriaDelPacienteTests
         Assert.Equal("EPS Sura", historia.PreRegistro!.Aseguradora);
     }
 
+    // ── Recepción abre la historia (I2 T056) ──────────────────────────────────────
+
+    private readonly IBuscadorDeMiembros _buscador = Substitute.For<IBuscadorDeMiembros>();
+    private static readonly Guid Recepcion = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private const string Correo = "camila@ejemplo.co";
+
+    private HealthcareApiController ConBuscador() => new(
+        _guard, _patients, Substitute.For<IAppointmentScheduler>(), Substitute.For<IPrescriptionService>(),
+        Substitute.For<IConsentLedger>(), _gate, new EditorDeLaHistoriaClinica(_patients), miembros: _buscador);
+
+    private static AperturaDeLaHistoria Apertura(string? nombre = "Camila Restrepo", string? fecha = "1990-04-12") =>
+        new(Correo, nombre, fecha);
+
+    [Fact]
+    public async Task AbrirHistoria_Si_la_guardia_niega_no_busca_el_correo_ni_crea_nada()
+    {
+        SesionDe(Miembro);
+        GuardiaDice(false);
+
+        var r = await ConBuscador().AbrirHistoria(Apertura(), CancellationToken.None);
+
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(r).StatusCode);
+        await _buscador.DidNotReceive().ClaveDelCorreoAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Assert.Empty(await _store.ListAsync("patients", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AbrirHistoria_Crea_la_del_miembro_solo_con_lo_demografico_y_otra_vez_devuelve_la_misma()
+    {
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        _buscador.ClaveDelCorreoAsync(Correo, Arg.Any<CancellationToken>()).Returns(Miembro);
+
+        var creada = Assert.IsType<ObjectResult>(await ConBuscador().AbrirHistoria(Apertura(), CancellationToken.None));
+        var otraVez = Assert.IsType<OkObjectResult>(await ConBuscador().AbrirHistoria(Apertura("Otro Nombre"), CancellationToken.None));
+
+        Assert.Equal(201, creada.StatusCode);
+        var key = (Guid)creada.Value!.GetType().GetProperty("patientKey")!.GetValue(creada.Value)!;
+        Assert.Equal(key, (Guid)otraVez.Value!.GetType().GetProperty("patientKey")!.GetValue(otraVez.Value)!);
+        Assert.Equal(key, await _patients.FindKeyByMemberAsync(Miembro, CancellationToken.None));
+        var historia = (await _patients.GetAsync(key, CancellationToken.None))!;
+        Assert.Equal(("Camila Restrepo", new DateTime(1990, 4, 12), Recepcion, 1),
+            (historia.DisplayName, historia.DateOfBirth.Date, historia.CreatedByDoctorKey, historia.VersionNumber));
+        Assert.True(historia.ChiefComplaint is null && historia.FindingsNotes is null && historia.AssessmentNotes is null
+            && historia.Resumen is null && historia.PreRegistro is null);
+        await _guard.Received().CheckAccessAsync(
+            Arg.Is<AccessCheckRequest>(r => r.ResourceType == "patient-record" && r.Action == "open"
+                && r.TargetPatientKey == null && r.Proposito == "salud.apertura"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(null, "1990-04-12")]
+    [InlineData("  ", "1990-04-12")]
+    [InlineData("Camila Restrepo", null)]
+    [InlineData("Camila Restrepo", "12/04/1990")]
+    [InlineData("Camila Restrepo", "2999-01-01")]
+    public async Task AbrirHistoria_Sin_nombre_o_con_una_fecha_que_no_sirve_es_400_y_no_se_crea(string? nombre, string? fecha)
+    {
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        _buscador.ClaveDelCorreoAsync(Correo, Arg.Any<CancellationToken>()).Returns(Miembro);
+
+        Assert.IsType<BadRequestObjectResult>(await ConBuscador().AbrirHistoria(Apertura(nombre, fecha), CancellationToken.None));
+        Assert.Null(await _patients.FindKeyByMemberAsync(Miembro, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AbrirHistoria_Un_correo_sin_miembro_es_404()
+    {
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        _buscador.ClaveDelCorreoAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((Guid?)null);
+
+        Assert.IsType<NotFoundObjectResult>(await ConBuscador().AbrirHistoria(Apertura(), CancellationToken.None));
+        Assert.Empty(await _store.ListAsync("patients", CancellationToken.None));
+    }
+
     private sealed class InMemoryPhiStore : IPhiStore
     {
         private readonly Dictionary<string, string> _data = new();

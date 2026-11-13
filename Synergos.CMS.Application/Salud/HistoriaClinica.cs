@@ -20,6 +20,12 @@ public sealed record CheckInDelPaciente(
 /// <summary>Una vacuna como la declara el paciente: el nombre y, si la sabe, la fecha (<c>aaaa-mm-dd</c>).</summary>
 public sealed record VacunaDeclarada(string? Nombre, string? Fecha = null);
 
+/// <summary>
+/// Lo que recepción pone al abrir la historia de un miembro (I2 T056): quién es, y nada clínico. La fecha va como
+/// <c>aaaa-mm-dd</c>.
+/// </summary>
+public sealed record AperturaDeLaHistoria(string? Correo, string? Nombre, string? FechaDeNacimiento);
+
 /// <summary>Lo que pasó al validar un dato del resumen.</summary>
 public enum ResultadoDeValidar
 {
@@ -52,6 +58,39 @@ public static class HistoriaClinica
 
     public const string OrigenPaciente = "paciente";
     public const string OrigenMedico = "medico";
+
+    /// <summary>
+    /// La historia nueva de una apertura, sólo con lo demográfico, o el error que la impide (T056). Sin notas, sin
+    /// resumen y sin pre-registro: lo clínico lo pone el médico, lo declarado el paciente.
+    /// </summary>
+    public static (PatientRecord? Historia, string? Error) Abrir(
+        AperturaDeLaHistoria apertura, Guid memberKey, Guid abiertaPor, DateTime ahoraUtc, DateOnly hoy)
+    {
+        ArgumentNullException.ThrowIfNull(apertura);
+        var nombre = Normalizado(apertura.Nombre);
+        if (nombre is null)
+        {
+            return (null, "nombre: falta.");
+        }
+        if (nombre.Length > LargoMaximo)
+        {
+            return (null, $"nombre: más de {LargoMaximo} caracteres.");
+        }
+        if (!DateOnly.TryParseExact(Normalizado(apertura.FechaDeNacimiento), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var nacimiento))
+        {
+            return (null, "fechaDeNacimiento: falta o no es aaaa-mm-dd.");
+        }
+        if (nacimiento > hoy || nacimiento.Year < 1900)
+        {
+            return (null, "fechaDeNacimiento: fuera de rango.");
+        }
+
+        var historia = new PatientRecord(
+            Guid.Empty, memberKey, nombre, nacimiento.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            null, null, null, ahoraUtc, abiertaPor, 1, false);
+        return (historia, null);
+    }
 
     /// <summary>
     /// Lo que no se puede guardar del pre-registro, o <c>null</c> si todo está bien. Nombra el campo: el paciente

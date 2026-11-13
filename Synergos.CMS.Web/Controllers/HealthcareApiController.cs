@@ -42,7 +42,11 @@ public sealed class HealthcareApiController : ControllerBase
         public const string CheckIn = "salud.check-in";
         public const string ResumenPropio = "salud.resumen";
         public const string Historia = "salud.historia";
+        public const string Apertura = "salud.apertura";
     }
+
+    /// <summary>La clave del miembro por su correo, para abrirle la historia (T056).</summary>
+    private readonly IBuscadorDeMiembros? _miembros;
 
     /// <param name="editor">Opcional: sin él se usa uno sobre el mismo repositorio (las pruebas que construyen el
     ///   controlador a mano no cambian). En el sitio es el singleton, con su candado compartido.</param>
@@ -55,8 +59,10 @@ public sealed class HealthcareApiController : ControllerBase
         IMemberAccessGate gate,
         EditorDeLaHistoriaClinica? editor = null,
         TimeProvider? reloj = null,
-        IOptions<ListadosSettings>? listados = null)
+        IOptions<ListadosSettings>? listados = null,
+        IBuscadorDeMiembros? miembros = null)
     {
+        _miembros = miembros;
         _guard = guard;
         _patients = patients;
         _appointments = appointments;
@@ -159,6 +165,44 @@ public sealed class HealthcareApiController : ControllerBase
 
         var key = await _patients.UpsertAsync(record, ct);
         return Ok(new { patientKey = key });
+    }
+
+    /// <summary>
+    /// Recepción (o el médico) abre la historia de un miembro por su correo, sólo con lo demográfico (I2 T056). Si ya
+    /// tiene una, devuelve esa y no crea otra.
+    /// </summary>
+    /// <remarks>La guardia va primero: sin el rol no se busca ni el correo.</remarks>
+    [HttpPost("patients/abrir")]
+    public async Task<IActionResult> AbrirHistoria([FromBody] AperturaDeLaHistoria body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "open", null, ct, proposito: Propositos.Apertura) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null || string.IsNullOrWhiteSpace(body.Correo))
+        {
+            return BadRequest(new { error = "correo: falta." });
+        }
+        if (_miembros is null || _gate.CurrentMemberKey is not Guid quienAbre)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var ahora = _reloj.GetUtcNow();
+        if (await _miembros.ClaveDelCorreoAsync(body.Correo, ct) is not Guid memberKey)
+        {
+            return NotFound(new { error = "No hay un miembro con ese correo." });
+        }
+        var (nueva, error) = HistoriaClinica.Abrir(body, memberKey, quienAbre, ahora.UtcDateTime, Hoy(ahora));
+        if (nueva is null)
+        {
+            return BadRequest(new { error });
+        }
+
+        var (patientKey, yaExistia) = await _editor.AbrirAsync(memberKey, nueva, ct);
+        return yaExistia
+            ? Ok(new { patientKey, yaExistia })
+            : StatusCode(StatusCodes.Status201Created, new { patientKey, yaExistia });
     }
 
     // ── El resumen de salud y el pre-registro (003-salud-cita, I2 T058–T060) ──────────

@@ -17,6 +17,7 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
 {
     private const string DoctorRole = "doctor";
     private const string SchedulingRolesCsv = "doctor,nurse,reception";
+    private const string AperturaRolesCsv = "doctor,reception";
 
     private readonly IMemberAccessGate _gate;
     private readonly IConsentLedger _consent;
@@ -74,6 +75,9 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
 
         /// <summary>El médico con el permiso del paciente para el consultorio, leído en <c>Api.Consent</c> (T054).</summary>
         public const string PermisoDelConsultorio = "permiso:" + PropositoDeLaHistoria;
+
+        /// <summary>Recepción o el médico abren la historia de un miembro, sólo con lo demográfico (T056).</summary>
+        public const string AperturaDelPersonal = "apertura-del-personal";
 
         /// <summary>No se dejó pasar.</summary>
         public const string Ninguna = "ninguna";
@@ -202,6 +206,17 @@ public sealed class DefaultPhiAccessGuard : IPhiAccessGuard
             {
                 return (true, null, Bases.Propio);
             }
+        }
+
+        // Abrir la historia (I2 T056, rompe el círculo de H5): la abre el consultorio, no el paciente. Es crear una
+        // historia nueva sólo con lo demográfico; no da lectura ni escritura de nada clínico, que siguen pidiendo el
+        // permiso del paciente.
+        if (string.Equals(request.Action, "open", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(request.ResourceType, "patient-record", StringComparison.OrdinalIgnoreCase))
+        {
+            return _gate.HasAnyRole(AperturaRolesCsv)
+                ? (true, null, Bases.AperturaDelPersonal)
+                : (false, "insufficient-role", Bases.Ninguna);
         }
 
         // Agenda: operación de staff (no requiere consentimiento clínico).

@@ -150,6 +150,9 @@ public sealed partial class SeamComposer
         // tiene que ser el mismo para todas las peticiones.
         services.AddSingleton<EditorDeLaHistoriaClinica>();
 
+        // I2 T056 — la clave del miembro por su correo, para que recepción le abra la historia.
+        services.AddScoped<IBuscadorDeMiembros, UmbracoBuscadorDeMiembros>();
+
         // ADR 0098 H2b — agenda de citas: lógica pura (Application) + scheduler Web
         // con lock async por-doctor (anti-overbooking) sobre el PHI store.
         services.AddSingleton<Synergos.CMS.Application.Services.AppointmentSchedulingService>();

@@ -173,6 +173,46 @@ public sealed class DefaultPhiAccessGuardTests
         Assert.Contains($"; {base_}", DetalleAuditado(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Abrir la historia (I2 T056) es de recepción y del médico, con el rol que el miembro TIENE: el doble del portón
+    /// contesta como el de verdad, por cualquiera de los roles de la lista. Enfermería y el paciente no la abren.
+    /// </summary>
+    [Theory]
+    [InlineData("reception", true)]
+    [InlineData("doctor", true)]
+    [InlineData("nurse", false)]
+    [InlineData("", false)]
+    public async Task Open_LaHistoriaLaAbreRecepcionOElMedico_YNadieMas(string rol, bool pasa)
+    {
+        Authenticated(Guid.NewGuid());
+        _gate.HasAnyRole(Arg.Any<string>()).Returns(ci => rol.Length > 0 && ((string)ci[0]).Split(',').Contains(rol));
+
+        var d = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("patient-record", "open", Proposito: "salud.apertura"), CancellationToken.None);
+
+        Assert.Equal(pasa, d.IsAllowed);
+        Assert.Equal(
+            pasa ? "action=open; reason=ok; basis=apertura-del-personal; purpose=salud.apertura"
+                 : "action=open; reason=insufficient-role; basis=ninguna; purpose=salud.apertura",
+            DetalleAuditado());
+    }
+
+    /// <summary>Abrir no es leer ni escribir: recepción con «open» no entra a una historia ni a una receta.</summary>
+    [Theory]
+    [InlineData("patient-record", "read")]
+    [InlineData("patient-record", "write")]
+    [InlineData("prescription", "open")]
+    public async Task Open_NoLeDaARecepcionNadaClinico(string recurso, string accion)
+    {
+        Authenticated(Guid.NewGuid());
+        _gate.HasAnyRole(Arg.Any<string>()).Returns(ci => ((string)ci[0]).Split(',').Contains("reception"));
+
+        var d = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest(recurso, accion, TargetPatientKey: Guid.NewGuid()), CancellationToken.None);
+
+        Assert.False(d.IsAllowed);
+    }
+
     [Fact]
     public async Task Audit_SinProposito_ElDetalleEsElDeSiempreConSuBase_YNoNombraUnProposito()
     {

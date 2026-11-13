@@ -19,8 +19,34 @@ public sealed class EditorDeLaHistoriaClinica
 {
     private readonly IPatientRepository _patients;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _candados = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _aperturas = new();
 
     public EditorDeLaHistoriaClinica(IPatientRepository patients) => _patients = patients;
+
+    /// <summary>
+    /// Abre la historia de un miembro, o devuelve la que ya tiene (I2 T056). Bajo un candado por MIEMBRO: dos aperturas a
+    /// la vez dan una sola historia, no dos.
+    /// </summary>
+    public async Task<(Guid PatientKey, bool YaExistia)> AbrirAsync(Guid memberKey, PatientRecord nueva, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(nueva);
+        var candado = _aperturas.GetOrAdd(memberKey, static _ => new SemaphoreSlim(1, 1));
+        await candado.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (await _patients.FindKeyByMemberAsync(memberKey, cancellationToken).ConfigureAwait(false) is Guid existente)
+            {
+                return (existente, true);
+            }
+            var key = await _patients.UpsertAsync(nueva with { PatientKey = Guid.Empty, MemberKey = memberKey }, cancellationToken)
+                .ConfigureAwait(false);
+            return (key, false);
+        }
+        finally
+        {
+            candado.Release();
+        }
+    }
 
     /// <summary>
     /// Aplica <paramref name="cambio"/> a la versión vigente y la guarda como una versión nueva. Si el cambio devuelve
