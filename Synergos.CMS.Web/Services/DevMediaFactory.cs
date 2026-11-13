@@ -47,6 +47,7 @@ public sealed class DevMediaFactory
     private const string FolderProductos = "Productos";     // imágenes de producto (gradiente limpio, sin foto real)
     private const string FolderAvatares = "Avatares";      // avatares de autor (gradiente limpio)
     private const string FolderMarca = "Marca";         // logos / isotipos / OG image
+    private const string FolderFotos = "Fotos";         // fotos reales CC0 ya versionadas en wwwroot/media/<dominio>/
 
     // ───────────────────────────── Mapeo imagen → contenido ─────────────────────────────
     // Nombre-de-nodo (lo que pasa DevContentFiller) → ilustración premium real del kit
@@ -147,6 +148,32 @@ public sealed class DevMediaFactory
         var mediaKey = GetOrCreate(name, altText, hexFrom, hexTo, width, height);
         var media = _mediaService.GetById(mediaKey);
         return media?.GetUrl("umbracoFile", _mediaUrlGenerators) ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Devuelve el valor MediaPicker3 de una FOTO real (CC0, ya versionada en el repo) importada como nodo
+    /// synImage en la carpeta <c>Fotos</c>. Idempotente por nombre: si el nodo ya existe se reusa tal cual,
+    /// sin volver a copiar el archivo (lo que el editor le haya cambiado se respeta). La licencia queda en la
+    /// metadata del nodo (<c>license</c>), para que el crédito viaje con la foto.
+    /// </summary>
+    public string GetOrCreatePhotoPickerValue(string name, string altText, string absolutePath, string license)
+    {
+        var existing = FindMediaByName(name);
+        if (existing is not null) { return BuildPickerJson(existing.Key); }
+        if (!System.IO.File.Exists(absolutePath))
+        {
+            throw new FileNotFoundException($"La foto '{name}' no está en {absolutePath}.", absolutePath);
+        }
+        var folderId = GetOrCreateFolder(FolderFotos);
+        using var stream = System.IO.File.OpenRead(absolutePath);
+        var key = UpsertMedia(name, altText, Slug(name) + Path.GetExtension(absolutePath), stream, folderId, absolutePath);
+        var creada = _mediaService.GetById(key);
+        if (creada is not null && creada.HasProperty("license"))
+        {
+            creada.SetValue("license", license);
+            _mediaService.Save(creada);
+        }
+        return BuildPickerJson(key);
     }
 
     private static string BuildPickerJson(Guid mediaKey)
