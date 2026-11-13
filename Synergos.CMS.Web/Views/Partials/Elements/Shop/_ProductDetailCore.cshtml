@@ -27,6 +27,7 @@
 @using Umbraco.Cms.Core.Models.PublishedContent
 @inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
 @inject Synergos.CMS.Interfaces.IPriceFormatter PriceFormatter
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.TiendaSettings> TiendaOpt
 @{
     var product = Model;
     if (product is null) { return; }
@@ -53,14 +54,10 @@
         ? (c.Value<string>("categoryName") ?? c.Name)
         : null;
 
-    // Trust signals — texto 100% desde Dictionary (Shop.Product.Trust.*).
-    // Si una clave está vacía (no traducida), se omite la fila.
-    var trustItems = new[]
-    {
-        Umbraco.GetDictionaryValue("Shop.Product.Trust.Shipping"),
-        Umbraco.GetDictionaryValue("Shop.Product.Trust.Returns"),
-        Umbraco.GetDictionaryValue("Shop.Product.Trust.Warranty"),
-    }.Where(t => !string.IsNullOrWhiteSpace(t)).ToArray();
+    // Trust signals: sólo lo que la tienda DECLARA (Synergos:Tienda:Promesas), con el texto del diccionario
+    // (Shop.Product.Trust.*). Sin declarar, la ficha no promete nada (016-contenido-piezas).
+    var trustItems = Synergos.CMS.Web.Services.PromesasDeLaFicha.Textos(
+        TiendaOpt.Value.Promesas, clave => Umbraco.GetDictionaryValue(clave));
 }
 @if (images.Count > 0)
 {
@@ -156,7 +153,7 @@
         </button>
     }
 
-    @if (trustItems.Length > 0)
+    @if (trustItems.Count > 0)
     {
         <ul class="syn-product__trust" role="list">
             @foreach (var item in trustItems)
