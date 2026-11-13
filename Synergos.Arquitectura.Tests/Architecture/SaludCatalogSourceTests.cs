@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Synergos.CMS.Tests.Architecture;
@@ -61,15 +62,27 @@ public sealed class SaludCatalogSourceTests
     /// al lado puede ser un abogado. Que el flag se pueda mover a <c>cms</c> sin que el scope
     /// exista sería un directorio vacío con los logs en rojo y nadie mirándolos, así que el scope
     /// se declara desde el primer día aunque el flag siga en <c>demo</c>.
+    ///
+    /// <para><b>Y el scope es el <c>brandKey</c> del sitio de Salud, cruzado contra el contenido</b> (003-salud-cita, I1
+    /// de producción, H1). Este gate pedía el literal <c>"salud"</c>, y ningún siteRoot se llama así: el de Salud es
+    /// <c>healthcare</c>. Con el flag en <c>cms</c>, la fuente fallaba cerrado y servía el directorio vacío, con el gate
+    /// en verde. Ahora el valor sale del sitio, no de la prosa.</para>
     /// </remarks>
     [Fact]
-    public void El_scope_de_Salud_esta_declarado_en_los_dos_entornos()
+    public void El_scope_de_Salud_es_el_brandKey_del_sitio_de_Salud_en_los_dos_entornos()
     {
+        var sitio = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", "uSync", "v9", "Content", "healthcare.config"));
+        var marca = Regex.Match(sitio, @"<brandKey>\s*<Value><!\[CDATA\[([^\]]+)\]\]></Value>");
+        Assert.True(marca.Success, "El siteRoot de Salud (Content/healthcare.config) no declara su brandKey.");
+
         foreach (var archivo in new[] { "appsettings.Development.json", "appsettings.Docker.json" })
         {
-            var settings = File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", archivo));
-            Assert.Contains("\"Salud\"", settings, StringComparison.Ordinal);
-            Assert.Contains("\"salud\"", settings, StringComparison.Ordinal);
+            using var settings = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "Synergos.CMS.Web", archivo)));
+            var scope = settings.RootElement.GetProperty("Synergos").GetProperty("Catalog").GetProperty("Scopes").GetProperty("Salud").GetString();
+            Assert.True(
+                marca.Groups[1].Value == scope,
+                $"{archivo}: Synergos:Catalog:Scopes:Salud es «{scope}» y el sitio de Salud se llama «{marca.Groups[1].Value}». "
+                + "Con otro valor, la fuente del contenido sirve el directorio vacío.");
         }
     }
 

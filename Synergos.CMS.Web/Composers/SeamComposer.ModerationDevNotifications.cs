@@ -96,6 +96,10 @@ public sealed partial class SeamComposer
         services.AddTransient<DevContentFiller>();
         // 014-despiece-tienda, I3: la tienda de la demo compuesta por páginas, una por vista (se exporta con uSync).
         services.AddTransient<DevTiendaPorPaginas>();
+        // 016-contenido-piezas: contenido real sumado al final de las portadas de las verticales (se exporta con uSync).
+        services.AddTransient<DevContenidoDeVerticales>();
+        // 012-blogs-social, I3: la red por páginas, con la misma receta que la tienda.
+        services.AddTransient<DevBlogsPorPaginas>();
         // #119 — la portada de arranque. Es el único paso del despliegue que faltaba entre
         // «los 26 contenedores están sanos» y «el sitio enseña algo»: sin ella Umbraco sirve
         // su cartel «No published content» con 200. Nada corre en boot (ADR 0013): lo invoca
@@ -109,6 +113,9 @@ public sealed partial class SeamComposer
         // devuelve 404 sin el flag; nada corre en boot (ADR 0013).
         services.AddTransient<DevProductReviewSeeder>();
         services.AddTransient<DevPaidOrderSeeder>();
+        // 003-salud-cita, T052: los profesionales de muestra de Salud, para las demos de la piloto. Igual: el endpoint
+        // devuelve 404 sin el flag y nada corre al arrancar.
+        services.AddTransient<DevProfesionalesDeMuestraSeeder>();
 
         // Health probes. Each registers as an ISchemaHealthProbe; the
         // HealthController resolves them as IEnumerable<ISchemaHealthProbe>.

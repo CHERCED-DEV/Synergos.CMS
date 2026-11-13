@@ -386,6 +386,20 @@ public sealed class DevController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Los profesionales de MUESTRA de Salud como contenido, publicados y rotulados «(muestra)», para las demos de la copia
+    /// piloto (003-salud-cita, T052). Publicarlos les abre la agenda (T047). Idempotente.
+    /// </summary>
+    [HttpPost("seed-profesionales-de-muestra")]
+    public async Task<IActionResult> SeedProfesionalesDeMuestra(
+        [FromServices] DevProfesionalesDeMuestraSeeder profesionales, CancellationToken cancellationToken)
+    {
+        if (!_settings.Enabled) return NotFound();
+
+        _logger.LogInformation("DevSeed endpoint invocado (seed-profesionales-de-muestra).");
+        return Ok(await profesionales.SembrarAsync(cancellationToken));
+    }
+
     [HttpGet("ping")]
     public IActionResult Ping()
     {

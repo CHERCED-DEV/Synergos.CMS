@@ -218,7 +218,12 @@ internal static class ContratoOpenApi
                 return Task.CompletedTask;
             }
 
-            if (contrato.Cuerpo is { } cuerpo)
+            // D-003-CUERPO: un abrir sin campos en el cuerpo —sólo el sujeto y el negocio, como el permiso de Salud— recibe
+            // igual un JSON, que el host lee como JsonElement y este contrato quita de los componentes. Sin esto su cuerpo
+            // apuntaba a un esquema que no está; se publica como un objeto vacío, con su nombre.
+            var cuerpoPublicado = contrato.Cuerpo
+                ?? (op.RequestBody is not null ? new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() } : null);
+            if (cuerpoPublicado is { } cuerpo)
             {
                 var nombre = contrato.NombreDelCuerpo ?? contrato.Nombre + "Entrada";
                 RegistrarCuerpo(nombre, cuerpo);
@@ -311,6 +316,10 @@ internal static class ContratoOpenApi
             if (s["properties"] is JsonObject props)
             {
                 r.Properties = props.ToDictionary(p => p.Key, p => (IOpenApiSchema)Esquema(p.Value!.AsObject()), StringComparer.Ordinal);
+
+                // D-003-CUERPO: un objeto vacío A PROPÓSITO —la entrada sin campos, los datos de una salida vacía— se marca
+                // cerrado, para que no se confunda con uno sin declarar, que el generador del UI rechaza.
+                if (props.Count == 0) r.AdditionalPropertiesAllowed = false;
             }
             if (s["required"] is JsonArray req) r.Required = new HashSet<string>(req.Select(x => (string)x!), StringComparer.Ordinal);
             if (s["items"] is JsonObject items) r.Items = Esquema(items);

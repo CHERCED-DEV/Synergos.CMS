@@ -162,12 +162,23 @@ public sealed partial class SeamComposer
         // Singleton por lo mismo que las otras: UmbracoProfessionalDirectorySource sólo sostiene
         // IUmbracoContextAccessor (un ACCESSOR, que resuelve el contexto por llamada),
         // IOptionsMonitor e ILogger. Ninguno es Scoped, así que no hay dependencia cautiva.
+        //
+        // La fuente la elige el mismo flag, como la de la tienda: la lectura genérica (abajo) sirve lo que sirve el
+        // directorio. Con `cms`, IDoctorDirectory sigue leyendo esta fuente; con `demo`, su stub, que es la misma muestra.
         services.AddSingleton<ICatalogSource<MedicalDoctor>>(sp =>
-            ActivatorUtilities.CreateInstance<UmbracoProfessionalDirectorySource>(sp));
+            IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
+                ? ActivatorUtilities.CreateInstance<UmbracoProfessionalDirectorySource>(sp)
+                : new SaludDemoDirectorySource());
         services.AddSingleton<IDoctorDirectory>(sp =>
             IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
                 ? new CatalogDoctorDirectory(sp.GetRequiredService<ICatalogSource<MedicalDoctor>>())
                 : new StubDoctorDirectory());
+
+        // 003-salud-cita, I1 de producción — los profesionales en las lecturas genéricas (api/lecturas/salud/…), con
+        // la misma fuente que el directorio. Transient, como la de la tienda.
+        services.AddTransient<Synergos.CMS.Interfaces.Lecturas.ILecturaDelCatalogo>(sp => CatalogoDeSalud.Lectura(
+            sp.GetRequiredService<ICatalogSource<MedicalDoctor>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<CatalogSettings>>().CurrentValue));
         services.AddSingleton<IClinicalRecordService, StubClinicalRecordService>();
         services.AddSingleton<IClinicalPrescriptionService, StubClinicalPrescriptionService>();
         // HU #25 — contra quién agenda la cita. Dos orígenes, mismo contrato, elegidos por
@@ -180,6 +191,30 @@ public sealed partial class SeamComposer
         // el sustantivo «doctor» vive acá y en el BFF, nunca en la capacidad. Lo vigila
         // SaludWiringTests.
         services.Configure<SaludSettings>(builder.Config.GetSection("Synergos:Salud"));
+
+        // 003-salud-cita, T047 (sobre NN-22 del núcleo): la OFERTA de cada profesional con su agenda, al orquestador de
+        // Salud, al publicar su ficha. Hay destino sólo si el despliegue dice dónde vive (Synergos:Salud:BaseUrl, la
+        // misma clave con que la puerta lo encuentra); sin él, publicar un profesional no sale a la red. Diez segundos,
+        // porque quien espera es el editor que publica, y una oferta que no salió se repara republicando.
+        var salud = builder.Config.GetSection("Synergos:Salud");
+        var hayOrquestadorDeSalud = !string.IsNullOrWhiteSpace(salud["BaseUrl"]);
+        if (hayOrquestadorDeSalud)
+        {
+            services.AddClienteDelArbolDeServicios(
+                Services.Salud.PublicadorDeOfertasDeProfesionales.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
+        }
+        services.AddSingleton<Services.Salud.IPublicadorDeOfertasDeProfesionales>(sp => new Services.Salud.PublicadorDeOfertasDeProfesionales(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<Services.Salud.PublicadorDeOfertasDeProfesionales>>(),
+            hayOrquestadorDeSalud,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<CartSettings>>().Value.Currency,
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ListadosSettings>>().Value.ZonaHoraria));
+
+        // Se dispara al publicar y al retirar, NUNCA al arrancar (ADR 0013).
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentPublishedNotification, Notifications.OfertaDeProfesionalAlPublicar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentUnpublishedNotification, Notifications.OfertaDeProfesionalAlRetirar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentMovedToRecycleBinNotification, Notifications.OfertaDeProfesionalAlRetirar>();
+        builder.AddNotificationAsyncHandler<Umbraco.Cms.Core.Notifications.ContentDeletedNotification, Notifications.OfertaDeProfesionalAlRetirar>();
 
         if (Interruptor.Encendido(builder.Config, "Synergos:Salud:Mode", "Bff", new SaludSettings().Mode))
         {

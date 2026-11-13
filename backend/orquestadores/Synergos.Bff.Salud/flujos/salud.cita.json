@@ -6,9 +6,18 @@
     "profesional": { "tipo": "ref", "kind": "salud.profesional" },
     "ventana": "ventana",
     "servicio": { "de": "negocio", "campo": "servicio", "tipo": "ref" },
-    "contacto": { "de": "contacto" }
+    "contacto": { "de": "contacto" },
+    "desde": "instante",
+    "hasta": "instante"
   },
   "salida": ["profesional", "ventana", "total", "reservaId"],
+  "lecturas": {
+    "disponibilidad": {
+      "entrada": ["profesional", "desde", "hasta"],
+      "pasos": ["agenda", "franjas"],
+      "salida": ["franjas"]
+    }
+  },
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["permiso", "lineas", "copago", "desglose", "agenda", "apartar", "autorizar"],
@@ -25,6 +34,7 @@
       "escribe": ["recursoId"],
       "motivo": "el profesional no tiene agenda"
     },
+    "franjas": { "tipo": "booking.franjas", "lee": ["recursoId", "desde", "hasta"], "escribe": ["franjas"] },
     "apartar": {
       "tipo": "booking.apartar",
       "lee": ["recursoId", "ventana", "paciente"],

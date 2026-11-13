@@ -841,7 +841,8 @@ public sealed class BlogsController : ControllerBase
             Comments: comments,
             CommentCount: comments,
             Reposts: item.Metrics.Reposts,
-            RepostCount: item.Metrics.Reposts);
+            RepostCount: item.Metrics.Reposts,
+            PageUrl: item.CmsUrl);
     }
 
     // Vocabulario UI del tipo de objeto del feed: la app espera
@@ -1307,7 +1308,10 @@ public sealed class BlogsController : ControllerBase
         // Contrato UI: la app lee `commentCount`/`repostCount`, no `comments`/`reposts`.
         int CommentCount,
         int Reposts,
-        int RepostCount);
+        int RepostCount,
+        // Contrato UI: `pageUrl`, la página de un artículo del CMS, que su tarjeta abre; su URL es su identidad
+        // (012-blogs-social, I3). Lo que publica un miembro no tiene página: va vacía.
+        string? PageUrl = null);
 
     /// <summary>Contrato UI: la app lee `media:[{url,kind,alt}]` (array), no `mediaUrl` (string).</summary>
     public sealed record PostMediaDto(string Url, string Kind, string Alt);

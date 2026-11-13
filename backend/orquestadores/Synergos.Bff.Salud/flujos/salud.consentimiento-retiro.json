@@ -1,0 +1,10 @@
+{
+  "clave": "salud.consentimiento-retiro",
+  "entrada": ["paciente"],
+  "tipos": { "paciente": { "de": "sujeto" } },
+  "salida": [],
+  "fases": { "abrir": ["revocar"] },
+  "pasos": {
+    "revocar": { "tipo": "consent.revocar", "proposito": "salud.agenda" }
+  }
+}

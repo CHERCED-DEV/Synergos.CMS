@@ -119,6 +119,19 @@ public sealed class SueloDelContratoTests
             malas.Add("Ninguna operación publica un rechazo: ¿se perdió el transformer?");
         }
 
+        // 7. Ningún $ref colgante (D-003-CUERPO): todo esquema al que se apunta existe. El generador del UI no arma el
+        //    transporte de una operación que apunta a un esquema que no está, y el de abrir de un flujo sin campos en el
+        //    cuerpo apuntaba a JsonElement, que este mismo contrato quita de los componentes.
+        foreach (var (ruta, nodo) in Nodos(doc, "#"))
+        {
+            if ((string?)nodo["$ref"] is { } referencia
+                && referencia.StartsWith("#/components/schemas/", StringComparison.Ordinal)
+                && esquemas[referencia["#/components/schemas/".Length..]] is null)
+            {
+                malas.Add($"{ruta}: $ref colgante «{referencia}».");
+            }
+        }
+
         Assert.True(malas.Count == 0,
             $"{ensamblado}.json no cumple el suelo del contrato. Regenerarlo no lo arregla: lo arregla el " +
             $"código (tipo de retorno, WithName, los records).{Environment.NewLine}" +

@@ -6,7 +6,14 @@
     EhrResolutor.FlujoDeLaCita; PuertaDeLaCitaTests la cruza con la tabla de la puerta y con
     Synergos:Puerta:Flujos. Con el camino «directa» es inocuo. El style en línea es para antes de que el
     bundle defina la etiqueta: un elemento desconocido es inline y cambiaría el layout del ítem del BlockGrid.
+
+    Dentro, los del permiso de datos de salud (003-salud-cita, T048-T050): darlo y retirarlo, del mismo orquestador que
+    la cita (D-003-GATE). Cada coordinador atiende sólo su flujo, así que los pedidos de uno no los toma otro.
 *@
 <synergos-flujo flujo="salud.cita" style="display:contents">
-    @await Html.PartialAsync("SynHost/Ehr", Model.Content)
+    <synergos-flujo flujo="salud.consentimiento" style="display:contents">
+        <synergos-flujo flujo="salud.consentimiento-retiro" style="display:contents">
+            @await Html.PartialAsync("SynHost/Ehr", Model.Content)
+        </synergos-flujo>
+    </synergos-flujo>
 </synergos-flujo>

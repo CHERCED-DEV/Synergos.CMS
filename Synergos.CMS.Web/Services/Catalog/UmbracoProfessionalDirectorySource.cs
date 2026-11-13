@@ -38,7 +38,7 @@ namespace Synergos.CMS.Web.Services.Catalog;
 public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalDoctor>
 {
     internal const string Vertical = "Salud";
-    private const string ProfessionalPageAlias = "professionalPage";
+    internal const string ProfessionalPageAlias = "professionalPage";
     private const string SiteRootAlias = "siteRoot";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
