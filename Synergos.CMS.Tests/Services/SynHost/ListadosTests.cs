@@ -180,13 +180,35 @@ public sealed class ListadosTests
             new("e1", "e1", "Conferencia de datos", "Tecnología", "Medellín", "Plaza Mayor", new DateTimeOffset(2026, 10, 5, 0, 0, 0, TimeSpan.Zero), "", 50_000m, "COP", "general"),
         });
 
-        var todas = new EventosDelCatalogo(catalogo).Filas(Peticion());
-        var jazz = new EventosDelCatalogo(catalogo).Filas(Peticion("musica"));
+        var reloj = new RelojFijo(new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero));
+        var todas = new EventosDelCatalogo(catalogo, reloj).Filas(Peticion());
+        var jazz = new EventosDelCatalogo(catalogo, reloj).Filas(Peticion("musica"));
 
         Assert.Equal(["Conferencia de datos", "Festival de jazz"], todas.Select(f => f.Title));
         Assert.StartsWith("4 ", todas[0].Specs![0].Value, StringComparison.Ordinal);
         Assert.Equal("Plaza Mayor, Medellín", todas[0].Specs![1].Value);
         Assert.Equal("Festival de jazz", Assert.Single(jazz).Title);
+    }
+
+    [Fact]
+    public void Un_evento_que_ya_empezo_no_sale_en_el_listado()
+    {
+        var catalogo = Substitute.For<IEventCatalogProvider>();
+        catalogo.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(new List<EventSummary>
+        {
+            new("pasado", "pasado", "Concierto de agosto", "Música", "Bogotá", "Teatro", new DateTimeOffset(2026, 8, 15, 19, 0, 0, TimeSpan.Zero), "", 90_000m, "COP", "general"),
+            new("ahora", "ahora", "Empieza en este instante", "Música", "Bogotá", "Teatro", new DateTimeOffset(2026, 11, 13, 12, 0, 0, TimeSpan.Zero), "", 90_000m, "COP", "general"),
+            new("futuro", "futuro", "Obra de diciembre", "Teatro", "Cali", "Teatro Municipal", new DateTimeOffset(2026, 12, 14, 20, 30, 0, TimeSpan.Zero), "", 45_000m, "COP", "general"),
+        });
+
+        var filas = new EventosDelCatalogo(catalogo, new RelojFijo(new DateTimeOffset(2026, 11, 13, 12, 0, 0, TimeSpan.Zero))).Filas(Peticion());
+
+        Assert.Equal("Obra de diciembre", Assert.Single(filas).Title);
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
     }
 
     [Fact]

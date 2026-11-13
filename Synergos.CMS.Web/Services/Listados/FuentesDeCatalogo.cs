@@ -42,12 +42,20 @@ public sealed class CursosDelCatalogo : IFuenteDeListado
     }
 }
 
-/// <summary>Los eventos del catálogo de Eventos: el mismo proveedor que lee la app de eventos.</summary>
+/// <summary>
+/// Los eventos del catálogo de Eventos: el mismo proveedor que lee la app de eventos. Sólo los que no han empezado
+/// (016-contenido-piezas): una cartelera o unos destacados que ofrecen un evento que ya pasó mienten.
+/// </summary>
 public sealed class EventosDelCatalogo : IFuenteDeListado
 {
     private readonly IEventCatalogProvider _catalogo;
+    private readonly TimeProvider _reloj;
 
-    public EventosDelCatalogo(IEventCatalogProvider catalogo) => _catalogo = catalogo;
+    public EventosDelCatalogo(IEventCatalogProvider catalogo, TimeProvider reloj)
+    {
+        _catalogo = catalogo;
+        _reloj = reloj;
+    }
 
     public string Clave => "eventos";
 
@@ -55,8 +63,10 @@ public sealed class EventosDelCatalogo : IFuenteDeListado
     {
         ArgumentNullException.ThrowIfNull(peticion);
         var eventos = _catalogo.SearchAsync(peticion.Consulta).GetAwaiter().GetResult();
+        var ahora = _reloj.GetUtcNow();
 
         return eventos
+            .Where(e => e.StartUtc > ahora)
             .Where(e => FormatoDelListado.Responde(peticion.Consulta, e.Title, e.Category, e.City, e.Venue))
             .OrderBy(e => e.StartUtc)
             .Select(e => new FilaDelListado(
