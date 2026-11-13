@@ -451,6 +451,115 @@ public sealed class HistoriaDelPacienteTests
         Assert.Null((await Notas.GetAsync(nota.Id, CancellationToken.None))!.Firma);
     }
 
+    // ── Órdenes y resultados (I4) ───────────────────────────────────────────────────────────────────────
+
+    private readonly ArchivosEnMemoria _archivos = new();
+    private FileSystemOrdenesMedicas? _ordenesReales;
+    private FileSystemOrdenesMedicas Ordenes => _ordenesReales ??= new FileSystemOrdenesMedicas(_store);
+
+    private HealthcareApiController ConOrdenes() => new(
+        _guard, _patients, Substitute.For<IAppointmentScheduler>(), Substitute.For<IPrescriptionService>(),
+        Substitute.For<IConsentLedger>(), _gate, new EditorDeLaHistoriaClinica(_patients), ordenes: Ordenes, archivos: _archivos);
+
+    private static readonly byte[] UnPdf = "%PDF-1.4 informe"u8.ToArray();
+
+    private static ResultadoCargado HbA1c(string examen, InformeAdjunto? informe = null) =>
+        new(examen, "6,2", "%", "4,0 – 5,6", "alto", "En ayunas", informe);
+
+    [Fact]
+    public async Task Orden_El_paciente_no_ve_un_resultado_hasta_que_el_medico_lo_libera_y_entonces_descarga_su_informe()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConOrdenes().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c", "Perfil lipídico"], "Control de diabetes"), CancellationToken.None)).Value);
+
+        var cargada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConOrdenes().CargarResultado(
+            key, orden.Id, HbA1c("e1", new InformeAdjunto("hba1c.pdf", "application/pdf", Convert.ToBase64String(UnPdf))),
+            CancellationToken.None)).Value);
+        var resultadoId = cargada.Examenes[0].Resultado!.Id;
+
+        SesionDe(Miembro);
+        var antes = Assert.IsType<List<OrdenParaLeer>>(Assert.IsType<OkObjectResult>(await ConOrdenes().MisOrdenes(CancellationToken.None)).Value);
+        Assert.IsType<NotFoundResult>(await ConOrdenes().MiInforme(resultadoId, CancellationToken.None));
+
+        SesionDe(Medico);
+        var liberada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConOrdenes().LiberarResultado(key, resultadoId, CancellationToken.None)).Value);
+
+        SesionDe(Miembro);
+        var despues = Assert.IsType<List<OrdenParaLeer>>(Assert.IsType<OkObjectResult>(await ConOrdenes().MisOrdenes(CancellationToken.None)).Value);
+        var informe = Assert.IsType<FileContentResult>(await ConOrdenes().MiInforme(resultadoId, CancellationToken.None));
+
+        Assert.False(cargada.Examenes[0].Resultado!.Liberado);
+        Assert.Null(Assert.Single(antes).Examenes[0].Resultado);
+        Assert.Equal(("6,2", "alto", true), (despues[0].Examenes[0].Resultado!.Valor, despues[0].Examenes[0].Resultado!.Marca,
+            despues[0].Examenes[0].Resultado!.Liberado));
+        Assert.Equal("application/pdf", informe.ContentType);
+        Assert.Equal(UnPdf, informe.FileContents);
+        Assert.Equal("abierta", liberada.Estado);
+    }
+
+    [Fact]
+    public async Task Orden_Con_todos_sus_examenes_liberados_queda_cumplida_y_liberar_dos_veces_da_lo_mismo()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConOrdenes().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value);
+        var cargada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConOrdenes().CargarResultado(key, orden.Id, HbA1c("e1"), CancellationToken.None)).Value);
+        var id = cargada.Examenes[0].Resultado!.Id;
+
+        await ConOrdenes().LiberarResultado(key, id, CancellationToken.None);
+        var otraVez = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConOrdenes().LiberarResultado(key, id, CancellationToken.None)).Value);
+
+        Assert.Equal("cumplida", otraVez.Estado);
+        Assert.Equal("cumplida", (await Ordenes.GetOrdenAsync(orden.Id, CancellationToken.None))!.Estado);
+    }
+
+    [Theory]
+    [InlineData("e9", "alto", "application/pdf", true)]   // un examen que no es de la orden
+    [InlineData("e1", "rarito", "application/pdf", true)] // una marca que no existe
+    [InlineData("e1", "alto", "text/html", true)]         // un informe que no es PDF
+    [InlineData("e1", "alto", "application/pdf", false)]  // dice PDF y no lo es
+    public async Task Orden_Un_resultado_que_no_sirve_es_400_y_no_se_guarda(string examen, string marca, string tipo, bool esPdf)
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConOrdenes().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value);
+        var contenido = Convert.ToBase64String(esPdf ? UnPdf : "<html>"u8.ToArray());
+
+        var r = await ConOrdenes().CargarResultado(
+            key, orden.Id, HbA1c(examen, new InformeAdjunto("x", tipo, contenido)) with { Marca = marca }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(r);
+        Assert.Empty(await Ordenes.ListResultadosAsync(key, CancellationToken.None));
+    }
+
+    private sealed class ArchivosEnMemoria : IPrivateFileStore
+    {
+        private readonly Dictionary<string, PrivateFileContent> _datos = new();
+
+        public Task<string> SaveAsync(string scope, byte[] content, string contentType, string fileName, CancellationToken cancellationToken = default)
+        {
+            var id = Guid.NewGuid().ToString("N");
+            _datos[scope + "/" + id] = new PrivateFileContent(content, contentType, fileName);
+            return Task.FromResult(id);
+        }
+
+        public Task<PrivateFileContent?> ReadAsync(string scope, string fileId, CancellationToken cancellationToken = default)
+            => Task.FromResult(_datos.TryGetValue(scope + "/" + fileId, out var v) ? v : null);
+
+        public Task<bool> DeleteAsync(string scope, string fileId, CancellationToken cancellationToken = default)
+            => Task.FromResult(_datos.Remove(scope + "/" + fileId));
+    }
+
     private sealed class InMemoryPhiStore : IPhiStore
     {
         private readonly Dictionary<string, string> _data = new();

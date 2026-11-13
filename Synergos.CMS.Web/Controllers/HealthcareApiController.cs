@@ -47,7 +47,18 @@ public sealed class HealthcareApiController : ControllerBase
         public const string Agenda = "salud.agenda-del-dia";
         public const string Llegada = "salud.llegada";
         public const string Firma = "salud.firma";
+        public const string Ordenes = "salud.orden";
+        public const string Resultado = "salud.resultado";
     }
+
+    /// <summary>El ámbito de los informes del laboratorio en el almacén privado cifrado (I4 P12).</summary>
+    public const string AmbitoDeLosInformes = "lab-results";
+
+    /// <summary>Las órdenes médicas y sus resultados, en el almacén PHI (I4).</summary>
+    private readonly IOrdenesMedicas? _ordenes;
+
+    /// <summary>El PDF de cada informe, cifrado (T6).</summary>
+    private readonly IPrivateFileStore? _archivos;
 
     /// <summary>La consulta en el orquestador: la agenda del día, la llegada y el sello de la nota (I3).</summary>
     private readonly IConsultaDeSalud? _consulta;
@@ -80,8 +91,12 @@ public sealed class HealthcareApiController : ControllerBase
         IConsentReader? permisos = null,
         IConsultaDeSalud? consulta = null,
         INotasDeLaConsulta? notas = null,
-        IOptions<HealthcareSettings>? salud = null)
+        IOptions<HealthcareSettings>? salud = null,
+        IOrdenesMedicas? ordenes = null,
+        IPrivateFileStore? archivos = null)
     {
+        _ordenes = ordenes;
+        _archivos = archivos;
         _miembros = miembros;
         _permisos = permisos;
         _consulta = consulta;
@@ -619,6 +634,218 @@ public sealed class HealthcareApiController : ControllerBase
             _ => StatusCode(StatusCodes.Status503ServiceUnavailable),
         };
     }
+
+    // ── Órdenes y resultados (003-salud-cita, I4: P11 la orden, P12 el resultado) ─────────────────────────────
+
+    /// <summary>Las órdenes de un paciente, con el último resultado de cada examen: el médico con el permiso los ve todos.</summary>
+    [HttpGet("patients/{patientKey:guid}/ordenes")]
+    public async Task<IActionResult> Ordenes(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Ordenes) is { } denied)
+        {
+            return denied;
+        }
+        if (_ordenes is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false } historia)
+        {
+            return NotFound();
+        }
+
+        // El paciente que pide lo suyo por esta ruta ve lo mismo que por «me»: sólo lo liberado.
+        var esElPaciente = _gate.CurrentMemberKey is Guid yo && historia.MemberKey == yo;
+        var resultados = await _ordenes.ListResultadosAsync(patientKey, ct);
+        return Ok((await _ordenes.ListOrdenesAsync(patientKey, ct))
+            .Select(o => OrdenesClinicas.ParaLeer(o, resultados, verSinLiberar: !esElPaciente)).ToList());
+    }
+
+    /// <summary>Las órdenes del paciente de la sesión: sus resultados, sólo los que el médico ya liberó.</summary>
+    [HttpGet("me/ordenes")]
+    public async Task<IActionResult> MisOrdenes(CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+        var patientKey = await _patients.FindKeyByMemberAsync(memberKey, ct);
+        if (patientKey is null)
+        {
+            return NotFound();
+        }
+        if (await DenyAsync("patient-record", "read", patientKey, ct, memberKey, Propositos.Ordenes) is { } denied)
+        {
+            return denied;
+        }
+        if (_ordenes is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var resultados = await _ordenes.ListResultadosAsync(patientKey.Value, ct);
+        return Ok((await _ordenes.ListOrdenesAsync(patientKey.Value, ct))
+            .Select(o => OrdenesClinicas.ParaLeer(o, resultados, verSinLiberar: false)).ToList());
+    }
+
+    /// <summary>El médico con el permiso ordena exámenes de laboratorio, imágenes o una remisión (P11).</summary>
+    [HttpPost("patients/{patientKey:guid}/ordenes")]
+    public async Task<IActionResult> Ordenar(Guid patientKey, [FromBody] OrdenEscrita body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Ordenes) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta la orden." });
+        }
+        if (OrdenesClinicas.ErrorDeLaOrden(body) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+        if (_ordenes is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false })
+        {
+            return NotFound();
+        }
+
+        var orden = OrdenesClinicas.Ordenar(body, patientKey, medico, _reloj.GetUtcNow().UtcDateTime);
+        await _ordenes.GuardarOrdenAsync(orden, ct);
+        return Ok(OrdenesClinicas.ParaLeer(orden, [], verSinLiberar: true));
+    }
+
+    /// <summary>
+    /// El consultorio carga el resultado de un examen de la orden, con el PDF del informe si lo hay (P12). Queda sin
+    /// liberar: el paciente no lo ve hasta que el médico lo revise.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/ordenes/{ordenId:guid}/resultados")]
+    [RequestSizeLimit(8_000_000)]
+    public async Task<IActionResult> CargarResultado(Guid patientKey, Guid ordenId, [FromBody] ResultadoCargado body, CancellationToken ct)
+    {
+        if (await DenyAsync("lab-result", "load", patientKey, ct, proposito: Propositos.Resultado) is { } denied)
+        {
+            return denied;
+        }
+        if (_ordenes is null || _archivos is null || _gate.CurrentMemberKey is not Guid quien)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _ordenes.GetOrdenAsync(ordenId, ct) is not { } orden || orden.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta el resultado." });
+        }
+        if (OrdenesClinicas.ErrorDelResultado(orden, body) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+
+        string? archivoId = null;
+        string? archivoNombre = null;
+        if (body.Informe is { } informe && OrdenesClinicas.BytesDe(informe) is { } bytes)
+        {
+            archivoNombre = string.IsNullOrWhiteSpace(informe.Nombre) ? "informe.pdf" : Path.GetFileName(informe.Nombre.Trim());
+            archivoId = await _archivos.SaveAsync(AmbitoDeLosInformes, bytes, "application/pdf", archivoNombre, ct);
+        }
+
+        var resultado = new ResultadoDeExamen(
+            Guid.NewGuid(), orden.Id, patientKey, body.ExamenId!, body.Valor!.Trim(), Limpio(body.Unidad), Limpio(body.Rango),
+            body.Marca!, Limpio(body.Nota), archivoId, archivoNombre, quien, _reloj.GetUtcNow().UtcDateTime);
+        await _ordenes.GuardarResultadoAsync(resultado, ct);
+        return Ok(OrdenesClinicas.ParaLeer(orden, await _ordenes.ListResultadosAsync(patientKey, ct), verSinLiberar: true));
+    }
+
+    /// <summary>
+    /// El médico revisa el resultado y lo libera al paciente (P12). Liberar dos veces da lo mismo; con todos los exámenes
+    /// liberados, la orden queda cumplida.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/resultados/{resultadoId:guid}/liberar")]
+    public async Task<IActionResult> LiberarResultado(Guid patientKey, Guid resultadoId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Resultado) is { } denied)
+        {
+            return denied;
+        }
+        if (_ordenes is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _ordenes.GetResultadoAsync(resultadoId, ct) is not { } resultado || resultado.PatientKey != patientKey
+            || await _ordenes.GetOrdenAsync(resultado.OrdenId, ct) is not { } orden)
+        {
+            return NotFound();
+        }
+
+        if (!resultado.Liberado)
+        {
+            await _ordenes.GuardarResultadoAsync(
+                resultado with { LiberadoPor = medico, LiberadoUtc = _reloj.GetUtcNow().UtcDateTime }, ct);
+        }
+        var resultados = await _ordenes.ListResultadosAsync(patientKey, ct);
+        var conEstado = OrdenesClinicas.ConSuEstado(orden, resultados);
+        if (!ReferenceEquals(conEstado, orden))
+        {
+            await _ordenes.GuardarOrdenAsync(conEstado, ct);
+        }
+        return Ok(OrdenesClinicas.ParaLeer(conEstado, resultados, verSinLiberar: true));
+    }
+
+    /// <summary>El PDF del informe, para el médico con el permiso (P12).</summary>
+    [HttpGet("patients/{patientKey:guid}/resultados/{resultadoId:guid}/informe")]
+    public async Task<IActionResult> InformeDelResultado(Guid patientKey, Guid resultadoId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Resultado) is { } denied)
+        {
+            return denied;
+        }
+        var esElPaciente = _gate.CurrentMemberKey is Guid yo
+            && await _patients.GetAsync(patientKey, ct) is { } historia && historia.MemberKey == yo;
+        return await InformeAsync(patientKey, resultadoId, soloLiberado: esElPaciente, ct);
+    }
+
+    /// <summary>El PDF del informe del paciente de la sesión: sólo de un resultado liberado.</summary>
+    [HttpGet("me/resultados/{resultadoId:guid}/informe")]
+    public async Task<IActionResult> MiInforme(Guid resultadoId, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return Unauthorized();
+        }
+        if (await _patients.FindKeyByMemberAsync(memberKey, ct) is not Guid patientKey)
+        {
+            return NotFound();
+        }
+        if (await DenyAsync("patient-record", "read", patientKey, ct, memberKey, Propositos.Resultado) is { } denied)
+        {
+            return denied;
+        }
+        return await InformeAsync(patientKey, resultadoId, soloLiberado: true, ct);
+    }
+
+    private async Task<IActionResult> InformeAsync(Guid patientKey, Guid resultadoId, bool soloLiberado, CancellationToken ct)
+    {
+        if (_ordenes is null || _archivos is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        // Uno sin liberar no existe para el paciente: el mismo 404 que uno que no es suyo.
+        if (await _ordenes.GetResultadoAsync(resultadoId, ct) is not { ArchivoId: { } archivoId } resultado
+            || resultado.PatientKey != patientKey || (soloLiberado && !resultado.Liberado))
+        {
+            return NotFound();
+        }
+        var archivo = await _archivos.ReadAsync(AmbitoDeLosInformes, archivoId, ct);
+        return archivo is null ? NotFound() : File(archivo.Content, archivo.ContentType, archivo.FileName);
+    }
+
+    private static string? Limpio(string? texto) => string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
 
     /// <summary>«Hoy» en el sitio: con el de UTC, desde las siete de la noche en Bogotá una vacuna de hoy sería futura.</summary>
     private DateOnly Hoy(DateTimeOffset ahora) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ahora, _zona).DateTime);

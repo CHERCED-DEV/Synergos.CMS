@@ -197,6 +197,29 @@ public sealed class DefaultPhiAccessGuardTests
             DetalleAuditado());
     }
 
+    /// <summary>
+    /// Cargar el resultado de un examen (I4) es del médico y de enfermería, con el permiso del paciente; recepción no carga
+    /// datos clínicos.
+    /// </summary>
+    [Theory]
+    [InlineData("doctor", true, true)]
+    [InlineData("nurse", true, true)]
+    [InlineData("nurse", false, false)]
+    [InlineData("reception", true, false)]
+    public async Task Load_ElResultadoLoCarganMedicoYEnfermeriaConElPermisoDelPaciente(string rol, bool conPermiso, bool pasa)
+    {
+        var actor = Guid.NewGuid();
+        var paciente = Guid.NewGuid();
+        Authenticated(actor);
+        _gate.HasAnyRole(Arg.Any<string>()).Returns(ci => ((string)ci[0]).Split(',').Contains(rol));
+        _consent.HasActiveConsentAsync(paciente, actor, Arg.Any<CancellationToken>()).Returns(conPermiso);
+
+        var d = await BuildSut().CheckAccessAsync(
+            new AccessCheckRequest("lab-result", "load", TargetPatientKey: paciente), CancellationToken.None);
+
+        Assert.Equal(pasa, d.IsAllowed);
+    }
+
     /// <summary>Abrir no es leer ni escribir: recepción con «open» no entra a una historia ni a una receta.</summary>
     [Theory]
     [InlineData("patient-record", "read")]
