@@ -44,7 +44,19 @@ public sealed class HealthcareApiController : ControllerBase
         public const string Historia = "salud.historia";
         public const string Apertura = "salud.apertura";
         public const string Busqueda = "salud.busqueda";
+        public const string Agenda = "salud.agenda-del-dia";
+        public const string Llegada = "salud.llegada";
+        public const string Firma = "salud.firma";
     }
+
+    /// <summary>La consulta en el orquestador: la agenda del día, la llegada y el sello de la nota (I3).</summary>
+    private readonly IConsultaDeSalud? _consulta;
+
+    /// <summary>Las notas de la consulta, en el almacén PHI (I3 P6).</summary>
+    private readonly INotasDeLaConsulta? _notas;
+
+    /// <summary>El propósito de la llave del consultorio en <c>Api.Signing</c> (Q14).</summary>
+    private readonly string _llaveDeFirma;
 
     /// <summary>La clave del miembro por su correo, para abrirle la historia (T056).</summary>
     private readonly IBuscadorDeMiembros? _miembros;
@@ -65,10 +77,16 @@ public sealed class HealthcareApiController : ControllerBase
         TimeProvider? reloj = null,
         IOptions<ListadosSettings>? listados = null,
         IBuscadorDeMiembros? miembros = null,
-        IConsentReader? permisos = null)
+        IConsentReader? permisos = null,
+        IConsultaDeSalud? consulta = null,
+        INotasDeLaConsulta? notas = null,
+        IOptions<HealthcareSettings>? salud = null)
     {
         _miembros = miembros;
         _permisos = permisos;
+        _consulta = consulta;
+        _notas = notas;
+        _llaveDeFirma = salud?.Value.LlaveDeFirma ?? new HealthcareSettings().LlaveDeFirma;
         _guard = guard;
         _patients = patients;
         _appointments = appointments;
@@ -378,6 +396,228 @@ public sealed class HealthcareApiController : ControllerBase
         return historia is null || resultado == ResultadoDeValidar.NoExiste
             ? NotFound()
             : Ok(HistoriaClinica.ParaLeer(historia));
+    }
+
+    // ── La consulta (003-salud-cita, I3: P9 la agenda del día, P10 la llegada, P6 la nota firmada) ──────────
+
+    /// <summary>
+    /// La agenda del día de un profesional, desde Booking por el orquestador, con el nombre de cada paciente desde su
+    /// historia (P9). Es del personal: la guardia lo decide como agenda, sin el permiso clínico.
+    /// </summary>
+    [HttpGet("agenda")]
+    public async Task<IActionResult> AgendaDelDia([FromQuery] string? profesional, [FromQuery] string? dia, CancellationToken ct)
+    {
+        if (await DenyAsync("appointment", "read", null, ct, proposito: Propositos.Agenda) is { } denied)
+        {
+            return denied;
+        }
+        if (string.IsNullOrWhiteSpace(profesional)
+            || !DateOnly.TryParseExact(dia, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var fecha))
+        {
+            return BadRequest(new { error = "Hacen falta el profesional y el día (aaaa-mm-dd)." });
+        }
+
+        var medianoche = fecha.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var desde = new DateTimeOffset(medianoche, _zona.GetUtcOffset(medianoche));
+        var citas = _consulta is null ? null : await _consulta.AgendaAsync(profesional.Trim(), desde, desde.AddDays(1), ct);
+        if (citas is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var filas = new List<object>(citas.Count);
+        foreach (var cita in citas)
+        {
+            Guid? patientKey = null;
+            string? nombre = null;
+            if (cita.PacienteKind == DefaultPhiAccessGuard.SujetoDelPaciente
+                && Guid.TryParseExact(cita.PacienteId, "N", out var miembro)
+                && await _patients.FindKeyByMemberAsync(miembro, ct) is Guid key
+                && await _patients.GetAsync(key, ct) is { IsDeleted: false } historia)
+            {
+                patientKey = key;
+                nombre = historia.DisplayName;
+            }
+            filas.Add(new { cita.ReservaId, cita.Inicio, cita.Fin, cita.Llegada, paciente = new { nombre, patientKey } });
+        }
+        return Ok(new { citas = filas });
+    }
+
+    /// <summary>Marca un paso de la llegada de una cita: llegó, en sala, atendido o no vino (P10).</summary>
+    [HttpPost("agenda/{reservaId}/llegada")]
+    public async Task<IActionResult> MarcarLlegada(string reservaId, [FromBody] PasoDeLlegada body, CancellationToken ct)
+    {
+        if (await DenyAsync("appointment", "write", null, ct, proposito: Propositos.Llegada) is { } denied)
+        {
+            return denied;
+        }
+        if (body?.Paso is not { } paso || !LlegadaALaConsulta.Pasos.Contains(paso))
+        {
+            return BadRequest(new { error = "El paso es llegar, pasar, atender o no-vino." });
+        }
+        if (_consulta is null || _gate.CurrentMemberKey is not Guid quien)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var r = await _consulta.MarcarLlegadaAsync(reservaId, paso, quien, ct);
+        return r.Estado switch
+        {
+            EstadoDeLaConsulta.Hecho => Ok(new { reservaId, llegada = r.Valor }),
+            EstadoDeLaConsulta.Rechazado => Conflict(new { error = r.Codigo }),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable),
+        };
+    }
+
+    /// <summary>Las notas de la consulta de un paciente: el médico con el permiso, o el paciente sobre lo suyo (P6).</summary>
+    [HttpGet("patients/{patientKey:guid}/notas")]
+    public async Task<IActionResult> Notas(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        return Ok((await _notas.ListAsync(patientKey, ct)).Select(NotaClinica.ParaLeer).ToList());
+    }
+
+    /// <summary>
+    /// El médico escribe o cambia su nota mientras no la firma (P6). Firmada no se cambia: una corrección es otra nota.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/notas")]
+    public async Task<IActionResult> EscribirNota(Guid patientKey, [FromBody] NotaEscrita body, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta la nota." });
+        }
+        if (NotaClinica.Error(body) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+        if (_notas is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false })
+        {
+            return NotFound();
+        }
+
+        var actual = body.Id is Guid id ? await _notas.GetAsync(id, ct) : null;
+        if (body.Id is not null && (actual is null || actual.PatientKey != patientKey))
+        {
+            return NotFound();
+        }
+        if (actual is not null && actual.AutorKey != medico)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        var nueva = NotaClinica.Escribir(actual, body, patientKey, medico, _reloj.GetUtcNow().UtcDateTime);
+        if (nueva is null)
+        {
+            return Conflict(new { error = "La nota está firmada: una corrección es otra nota." });
+        }
+        await _notas.GuardarAsync(nueva, ct);
+        return Ok(NotaClinica.ParaLeer(nueva));
+    }
+
+    /// <summary>
+    /// El autor firma su nota: su huella, sellada con la llave del consultorio en <c>Api.Signing</c> (P6, Q14). Firmar dos
+    /// veces da la misma firma. Sin la llave del consultorio, el no de la capacidad y la nota sigue en borrador.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/notas/{notaId:guid}/firmar")]
+    public async Task<IActionResult> FirmarNota(Guid patientKey, Guid notaId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "write", patientKey, ct, proposito: Propositos.Firma) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null || _consulta is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var nota = await _notas.GetAsync(notaId, ct);
+        if (nota is null || nota.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (nota.Firma is not null)
+        {
+            return Ok(NotaClinica.ParaLeer(nota));
+        }
+        if (nota.AutorKey != medico)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        var huella = NotaClinica.Huella(nota);
+        var sello = await _consulta.SellarAsync(_llaveDeFirma, huella, ct);
+        if (sello.Estado == EstadoDeLaConsulta.Rechazado)
+        {
+            return Conflict(new { error = sello.Codigo });
+        }
+        if (sello.Estado != EstadoDeLaConsulta.Hecho || sello.Valor is null || sello.Extra is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var firmada = nota with
+        {
+            Firma = new FirmaDeLaNota(huella, sello.Valor, sello.Extra, _llaveDeFirma, medico, _reloj.GetUtcNow().UtcDateTime),
+        };
+        await _notas.GuardarAsync(firmada, ct);
+        return Ok(NotaClinica.ParaLeer(firmada));
+    }
+
+    /// <summary>
+    /// Si la firma de una nota sigue valiendo: la huella de lo que hay hoy en el almacén, contra el sello (P6). Una nota
+    /// cambiada después de firmar no cuadra.
+    /// </summary>
+    [HttpGet("patients/{patientKey:guid}/notas/{notaId:guid}/comprobar")]
+    public async Task<IActionResult> ComprobarNota(Guid patientKey, Guid notaId, CancellationToken ct)
+    {
+        if (await DenyAsync("patient-record", "read", patientKey, ct, proposito: Propositos.Historia) is { } denied)
+        {
+            return denied;
+        }
+        if (_notas is null || _consulta is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        var nota = await _notas.GetAsync(notaId, ct);
+        if (nota is null || nota.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (nota.Firma is not { } firma)
+        {
+            return Ok(new { firmada = false, valida = false });
+        }
+
+        var huella = NotaClinica.Huella(nota);
+        if (!string.Equals(huella, firma.Huella, StringComparison.Ordinal))
+        {
+            return Ok(new { firmada = true, valida = false });
+        }
+        var r = await _consulta.ComprobarSelloAsync(firma.Llave, huella, firma.Sello, ct);
+        return r.Estado switch
+        {
+            EstadoDeLaConsulta.Hecho => Ok(new { firmada = true, valida = true, llaveId = r.Valor }),
+            EstadoDeLaConsulta.Rechazado => Ok(new { firmada = true, valida = false }),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable),
+        };
     }
 
     /// <summary>«Hoy» en el sitio: con el de UTC, desde las siete de la noche en Bogotá una vacuna de hoy sería futura.</summary>

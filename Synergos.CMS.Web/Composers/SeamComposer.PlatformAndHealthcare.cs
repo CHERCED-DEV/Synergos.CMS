@@ -232,6 +232,21 @@ public sealed partial class SeamComposer
             services.AddClienteDelArbolDeServicios(
                 Services.Salud.PublicadorDeOfertasDeProfesionales.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
         }
+        // 003-salud-cita, I3: la consulta en el orquestador de Salud —la agenda del día (P9), la llegada (P10) y el sello
+        // de la nota (P6)—, en el mismo destino. Sin él, la consulta contesta 503 y la agenda no inventa nada. Las notas
+        // viven en el almacén PHI cifrado; al orquestador sólo viaja su huella.
+        if (hayOrquestadorDeSalud)
+        {
+            services.AddClienteDelArbolDeServicios(
+                HttpConsultaDeSalud.ClientName, DestinoDelArbol.De(salud, salud["BaseUrl"]!, 10));
+            services.AddSingleton<IConsultaDeSalud, HttpConsultaDeSalud>();
+        }
+        else
+        {
+            services.AddSingleton<IConsultaDeSalud, ConsultaDeSaludSinDestino>();
+        }
+        services.AddSingleton<INotasDeLaConsulta, FileSystemNotasDeLaConsulta>();
+
         services.AddSingleton<Services.Salud.IPublicadorDeOfertasDeProfesionales>(sp => new Services.Salud.PublicadorDeOfertasDeProfesionales(
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<Services.Salud.PublicadorDeOfertasDeProfesionales>>(),

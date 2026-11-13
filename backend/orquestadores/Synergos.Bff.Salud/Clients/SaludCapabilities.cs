@@ -15,6 +15,8 @@ public sealed class SaludCapabilities : CapabilityClients
     public const string Booking = "booking";
     public const string Pricing = "pricing";
     public const string Payments = "payments";
+    public const string Workflow = "workflow";
+    public const string Signing = "signing";
 
     public SaludCapabilities(IHttpClientFactory clients) : base(clients) { }
 
@@ -90,4 +92,33 @@ public sealed class SaludCapabilities : CapabilityClients
 
     public Task<Result<PaymentDto>> GetPaymentAsync(string paymentId, CancellationToken ct)
         => Get<PaymentDto>(Payments, $"v1/payments/{paymentId}", ct);
+
+    // ── La consulta (I3): la agenda del día, la llegada y el sello de la nota ─────────────────
+
+    /// <summary>Las reservas de un recurso, una página. Booking no filtra por fecha: quien llama recorta la ventana.</summary>
+    public Task<Result<PaginaDto<ReservaDeLaAgendaDto>>> ReservasDelRecursoAsync(string recursoId, int offset, int limit, CancellationToken ct)
+        => Get<PaginaDto<ReservaDeLaAgendaDto>>(Booking,
+            $"v1/reservations?resourceId={Uri.EscapeDataString(recursoId)}&offset={offset}&limit={limit}", ct);
+
+    /// <summary>Las instancias de un sujeto en Workflow: la de la llegada de una cita, si ya arrancó.</summary>
+    public Task<Result<PaginaDto<InstanciaDeLlegadaDto>>> InstanciasDeAsync(Ref sujeto, CancellationToken ct)
+        => Get<PaginaDto<InstanciaDeLlegadaDto>>(Workflow,
+            $"v1/instances?subjectKind={Uri.EscapeDataString(sujeto.Kind)}&subjectId={Uri.EscapeDataString(sujeto.Id)}", ct);
+
+    /// <summary>Arranca la instancia; con la misma llave devuelve la que ya arrancó.</summary>
+    public Task<Result<InstanciaDeLlegadaDto>> ArrancarAsync(string proceso, Ref sujeto, IdempotencyKey key, CancellationToken ct)
+        => Post<InstanciaDeLlegadaDto>(Workflow, "v1/instances",
+            new { definitionKey = proceso, subjectKind = sujeto.Kind, subjectId = sujeto.Id }, key, ct);
+
+    public Task<Result<InstanciaDeLlegadaDto>> DispararAsync(
+        string instancia, string transicion, Ref actor, IReadOnlyList<string> roles, IdempotencyKey key, CancellationToken ct)
+        => Post<InstanciaDeLlegadaDto>(Workflow, $"v1/instances/{Uri.EscapeDataString(instancia)}/fire",
+            new { transition = transicion, actorKind = actor.Kind, actorId = actor.Id, actorRoles = roles }, key, ct);
+
+    /// <summary>Sella un contenido con la llave vigente de su propósito (<c>/v1/seals</c>): determinista y no vence.</summary>
+    public Task<Result<SelloDto>> SellarAsync(string llave, string contenido, CancellationToken ct)
+        => Post<SelloDto>(Signing, "v1/seals", new { purpose = llave, payload = contenido }, null, ct);
+
+    public Task<Result<SelloComprobadoDto>> ComprobarSelloAsync(string llave, string contenido, string sello, CancellationToken ct)
+        => Post<SelloComprobadoDto>(Signing, "v1/seals/verify", new { purpose = llave, payload = contenido, seal = sello }, null, ct);
 }

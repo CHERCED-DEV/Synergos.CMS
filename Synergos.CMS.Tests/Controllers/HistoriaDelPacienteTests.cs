@@ -329,6 +329,128 @@ public sealed class HistoriaDelPacienteTests
 
     private static T Leer<T>(OkObjectResult ok, string campo) => (T)ok.Value!.GetType().GetProperty(campo)!.GetValue(ok.Value)!;
 
+    // ── La consulta (I3): la agenda del día, la llegada y la nota firmada ───────────────────────────────
+
+    private readonly IConsultaDeSalud _consulta = Substitute.For<IConsultaDeSalud>();
+    private FileSystemNotasDeLaConsulta? _notasReales;
+    private FileSystemNotasDeLaConsulta Notas => _notasReales ??= new FileSystemNotasDeLaConsulta(_store);
+
+    private HealthcareApiController EnLaConsulta() => new(
+        _guard, _patients, Substitute.For<IAppointmentScheduler>(), Substitute.For<IPrescriptionService>(),
+        Substitute.For<IConsentLedger>(), _gate, new EditorDeLaHistoriaClinica(_patients), consulta: _consulta, notas: Notas);
+
+    private static readonly NotaEscrita UnaNota = new(
+        Subjetivo: "Cefalea de tres días", Objetivo: "PA 120/80", Analisis: "Cefalea tensional", Plan: "Control en un mes");
+
+    private void ElOrquestadorSella() =>
+        _consulta.SellarAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(ci => new ResultadoDeLaConsulta(EstadoDeLaConsulta.Hecho, "sello-de-" + (string)ci[1], "llave-1"));
+
+    [Fact]
+    public async Task AgendaDelDia_Pone_el_nombre_de_la_historia_a_quien_la_tiene_y_nada_a_quien_no()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        var lunes = new DateTimeOffset(2027, 3, 15, 14, 0, 0, TimeSpan.Zero);
+        _consulta.AgendaAsync("dra-1", Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new CitaDelDia("r-1", lunes, lunes.AddMinutes(30), "salud.paciente", Miembro.ToString("N"), "agendada"),
+                new CitaDelDia("r-2", lunes.AddHours(1), lunes.AddHours(1.5), "salud.paciente", Guid.NewGuid().ToString("N"), "llego"),
+            });
+
+        var ok = Assert.IsType<OkObjectResult>(await EnLaConsulta().AgendaDelDia("dra-1", "2027-03-15", CancellationToken.None));
+
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(ok.Value);
+        var citas = json.GetProperty("citas").EnumerateArray().ToList();
+        Assert.Equal(("Camila Restrepo", key.ToString()), (citas[0].GetProperty("paciente").GetProperty("nombre").GetString(),
+            citas[0].GetProperty("paciente").GetProperty("patientKey").GetString()));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, citas[1].GetProperty("paciente").GetProperty("nombre").ValueKind);
+        await _guard.Received().CheckAccessAsync(
+            Arg.Is<AccessCheckRequest>(r => r.ResourceType == "appointment" && r.Action == "read" && r.Proposito == "salud.agenda-del-dia"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MarcarLlegada_Un_paso_que_no_existe_es_400_y_el_no_del_proceso_es_409()
+    {
+        SesionDe(Recepcion);
+        GuardiaDice(true);
+        _consulta.MarcarLlegadaAsync("r-1", "atender", Recepcion, Arg.Any<CancellationToken>())
+            .Returns(new ResultadoDeLaConsulta(EstadoDeLaConsulta.Rechazado, Codigo: "workflow.transition_not_allowed"));
+
+        Assert.IsType<BadRequestObjectResult>(await EnLaConsulta().MarcarLlegada("r-1", new PasoDeLlegada("volar"), CancellationToken.None));
+        Assert.IsType<ConflictObjectResult>(await EnLaConsulta().MarcarLlegada("r-1", new PasoDeLlegada("atender"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Nota_El_medico_la_escribe_la_firma_con_la_llave_del_consultorio_y_firmarla_otra_vez_da_lo_mismo()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        ElOrquestadorSella();
+
+        var escrita = Assert.IsType<NotaParaLeer>(Assert.IsType<OkObjectResult>(
+            await EnLaConsulta().EscribirNota(key, UnaNota, CancellationToken.None)).Value);
+        var firmada = Assert.IsType<NotaParaLeer>(Assert.IsType<OkObjectResult>(
+            await EnLaConsulta().FirmarNota(key, escrita.Id, CancellationToken.None)).Value);
+        await EnLaConsulta().FirmarNota(key, escrita.Id, CancellationToken.None);
+
+        Assert.True(firmada.Firmada);
+        var guardada = (await Notas.GetAsync(escrita.Id, CancellationToken.None))!;
+        Assert.Equal(NotaClinica.Huella(guardada), guardada.Firma!.Huella);
+        Assert.Equal(("sello-de-" + guardada.Firma.Huella, "salud.consultorio"), (guardada.Firma.Sello, guardada.Firma.Llave));
+        await _consulta.Received(1).SellarAsync("salud.consultorio", guardada.Firma.Huella, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Nota_Firmada_no_se_cambia_y_si_alguien_la_cambia_en_el_almacen_la_firma_deja_de_valer()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        ElOrquestadorSella();
+        _consulta.ComprobarSelloAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ResultadoDeLaConsulta(EstadoDeLaConsulta.Hecho, "llave-1"));
+        var nota = Assert.IsType<NotaParaLeer>(Assert.IsType<OkObjectResult>(
+            await EnLaConsulta().EscribirNota(key, UnaNota, CancellationToken.None)).Value);
+        await EnLaConsulta().FirmarNota(key, nota.Id, CancellationToken.None);
+
+        var cambio = await EnLaConsulta().EscribirNota(key, UnaNota with { Id = nota.Id, Plan = "Sin control" }, CancellationToken.None);
+        var vale = Assert.IsType<OkObjectResult>(await EnLaConsulta().ComprobarNota(key, nota.Id, CancellationToken.None));
+        var guardada = (await Notas.GetAsync(nota.Id, CancellationToken.None))!;
+        await Notas.GuardarAsync(guardada with { Plan = "Sin control" }, CancellationToken.None);
+        var noVale = Assert.IsType<OkObjectResult>(await EnLaConsulta().ComprobarNota(key, nota.Id, CancellationToken.None));
+
+        Assert.IsType<ConflictObjectResult>(cambio);
+        Assert.Equal("Control en un mes", guardada.Plan);
+        Assert.True(Leer<bool>(vale, "valida"));
+        Assert.False(Leer<bool>(noVale, "valida"));
+    }
+
+    [Fact]
+    public async Task Nota_Sin_la_guardia_no_se_escribe_ni_se_firma_y_otro_medico_no_firma_la_ajena()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        ElOrquestadorSella();
+        var nota = Assert.IsType<NotaParaLeer>(Assert.IsType<OkObjectResult>(
+            await EnLaConsulta().EscribirNota(key, UnaNota, CancellationToken.None)).Value);
+
+        SesionDe(Guid.NewGuid());
+        var ajena = await EnLaConsulta().FirmarNota(key, nota.Id, CancellationToken.None);
+        GuardiaDice(false);
+        var negada = await EnLaConsulta().EscribirNota(key, UnaNota, CancellationToken.None);
+
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(ajena).StatusCode);
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(negada).StatusCode);
+        Assert.Single(await Notas.ListAsync(key, CancellationToken.None));
+        Assert.Null((await Notas.GetAsync(nota.Id, CancellationToken.None))!.Firma);
+    }
+
     private sealed class InMemoryPhiStore : IPhiStore
     {
         private readonly Dictionary<string, string> _data = new();

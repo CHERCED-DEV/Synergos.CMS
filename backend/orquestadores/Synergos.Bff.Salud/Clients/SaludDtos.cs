@@ -14,3 +14,10 @@ public sealed record MoneyDto(decimal Amount, string Currency);
 public sealed record QuoteDto(MoneyDto Total);
 public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
 public sealed record ResourceDto(string Id);
+
+// ── La consulta (003-salud-cita, I3): la agenda del día, la llegada y el sello de la nota ─────────
+public sealed record ReservaDeLaAgendaDto(string Id, DateTimeOffset Start, DateTimeOffset End, string ForKind, string ForId, string Status);
+public sealed record PaginaDto<T>(IReadOnlyList<T> Items, int Total, int Offset, bool HasMore);
+public sealed record InstanciaDeLlegadaDto(string Id, string State);
+public sealed record SelloDto(string Seal, string KeyId);
+public sealed record SelloComprobadoDto(string KeyId);

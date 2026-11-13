@@ -48,6 +48,13 @@ public sealed class HealthcareSettings
     /// <summary>El término que se aplica: lo configurado, pero nunca menos que la ley.</summary>
     public int RetencionEfectivaDias => Math.Max(RecordRetentionDays, RetencionMinimaDias);
 
+    /// <summary>
+    /// El propósito de la llave del consultorio en <c>Api.Signing</c> con que se firman las notas (003-salud-cita, I3 P6;
+    /// Q14: una por consultorio). La llave la crea el arquitecto al desplegar (<c>POST /v1/keys</c>); sin ella, firmar
+    /// contesta <c>signing.no_active_key</c> y la nota queda en borrador.
+    /// </summary>
+    public string LlaveDeFirma { get; init; } = "salud.consultorio";
+
     /// <summary>Si true, los roles de staff (doctor/nurse/reception) requieren 2FA. Default true.</summary>
     public bool RequireTwoFactorStaff { get; init; } = true;
 
