@@ -49,6 +49,8 @@ public sealed record PendingCommentsPage(
 ///   una respuesta se aplanan al hilo del top-level (sin nesting > 2).</param>
 /// <param name="Likes">Contador acumulado de reacciones "me gusta".
 ///   Default 0. Backward-compat: ausente en JSON legacy ⇒ 0.</param>
+/// <param name="Retirado">Si lo retiró la moderación tras una denuncia (012-blogs-social, I5): sigue guardado, con su
+///   caso, y no se muestra ni se le responde. Ausente en JSON legacy ⇒ false.</param>
 public sealed record Comment(
     string Id,
     int NodeId,
@@ -58,7 +60,8 @@ public sealed record Comment(
     DateTime CreatedAtUtc,
     bool Approved,
     Guid? ParentId = null,
-    int Likes = 0);
+    int Likes = 0,
+    bool Retirado = false);
 
 /// <summary>
 /// Datos para crear un comentario nuevo. El repository asigna Id,

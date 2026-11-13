@@ -76,7 +76,8 @@ const PARES = [
     { app: 'realty', controllers: ['RealtyController.cs'] },
     { app: 'booking-wizard', controllers: ['BookingController.cs'] },
     // Sus clientes viven en `libs/dominio/blogs`, uno por capacidad (012-blogs-social, I2, T014).
-    { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs'], dominio: { nombre: 'blogs' } },
+    // Y la moderación genérica, donde Blogs denuncia y decide (012-blogs-social, I5).
+    { app: 'blogs', controllers: ['BlogsController.cs', 'CommentsController.cs', 'ModeracionController.cs'], dominio: { nombre: 'blogs' } },
     { app: 'alquiler', controllers: ['AlquilerController.cs'] },
     // La consola del vendedor (013-seller-operaciones, T025): mueve las devoluciones por `return/{id}/advance` de
     // ShopCatalogController. Sus rutas del personal (VendedorDeLaTiendaController, `api/shop/seller`) no ligan todavía:

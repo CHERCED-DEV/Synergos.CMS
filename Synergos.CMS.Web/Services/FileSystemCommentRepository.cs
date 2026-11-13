@@ -50,7 +50,8 @@ public sealed class FileSystemCommentRepository : ICommentReader, ICommentWriter
     public IReadOnlyList<Comment> GetApprovedForNode(int nodeId)
     {
         var all = LoadAll(nodeId);
-        return all.Where(c => c.Approved).ToList();
+        // Lo retirado por moderación sigue guardado y no se muestra (012-blogs-social, I5).
+        return all.Where(c => c.Approved && !c.Retirado).ToList();
     }
 
     public IReadOnlyList<Comment> GetPendingForNode(int nodeId)
@@ -257,6 +258,29 @@ public sealed class FileSystemCommentRepository : ICommentReader, ICommentWriter
         return true;
     }
 
+    public async Task<bool> RetirarAsync(int nodeId, string commentId, CancellationToken cancellationToken)
+    {
+        var existing = LoadAll(nodeId);
+        var index = existing.FindIndex(c => string.Equals(c.Id, commentId, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            return false;
+        }
+        if (existing[index].Retirado)
+        {
+            return true;
+        }
+
+        existing[index] = existing[index] with { Retirado = true };
+        await PersistAsync(nodeId, existing, cancellationToken);
+
+        _logger.LogInformation(
+            "Comment retired by moderation: nodeId={NodeId} commentId={CommentId}",
+            nodeId, commentId);
+
+        return true;
+    }
+
     private async Task PersistAsync(int nodeId, List<Comment> comments, CancellationToken cancellationToken)
     {
         var path = ResolvePath(nodeId);
@@ -316,7 +340,7 @@ public sealed class FileSystemCommentRepository : ICommentReader, ICommentWriter
     {
         var existing = LoadAll(nodeId);
         var index = existing.FindIndex(c => string.Equals(c.Id, commentId, StringComparison.Ordinal));
-        if (index < 0 || !existing[index].Approved)
+        if (index < 0 || !existing[index].Approved || existing[index].Retirado)
         {
             return null;
         }
@@ -348,9 +372,9 @@ public sealed class FileSystemCommentRepository : ICommentReader, ICommentWriter
         var parent = existing.FirstOrDefault(c =>
             Guid.TryParseExact(c.Id, "N", out var cid) && cid == parentGuid);
 
-        if (parent is null || !parent.Approved)
+        if (parent is null || !parent.Approved || parent.Retirado)
         {
-            // Parent fantasma o no aprobado ⇒ degradar a top-level.
+            // Parent fantasma, no aprobado o retirado por moderación ⇒ degradar a top-level.
             return null;
         }
 

@@ -548,14 +548,43 @@
       "tipo": "funcionalidad",
       "record": "BlogsProps",
       "diccionario": [
-        "Blogs.Comentarios"
+        "Blogs.Comentarios",
+        "Blogs.Moderacion"
       ],
       "claves": [
         "Blogs.Comentarios.EnRevision",
         "Blogs.Comentarios.MeGustaNoGuardado",
         "Blogs.Comentarios.MeGustaSinSesion",
         "Blogs.Comentarios.NoPublicado",
-        "Blogs.Comentarios.SinSesion"
+        "Blogs.Comentarios.SinSesion",
+        "Blogs.Moderacion.Ayuda",
+        "Blogs.Moderacion.Cancelar",
+        "Blogs.Moderacion.Cerrar",
+        "Blogs.Moderacion.Cola",
+        "Blogs.Moderacion.ColaNoCargo",
+        "Blogs.Moderacion.ColaVacia",
+        "Blogs.Moderacion.Comentario",
+        "Blogs.Moderacion.Confirmar",
+        "Blogs.Moderacion.Contenido",
+        "Blogs.Moderacion.Decidida",
+        "Blogs.Moderacion.Denunciar",
+        "Blogs.Moderacion.Denuncias",
+        "Blogs.Moderacion.Enviada",
+        "Blogs.Moderacion.Enviar",
+        "Blogs.Moderacion.Fecha",
+        "Blogs.Moderacion.Mantener",
+        "Blogs.Moderacion.Motivo",
+        "Blogs.Moderacion.NoDecidida",
+        "Blogs.Moderacion.NoEnviada",
+        "Blogs.Moderacion.PorQue",
+        "Blogs.Moderacion.Publicacion",
+        "Blogs.Moderacion.Que",
+        "Blogs.Moderacion.Retirar",
+        "Blogs.Moderacion.SesionParaModerar",
+        "Blogs.Moderacion.SinPermiso",
+        "Blogs.Moderacion.SinSesion",
+        "Blogs.Moderacion.Titulo",
+        "Blogs.Moderacion.YaNoEsta"
       ],
       "campos": [
         {
@@ -578,6 +607,12 @@
         },
         {
           "nombre": "lecturasBase",
+          "tipo": "string",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "moderacionBase",
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
@@ -637,6 +672,10 @@
             {
               "editor": "estudio",
               "viaja": "estudio"
+            },
+            {
+              "editor": "moderacion",
+              "viaja": "moderacion"
             }
           ]
         }
@@ -647,6 +686,7 @@
         "subheading": "Sigue autores, publica historias y reacciona en tiempo real",
         "apiBase": "/api/blogs",
         "lecturasBase": "/api/lecturas/blogs",
+        "moderacionBase": "/api/moderacion",
         "vista": "explorar",
         "rutas": [
           {

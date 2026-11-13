@@ -5,4 +5,6 @@ namespace Synergos.CMS.Interfaces;
 /// <param name="LecturasBase">La base de las lecturas genéricas de Blogs (012-blogs-social, I4): el catálogo de la red,
 /// los guardados y los mensajes directos con forma neutra. Vacía, la app vuelve a las rutas interinas de
 /// <paramref name="ApiBase"/>.</param>
-public sealed record NegocioDeBlogs(string ApiBase, string LecturasBase);
+/// <param name="ModeracionBase">Dónde se denuncia lo publicado y vive la cola de moderación (012-blogs-social, I5).
+/// Vacía, la app no ofrece denunciar.</param>
+public sealed record NegocioDeBlogs(string ApiBase, string LecturasBase, string ModeracionBase);
