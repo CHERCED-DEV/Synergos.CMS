@@ -33,6 +33,19 @@ public sealed class CalendarioDeVentaTests
 {
     private static readonly TimeSpan Colombia = TimeSpan.FromHours(-5);
 
+    /// <summary>
+    /// El catálogo de muestra cuenta sus fechas desde «hoy» (016-contenido-piezas). Estas pruebas razonan sobre las fechas
+    /// de siempre —el festival del 15 de agosto de 2026—, así que lo construyen con el reloj en el 26 de julio de 2026,
+    /// el ancla con que salen exactamente esas fechas.
+    /// </summary>
+    private static StubEventCatalogProvider CatalogoDelAncla()
+        => new(new RelojDelAncla());
+
+    private sealed class RelojDelAncla : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 7, 26, 12, 0, 0, TimeSpan.Zero);
+    }
+
     /// <summary>El día que se midió el defecto, a mediodía en Bogotá.</summary>
     private static readonly DateTimeOffset DiaDelDefecto = new(2026, 10, 2, 12, 0, 0, Colombia);
 
@@ -73,7 +86,7 @@ public sealed class CalendarioDeVentaTests
         IReservationService? reservas = null,
         IPaymentProvider? pagos = null,
         IEventCatalogProvider? catalogo = null)
-        => new(catalogo ?? new StubEventCatalogProvider(), reservas ?? new StubReservationService(),
+        => new(catalogo ?? CatalogoDelAncla(), reservas ?? new StubReservationService(),
             pagos ?? new StubPaymentProvider(), null, null, null, () => ahora, signer: Firmante);
 
     // ── La regla ────────────────────────────────────────────────────────────
@@ -93,7 +106,7 @@ public sealed class CalendarioDeVentaTests
     [Fact] // «hasta el 14 de agosto» = hasta que termina el 14 en Colombia, no en UTC.
     public async Task La_venta_cierra_al_terminar_el_dia_en_Colombia()
     {
-        var general = (await new StubEventCatalogProvider().GetEventAsync("evt-festival-estereo"))!
+        var general = (await CatalogoDelAncla().GetEventAsync("evt-festival-estereo"))!
             .Tiers.Single(t => t.Code == "GEN");
         Assert.Equal("Hasta el 14 de agosto de 2026", general.SaleWindow);
 
@@ -157,7 +170,7 @@ public sealed class CalendarioDeVentaTests
     [Fact]
     public async Task Una_localidad_que_todavia_no_abre_no_se_vende()
     {
-        var catalogo = new StubEventCatalogProvider();
+        var catalogo = CatalogoDelAncla();
         var abre = new DateTimeOffset(2026, 9, 1, 0, 0, 0, Colombia);
         var publicado = await catalogo.PublishEventAsync(new EventDetail(
             new EventSummary(string.Empty, "lanzamiento", "Lanzamiento", "Música", "Bogotá", "Teatro",
@@ -202,7 +215,7 @@ public sealed class CalendarioDeVentaTests
     [Fact]
     public async Task El_endpoint_rechaza_con_400_y_el_motivo_como_el_aforo()
     {
-        var catalogo = new StubEventCatalogProvider();
+        var catalogo = CatalogoDelAncla();
         var pagos = Pagos();
         var controlador = new EventosController(
             catalogo,
@@ -244,7 +257,7 @@ public sealed class CalendarioDeVentaTests
     public async Task El_texto_de_cada_ventana_dice_el_dia_en_que_cierra_la_venta()
     {
         var esCo = CultureInfo.GetCultureInfo("es-CO");
-        var catalogo = new StubEventCatalogProvider();
+        var catalogo = CatalogoDelAncla();
         var localidades = new List<EventTier>();
         foreach (var resumen in await catalogo.SearchAsync(null))
         {

@@ -13,6 +13,44 @@ public class StubEventCatalogProviderTests
 {
     private static IEventCatalogProvider Make() => new StubEventCatalogProvider();
 
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    private static readonly TimeSpan Colombia = TimeSpan.FromHours(-5);
+
+    [Fact] // 016: con el reloj en el 26 de julio de 2026 salen las fechas de siempre (las que fijan las demás pruebas)
+    public async Task Con_el_reloj_en_el_ancla_de_siempre_las_fechas_no_cambian()
+    {
+        var catalogo = new StubEventCatalogProvider(new RelojFijo(new DateTimeOffset(2026, 7, 26, 10, 0, 0, Colombia)));
+
+        var festival = (await catalogo.GetEventAsync("evt-festival-estereo"))!;
+        Assert.Equal(new DateTimeOffset(2026, 8, 15, 19, 0, 0, TimeSpan.Zero), festival.Summary.StartUtc);
+        Assert.Equal("Festival Estéreo 2026", festival.Summary.Title);
+        Assert.Equal("Hasta el 14 de agosto de 2026", festival.Tiers.Single(t => t.Code == "GEN").SaleWindow);
+        Assert.Equal("Concierto Sinfónico de Octubre", (await catalogo.GetEventAsync("evt-concierto-sinfonico"))!.Summary.Title);
+    }
+
+    [Fact] // 016: el catálogo de muestra nunca ofrece un evento pasado, se consulte cuando se consulte
+    public async Task Las_fechas_se_cuentan_desde_hoy_y_todos_los_eventos_quedan_por_venir()
+    {
+        var hoy = new DateTimeOffset(2027, 3, 10, 9, 0, 0, Colombia);
+        var catalogo = new StubEventCatalogProvider(new RelojFijo(hoy));
+
+        var eventos = await catalogo.SearchAsync(null);
+
+        Assert.Equal(4, eventos.Count);
+        Assert.All(eventos, e => Assert.True(e.StartUtc > hoy, $"{e.Title} ({e.StartUtc:O}) no queda por venir"));
+        var festival = (await catalogo.GetEventAsync("evt-festival-estereo"))!;
+        Assert.Equal(new DateTimeOffset(2027, 3, 30, 14, 0, 0, Colombia), festival.Summary.StartUtc);
+        Assert.Equal("Festival Estéreo 2027", festival.Summary.Title);
+        Assert.Equal("Hasta el 29 de marzo de 2027", festival.Tiers.Single(t => t.Code == "GEN").SaleWindow);
+        Assert.Equal("Concierto Sinfónico de Mayo", (await catalogo.GetEventAsync("evt-concierto-sinfonico"))!.Summary.Title);
+        // «Cuento de Navidad» sigue en diciembre: el próximo 14 de diciembre.
+        Assert.Equal(new DateTimeOffset(2027, 12, 14, 15, 30, 0, Colombia), (await catalogo.GetEventAsync("evt-obra-infantil"))!.Summary.StartUtc);
+    }
+
     [Fact] // empty: sin query devuelve todo el catálogo, ordenado por fecha
     public async Task Search_NoQuery_ReturnsAllOrderedByDate()
     {

@@ -82,6 +82,7 @@ public sealed class DevContenidoDeVerticales
             ["booking"] = (Booking, RecetaBooking),
             ["hoteles"] = (Hoteles, RecetaHoteles),
             ["educacion"] = (Educacion, RecetaEducacion),
+            ["eventos"] = (Eventos, RecetaEventos),
         };
 
     /// <summary>
@@ -425,6 +426,30 @@ public sealed class DevContenidoDeVerticales
         var nuevas = cuerpo.InsertarSeccionesAntesDe(rejilla, b.Build(), esLaDeDestacados);
         var fuera = cuerpo.DesconectarSeccionesCon(rejilla, esLaDeDestacados);
         return $"destacados:{CursosDestacados.Length};secciones-nuevas:{nuevas};desconectadas:{fuera}";
+    }
+
+    // ───────────────────────────── Eventos (I5) ─────────────────────────────
+
+    private string RecetaEventos(CuerpoEditable cuerpo)
+    {
+        // Los «Eventos destacados» eran tres tarjetas de texto sobre el motor (Synergos Summit, tokens). Un texto fijo
+        // envejece: en su lugar va el listado que arma el servidor con la fuente «eventos», que sólo trae los eventos
+        // que no han empezado (EventosDelCatalogo). La sección vieja queda desconectada, la pieza sigue.
+        if (cuerpo.Contiene(Marca("eventos"))) { return "proximos:ya"; }
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var esLaDeDestacados = CuerpoEditable.Donde("headingText", "Eventos destacados");
+        var listado = KeyOf("elementSynDataGrid");
+
+        var b = new BlockGridJsonBuilder();
+        var s = Seccion(b, null, Marca("eventos"));
+        Encabezado(s, "Próximos eventos");
+        s.AddChild(AreaDeLaSeccion, listado, g => g
+            .Set("fuente", "[\"eventos\"]")
+            .ApplyDefaults(_defaults.DefaultsFor(listado)));
+
+        var nuevas = cuerpo.InsertarSeccionesAntesDe(rejilla, b.Build(), esLaDeDestacados);
+        var fuera = cuerpo.DesconectarSeccionesCon(rejilla, esLaDeDestacados);
+        return $"proximos:listado;secciones-nuevas:{nuevas};desconectadas:{fuera}";
     }
 
     // ───────────────────────────── Atribuciones (I6) ─────────────────────────────
