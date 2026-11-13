@@ -1443,6 +1443,7 @@
         "Health.Record.OrderSaved",
         "Health.Record.OrderType",
         "Health.Record.OrdersTitle",
+        "Health.Record.OrdersUnreadable",
         "Health.Record.PatientEmail",
         "Health.Record.PatientRecord",
         "Health.Record.Pending",
