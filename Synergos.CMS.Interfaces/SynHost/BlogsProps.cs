@@ -14,7 +14,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y lo que dice al comentar</b> sale de la sección <c>Blogs.Comentarios</c> del diccionario (ADR 0136,
 /// 012-blogs-social, I0): que el comentario quedó en revisión, que no se publicó, que hace falta sesión. Son los
 /// primeros textos de la red en el diccionario; los demás siguen escritos en la app y su deuda la cuenta
-/// <c>gate:literales</c>.</para>
+/// <c>gate:literales</c>. Los de denunciar y la cola de moderación son de la sección <c>Blogs.Moderacion</c> (I5).</para>
 ///
 /// <para><b>Y qué parte de la red es esta página</b> (<c>Vista</c>, 012-blogs-social, I3): la elige el editor en el
 /// bloque; vacía, el inicio, que es la red entera de antes. Las <c>Rutas</c> dicen en qué página del sitio vive cada
@@ -24,12 +24,16 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y de dónde lee</b> (<c>LecturasBase</c>, 012-blogs-social, I4): la base de las lecturas genéricas de Blogs
 /// (<c>/api/lecturas/blogs</c>): Explorar, los guardados y los mensajes directos con forma neutra, como la tienda y
 /// Salud. Vacía, la app lee las rutas interinas de <c>ApiBase</c>, como antes. Es del despliegue.</para>
+///
+/// <para><b>Y dónde se modera</b> (<c>ModeracionBase</c>, 012-blogs-social, I5): la moderación genérica del CMS
+/// (<c>/api/moderacion</c>), donde se denuncia y vive la cola. Vacía, la app no ofrece denunciar. Es del despliegue.</para>
 /// </remarks>
-[ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios"])]
+[ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios", "Blogs.Moderacion"])]
 public sealed record BlogsProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string ModeracionBase,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
     [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);

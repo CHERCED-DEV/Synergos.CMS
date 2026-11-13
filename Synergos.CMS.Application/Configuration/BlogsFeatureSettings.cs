@@ -28,9 +28,19 @@ public sealed class BlogsFeatureSettings : SeccionDeNegocio<BlogsFeatureSitio, N
     /// </remarks>
     public string LecturasBase { get; init; } = "/api/lecturas/" + CatalogoDeBlogs.Vertical;
 
+    /// <summary>
+    /// Dónde se denuncia lo publicado y vive la cola de moderación (012-blogs-social, I5): la moderación genérica del
+    /// CMS.
+    /// </summary>
+    /// <remarks>Vacía, la app no ofrece denunciar ni la cola: es la vuelta atrás sin desplegar.</remarks>
+    public string ModeracionBase { get; init; } = "/api/moderacion";
+
     /// <inheritdoc />
     protected override NegocioDeBlogs Fusionar(BlogsFeatureSitio? propio)
-        => new(ApiBase: propio?.ApiBase ?? ApiBase, LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim());
+        => new(
+            ApiBase: propio?.ApiBase ?? ApiBase,
+            LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim(),
+            ModeracionBase: (propio?.ModeracionBase ?? ModeracionBase).Trim());
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeBlogs negocio)
@@ -39,6 +49,9 @@ public sealed class BlogsFeatureSettings : SeccionDeNegocio<BlogsFeatureSitio, N
             ReglasDeNegocio.ApiBase("ApiBase", negocio.ApiBase),
             // Vacía vale: es la vuelta atrás.
             string.IsNullOrWhiteSpace(negocio.LecturasBase) ? null : ReglasDeNegocio.ApiBase("LecturasBase", negocio.LecturasBase),
+            string.IsNullOrWhiteSpace(negocio.ModeracionBase)
+                ? null
+                : ReglasDeNegocio.ApiBase("ModeracionBase", negocio.ModeracionBase),
         }.OfType<string>();
 }
 
@@ -52,4 +65,7 @@ public sealed class BlogsFeatureSitio
 
     /// <inheritdoc cref="BlogsFeatureSettings.LecturasBase"/>
     public string? LecturasBase { get; init; }
+
+    /// <inheritdoc cref="BlogsFeatureSettings.ModeracionBase"/>
+    public string? ModeracionBase { get; init; }
 }

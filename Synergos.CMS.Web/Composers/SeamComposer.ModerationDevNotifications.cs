@@ -1,5 +1,6 @@
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Interfaces.Moderacion;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Umbraco.Cms.Core.Notifications;
@@ -11,6 +12,14 @@ public sealed partial class SeamComposer
     private static void ComposeModerationDevAndNotifications(IUmbracoBuilder builder)
     {
         var services = builder.Services;
+
+        // 012-blogs-social, I5 — la moderación de lo publicado, en Local: los casos y lo retirado en el almacén común.
+        // Genérica: cada vertical declara lo suyo denunciable con su ITipoModerable. Singletons, porque cada una pone
+        // en fila sus escrituras.
+        services.AddSingleton<IModeracion>(sp => new ModeracionLocal(
+            sp.GetRequiredService<IJsonEntityStore>(),
+            sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IRegistroDeRetirados>(sp => new RegistroDeRetirados(sp.GetRequiredService<IJsonEntityStore>()));
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository
         // persiste un JSON por nodo (App_Data/syn-comments/{nodeId}.json).

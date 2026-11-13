@@ -59,6 +59,12 @@ public interface ICommentModeration
     Task<bool> RejectAsync(int nodeId, string commentId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Retira un comentario publicado tras una denuncia (012-blogs-social, I5): no lo borra, deja de mostrarse y de
+    /// aceptar respuestas. Devuelve false si no existe. Idempotente: retirar lo ya retirado devuelve true.
+    /// </summary>
+    Task<bool> RetirarAsync(int nodeId, string commentId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Aprueba una lista de comentarios. Devuelve el número de
     /// items realmente actualizados (excluye no-encontrados o ya
     /// aprobados).

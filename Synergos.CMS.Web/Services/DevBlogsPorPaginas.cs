@@ -52,6 +52,8 @@ public sealed class DevBlogsPorPaginas
         new("Guardados", "guardados"),
         new("Escribir", "escribir"),
         new("Estudio", "estudio"),
+        // La cola de moderación (I5): de quien modera; el CMS dice quién puede verla.
+        new("Moderación", "moderacion"),
     ];
 
     private readonly IContentService _contenido;
