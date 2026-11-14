@@ -27,15 +27,18 @@ public sealed class TravelShellResolutor : IResolutorSynHost<TravelShellProps>
     private readonly INegocioDelSitio<NegocioDeTravelShell> _negocio;
     private readonly ICaminoDeLosFlujos _caminos;
     private readonly ILogger<TravelShellResolutor> _log;
+    private readonly ICabeceraDeLasApps? _cabecera;
 
     public TravelShellResolutor(
         IPublishedValueFallback fallback, INegocioDelSitio<NegocioDeTravelShell> negocio, ICaminoDeLosFlujos caminos,
-        ILogger<TravelShellResolutor> log)
+        ILogger<TravelShellResolutor> log,
+        ICabeceraDeLasApps? cabecera = null)
     {
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
         _log = log;
+        _cabecera = cabecera;
     }
 
     public ElementoResuelto<TravelShellProps> Resolver(IPublishedElement elemento)
@@ -47,6 +50,7 @@ public sealed class TravelShellResolutor : IResolutorSynHost<TravelShellProps>
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
-            BookingPath: _caminos.Decidir(FlujoDeLaReserva, negocio.BookingPath)));
+            BookingPath: _caminos.Decidir(FlujoDeLaReserva, negocio.BookingPath),
+            Cabecera: _cabecera?.Actual()));
     }
 }

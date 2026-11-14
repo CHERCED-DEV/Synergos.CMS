@@ -2249,6 +2249,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "cabecera",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sitio"
         }
       ],
       "ejemplo": {
@@ -2256,7 +2262,8 @@
         "heading": "Tus trámites, sin filas",
         "subheading": "Radica, paga la tasa y sigue tu expediente",
         "apiBase": "/api/gov",
-        "camino": "directa"
+        "camino": "directa",
+        "cabecera": "secundaria"
       }
     },
     {
@@ -4229,6 +4236,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "cabecera",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sitio"
         }
       ],
       "ejemplo": {
@@ -4236,7 +4249,8 @@
         "heading": "Reserva tu próximo viaje",
         "subheading": "Vuelos, hoteles y paquetes",
         "apiBase": "/api/travel",
-        "bookingPath": "directa"
+        "bookingPath": "directa",
+        "cabecera": "secundaria"
       }
     },
     {

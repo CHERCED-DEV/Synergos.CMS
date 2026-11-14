@@ -22,4 +22,6 @@ public sealed record GovProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string Camino);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string Camino,
+    // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);
