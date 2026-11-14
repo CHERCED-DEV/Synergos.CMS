@@ -621,6 +621,20 @@ public sealed class DevContenidoDeVerticales
             "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
     ];
 
+    /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
+    private string? TituloDeCategoria(IContent categoria)
+    {
+        var sitio = _contentService.GetById(categoria.ParentId);
+        var nombreDelSitio = sitio is not null && sitio.HasProperty("siteDisplayName")
+            ? sitio.GetValue<string>("siteDisplayName", sitio.Properties["siteDisplayName"]!.PropertyType.VariesByCulture() ? Cultura : null)
+            : null;
+        var nombre = categoria.HasProperty("categoryName") ? categoria.GetValue<string>("categoryName", Cultura) : null;
+        nombre = string.IsNullOrWhiteSpace(nombre) ? categoria.GetCultureName(Cultura) ?? categoria.Name : nombre;
+        return string.IsNullOrWhiteSpace(nombreDelSitio) || string.IsNullOrWhiteSpace(nombre)
+            ? null
+            : $"{nombre} — {nombreDelSitio.Trim()} SynergosLabs";
+    }
+
     private string RecetaEntradasDeCategorias()
     {
         int cambiadas = 0, faltan = 0;
@@ -628,8 +642,20 @@ public sealed class DevContenidoDeVerticales
         {
             var pagina = _contentService.GetById(key);
             if (pagina is null || !pagina.HasProperty("categoryDescription")) { faltan++; continue; }
-            if (pagina.GetValue<string>("categoryDescription", Cultura) == entrada) { continue; }
-            pagina.SetValue("categoryDescription", entrada, Cultura);
+            var cambio = false;
+            if (pagina.GetValue<string>("categoryDescription", Cultura) != entrada)
+            {
+                pagina.SetValue("categoryDescription", entrada, Cultura);
+                cambio = true;
+            }
+            // El título nombra SU sitio (016, V7): el sembrador puso «Casas — Tienda SynergosLabs» a todas.
+            if (TituloDeCategoria(pagina) is { } titulo && pagina.HasProperty("seoTitle")
+                && pagina.GetValue<string>("seoTitle", Cultura) != titulo)
+            {
+                pagina.SetValue("seoTitle", titulo, Cultura);
+                cambio = true;
+            }
+            if (!cambio) { continue; }
             _contentService.SaveAndPublish(pagina, new[] { Cultura });
             cambiadas++;
         }
