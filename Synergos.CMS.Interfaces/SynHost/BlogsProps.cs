@@ -14,7 +14,8 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y lo que dice al comentar</b> sale de la sección <c>Blogs.Comentarios</c> del diccionario (ADR 0136,
 /// 012-blogs-social, I0): que el comentario quedó en revisión, que no se publicó, que hace falta sesión. Son los
 /// primeros textos de la red en el diccionario; los demás siguen escritos en la app y su deuda la cuenta
-/// <c>gate:literales</c>. Los de denunciar y la cola de moderación son de la sección <c>Blogs.Moderacion</c> (I5).</para>
+/// <c>gate:literales</c>. Los de denunciar y la cola de moderación son de la sección <c>Blogs.Moderacion</c> (I5), y los
+/// de la red en general, de <c>Blogs.Red</c> (el perfil sin sesión, en la vuelta de valor).</para>
 ///
 /// <para><b>Y qué parte de la red es esta página</b> (<c>Vista</c>, 012-blogs-social, I3): la elige el editor en el
 /// bloque; vacía, el inicio, que es la red entera de antes. Las <c>Rutas</c> dicen en qué página del sitio vive cada
@@ -32,7 +33,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// en el bloque, como filtro fijo de Explorar (<c>etiqueta = arquitectura</c>), igual que «Ofertas» en la tienda. El
 /// elemento lo aplica en cada búsqueda y no ofrece la faceta; vacía, Explorar busca en toda la red.</para>
 /// </remarks>
-[ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios", "Blogs.Moderacion"])]
+[ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios", "Blogs.Moderacion", "Blogs.Red"])]
 public sealed record BlogsProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
