@@ -12,6 +12,8 @@ on:
     paths:
       - 'Synergos.CMS.Web/uSync/v9/**'
       - 'tools/usync-audit.mjs'
+      - 'tools/usync-ficheros.mjs'
+      - 'Synergos.CMS.Web/wwwroot/media/**'
       - 'tools/umbraco13-icons-stock.txt'
       - '.github/workflows/usync-audit.yml'
   push:
@@ -21,6 +23,8 @@ on:
     paths:
       - 'Synergos.CMS.Web/uSync/v9/**'
       - 'tools/usync-audit.mjs'
+      - 'tools/usync-ficheros.mjs'
+      - 'Synergos.CMS.Web/wwwroot/media/**'
       - 'tools/umbraco13-icons-stock.txt'
       - '.github/workflows/usync-audit.yml'
 
