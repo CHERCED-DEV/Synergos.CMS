@@ -43,4 +43,6 @@ public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ZonaHoraria,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
     [property: CampoSynHost(OrigenDelCampo.Decision)] IReadOnlyList<FiltroFijo> Filtros,
-    [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas,
+    // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);

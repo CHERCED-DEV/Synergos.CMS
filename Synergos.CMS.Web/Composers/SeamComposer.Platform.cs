@@ -193,6 +193,11 @@ public sealed partial class SeamComposer
         // Transient por la misma razón que el theme provider.
         services.AddTransient<IPageRenderContextResolver, DefaultPageRenderContextResolver>();
 
+        // La cabecera de las apps dentro de un sitio (D-016-V2): por defecto secundaria; un sitio pide la completa por
+        // la Key de su siteRoot. La leen los resolutores de la Tienda, Eventos y Educación, por el siteRoot de la página.
+        services.AddSeccionDeNegocio<CabeceraFeatureSettings, NegocioDeCabecera>(builder.Config.GetSection("Synergos:Features:Cabecera"));
+        services.AddTransient<ICabeceraDeLasApps, CabeceraDeLasApps>();
+
         // Ola 50 — Global component resolver. Lee siteConfigSettings.
         // globalComponents (BlockList) y devuelve la pieza activa
         // aplicable. Ola 52.A extendió a 4 cfg* (Alert/Banner/

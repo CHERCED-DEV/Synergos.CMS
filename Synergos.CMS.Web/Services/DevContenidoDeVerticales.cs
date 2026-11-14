@@ -106,6 +106,10 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "tienda-vender", RecetaTiendaYVender(), 0);
         }
+        if (string.Equals(vertical, "titulo-apps", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
+        }
         if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaEntradasDeCategorias();
@@ -620,6 +624,29 @@ public sealed class DevContenidoDeVerticales
         (Guid.Parse("c61376b9-dafa-490a-89b6-16ab0dbb25bc"),
             "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
     ];
+
+    /// <summary>La página «Apps» de Synergos, por su Key de uSync.</summary>
+    private static readonly Guid PaginaApps = Guid.Parse("1c9e334b-08ac-4d20-91cf-ec3aa8fd97b8");
+
+    /// <summary>
+    /// «Apps — Apps SynergosLabs» repetía la palabra, y la página no tenía descripción (016, junto a V2).
+    /// </summary>
+    private string RecetaTituloDeApps()
+    {
+        var apps = _contentService.GetById(PaginaApps);
+        if (apps is null) { return "sin-pagina"; }
+        var cambio = false;
+        foreach (var (alias, valor) in new[]
+                 {
+                     ("seoTitle", "Apps — SynergosLabs"),
+                     ("seoDescription", "Las apps de SynergosLabs por dentro: qué hace cada una, cómo se ve y dónde probarla."),
+                 })
+        {
+            if (apps.HasProperty(alias) && apps.GetValue<string>(alias, Cultura) != valor) { apps.SetValue(alias, valor, Cultura); cambio = true; }
+        }
+        if (cambio) { _contentService.SaveAndPublish(apps, new[] { Cultura }); }
+        return cambio ? "apps:1" : "apps:0";
+    }
 
     /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
     private string? TituloDeCategoria(IContent categoria)

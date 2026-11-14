@@ -57,6 +57,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "cabecera",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sitio"
         }
       ],
       "ejemplo": {
@@ -64,7 +70,8 @@
         "heading": "Aprende lo que el mercado pide",
         "subheading": "Catálogo, lecciones e instructores a tu ritmo",
         "apiBase": "/api/academy",
-        "enrollmentPath": "directa"
+        "enrollmentPath": "directa",
+        "cabecera": "secundaria"
       }
     },
     {
@@ -1768,6 +1775,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "cabecera",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sitio"
         }
       ],
       "ejemplo": {
@@ -1778,7 +1791,8 @@
         "apiBase": "/api/eventos",
         "feePercent": 12,
         "platformFeePercent": 10,
-        "purchasePath": "directa"
+        "purchasePath": "directa",
+        "cabecera": "secundaria"
       }
     },
     {
@@ -3826,6 +3840,12 @@
           "tipo": "RutaDeUnaVista[]",
           "opcional": false,
           "origen": "sitio"
+        },
+        {
+          "nombre": "cabecera",
+          "tipo": "string",
+          "opcional": true,
+          "origen": "sitio"
         }
       ],
       "selectores": [
@@ -3908,7 +3928,8 @@
             "vista": "carrito",
             "url": "/tienda/carrito/"
           }
-        ]
+        ],
+        "cabecera": "secundaria"
       }
     },
     {

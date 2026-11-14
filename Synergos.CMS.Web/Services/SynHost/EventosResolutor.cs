@@ -29,13 +29,16 @@ public sealed class EventosResolutor : IResolutorSynHost<EventosProps>
     private readonly INegocioDelSitio<NegocioDeEventos> _negocio;
     private readonly ICaminoDeLosFlujos _caminos;
     private readonly ILogger<EventosResolutor> _log;
+    private readonly ICabeceraDeLasApps? _cabecera;
 
     public EventosResolutor(
         IPublishedValueFallback fallback,
         INegocioDelSitio<NegocioDeEventos> negocio,
         ICaminoDeLosFlujos caminos,
-        ILogger<EventosResolutor> log)
+        ILogger<EventosResolutor> log,
+        ICabeceraDeLasApps? cabecera = null)
     {
+        _cabecera = cabecera;
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
@@ -54,6 +57,7 @@ public sealed class EventosResolutor : IResolutorSynHost<EventosProps>
             ApiBase: negocio.ApiBase,
             FeePercent: negocio.FeePercent,
             PlatformFeePercent: negocio.PlatformFeePercent,
-            PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath)));
+            PurchasePath: _caminos.Decidir(FlujoDeLaCompra, negocio.PurchasePath),
+            Cabecera: _cabecera?.Actual()));
     }
 }
