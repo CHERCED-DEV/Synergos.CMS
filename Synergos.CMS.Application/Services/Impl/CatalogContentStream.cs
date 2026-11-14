@@ -139,9 +139,19 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
                 Tags = post.Tags is { Count: > 0 } ? post.Tags : null,
                 // Cuándo se publicó, si el editor lo dijo: el item guardado lleva la hora de la siembra, que es la misma
                 // para todos y hacía decir «hace 1 d» a artículos de junio (012-blogs-social, vuelta de valor).
-                CreatedUtc = post.PublishedUtc is { } publicado ? DateTime.SpecifyKind(publicado, DateTimeKind.Utc) : item.CreatedUtc,
+                CreatedUtc = post.PublishedUtc is { } publicado ? AlMediodia(publicado) : item.CreatedUtc,
             }
             : item;
+
+    /// <summary>
+    /// Una fecha de publicación sin hora es la del mediodía UTC: así el día no cambia al pintarla en la zona de quien lee.
+    /// Como medianoche UTC, en Bogotá la tarjeta decía «19 de jun» de un artículo cuya página dice «20 jun».
+    /// </summary>
+    internal static DateTime AlMediodia(DateTime publicado)
+    {
+        var utc = DateTime.SpecifyKind(publicado, DateTimeKind.Utc);
+        return utc.TimeOfDay == TimeSpan.Zero ? utc.AddHours(12) : utc;
+    }
 
     /// <summary>
     /// Siembra los posts autorados que faltan, o que cambiaron de resumen.

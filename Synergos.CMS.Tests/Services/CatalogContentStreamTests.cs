@@ -300,6 +300,7 @@ public class CatalogContentStreamTests
     {
         var junio10 = new DateTime(2026, 6, 10, 0, 0, 0, DateTimeKind.Utc);
         var junio20 = new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
+        var alMediodia = TimeSpan.FromHours(12);
         var source = new FakeSource();
         source.Posts.Add(Post(slug: "de-junio-10", excerpt: "Uno.") with { PublishedUtc = junio10 });
         source.Posts.Add(Post(slug: "de-junio-20", excerpt: "Dos.") with { PublishedUtc = junio20 });
@@ -309,7 +310,10 @@ public class CatalogContentStreamTests
 
         var articulos = feed.Where(i => i.CmsUrl is not null).ToList();
         Assert.Equal(["/blog/sin-fecha", "/blog/de-junio-20", "/blog/de-junio-10"], articulos.Select(i => i.CmsUrl));
-        Assert.Equal([new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), junio20, junio10], articulos.Select(i => i.CreatedUtc));
+        // Una fecha sin hora es la del mediodía UTC: el día no cambia al pintarla en Bogotá ni en Madrid.
+        Assert.Equal(
+            [new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), junio20 + alMediodia, junio10 + alMediodia],
+            articulos.Select(i => i.CreatedUtc));
     }
 
     /// <summary>
