@@ -146,6 +146,21 @@ public sealed class ModeracionContractTests : IDisposable
         Assert.Empty(Wire(await Controlador(Moderadora()).Cola(null, default)).GetProperty("casos").EnumerateArray());
     }
 
+    /// <summary>
+    /// Con la moderación en Api y la capacidad sin contestar (o sin dirección), denunciar, la cola y decidir dicen que no
+    /// se pudo (503): ni una denuncia por recibida, ni una cola vacía, ni una decisión por guardada.
+    /// </summary>
+    [Fact]
+    public async Task Si_la_moderacion_no_contesta_se_dice_y_no_se_finge()
+    {
+        var caida = new ModeracionSinDestino();
+
+        Assert.Equal(503, Estado(await Controlador(Sesion(), moderacion: caida).Denunciar(Publicacion("it-ana"), default)));
+        Assert.Equal(503, Estado(await Controlador(Moderadora(), moderacion: caida).Cola(null, default)));
+        Assert.Equal(503, Estado(await Controlador(Moderadora(), moderacion: caida).Decidir("caso", new("retirar", "Spam"), default)));
+        Assert.NotNull(await _red.GetItemAsync("it-ana"));
+    }
+
     /// <summary>Un comentario se nombra por su publicación y su id, y retirarlo es la moderación de comentarios de hoy.</summary>
     [Fact]
     public async Task Retirar_un_comentario_lo_retira_en_el_hilo_de_su_publicacion()
@@ -166,7 +181,8 @@ public sealed class ModeracionContractTests : IDisposable
     private ModeracionController Controlador(
         IMemberAccessGate sesion,
         string? correo = null,
-        IReadOnlyList<Comment>? comentarios = null)
+        IReadOnlyList<Comment>? comentarios = null,
+        IModeracion? moderacion = null)
     {
         if (correo is not null)
         {
@@ -175,15 +191,22 @@ public sealed class ModeracionContractTests : IDisposable
 
         var lector = Substitute.For<ICommentReader>();
         lector.GetApprovedForNode(Nodo).Returns(comentarios ?? []);
+        // Cada correo tiene su llave (la huella), como la identidad real: dos personas no se confunden.
         var identidad = Substitute.For<IIdentidadPublica>();
+        identidad.De(Arg.Any<string>()).Returns(ci => CaraPublica.De(LlaveDe(ci.ArgAt<string>(0)), "Persona"));
         identidad.De(Ana).Returns(CaraPublica.De("a1b2c3d4e5f60718", "Ana Autora"));
         var tipos = new ITipoModerable[]
         {
             new PublicacionesModerables(_red, _retirados, identidad),
             new ComentariosModerables(_red, lector, _moderacionDeComentarios),
         };
-        return new ModeracionController(_moderacion, tipos, sesion, NullLogger<ModeracionController>.Instance);
+        return new ModeracionController(
+            moderacion ?? _moderacion, tipos, sesion, identidad, NullLogger<ModeracionController>.Instance);
     }
+
+    private static string LlaveDe(string correo)
+        => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(correo)))
+            .ToLowerInvariant()[..16];
 
     private static IMemberAccessGate Moderadora()
     {

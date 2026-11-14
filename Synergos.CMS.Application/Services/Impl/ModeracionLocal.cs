@@ -107,12 +107,14 @@ public sealed class ModeracionLocal : IModeracion, IDisposable
     public async Task<DecisionTomada> DecidirAsync(
         string id,
         DecisionDeModeracion decision,
-        string quien,
+        QuienModera quien,
         string porQue,
         CancellationToken cancellationToken = default)
     {
         // Una moderación anónima es indistinguible de un borrado arbitrario, y una sin motivo no se puede revisar.
-        ArgumentException.ThrowIfNullOrWhiteSpace(quien);
+        ArgumentNullException.ThrowIfNull(quien);
+        ArgumentException.ThrowIfNullOrWhiteSpace(quien.Llave);
+        ArgumentException.ThrowIfNullOrWhiteSpace(quien.Nombre);
         var motivo = Motivo(porQue);
 
         await _turno.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -134,7 +136,8 @@ public sealed class ModeracionLocal : IModeracion, IDisposable
             var decidido = caso with
             {
                 Decision = decision,
-                Quien = quien.Trim(),
+                Quien = quien.Nombre.Trim(),
+                QuienLlave = quien.Llave.Trim(),
                 PorQue = motivo,
                 Decidido = _reloj.GetUtcNow(),
             };
@@ -197,7 +200,8 @@ public sealed class ModeracionLocal : IModeracion, IDisposable
         DecisionDeModeracion? Decision,
         string? Quien,
         string? PorQue,
-        DateTimeOffset? Decidido)
+        DateTimeOffset? Decidido,
+        string? QuienLlave = null)
     {
         public CasoDeModeracion ComoCaso() => new(
             Id,

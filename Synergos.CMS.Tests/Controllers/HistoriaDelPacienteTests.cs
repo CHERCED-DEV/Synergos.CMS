@@ -542,6 +542,126 @@ public sealed class HistoriaDelPacienteTests
         Assert.Empty(await Ordenes.ListResultadosAsync(key, CancellationToken.None));
     }
 
+    // ── Recetas firmadas y su renovación (I5) ───────────────────────────────────────────────────────────
+
+    private FileSystemPrescriptionService? _recetasReales;
+    private FileSystemPrescriptionService Recetas => _recetasReales ??= new FileSystemPrescriptionService(_store);
+    private FileSystemRenovaciones? _renovacionesReales;
+    private FileSystemRenovaciones Renovaciones => _renovacionesReales ??= new FileSystemRenovaciones(_store);
+
+    private HealthcareApiController ConRecetas() => new(
+        _guard, _patients, Substitute.For<IAppointmentScheduler>(), Recetas, Substitute.For<IConsentLedger>(), _gate,
+        new EditorDeLaHistoriaClinica(_patients), consulta: _consulta, renovaciones: Renovaciones);
+
+    private static readonly RecetaEscrita Metformina = new("Metformina 850 mg", "1 tableta", "cada 12 horas", "Con las comidas", 30);
+
+    private async Task<(Guid Key, RecetaParaLeer Receta)> UnaRecetaEmitida()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        ElOrquestadorSella();
+        var receta = Assert.IsType<RecetaParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().EmitirReceta(key, Metformina, CancellationToken.None)).Value);
+        return (key, receta);
+    }
+
+    [Fact]
+    public async Task Receta_Sale_firmada_el_paciente_la_ve_vigente_descarga_su_PDF_y_anulada_deja_de_estar_vigente()
+    {
+        var (key, receta) = await UnaRecetaEmitida();
+        var guardada = (await Recetas.GetAsync(receta.Id, CancellationToken.None))!;
+
+        SesionDe(Miembro);
+        var mias = Assert.IsType<List<RecetaParaLeer>>(Assert.IsType<OkObjectResult>(await ConRecetas().MisRecetas(CancellationToken.None)).Value);
+        var pdf = Assert.IsType<FileContentResult>(await ConRecetas().MiPdfDeLaReceta(receta.Id, CancellationToken.None));
+        SesionDe(Medico);
+        var anulada = Assert.IsType<RecetaParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().AnularReceta(key, receta.Id, CancellationToken.None)).Value);
+
+        Assert.True(receta.Firmada && receta.Vigente);
+        Assert.Equal(RecetasClinicas.Huella(guardada), guardada.Firma!.Huella);
+        Assert.True(Assert.Single(mias).Vigente);
+        Assert.Equal("application/pdf", pdf.ContentType);
+        var texto = System.Text.Encoding.Latin1.GetString(pdf.FileContents);
+        Assert.StartsWith("%PDF-1.4", texto);
+        Assert.Contains("Metformina 850 mg", texto);
+        Assert.Contains("RECETA MÉDICA", texto);
+        Assert.False(anulada.Vigente);
+    }
+
+    [Fact]
+    public async Task Receta_Sin_la_llave_del_consultorio_no_hay_receta()
+    {
+        var key = await HistoriaDe(Miembro);
+        SesionDe(Medico);
+        GuardiaDice(true);
+        _consulta.SellarAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ResultadoDeLaConsulta(EstadoDeLaConsulta.Rechazado, Codigo: "signing.no_active_key"));
+
+        var r = await ConRecetas().EmitirReceta(key, Metformina, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(r);
+        Assert.Empty(await Recetas.ListForPatientAsync(key, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Renovacion_Pedirla_dos_veces_es_una_aprobarla_dos_veces_es_una_receta_nueva_firmada_y_ya_no_se_rechaza()
+    {
+        var (key, receta) = await UnaRecetaEmitida();
+
+        SesionDe(Miembro);
+        var pedida = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().PedirRenovacion(receta.Id, new PedidoDeRenovacion("Se me acaban el viernes"), CancellationToken.None)).Value);
+        var otraVez = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().PedirRenovacion(receta.Id, null, CancellationToken.None)).Value);
+
+        SesionDe(Medico);
+        var aprobada = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().AprobarRenovacion(key, pedida.Id, null, CancellationToken.None)).Value);
+        var dosVeces = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConRecetas().AprobarRenovacion(key, pedida.Id, null, CancellationToken.None)).Value);
+        var rechazo = await ConRecetas().RechazarRenovacion(key, pedida.Id, new PedidoDeRenovacion(Motivo: "No"), CancellationToken.None);
+
+        Assert.Equal(pedida.Id, otraVez.Id);
+        Assert.Equal(("aprobada", aprobada.NuevaRecetaId), (dosVeces.Estado, dosVeces.NuevaRecetaId));
+        var todas = await Recetas.ListForPatientAsync(key, CancellationToken.None);
+        Assert.Equal(2, todas.Count);
+        var nueva = todas.Single(r => r.PrescriptionId == aprobada.NuevaRecetaId);
+        Assert.Equal((receta.Id, "Metformina 850 mg", true), (nueva.RenuevaA!.Value, nueva.MedicationName, nueva.Firma is not null));
+        Assert.IsType<ConflictObjectResult>(rechazo);
+    }
+
+    [Fact]
+    public async Task Renovacion_Una_receta_anulada_no_se_renueva()
+    {
+        var (key, receta) = await UnaRecetaEmitida();
+        await ConRecetas().AnularReceta(key, receta.Id, CancellationToken.None);
+
+        SesionDe(Miembro);
+        var r = await ConRecetas().PedirRenovacion(receta.Id, null, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(r);
+        Assert.Empty(await Renovaciones.ListAsync(key, CancellationToken.None));
+    }
+
+    [Fact]
+    public void PdfDeTexto_Es_un_PDF_con_su_tabla_de_referencias_bien_contada_y_las_tildes_en_WinAnsi()
+    {
+        var bytes = PdfDeTexto.Generar(["Receta médica — señora Núñez", new string('x', 200)]);
+        var texto = System.Text.Encoding.Latin1.GetString(bytes);
+
+        Assert.StartsWith("%PDF-1.4", texto);
+        Assert.EndsWith("%%EOF\n", texto);
+        var xref = int.Parse(texto[(texto.LastIndexOf("startxref\n", StringComparison.Ordinal) + 10)..].Split('\n')[0],
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.StartsWith("xref", texto[xref..]);
+        var primero = int.Parse(texto[(xref + texto[xref..].IndexOf("0000000000 65535 f \n", StringComparison.Ordinal) + 20)..][..10],
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.StartsWith("1 0 obj", texto[primero..]);
+        Assert.Contains("(Receta médica - señora Núñez) Tj", texto);
+    }
+
     private sealed class ArchivosEnMemoria : IPrivateFileStore
     {
         private readonly Dictionary<string, PrivateFileContent> _datos = new();
