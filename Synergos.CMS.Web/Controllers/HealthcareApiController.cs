@@ -49,7 +49,15 @@ public sealed class HealthcareApiController : ControllerBase
         public const string Firma = "salud.firma";
         public const string Ordenes = "salud.orden";
         public const string Resultado = "salud.resultado";
+        public const string Receta = "salud.receta";
+        public const string Renovacion = "salud.renovacion";
     }
+
+    /// <summary>Las solicitudes de renovación de recetas, en el almacén PHI (I5 P14).</summary>
+    private readonly IRenovaciones? _renovaciones;
+
+    /// <summary>Un candado por solicitud: aprobarla dos veces a la vez da una receta, no dos.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> CandadosDeRenovacion = new();
 
     /// <summary>El ámbito de los informes del laboratorio en el almacén privado cifrado (I4 P12).</summary>
     public const string AmbitoDeLosInformes = "lab-results";
@@ -93,8 +101,10 @@ public sealed class HealthcareApiController : ControllerBase
         INotasDeLaConsulta? notas = null,
         IOptions<HealthcareSettings>? salud = null,
         IOrdenesMedicas? ordenes = null,
-        IPrivateFileStore? archivos = null)
+        IPrivateFileStore? archivos = null,
+        IRenovaciones? renovaciones = null)
     {
+        _renovaciones = renovaciones;
         _ordenes = ordenes;
         _archivos = archivos;
         _miembros = miembros;
@@ -843,6 +853,315 @@ public sealed class HealthcareApiController : ControllerBase
         }
         var archivo = await _archivos.ReadAsync(AmbitoDeLosInformes, archivoId, ct);
         return archivo is null ? NotFound() : File(archivo.Content, archivo.ContentType, archivo.FileName);
+    }
+
+    // ── Recetas firmadas y su renovación (003-salud-cita, I5: P13 la receta, P14 la medicación activa) ────────
+
+    /// <summary>Las recetas de un paciente, vigentes o no: el médico con el permiso, o el paciente sobre lo suyo.</summary>
+    [HttpGet("patients/{patientKey:guid}/recetas")]
+    public async Task<IActionResult> Recetas(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "read", patientKey, ct, proposito: Propositos.Receta) is { } denied)
+        {
+            return denied;
+        }
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        return Ok((await _prescriptions.ListForPatientAsync(patientKey, ct)).Select(r => RecetasClinicas.ParaLeer(r, ahora)).ToList());
+    }
+
+    /// <summary>Las recetas del paciente de la sesión: la medicación activa son las vigentes.</summary>
+    [HttpGet("me/recetas")]
+    public async Task<IActionResult> MisRecetas(CancellationToken ct)
+    {
+        var (miPaciente, negada) = await MiHistoriaAsync("prescription", "read", Propositos.Receta, ct);
+        if (negada is not null || miPaciente is not Guid patientKey)
+        {
+            return negada ?? NotFound();
+        }
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        return Ok((await _prescriptions.ListForPatientAsync(patientKey, ct)).Select(r => RecetasClinicas.ParaLeer(r, ahora)).ToList());
+    }
+
+    /// <summary>
+    /// El médico con el permiso emite la receta, firmada con la llave del consultorio (P13, Q14). Sin firma no hay receta:
+    /// si el sello no sale, no se guarda.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/recetas")]
+    public async Task<IActionResult> EmitirReceta(Guid patientKey, [FromBody] RecetaEscrita body, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "write", patientKey, ct, proposito: Propositos.Receta) is { } denied)
+        {
+            return denied;
+        }
+        if (body is null)
+        {
+            return BadRequest(new { error = "Falta la receta." });
+        }
+        if (RecetasClinicas.Error(body) is { } error)
+        {
+            return BadRequest(new { error });
+        }
+        if (_gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _patients.GetAsync(patientKey, ct) is not { IsDeleted: false })
+        {
+            return NotFound();
+        }
+
+        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        var (firmada, fallo) = await FirmarYGuardarAsync(RecetasClinicas.Emitir(body, patientKey, medico, ahora), medico, ct);
+        return fallo ?? Ok(RecetasClinicas.ParaLeer(firmada!, ahora));
+    }
+
+    /// <summary>El médico anula una receta: deja de estar vigente, y su PDF lo dice.</summary>
+    [HttpPost("patients/{patientKey:guid}/recetas/{recetaId:guid}/anular")]
+    public async Task<IActionResult> AnularReceta(Guid patientKey, Guid recetaId, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "write", patientKey, ct, proposito: Propositos.Receta) is { } denied)
+        {
+            return denied;
+        }
+        if (await _prescriptions.GetAsync(recetaId, ct) is not { } receta || receta.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        await _prescriptions.RevokeAsync(recetaId, ct);
+        return Ok(RecetasClinicas.ParaLeer((await _prescriptions.GetAsync(recetaId, ct))!, _reloj.GetUtcNow().UtcDateTime));
+    }
+
+    /// <summary>El PDF de la receta, para el médico con el permiso o el paciente sobre lo suyo.</summary>
+    [HttpGet("patients/{patientKey:guid}/recetas/{recetaId:guid}/pdf")]
+    public async Task<IActionResult> PdfDeLaReceta(Guid patientKey, Guid recetaId, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "read", patientKey, ct, proposito: Propositos.Receta) is { } denied)
+        {
+            return denied;
+        }
+        return await PdfAsync(patientKey, recetaId, ct);
+    }
+
+    /// <summary>El PDF de una receta del paciente de la sesión.</summary>
+    [HttpGet("me/recetas/{recetaId:guid}/pdf")]
+    public async Task<IActionResult> MiPdfDeLaReceta(Guid recetaId, CancellationToken ct)
+    {
+        var (miPaciente, negada) = await MiHistoriaAsync("prescription", "read", Propositos.Receta, ct);
+        if (negada is not null || miPaciente is not Guid patientKey)
+        {
+            return negada ?? NotFound();
+        }
+        return await PdfAsync(patientKey, recetaId, ct);
+    }
+
+    /// <summary>
+    /// El paciente pide renovar una receta suya, firmada y no anulada (P14). Pedirla otra vez mientras espera devuelve la
+    /// misma solicitud.
+    /// </summary>
+    [HttpPost("me/recetas/{recetaId:guid}/renovacion")]
+    public async Task<IActionResult> PedirRenovacion(Guid recetaId, [FromBody] PedidoDeRenovacion? body, CancellationToken ct)
+    {
+        var (miPaciente, negada) = await MiHistoriaAsync("patient-record", "declare", Propositos.Renovacion, ct);
+        if (negada is not null || miPaciente is not Guid patientKey)
+        {
+            return negada ?? NotFound();
+        }
+        if (_renovaciones is null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _prescriptions.GetAsync(recetaId, ct) is not { } receta || receta.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (receta.Status != RecetasClinicas.Activa || receta.Firma is null)
+        {
+            return Conflict(new { error = "Esa receta no se puede renovar: está anulada o sin firma." });
+        }
+
+        var pendiente = (await _renovaciones.ListAsync(patientKey, ct))
+            .FirstOrDefault(s => s.RecetaId == recetaId && s.Estado == RecetasClinicas.Pedida);
+        if (pendiente is not null)
+        {
+            return Ok(RecetasClinicas.ParaLeer(pendiente));
+        }
+        var nota = Limpio(body?.Nota);
+        var solicitud = new SolicitudDeRenovacion(
+            Guid.NewGuid(), patientKey, recetaId, nota is { Length: > 500 } ? nota[..500] : nota, RecetasClinicas.Pedida,
+            _reloj.GetUtcNow().UtcDateTime);
+        await _renovaciones.GuardarAsync(solicitud, ct);
+        return Ok(RecetasClinicas.ParaLeer(solicitud));
+    }
+
+    /// <summary>Las renovaciones que pidió el paciente de la sesión, con su estado.</summary>
+    [HttpGet("me/renovaciones")]
+    public async Task<IActionResult> MisRenovaciones(CancellationToken ct)
+    {
+        var (miPaciente, negada) = await MiHistoriaAsync("patient-record", "read", Propositos.Renovacion, ct);
+        if (negada is not null || miPaciente is not Guid patientKey)
+        {
+            return negada ?? NotFound();
+        }
+        return _renovaciones is null
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable)
+            : Ok((await _renovaciones.ListAsync(patientKey, ct)).Select(RecetasClinicas.ParaLeer).ToList());
+    }
+
+    /// <summary>Las renovaciones de un paciente, para el médico con el permiso.</summary>
+    [HttpGet("patients/{patientKey:guid}/renovaciones")]
+    public async Task<IActionResult> Renovaciones(Guid patientKey, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "read", patientKey, ct, proposito: Propositos.Renovacion) is { } denied)
+        {
+            return denied;
+        }
+        return _renovaciones is null
+            ? StatusCode(StatusCodes.Status503ServiceUnavailable)
+            : Ok((await _renovaciones.ListAsync(patientKey, ct)).Select(RecetasClinicas.ParaLeer).ToList());
+    }
+
+    /// <summary>
+    /// El médico aprueba la renovación: sale una receta nueva, firmada, con la vigencia desde hoy (P14). Aprobarla otra vez
+    /// —o dos a la vez— da la misma receta.
+    /// </summary>
+    [HttpPost("patients/{patientKey:guid}/renovaciones/{solicitudId:guid}/aprobar")]
+    public async Task<IActionResult> AprobarRenovacion(Guid patientKey, Guid solicitudId, [FromBody] PedidoDeRenovacion? body, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "write", patientKey, ct, proposito: Propositos.Renovacion) is { } denied)
+        {
+            return denied;
+        }
+        if (_renovaciones is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (body?.Dias is { } d && (d < 1 || d > RecetasClinicas.DiasMaximos))
+        {
+            return BadRequest(new { error = $"dias: de 1 a {RecetasClinicas.DiasMaximos}." });
+        }
+
+        var candado = CandadosDeRenovacion.GetOrAdd(solicitudId, static _ => new SemaphoreSlim(1, 1));
+        await candado.WaitAsync(ct);
+        try
+        {
+            if (await _renovaciones.GetAsync(solicitudId, ct) is not { } solicitud || solicitud.PatientKey != patientKey)
+            {
+                return NotFound();
+            }
+            if (solicitud.Estado == RecetasClinicas.Aprobada)
+            {
+                return Ok(RecetasClinicas.ParaLeer(solicitud));
+            }
+            if (solicitud.Estado != RecetasClinicas.Pedida || await _prescriptions.GetAsync(solicitud.RecetaId, ct) is not { } anterior)
+            {
+                return Conflict(new { error = "Esa solicitud ya se resolvió." });
+            }
+
+            var ahora = _reloj.GetUtcNow().UtcDateTime;
+            var (nueva, fallo) = await FirmarYGuardarAsync(RecetasClinicas.Renovar(anterior, body?.Dias, medico, ahora), medico, ct);
+            if (fallo is not null)
+            {
+                return fallo;
+            }
+            var aprobada = solicitud with
+            {
+                Estado = RecetasClinicas.Aprobada, ResueltaPor = medico, ResueltaUtc = ahora, NuevaRecetaId = nueva!.PrescriptionId,
+            };
+            await _renovaciones.GuardarAsync(aprobada, ct);
+            return Ok(RecetasClinicas.ParaLeer(aprobada));
+        }
+        finally
+        {
+            candado.Release();
+        }
+    }
+
+    /// <summary>El médico rechaza la renovación, con su motivo.</summary>
+    [HttpPost("patients/{patientKey:guid}/renovaciones/{solicitudId:guid}/rechazar")]
+    public async Task<IActionResult> RechazarRenovacion(Guid patientKey, Guid solicitudId, [FromBody] PedidoDeRenovacion? body, CancellationToken ct)
+    {
+        if (await DenyAsync("prescription", "write", patientKey, ct, proposito: Propositos.Renovacion) is { } denied)
+        {
+            return denied;
+        }
+        if (_renovaciones is null || _gate.CurrentMemberKey is not Guid medico)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (await _renovaciones.GetAsync(solicitudId, ct) is not { } solicitud || solicitud.PatientKey != patientKey)
+        {
+            return NotFound();
+        }
+        if (solicitud.Estado == RecetasClinicas.Rechazada)
+        {
+            return Ok(RecetasClinicas.ParaLeer(solicitud));
+        }
+        if (solicitud.Estado != RecetasClinicas.Pedida)
+        {
+            return Conflict(new { error = "Esa solicitud ya se resolvió." });
+        }
+        var motivo = Limpio(body?.Motivo);
+        var rechazada = solicitud with
+        {
+            Estado = RecetasClinicas.Rechazada, ResueltaPor = medico, ResueltaUtc = _reloj.GetUtcNow().UtcDateTime,
+            Motivo = motivo is { Length: > 500 } ? motivo[..500] : motivo,
+        };
+        await _renovaciones.GuardarAsync(rechazada, ct);
+        return Ok(RecetasClinicas.ParaLeer(rechazada));
+    }
+
+    /// <summary>
+    /// La historia del paciente de la sesión y la guardia sobre ella: la clave, o lo que hay que contestar (401, 404, 403).
+    /// </summary>
+    private async Task<(Guid? PatientKey, IActionResult? Negada)> MiHistoriaAsync(string recurso, string accion, string proposito, CancellationToken ct)
+    {
+        if (!_gate.IsAuthenticated || _gate.CurrentMemberKey is not Guid memberKey)
+        {
+            return (null, Unauthorized());
+        }
+        if (await _patients.FindKeyByMemberAsync(memberKey, ct) is not Guid patientKey)
+        {
+            return (null, NotFound());
+        }
+        return await DenyAsync(recurso, accion, patientKey, ct, memberKey, proposito) is { } denied
+            ? (null, denied)
+            : (patientKey, null);
+    }
+
+    /// <summary>Sella la huella de la receta con la llave del consultorio y la guarda firmada; sin sello no se guarda.</summary>
+    private async Task<(PrescriptionRecord? Receta, IActionResult? Fallo)> FirmarYGuardarAsync(
+        PrescriptionRecord receta, Guid medico, CancellationToken ct)
+    {
+        if (_consulta is null)
+        {
+            return (null, StatusCode(StatusCodes.Status503ServiceUnavailable));
+        }
+        var huella = RecetasClinicas.Huella(receta);
+        var sello = await _consulta.SellarAsync(_llaveDeFirma, huella, ct);
+        if (sello.Estado == EstadoDeLaConsulta.Rechazado)
+        {
+            return (null, Conflict(new { error = sello.Codigo }));
+        }
+        if (sello.Estado != EstadoDeLaConsulta.Hecho || sello.Valor is null || sello.Extra is null)
+        {
+            return (null, StatusCode(StatusCodes.Status503ServiceUnavailable));
+        }
+        var firmada = receta with
+        {
+            Firma = new FirmaDeLaNota(huella, sello.Valor, sello.Extra, _llaveDeFirma, medico, _reloj.GetUtcNow().UtcDateTime),
+        };
+        await _prescriptions.GuardarAsync(firmada, ct);
+        return (firmada, null);
+    }
+
+    private async Task<IActionResult> PdfAsync(Guid patientKey, Guid recetaId, CancellationToken ct)
+    {
+        if (await _prescriptions.GetAsync(recetaId, ct) is not { } receta || receta.PatientKey != patientKey
+            || await _patients.GetAsync(patientKey, ct) is not { } historia)
+        {
+            return NotFound();
+        }
+        return File(RecetasClinicas.Pdf(receta, historia.DisplayName, _zona), "application/pdf", $"receta-{recetaId:N}.pdf");
     }
 
     private static string? Limpio(string? texto) => string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
