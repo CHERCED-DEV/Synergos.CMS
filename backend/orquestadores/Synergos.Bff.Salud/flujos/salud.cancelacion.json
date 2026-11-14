@@ -1,0 +1,44 @@
+{
+  "clave": "salud.cancelacion",
+  "posterior_a": "salud.cita",
+  "entrada": ["paciente", "cita", "totalHoras", "parcialHoras", "porcentaje"],
+  "tipos": {
+    "paciente": { "de": "sujeto" },
+    "cita": "texto",
+    "totalHoras": { "de": "negocio", "campo": "devolucionTotalHoras", "tipo": "entero" },
+    "parcialHoras": { "de": "negocio", "campo": "devolucionParcialHoras", "tipo": "entero" },
+    "porcentaje": { "de": "negocio", "campo": "devolucionParcialPorcentaje", "tipo": "entero" },
+    "cobroId": { "tipo": "texto?", "de": "original" },
+    "total": { "tipo": "dinero", "de": "original" },
+    "ventana": { "tipo": "ventana", "de": "original" },
+    "reservaId": { "tipo": "texto", "de": "original" }
+  },
+  "salida": ["cita", "aDevolver"],
+  "fases": {
+    "abrir": ["original", "devolucion", "cancelar", "devolver"]
+  },
+  "pasos": {
+    "original": {
+      "tipo": "flow.leer-original",
+      "lee": ["cita"],
+      "escribe": ["cobroId", "total", "ventana", "reservaId"]
+    },
+    "devolucion": {
+      "tipo": "salud.devolucion-por-antelacion",
+      "lee": ["total", "ventana", "cobroId", "totalHoras", "parcialHoras", "porcentaje"],
+      "escribe": ["aDevolver"]
+    },
+    "cancelar": {
+      "tipo": "booking.cancelar",
+      "lee": ["reservaId"],
+      "motivo": "la agenda no dejó cancelar la cita"
+    },
+    "devolver": {
+      "tipo": "payments.devolver",
+      "lee": ["cobroId", "aDevolver"],
+      "llave": "refund",
+      "omitir_si_falta": "aDevolver",
+      "motivo": "no se pudo devolver el copago de la cita"
+    }
+  }
+}

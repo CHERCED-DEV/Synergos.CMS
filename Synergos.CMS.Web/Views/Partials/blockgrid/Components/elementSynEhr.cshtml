@@ -9,11 +9,16 @@
 
     Dentro, los del permiso de datos de salud (003-salud-cita, T048-T050): darlo y retirarlo, del mismo orquestador que
     la cita (D-003-GATE). Cada coordinador atiende sólo su flujo, así que los pedidos de uno no los toma otro.
+
+    Y el de cancelar una cita ya confirmada (I6, EhrResolutor.FlujoDeLaCancelacion): un flujo posterior a la cita, en el
+    mismo orquestador. Sin él la pantalla no ofrece cancelar una confirmada.
 *@
 <synergos-flujo flujo="salud.cita" style="display:contents">
     <synergos-flujo flujo="salud.consentimiento" style="display:contents">
         <synergos-flujo flujo="salud.consentimiento-retiro" style="display:contents">
-            @await Html.PartialAsync("SynHost/Ehr", Model.Content)
+            <synergos-flujo flujo="salud.cancelacion" style="display:contents">
+                @await Html.PartialAsync("SynHost/Ehr", Model.Content)
+            </synergos-flujo>
         </synergos-flujo>
     </synergos-flujo>
 </synergos-flujo>

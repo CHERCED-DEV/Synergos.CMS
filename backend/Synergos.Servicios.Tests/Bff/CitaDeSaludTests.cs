@@ -207,6 +207,26 @@ internal sealed class CitaDeSaludReal : IDisposable
         => Enviar(DeLaPuerta(HttpMethod.Post, $"v1/flujos/salud.cita/{id}/cancelar", sujeto));
 
     /// <summary>
+    /// Cancelar una cita YA confirmada (I6): el flujo posterior <c>salud.cancelacion</c>, con la política del sitio como la
+    /// manda la puerta en el negocio —por defecto, todo desde 24 h antes, la mitad desde 2 h, nada con menos—.
+    /// </summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> CancelarConfirmada(
+        string cita, string llave = "cancelar-1", string sujeto = "u-1", int totalHoras = 24, int parcialHoras = 2, int porcentaje = 50)
+    {
+        var peticion = DeLaPuerta(HttpMethod.Post, "v1/flujos/salud.cancelacion", sujeto, new { cita });
+        peticion.Headers.TryAddWithoutValidation(CabecerasDeLaPuerta.Negocio, Base64(new
+        {
+            devolucionTotalHoras = totalHoras, devolucionParcialHoras = parcialHoras, devolucionParcialPorcentaje = porcentaje,
+        }));
+        peticion.Headers.Add("Idempotency-Key", llave);
+        return Enviar(peticion);
+    }
+
+    /// <summary>Las cancelaciones del paciente, como «listar» de la puerta.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> ListarCancelaciones(string sujeto = "u-1")
+        => Enviar(DeLaPuerta(HttpMethod.Get, "v1/flujos/salud.cancelacion?limit=50", sujeto));
+
+    /// <summary>
     /// La lectura «disponibilidad» como la pide la puerta para un invitado: SIN la cabecera del sujeto (I1 de producción,
     /// T046; la puerta la abre a invitados, núcleo NB-3).
     /// </summary>

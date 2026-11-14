@@ -64,6 +64,22 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
     /// </summary>
     public string HistoriaBase { get; init; } = "/api/healthcare";
 
+    /// <summary>
+    /// Cancelar una cita confirmada (003-salud-cita, I6, la ficha F4): desde cuántas horas antes de su inicio se devuelve el
+    /// copago entero. Lo de hoy es la propuesta de la línea (D-003-I6-1): 24 h, como la costumbre de los consultorios.
+    /// </summary>
+    /// <remarks>
+    /// <b>Una sola regla</b>: la puerta manda los tres valores a <c>salud.cancelacion</c> como negocio, el orquestador calcula
+    /// con ellos lo que devuelve, y el elemento los recibe para decir lo mismo antes de cancelar. El navegador no los elige.
+    /// </remarks>
+    public int DevolucionTotalHoras { get; init; } = 24;
+
+    /// <summary>Desde cuántas horas antes se devuelve <see cref="DevolucionParcialPorcentaje"/>; con menos, nada.</summary>
+    public int DevolucionParcialHoras { get; init; } = 2;
+
+    /// <summary>El porcentaje del copago que se devuelve entre <see cref="DevolucionParcialHoras"/> y <see cref="DevolucionTotalHoras"/>.</summary>
+    public int DevolucionParcialPorcentaje { get; init; } = 50;
+
     /// <inheritdoc />
     protected override NegocioDeEhr Fusionar(EhrFeatureSitio? propio)
         => new(
@@ -72,7 +88,10 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
             AppointmentPath: CaminoDeCompra.Normalizar(propio?.AppointmentPath ?? AppointmentPath),
             LecturasBase: (propio?.LecturasBase ?? LecturasBase).Trim(),
             VersionDelPermiso: (propio?.VersionDelPermiso ?? VersionDelPermiso).Trim(),
-            HistoriaBase: (propio?.HistoriaBase ?? HistoriaBase).Trim());
+            HistoriaBase: (propio?.HistoriaBase ?? HistoriaBase).Trim(),
+            DevolucionTotalHoras: propio?.DevolucionTotalHoras ?? DevolucionTotalHoras,
+            DevolucionParcialHoras: propio?.DevolucionParcialHoras ?? DevolucionParcialHoras,
+            DevolucionParcialPorcentaje: propio?.DevolucionParcialPorcentaje ?? DevolucionParcialPorcentaje);
 
     /// <inheritdoc />
     protected override IEnumerable<string> ProblemasDe(NegocioDeEhr negocio)
@@ -88,6 +107,14 @@ public sealed class EhrFeatureSettings : SeccionDeNegocio<EhrFeatureSitio, Negoc
                 : null,
             string.IsNullOrWhiteSpace(negocio.Servicio.Kind) || string.IsNullOrWhiteSpace(negocio.Servicio.Id)
                 ? "ServiceKind y ServiceId: el servicio que se agenda no puede quedar vacío (sin él la cita no tiene copago que cotizar)."
+                : null,
+            negocio.DevolucionTotalHoras < 0 || negocio.DevolucionParcialHoras < 0
+                ? "DevolucionTotalHoras y DevolucionParcialHoras: las horas no pueden ser negativas."
+                : negocio.DevolucionParcialHoras > negocio.DevolucionTotalHoras
+                    ? "DevolucionParcialHoras: la devolución parcial no puede empezar antes que la total."
+                    : null,
+            negocio.DevolucionParcialPorcentaje is < 0 or > 100
+                ? "DevolucionParcialPorcentaje: va de 0 a 100."
                 : null,
         }.OfType<string>();
 }
@@ -117,4 +144,13 @@ public sealed class EhrFeatureSitio
 
     /// <inheritdoc cref="EhrFeatureSettings.HistoriaBase"/>
     public string? HistoriaBase { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.DevolucionTotalHoras"/>
+    public int? DevolucionTotalHoras { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.DevolucionParcialHoras"/>
+    public int? DevolucionParcialHoras { get; init; }
+
+    /// <inheritdoc cref="EhrFeatureSettings.DevolucionParcialPorcentaje"/>
+    public int? DevolucionParcialPorcentaje { get; init; }
 }
