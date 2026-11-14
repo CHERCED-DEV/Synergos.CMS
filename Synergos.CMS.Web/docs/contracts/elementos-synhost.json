@@ -1368,10 +1368,19 @@
         "Health.Record"
       ],
       "claves": [
+        "Health.Appointment.AlreadyCancelled",
+        "Health.Appointment.AlreadyStarted",
         "Health.Appointment.BadRequest",
         "Health.Appointment.BadWindow",
         "Health.Appointment.Cancel",
+        "Health.Appointment.CancelFailed",
+        "Health.Appointment.CancelNoCopay",
         "Health.Appointment.CancelledNoCharge",
+        "Health.Appointment.CancelledNoRefund",
+        "Health.Appointment.CancelledRefund",
+        "Health.Appointment.ConfirmCancel",
+        "Health.Appointment.ConfirmCancelNo",
+        "Health.Appointment.ConfirmCancelYes",
         "Health.Appointment.ConsentMissing",
         "Health.Appointment.Copay",
         "Health.Appointment.CopayUnavailable",
@@ -1380,15 +1389,22 @@
         "Health.Appointment.Loading",
         "Health.Appointment.NoAgenda",
         "Health.Appointment.NoCopay",
+        "Health.Appointment.NoRefund",
         "Health.Appointment.NoSlots",
         "Health.Appointment.NotCancellable",
         "Health.Appointment.NotConfirmable",
         "Health.Appointment.NotFound",
         "Health.Appointment.PaymentFailed",
+        "Health.Appointment.RefundAll",
         "Health.Appointment.RefundIssued",
+        "Health.Appointment.RefundNone",
+        "Health.Appointment.RefundPart",
+        "Health.Appointment.RefundPolicy",
+        "Health.Appointment.Refunded",
         "Health.Appointment.SignInRequired",
         "Health.Appointment.SlotExpired",
         "Health.Appointment.SlotTaken",
+        "Health.Appointment.StateCancelled",
         "Health.Appointment.StateConfirmed",
         "Health.Appointment.StatePending",
         "Health.Appointment.StateReview",
@@ -1611,6 +1627,24 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "devolucionTotalHoras",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "devolucionParcialHoras",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
+        },
+        {
+          "nombre": "devolucionParcialPorcentaje",
+          "tipo": "number",
+          "opcional": false,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -1619,7 +1653,10 @@
         "lecturasBase": "/api/lecturas/salud",
         "appointmentPath": "directa",
         "zona": "America/Bogota",
-        "historiaBase": "/api/healthcare"
+        "historiaBase": "/api/healthcare",
+        "devolucionTotalHoras": 24,
+        "devolucionParcialHoras": 2,
+        "devolucionParcialPorcentaje": 50
       }
     },
     {

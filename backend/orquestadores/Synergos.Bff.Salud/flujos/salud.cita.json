@@ -11,6 +11,7 @@
     "hasta": "instante"
   },
   "salida": ["profesional", "ventana", "total", "reservaId"],
+  "para_lo_posterior": ["cobroId", "total", "ventana", "reservaId"],
   "lecturas": {
     "disponibilidad": {
       "entrada": ["profesional", "desde", "hasta"],

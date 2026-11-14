@@ -27,6 +27,9 @@ public sealed class EhrResolutor : IResolutorSynHost<EhrProps>
     /// <summary>El flujo de la cita: el que coloca <c>elementSynEhr.cshtml</c> alrededor del elemento.</summary>
     public const string FlujoDeLaCita = "salud.cita";
 
+    /// <summary>Cancelar una cita confirmada (I6): el flujo posterior que también coloca <c>elementSynEhr.cshtml</c>.</summary>
+    public const string FlujoDeLaCancelacion = "salud.cancelacion";
+
     private readonly INegocioDelSitio<NegocioDeEhr> _negocio;
     private readonly IPuertaDeLosFlujos _puerta;
     private readonly IOptions<ListadosSettings> _listados;
@@ -46,6 +49,9 @@ public sealed class EhrResolutor : IResolutorSynHost<EhrProps>
             LecturasBase: negocio.LecturasBase,
             AppointmentPath: CaminoDeCompra.Decidir(negocio.AppointmentPath, _puerta.Abre(FlujoDeLaCita)),
             Zona: _listados.Value.ZonaHoraria,
-            HistoriaBase: negocio.HistoriaBase));
+            HistoriaBase: negocio.HistoriaBase,
+            DevolucionTotalHoras: negocio.DevolucionTotalHoras,
+            DevolucionParcialHoras: negocio.DevolucionParcialHoras,
+            DevolucionParcialPorcentaje: negocio.DevolucionParcialPorcentaje));
     }
 }

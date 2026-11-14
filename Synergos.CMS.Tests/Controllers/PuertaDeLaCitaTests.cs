@@ -237,6 +237,72 @@ public sealed class PuertaDeLaCitaTests
         Assert.NotEmpty(TablaDeLaPuerta.Incrustada().DelFlujo(coordinador.Groups[1].Value));
     }
 
+    // ── Cancelar una cita confirmada (I6, la ficha F4) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// La entrada de <c>salud.cancelacion</c> arranca contra los contratos incrustados, la vista coloca su coordinador, y
+    /// la política que pone la puerta es la que lee la definición, con los nombres y los valores del negocio del sitio.
+    /// </summary>
+    [Fact]
+    public void La_cancelacion_arranca_en_la_puerta_y_le_llega_la_politica_que_lee_su_definicion()
+    {
+        var flujo = EhrResolutor.FlujoDeLaCancelacion;
+        var puerta = LaDelAppsettings();
+        var sola = new PuertaSettings
+        {
+            Flujos = new Dictionary<string, FlujoDeLaPuertaSettings>(StringComparer.Ordinal) { [flujo] = puerta.Flujos[flujo] },
+        };
+        var r = new ValidadorDeLaPuerta(TablaDeLaPuerta.Incrustada(), Secciones).Validate(null, sola);
+        Assert.True(r.Succeeded, r.FailureMessage);
+        Assert.Contains(TablaDeLaPuerta.Incrustada().DelFlujo(flujo), o => o.Operacion == "abrir");
+
+        var vista = File.ReadAllText(Path.Combine(Raiz(), "Synergos.CMS.Web", "Views", "Partials", "blockgrid", "Components", "elementSynEhr.cshtml"));
+        Assert.Contains($"<synergos-flujo flujo=\"{flujo}\" style=\"display:contents\">", vista, StringComparison.Ordinal);
+
+        var definicion = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            Raiz(), "backend", "orquestadores", "Synergos.Bff.Salud", "flujos", "salud.cancelacion.json")));
+        var leidos = definicion.RootElement.GetProperty("tipos").EnumerateObject()
+            .Where(t => t.Value.ValueKind == JsonValueKind.Object && t.Value.TryGetProperty("de", out var de) && de.GetString() == "negocio")
+            .Select(t => t.Value.GetProperty("campo").GetString()!)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var campos = puerta.Flujos[flujo].Negocio!.Campos;
+        Assert.Equal(leidos, campos.Select(JsonNamingPolicy.CamelCase.ConvertName).Order(StringComparer.Ordinal).ToList());
+
+        using var json = JsonDocument.Parse(Encoding.UTF8.GetString(DeBase64Url(LoQuePoneLaPuerta.Negocio(new EhrFeatureSettings().Para(null), campos))));
+        Assert.Equal(24, json.RootElement.GetProperty("devolucionTotalHoras").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("devolucionParcialHoras").GetInt32());
+        Assert.Equal(50, json.RootElement.GetProperty("devolucionParcialPorcentaje").GetInt32());
+    }
+
+    /// <summary>
+    /// La política es del sitio: un sitio la cambia, el elemento recibe la misma que manda la puerta, y una que no es una
+    /// política no deja arrancar.
+    /// </summary>
+    [Fact]
+    public void La_politica_de_devolucion_es_del_sitio_llega_al_elemento_y_mal_hecha_no_deja_arrancar()
+    {
+        var sitio = Guid.Parse("f289c6d5-4f6c-407f-8c35-ce7e0dec7b22");
+        var ajustes = new EhrFeatureSettings
+        {
+            Sitios = new(StringComparer.OrdinalIgnoreCase)
+            {
+                [sitio.ToString()] = new EhrFeatureSitio { DevolucionTotalHoras = 48, DevolucionParcialPorcentaje = 30 },
+            },
+        };
+
+        var props = Resolver(ajustes, laPuertaAbre: true, sitio);
+        Assert.Equal((48, 2, 30), (props.DevolucionTotalHoras, props.DevolucionParcialHoras, props.DevolucionParcialPorcentaje));
+        Assert.Equal((24, 2, 50), (Resolver(new EhrFeatureSettings(), laPuertaAbre: true).DevolucionTotalHoras,
+            Resolver(new EhrFeatureSettings(), laPuertaAbre: true).DevolucionParcialHoras,
+            Resolver(new EhrFeatureSettings(), laPuertaAbre: true).DevolucionParcialPorcentaje));
+        Assert.Empty(ajustes.Problemas());
+
+        Assert.Contains(new EhrFeatureSettings { DevolucionParcialHoras = 30 }.Problemas(), p => p.Contains("DevolucionParcialHoras", StringComparison.Ordinal));
+        Assert.Contains(new EhrFeatureSettings { DevolucionParcialPorcentaje = 101 }.Problemas(), p => p.Contains("DevolucionParcialPorcentaje", StringComparison.Ordinal));
+        Assert.Contains(new EhrFeatureSettings { DevolucionTotalHoras = -1 }.Problemas(), p => p.Contains("DevolucionTotalHoras", StringComparison.Ordinal));
+    }
+
     private static byte[] DeBase64Url(string texto)
     {
         var b64 = texto.Replace('-', '+').Replace('_', '/');

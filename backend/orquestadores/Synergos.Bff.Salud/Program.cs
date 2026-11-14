@@ -1,6 +1,7 @@
 using Synergos.Bff.Core;
 using Synergos.Bff.Core.Flow;
 using Synergos.Bff.Pasos;
+using Synergos.Bff.Pasos.Http;
 using Synergos.Bff.Salud.Clients;
 using Synergos.Bff.Salud.Domain;
 using Synergos.Bff.Salud.Endpoints;
@@ -68,7 +69,21 @@ builder.Services.AddSingleton<SaludCapabilities>();
 builder.Services.AddSingleton<AppointmentFlow>();
 
 var declarado = ModosDelOrquestador.Leer(builder.Configuration, vocabulario, ModoDelOrquestador.Declarado) == ModoDelOrquestador.Declarado;
-if (declarado) builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
+if (declarado)
+{
+    builder.AddOrquestadorDeclarado(vocabulario, typeof(Program).Assembly);
+
+    // Cancelar una cita confirmada (salud.cancelacion, I6): su paso propio necesita el reloj del orquestador, así que el
+    // registro se rehace aquí. Este registro reemplaza al del núcleo, así que nombra lo que el núcleo pone: la lectura de
+    // la original y la zona del aviso de la cita (salud:ZonaHoraria).
+    var zona = TimeZoneInfo.FindSystemTimeZoneById(
+        builder.Configuration[$"{vocabulario.Origin}:ZonaHoraria"] is { Length: > 0 } declarada ? declarada : PasoAvisar.ZonaPorDefecto);
+    builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), zona,
+    [
+        new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), TiposDeValor.Sumados(sp.GetServices<TiposDeValor>())),
+        .. CancelacionDeLaCita.Pasos(sp.GetRequiredService<TimeProvider>()),
+    ]));
+}
 
 var app = builder.Build();
 

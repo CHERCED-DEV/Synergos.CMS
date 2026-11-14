@@ -34,6 +34,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y dónde vive la historia</b> (<c>HistoriaBase</c>, I2 T062): <c>/api/healthcare</c>, la historia clínica de
 /// producción, de donde salen «Mi salud», el check-in y las vistas del personal. Vacía, el portal vuelve a lo de
 /// <c>ApiBase</c>.</para>
+///
+/// <para><b>Y cuánto devuelve cancelar una cita confirmada</b> (<c>Devolucion*</c>, I6): la política del sitio, la misma que la
+/// puerta manda a <c>salud.cancelacion</c>. El elemento la usa para decir lo que se devolverá antes de cancelar; lo que se
+/// devuelve de verdad lo calcula el orquestador.</para>
 /// </remarks>
 [ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent", "Health.Record"])]
 public sealed record EhrProps(
@@ -41,4 +45,7 @@ public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string AppointmentPath,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string Zona,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string HistoriaBase);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string HistoriaBase,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionTotalHoras = 24,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialHoras = 2,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialPorcentaje = 50);

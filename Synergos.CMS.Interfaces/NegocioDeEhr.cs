@@ -14,13 +14,20 @@ namespace Synergos.CMS.Interfaces;
 /// no la elige.</param>
 /// <param name="HistoriaBase">La base de la historia clínica de producción (<c>/api/healthcare</c>, I2 T062); vacía, el portal
 /// vuelve a lo de <see cref="ApiBase"/>.</param>
+/// <param name="DevolucionTotalHoras">Cancelar una cita confirmada (I6): desde cuántas horas antes de su inicio se devuelve
+/// el copago entero. La puerta lo manda a <c>salud.cancelacion</c> como negocio y el elemento lo muestra antes de cancelar.</param>
+/// <param name="DevolucionParcialHoras">Desde cuántas horas antes se devuelve una parte; con menos, nada.</param>
+/// <param name="DevolucionParcialPorcentaje">Qué porcentaje del copago es esa parte (0 a 100).</param>
 public sealed record NegocioDeEhr(
     string ApiBase,
     ServicioAgendable Servicio,
     string? AppointmentPath = null,
     string LecturasBase = "",
     string VersionDelPermiso = "",
-    string HistoriaBase = "");
+    string HistoriaBase = "",
+    int DevolucionTotalHoras = 24,
+    int DevolucionParcialHoras = 2,
+    int DevolucionParcialPorcentaje = 50);
 
 /// <summary>
 /// El servicio que se agenda, con la forma de un <c>Ref</c> del backend (<c>{ kind, id }</c>): es como lo lee
