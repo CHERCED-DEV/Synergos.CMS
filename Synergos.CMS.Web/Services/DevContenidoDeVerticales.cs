@@ -1096,7 +1096,8 @@ public sealed class DevContenidoDeVerticales
         if (!nodo.HasProperty(alias)) { return false; }
         var porCultura = nodo.Properties[alias]!.PropertyType.VariesByCulture();
         var actual = porCultura ? nodo.GetValue(alias, Cultura) : nodo.GetValue(alias);
-        if (Equals(actual?.ToString(), valor.ToString())) { return false; }
+        // Una lista vacía se guarda como nulo: «nada» y «""» son lo mismo, o la receta cambiaría en cada pasada.
+        if (string.Equals(actual?.ToString() ?? string.Empty, valor.ToString() ?? string.Empty, StringComparison.Ordinal)) { return false; }
         if (porCultura) { nodo.SetValue(alias, valor, Cultura); } else { nodo.SetValue(alias, valor); }
         return true;
     }
