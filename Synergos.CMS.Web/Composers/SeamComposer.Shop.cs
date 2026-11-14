@@ -265,11 +265,17 @@ public sealed partial class SeamComposer
         // reinicio, que es lo mínimo que un usuario espera de un buzón.
         // Y lo que la moderación retiró de los mensajes directos de Blogs no se lee (012-blogs-social, I5): los hilos de
         // los demás pasan tal cual.
+        // Y los hilos se guardan CIFRADOS (003-salud-cita, Q12: en la librería, para todos): un mensaje al médico es dato
+        // de salud, y uno directo de Blogs tampoco tiene por qué quedar en claro en el disco. Lo de antes se sigue leyendo.
         services.AddSingleton<IMessagingService>(sp =>
             new MensajeriaSinRetirados(
                 new StubMessagingService(
                     null,
-                    sp.GetRequiredService<IJsonEntityStore>(),
+                    new AlmacenCifrado(
+                        sp.GetRequiredService<IJsonEntityStore>(),
+                        sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>(),
+                        AlmacenCifrado.PropositoDeLaMensajeria,
+                        sp.GetRequiredService<ILogger<AlmacenCifrado>>()),
                     StubMessagingService.DefaultResourceType),
                 sp.GetRequiredService<IRegistroDeRetirados>()));
 

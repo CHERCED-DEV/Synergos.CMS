@@ -18,7 +18,20 @@ public interface IConsultaDeSalud
 
     /// <summary>Si el sello es el de esa huella con esa llave. El valor es la llave que cuadró.</summary>
     Task<ResultadoDeLaConsulta> ComprobarSelloAsync(string llave, string huella, string sello, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// El estado de cuenta de un paciente (I7 P17): lo cobrado y lo devuelto de cada cita suya, leído en Payments. <c>null</c>
+    /// si el orquestador no contestó o no pudo leer algún pago: una cuenta a medias no se muestra.
+    /// </summary>
+    Task<EstadoDeCuenta?> EstadoDeCuentaAsync(string pacienteKind, string pacienteId, CancellationToken cancellationToken);
 }
+
+/// <summary>Una cita cobrada en la cuenta del paciente, con lo que dice Payments de su cobro.</summary>
+public sealed record LineaDeLaCuenta(
+    string CitaId, string Numero, DateTimeOffset? Inicio, decimal Cobrado, decimal Devuelto, string Moneda);
+
+/// <summary>La cuenta del paciente, una línea por cita cobrada.</summary>
+public sealed record EstadoDeCuenta(IReadOnlyList<LineaDeLaCuenta> Lineas);
 
 /// <summary>Una cita del día como la da el orquestador.</summary>
 public sealed record CitaDelDia(

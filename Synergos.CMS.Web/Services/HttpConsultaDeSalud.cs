@@ -63,6 +63,31 @@ public sealed class HttpConsultaDeSalud : IConsultaDeSalud
         => EnviarAsync("v1/sellos/comprobar", new { llave, contenido = huella, sello },
             c => (c.GetProperty("llaveId").GetString(), null), cancellationToken);
 
+    public async Task<EstadoDeCuenta?> EstadoDeCuentaAsync(string pacienteKind, string pacienteId, CancellationToken cancellationToken)
+    {
+        var url = $"v1/estado-de-cuenta?pacienteKind={Uri.EscapeDataString(pacienteKind)}&pacienteId={Uri.EscapeDataString(pacienteId)}";
+        try
+        {
+            using var r = await _clients.CreateClient(ClientName).GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!r.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("El estado de cuenta no se pudo leer: el orquestador contestó {Estado}.", (int)r.StatusCode);
+                return null;
+            }
+            var cuerpo = await r.Content.ReadFromJsonAsync<JsonElement>(cancellationToken).ConfigureAwait(false);
+            return new EstadoDeCuenta(cuerpo.GetProperty("lineas").EnumerateArray().Select(l => new LineaDeLaCuenta(
+                l.GetProperty("citaId").GetString()!, l.GetProperty("numero").GetString()!,
+                l.TryGetProperty("inicio", out var inicio) && inicio.ValueKind == JsonValueKind.String ? inicio.GetDateTimeOffset() : null,
+                l.GetProperty("cobrado").GetDecimal(), l.GetProperty("devuelto").GetDecimal(), l.GetProperty("moneda").GetString()!)).ToList());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException
+                                       or InvalidOperationException or FormatException)
+        {
+            _logger.LogWarning(ex, "El estado de cuenta no se pudo leer.");
+            return null;
+        }
+    }
+
     private async Task<ResultadoDeLaConsulta> EnviarAsync(
         string ruta, object cuerpo, Func<JsonElement, (string? Valor, string? Extra)> leer, CancellationToken cancellationToken)
     {
@@ -107,4 +132,7 @@ public sealed class ConsultaDeSaludSinDestino : IConsultaDeSalud
 
     public Task<ResultadoDeLaConsulta> ComprobarSelloAsync(string llave, string huella, string sello, CancellationToken cancellationToken)
         => Task.FromResult(ResultadoDeLaConsulta.SinRespuesta);
+
+    public Task<EstadoDeCuenta?> EstadoDeCuentaAsync(string pacienteKind, string pacienteId, CancellationToken cancellationToken)
+        => Task.FromResult<EstadoDeCuenta?>(null);
 }

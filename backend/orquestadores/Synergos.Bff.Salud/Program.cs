@@ -95,6 +95,8 @@ if (declarado)
 {
     app.MapFlujosDeclarados();
     app.MapOfertaDeclarada();
+    // El estado de cuenta (I7 P17) lee las citas de la saga genérica: sólo existe con el declarado.
+    app.MapCuentaEndpoints();
 }
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

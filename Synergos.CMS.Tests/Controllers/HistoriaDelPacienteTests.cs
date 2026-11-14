@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Synergos.CMS.Application.Salud;
+using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Services;
@@ -12,8 +13,10 @@ namespace Synergos.CMS.Tests.Controllers;
 /// protege es el orden de siempre del portal: la historia sale de la SESIÓN, la guardia decide y audita antes de tocar
 /// nada, y lo que el paciente escribe es sólo lo declarado. El repositorio es el de verdad, sobre un almacén en memoria.
 /// </summary>
-public sealed class HistoriaDelPacienteTests
+public sealed class HistoriaDelPacienteTests : IDisposable
 {
+    public void Dispose() => _mensajeria.Dispose();
+
     private readonly IPhiAccessGuard _guard = Substitute.For<IPhiAccessGuard>();
     private readonly IMemberAccessGate _gate = Substitute.For<IMemberAccessGate>();
     private readonly InMemoryPhiStore _store = new();
@@ -660,6 +663,167 @@ public sealed class HistoriaDelPacienteTests
             System.Globalization.CultureInfo.InvariantCulture);
         Assert.StartsWith("1 0 obj", texto[primero..]);
         Assert.Contains("(Receta médica - señora Núñez) Tj", texto);
+    }
+
+    // ── Mensajes, bandeja y estado de cuenta (I7) ───────────────────────────────────────────────────────
+
+    private static readonly Guid OtroMiembro = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private readonly StubMessagingService _mensajeria = new(null);
+    private readonly IDoctorDirectory _directorio = UnDirectorio();
+
+    private static IDoctorDirectory UnDirectorio()
+    {
+        var dra = new MedicalDoctor("dra-1", "Dra. Ana Gómez", "Medicina general", "RM-1", 5, 10, null, [], 8, 17, 30);
+        var directorio = Substitute.For<IDoctorDirectory>();
+        directorio.GetAsync("dra-1", Arg.Any<CancellationToken>()).Returns(dra);
+        directorio.ListAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(new[] { dra });
+        return directorio;
+    }
+
+    private HealthcareApiController ConMensajes() => new(
+        _guard, _patients, Substitute.For<IAppointmentScheduler>(), Recetas, Substitute.For<IConsentLedger>(), _gate,
+        new EditorDeLaHistoriaClinica(_patients), consulta: _consulta, ordenes: Ordenes, archivos: _archivos,
+        renovaciones: Renovaciones, mensajeria: _mensajeria, directorio: _directorio);
+
+    private void ComoMedico()
+    {
+        SesionDe(Medico);
+        _gate.HasAnyRole("doctor").Returns(true);
+    }
+
+    private async Task<HiloDelPaciente> ElPacienteEscribe(string texto)
+    {
+        SesionDe(Miembro);
+        return Assert.IsType<HiloDelPaciente>(Assert.IsType<OkObjectResult>(
+            await ConMensajes().EscribirMensaje(new MensajeEscrito("dra-1", texto), CancellationToken.None)).Value);
+    }
+
+    [Fact]
+    public async Task Mensajes_El_paciente_escribe_a_su_profesional_y_el_medico_contesta_en_el_mismo_hilo()
+    {
+        await HistoriaDe(Miembro);
+        GuardiaDice(true);
+        var primero = await ElPacienteEscribe("Doctora, ¿puedo tomar la metformina en ayunas?");
+        var segundo = await ElPacienteEscribe("Olvidé decirle que me mareo.");
+
+        ComoMedico();
+        var leido = Assert.IsType<HiloDelConsultorio>(Assert.IsType<OkObjectResult>(
+            await ConMensajes().HiloDelConsultorio(primero.Id, CancellationToken.None)).Value);
+        var contestado = Assert.IsType<HiloDelConsultorio>(Assert.IsType<OkObjectResult>(await ConMensajes().ResponderMensaje(
+            primero.Id, new MensajeEscrito(Texto: "Mejor con las comidas. Venga a control."), CancellationToken.None)).Value);
+
+        SesionDe(Miembro);
+        var mios = Assert.IsType<List<HiloDelPaciente>>(Assert.IsType<OkObjectResult>(await ConMensajes().MisMensajes(CancellationToken.None)).Value);
+
+        Assert.Equal(primero.Id, segundo.Id);
+        Assert.True(segundo.Esperando);
+        Assert.Equal(("Camila Restrepo", "Dra. Ana Gómez", 2), (leido.Paciente, leido.Profesional, leido.Mensajes.Count));
+        Assert.False(contestado.Esperando);
+        var hilo = Assert.Single(mios);
+        Assert.Equal(new[] { true, true, false }, hilo.Mensajes.Select(m => m.DelPaciente));
+        Assert.False(hilo.Esperando);
+    }
+
+    [Fact]
+    public async Task Mensajes_Sin_el_permiso_del_paciente_el_medico_no_lee_ni_contesta_su_hilo()
+    {
+        await HistoriaDe(Miembro);
+        GuardiaDice(true);
+        var hilo = await ElPacienteEscribe("¿Me puede ver el viernes?");
+
+        ComoMedico();
+        GuardiaDice(false);
+        var leer = await ConMensajes().HiloDelConsultorio(hilo.Id, CancellationToken.None);
+        var contestar = await ConMensajes().ResponderMensaje(hilo.Id, new MensajeEscrito(Texto: "Sí"), CancellationToken.None);
+
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(leer).StatusCode);
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(contestar).StatusCode);
+        Assert.Single((await _mensajeria.GetThreadAsync(hilo.Id, CancellationToken.None))!.Messages);
+    }
+
+    [Theory]
+    [InlineData("dra-9", "Hola")]
+    [InlineData("dra-1", "   ")]
+    public async Task Mensajes_A_quien_no_esta_en_el_directorio_o_sin_texto_es_400_y_no_se_guarda(string profesional, string texto)
+    {
+        await HistoriaDe(Miembro);
+        GuardiaDice(true);
+        SesionDe(Miembro);
+
+        var r = await ConMensajes().EscribirMensaje(new MensajeEscrito(profesional, texto), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(r);
+        Assert.Empty(await _mensajeria.GetInboxAsync(MensajesClinicos.BuzonDelPaciente(
+            (await _patients.FindKeyByMemberAsync(Miembro, CancellationToken.None))!.Value), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Bandeja_Reune_el_resultado_la_renovacion_y_el_mensaje_y_cada_uno_sale_al_atenderlo()
+    {
+        var (key, receta) = await UnaRecetaEmitida();
+        ComoMedico();
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConMensajes().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value);
+        var cargada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConMensajes().CargarResultado(key, orden.Id, HbA1c("e1"), CancellationToken.None)).Value);
+        SesionDe(Miembro);
+        var pedida = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConMensajes().PedirRenovacion(receta.Id, null, CancellationToken.None)).Value);
+        var hilo = await ElPacienteEscribe("¿Ya salió mi examen?");
+
+        ComoMedico();
+        var antes = Assert.IsType<BandejaDelConsultorio>(Assert.IsType<OkObjectResult>(await ConMensajes().Bandeja(CancellationToken.None)).Value);
+        await ConMensajes().LiberarResultado(key, cargada.Examenes[0].Resultado!.Id, CancellationToken.None);
+        await ConMensajes().AprobarRenovacion(key, pedida.Id, null, CancellationToken.None);
+        await ConMensajes().ResponderMensaje(hilo.Id, new MensajeEscrito(Texto: "Sí, ya está liberado."), CancellationToken.None);
+        var despues = Assert.IsType<BandejaDelConsultorio>(Assert.IsType<OkObjectResult>(await ConMensajes().Bandeja(CancellationToken.None)).Value);
+
+        Assert.Equal(new[] { "mensaje", "renovacion", "resultado" }, antes.Items.Select(i => i.Tipo).Order());
+        Assert.All(antes.Items, i => Assert.Equal((key, "Camila Restrepo"), (i.PacienteKey, i.Paciente)));
+        Assert.Contains(antes.Items, i => i.Tipo == "resultado" && i.Resumen == "HbA1c");
+        Assert.Contains(antes.Items, i => i.Tipo == "renovacion" && i.Resumen == "Metformina 850 mg");
+        Assert.Empty(despues.Items);
+    }
+
+    [Fact]
+    public async Task Bandeja_Un_paciente_sin_permiso_no_sale_solo_se_cuenta_y_sin_rol_de_medico_es_403()
+    {
+        var conPermiso = await HistoriaDe(Miembro);
+        var sinPermiso = await HistoriaDe(OtroMiembro);
+        GuardiaDice(true);
+        _guard.CheckAccessAsync(Arg.Is<AccessCheckRequest>(r => r.TargetPatientKey == sinPermiso), Arg.Any<CancellationToken>())
+            .Returns(new AccessDecision(false, "no-active-consent", "audit-id"));
+        ComoMedico();
+        await ConMensajes().CargarResultado(conPermiso, Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConMensajes().Ordenar(conPermiso, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value).Id,
+            HbA1c("e1"), CancellationToken.None);
+
+        var bandeja = Assert.IsType<BandejaDelConsultorio>(Assert.IsType<OkObjectResult>(await ConMensajes().Bandeja(CancellationToken.None)).Value);
+        _gate.HasAnyRole("doctor").Returns(false);
+        GuardiaDice(false);
+        var sinRol = await ConMensajes().Bandeja(CancellationToken.None);
+
+        Assert.Equal((1, conPermiso), (bandeja.SinPermiso, Assert.Single(bandeja.Items).PacienteKey));
+        Assert.Equal(403, Assert.IsType<StatusCodeResult>(sinRol).StatusCode);
+    }
+
+    [Fact]
+    public async Task Cuenta_Son_las_lineas_del_orquestador_con_sus_totales_y_sin_respuesta_es_503()
+    {
+        SesionDe(Miembro);
+        GuardiaDice(true);
+        _consulta.EstadoDeCuentaAsync("salud.paciente", Miembro.ToString("N"), Arg.Any<CancellationToken>()).Returns(new EstadoDeCuenta([
+            new LineaDeLaCuenta("c1", "CITA1", new DateTimeOffset(2027, 3, 1, 15, 0, 0, TimeSpan.Zero), 50_000m, 25_000m, "COP"),
+            new LineaDeLaCuenta("c2", "CITA2", new DateTimeOffset(2027, 3, 8, 15, 0, 0, TimeSpan.Zero), 50_000m, 0m, "COP"),
+        ]));
+
+        var cuenta = Assert.IsType<CuentaParaLeer>(Assert.IsType<OkObjectResult>(await ConMensajes().MiEstadoDeCuenta(CancellationToken.None)).Value);
+        _consulta.EstadoDeCuentaAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((EstadoDeCuenta?)null);
+        var caida = await ConMensajes().MiEstadoDeCuenta(CancellationToken.None);
+
+        Assert.Equal(new[] { "c2", "c1" }, cuenta.Lineas.Select(l => l.CitaId));
+        Assert.Equal(new TotalDeLaCuenta("COP", 100_000m, 25_000m, 75_000m), Assert.Single(cuenta.Totales));
+        Assert.Equal(503, Assert.IsType<StatusCodeResult>(caida).StatusCode);
     }
 
     private sealed class ArchivosEnMemoria : IPrivateFileStore
