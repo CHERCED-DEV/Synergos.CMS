@@ -22,11 +22,13 @@ public sealed class AcademyResolutor : IResolutorSynHost<AcademyProps>
     private readonly INegocioDelSitio<NegocioDeAcademy> _negocio;
     private readonly ICaminoDeLosFlujos _caminos;
     private readonly ILogger<AcademyResolutor> _log;
+    private readonly ICabeceraDeLasApps? _cabecera;
 
     public AcademyResolutor(
         IPublishedValueFallback fallback, INegocioDelSitio<NegocioDeAcademy> negocio, ICaminoDeLosFlujos caminos,
-        ILogger<AcademyResolutor> log)
+        ILogger<AcademyResolutor> log, ICabeceraDeLasApps? cabecera = null)
     {
+        _cabecera = cabecera;
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
@@ -42,6 +44,7 @@ public sealed class AcademyResolutor : IResolutorSynHost<AcademyProps>
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
-            EnrollmentPath: _caminos.Decidir(FlujoDeLaMatricula, negocio.EnrollmentPath)));
+            EnrollmentPath: _caminos.Decidir(FlujoDeLaMatricula, negocio.EnrollmentPath),
+            Cabecera: _cabecera?.Actual()));
     }
 }

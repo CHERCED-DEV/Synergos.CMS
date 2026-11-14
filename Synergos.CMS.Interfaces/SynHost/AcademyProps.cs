@@ -18,4 +18,6 @@ public sealed record AcademyProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string EnrollmentPath);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string EnrollmentPath,
+    // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);
