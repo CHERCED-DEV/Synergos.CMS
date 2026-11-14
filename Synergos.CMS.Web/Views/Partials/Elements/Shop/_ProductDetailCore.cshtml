@@ -150,11 +150,22 @@
     @* El carrito sólo en un sitio que vende en línea (Synergos:Features:Compra): un inmueble se visita y un servicio
        se reserva, con el botón que la ficha ya compone. El sitio es el siteRoot de la ficha: la base no tiene
        dominios, y por dominio (INegocioDelSitio) regiría siempre la base. *@
-    @if (Compra.CurrentValue.Para(product.AncestorOrSelf("siteRoot")?.Key).EnLinea && inStock && hasPrice)
+    @if (Compra.CurrentValue.Para(product.AncestorOrSelf("siteRoot")?.Key).EnLinea)
     {
-        <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
-            @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
-        </button>
+        if (inStock && hasPrice)
+        {
+            <button type="button" class="syn-product__add-to-cart" data-action="add-to-cart" data-sku="@sku">
+                @Umbraco.GetDictionaryValue("Shop.Product.AddToCart")
+            </button>
+        }
+    }
+    else if (Synergos.CMS.Web.Services.AccionDeLaFicha.Del(
+                 product.HasProperty("sections") ? product.Value<Umbraco.Cms.Core.Models.Blocks.BlockGridModel>("sections") : null)
+             is { } accion)
+    {
+        @* Sin carrito, la acción que la ficha ya compone en su cierre («Agendar visita», «Reservar ahora») sale
+           también aquí, junto al precio: antes quedaba al final de la página y esta columna se veía vacía. *@
+        <a class="syn-product__add-to-cart syn-product__accion" href="@accion.Url">@accion.Rotulo</a>
     }
 
     @if (trustItems.Count > 0)
