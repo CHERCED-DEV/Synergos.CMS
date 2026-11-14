@@ -3,10 +3,12 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.Lecturas;
+using Synergos.CMS.Interfaces.Moderacion;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
 using Synergos.CMS.Web.Services.Lecturas;
+using Synergos.CMS.Web.Services.Moderacion;
 using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
@@ -261,11 +263,15 @@ public sealed partial class SeamComposer
                 sp.GetRequiredService<IJsonEntityStore>()));
         // Durabilidad (ADR 0105): un mensaje directo que alguien ya envió sobrevive el
         // reinicio, que es lo mínimo que un usuario espera de un buzón.
+        // Y lo que la moderación retiró de los mensajes directos de Blogs no se lee (012-blogs-social, I5): los hilos de
+        // los demás pasan tal cual.
         services.AddSingleton<IMessagingService>(sp =>
-            new StubMessagingService(
-                null,
-                sp.GetRequiredService<IJsonEntityStore>(),
-                StubMessagingService.DefaultResourceType));
+            new MensajeriaSinRetirados(
+                new StubMessagingService(
+                    null,
+                    sp.GetRequiredService<IJsonEntityStore>(),
+                    StubMessagingService.DefaultResourceType),
+                sp.GetRequiredService<IRegistroDeRetirados>()));
 
     }
 }

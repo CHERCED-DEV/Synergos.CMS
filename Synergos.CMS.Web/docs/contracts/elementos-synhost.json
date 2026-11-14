@@ -573,6 +573,7 @@
         "Blogs.Moderacion.Enviar",
         "Blogs.Moderacion.Fecha",
         "Blogs.Moderacion.Mantener",
+        "Blogs.Moderacion.Mensaje",
         "Blogs.Moderacion.Motivo",
         "Blogs.Moderacion.NoDecidida",
         "Blogs.Moderacion.NoEnviada",
