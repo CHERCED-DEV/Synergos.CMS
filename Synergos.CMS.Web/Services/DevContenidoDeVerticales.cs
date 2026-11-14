@@ -487,8 +487,8 @@ public sealed class DevContenidoDeVerticales
                 "<p>Una jornada en el Ágora Centro de Convenciones, en el corazón de Bogotá: keynotes de líderes de producto e ingeniería, demos en vivo de startups colombianas y networking. Con el plan Pro suman los talleres prácticos de la tarde.</p>",
                 CuerpoEditable.Donde("headingTitle", "Lo que vas a vivir"));
             var programa = KeyOf("elementSynTimelineHorizontal");
-            // Sin el ajuste por franjas: al cargar, el carril se desplazaba a la primera y el rótulo fijo la tapaba.
-            c.Reemplazar(programa, "snapEnabled", "0");
+            // El ajuste por franjas vuelve (016, V6): el componente ya alinea la hora después del rótulo fijo.
+            c.Reemplazar(programa, "snapEnabled", "1");
             c.TransformarLista(programa, "eventsJson", _ => new JsonArray(
                 Momento("08:30", "Registro y acreditación", "Recoges tu escarapela en la entrada del Ágora."),
                 Momento("09:30", "Keynote de apertura", "El futuro del software en Colombia."),
@@ -511,7 +511,7 @@ public sealed class DevContenidoDeVerticales
             c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "registro-evento"));
             var mapa = KeyOf("elementCorpMapEmbed");
             c.Reemplazar(mapa, "mapTitle", "Ágora Centro de Convenciones, Bogotá");
-            // El Ágora queda junto a Corferias. La coordenada del catálogo (4.6280, -74.0644) cae en el Parque Nacional.
+            // El Ágora queda junto a Corferias: la misma coordenada que su evento en el catálogo.
             c.Reemplazar(mapa, "mapUrl",
                 "https://www.openstreetmap.org/export/embed.html?bbox=-74.1015%2C4.6221%2C-74.0815%2C4.6381&layer=mapnik&marker=4.6301%2C-74.0915");
             var antesDeRegistrarte = Alguno("headingText", "Antes de registrarte", "Antes de comprar");
