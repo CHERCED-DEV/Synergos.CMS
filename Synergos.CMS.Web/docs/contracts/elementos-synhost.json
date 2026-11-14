@@ -3648,9 +3648,11 @@
       "tipo": "funcionalidad",
       "record": "StorefrontProps",
       "diccionario": [
-        "Storefront.Purchase"
+        "Storefront.Purchase",
+        "Storefront.Cart"
       ],
       "claves": [
+        "Storefront.Cart.Suggestions",
         "Storefront.Purchase.ConfirmPending",
         "Storefront.Purchase.Failed",
         "Storefront.Purchase.InProgress",
