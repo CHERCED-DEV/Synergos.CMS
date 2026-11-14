@@ -40,7 +40,9 @@ public sealed class LecturasDeBlogsContractTests
         CmsNodeId: 1234,
         CmsUrl: "/blogs/ingenieria/arquitectura-por-capas/",
         CmsTitle: "Arquitectura por capas",
-        Category: "Ingeniería");
+        Category: "Ingeniería",
+        // La que le puso el editor y su cuerpo no nombra (I6).
+        Tags: ["ingeniería"]);
 
     private static readonly ContentStreamItem DeAna = new(
         Id: "it-ana",
@@ -77,14 +79,14 @@ public sealed class LecturasDeBlogsContractTests
             "etiquetas", "pagina", "imagenAlt", "republicaciones", "comentarios", "reacciones");
         Assert.Equal("Ingeniería", atributos.GetProperty("categoria").GetString());
         Assert.Equal("/blogs/ingenieria/arquitectura-por-capas/", atributos.GetProperty("pagina").GetString());
-        Assert.Equal("arquitectura", atributos.GetProperty("etiquetas").GetString());
+        Assert.Equal("arquitectura,ingeniería", atributos.GetProperty("etiquetas").GetString());
         Assert.Equal("7", atributos.GetProperty("comentarios").GetString());
         Assert.Equal("3", atributos.GetProperty("republicaciones").GetString());
 
         var facetas = listado.GetProperty("facetas").EnumerateArray().ToDictionary(f => f.GetProperty("campo").GetString()!);
         Assert.Equal(new[] { "categoria", "autor", "etiqueta" }, facetas.Keys);
         Assert.Equal(new string?[] { "Ingeniería" }, Valores(facetas["categoria"]));
-        Assert.Equal(new string?[] { "arquitectura", "ux" }, Valores(facetas["etiqueta"]));
+        Assert.Equal(new string?[] { "arquitectura", "ingeniería", "ux" }, Valores(facetas["etiqueta"]));
     }
 
     /// <summary>Un miembro sale por su cara pública: la llave, el alias y el nombre; su correo no sale por ningún lado.</summary>
@@ -128,6 +130,18 @@ public sealed class LecturasDeBlogsContractTests
 
         Assert.Equal(new string?[] { "it-ana", "it-articulo" }, listado.GetProperty("elementos").EnumerateArray().Select(e => e.GetProperty("id").GetString()));
         Assert.Equal(2, listado.GetProperty("total").GetInt32());
+    }
+
+    /// <summary>
+    /// La página de una etiqueta (I6) encuentra también lo que el editor etiquetó en el backoffice, aunque su cuerpo no la
+    /// nombre: un artículo del CMS se etiqueta en <c>compTagging</c>, no con un <c>#</c>.
+    /// </summary>
+    [Fact]
+    public async Task Filtrar_por_una_etiqueta_del_editor_trae_el_articulo_que_la_lleva()
+    {
+        var listado = Wire(await Catalogo(Sesion(), "?filtro.etiqueta=ingeniería").Listado("blogs", null, null, null, null, default));
+
+        Assert.Equal(new string?[] { "it-articulo" }, listado.GetProperty("elementos").EnumerateArray().Select(e => e.GetProperty("id").GetString()));
     }
 
     [Fact]

@@ -624,6 +624,12 @@
           "origen": "decision"
         },
         {
+          "nombre": "filtros",
+          "tipo": "FiltroFijo[]",
+          "opcional": false,
+          "origen": "decision"
+        },
+        {
           "nombre": "rutas",
           "tipo": "RutaDeUnaVista[]",
           "opcional": false,
@@ -688,6 +694,12 @@
         "lecturasBase": "/api/lecturas/blogs",
         "moderacionBase": "/api/moderacion",
         "vista": "explorar",
+        "filtros": [
+          {
+            "campo": "etiqueta",
+            "valor": "arquitectura"
+          }
+        ],
         "rutas": [
           {
             "vista": "inicio",

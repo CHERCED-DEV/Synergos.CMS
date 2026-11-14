@@ -42,6 +42,9 @@ namespace Synergos.CMS.Interfaces;
 ///   (012-blogs-social, I0). <c>null</c> si quien lo produce no lo sabe.</param>
 /// <param name="Category">El nombre de la página de categoría que lo contiene (<c>postCategoryPage</c>), o <c>null</c> si
 ///   no cuelga de una: la faceta «categoría» del catálogo de la red (012-blogs-social, I4).</param>
+/// <param name="Tags">Las etiquetas que le puso el editor (<c>compTagging</c>), en minúsculas y sin repetir, o <c>null</c>
+///   si no tiene: con las del cuerpo, la faceta «etiqueta» del catálogo de la red, que arma la página de una etiqueta
+///   (012-blogs-social, I6).</param>
 public sealed record AuthoredPost(
     string Id,
     string Title,
@@ -53,7 +56,8 @@ public sealed record AuthoredPost(
     string Kind,
     AuthoredPostAuthor Author,
     int? NodeId = null,
-    string? Category = null);
+    string? Category = null,
+    IReadOnlyList<string>? Tags = null);
 
 /// <summary>
 /// Quien firma un post autorado: la proyección del <c>authorPage</c> que su <c>authorRef</c>

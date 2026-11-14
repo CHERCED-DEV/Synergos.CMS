@@ -290,4 +290,21 @@ public class CatalogContentStreamTests
             Assert.Single(feed, i => i.MediaUrl == "/media/a.webp").MediaAlt);
         Assert.Null(Assert.Single(feed, i => i.MediaUrl == "/media/b.webp").MediaAlt);
     }
+
+    /// <summary>
+    /// Las etiquetas del editor se reponen al leer, como la categoría: el item guardado no las lleva, y sin ellas la
+    /// página de una etiqueta (012-blogs-social, I6) no encontraría el artículo. Sin etiquetas, no viaja una lista vacía.
+    /// </summary>
+    [Fact]
+    public async Task Las_etiquetas_del_editor_se_reponen_al_leer()
+    {
+        var source = new FakeSource();
+        source.Posts.Add(Post(slug: "etiquetado") with { Tags = ["arquitectura", "ingeniería"] });
+        source.Posts.Add(Post(slug: "sin-etiquetas", excerpt: "Otro resumen."));
+
+        var feed = await FeedDe(new CatalogContentStream(source, new InMemoryJsonEntityStore(), Feed()));
+
+        Assert.Equal(["arquitectura", "ingeniería"], Assert.Single(feed, i => i.CmsUrl == "/blog/etiquetado").Tags);
+        Assert.Null(Assert.Single(feed, i => i.CmsUrl == "/blog/sin-etiquetas").Tags);
+    }
 }

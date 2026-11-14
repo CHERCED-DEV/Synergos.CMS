@@ -68,6 +68,27 @@ public sealed class RutasDeLasVistasTests
         Assert.Equal([new RutaDeUnaVista("cuenta", "/tienda/cuenta/")], Rutas(paginas));
     }
 
+    /// <summary>
+    /// Una página que acota su vista (012-blogs-social, I6) no es la página de esa vista, aunque vaya primero en el árbol:
+    /// «Ofertas» no se lleva el enlace del catálogo, ni «#arquitectura» el de Explorar. Si es la única de su vista, la
+    /// vista no tiene página.
+    /// </summary>
+    [Fact]
+    public void Una_pagina_que_acota_su_vista_no_se_lleva_su_enlace()
+    {
+        var paginas = new[]
+        {
+            Pagina("/tienda/ofertas/", Bloque(Tienda, "catalogo", seleccion: new[] { "ofertas" })),
+            Pagina("/tienda/catalogo/", Bloque(Tienda, "catalogo", seleccion: Array.Empty<string>())),
+            Pagina("/tienda/arquitectura/", Bloque(Tienda, "ficha", seleccion: " arquitectura ")),
+            Pagina("/tienda/carrito/", Bloque(Tienda, "carrito", seleccion: "  ")),
+        };
+
+        Assert.Equal(
+            [new RutaDeUnaVista("catalogo", "/tienda/catalogo/"), new RutaDeUnaVista("carrito", "/tienda/carrito/")],
+            Rutas(paginas));
+    }
+
     [Fact]
     public void Un_desplegable_multiple_toma_su_primera_vista()
     {
@@ -92,16 +113,31 @@ public sealed class RutasDeLasVistasTests
         return pagina;
     }
 
-    private static BlockGridItem Bloque(string alias, object? vista = null)
-        => new(new GuidUdi(Constants.UdiEntityType.Element, Guid.NewGuid()), Elemento(alias, vista), null!, null!);
+    private static BlockGridItem Bloque(string alias, object? vista = null, object? seleccion = null)
+        => new(new GuidUdi(Constants.UdiEntityType.Element, Guid.NewGuid()), Elemento(alias, vista, seleccion), null!, null!);
 
-    private static IPublishedElement Elemento(string alias, object? vista = null)
+    private static IPublishedElement Elemento(string alias, object? vista = null, object? seleccion = null)
     {
         var elemento = Substitute.For<IPublishedElement>();
         elemento.ContentType.Alias.Returns(alias);
-        var propiedad = Substitute.For<IPublishedProperty>();
-        propiedad.GetValue(Arg.Any<string?>(), Arg.Any<string?>()).Returns(vista);
-        elemento.GetProperty(RutasDeLasVistas.AliasDeLaVista).Returns(vista is null ? null : propiedad);
+        // Cada propiedad se arma antes de su Returns: configurar un sustituto dentro de otro Returns lo rompe.
+        var deLaVista = Propiedad(vista);
+        var deLaSeleccion = Propiedad(seleccion);
+        elemento.GetProperty(RutasDeLasVistas.AliasDeLaVista).Returns(deLaVista);
+        elemento.GetProperty(RutasDeLasVistas.AliasDeLaSeleccion).Returns(deLaSeleccion);
         return elemento;
+    }
+
+    /// <summary>Una propiedad con ese valor, o ninguna: una interfaz sin configurar no es null en NSubstitute.</summary>
+    private static IPublishedProperty? Propiedad(object? valor)
+    {
+        if (valor is null)
+        {
+            return null;
+        }
+
+        var propiedad = Substitute.For<IPublishedProperty>();
+        propiedad.GetValue(Arg.Any<string?>(), Arg.Any<string?>()).Returns(valor);
+        return propiedad;
     }
 }

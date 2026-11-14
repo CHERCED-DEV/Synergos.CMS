@@ -11,7 +11,7 @@ public interface IRutasDeLasVistas
     /// <summary>
     /// Las páginas del sitio de la petición que colocan <paramref name="aliasDelBloque"/>, una por vista: la
     /// <c>vista</c> que el editor eligió en cada bloque (vacía, <paramref name="vistaPorDefecto"/>) y la URL de la
-    /// página. Sin petición o sin páginas, vacía.
+    /// página, sin las que acotan su vista. Sin petición o sin páginas, vacía.
     /// </summary>
     IReadOnlyList<RutaDeUnaVista> Del(string aliasDelBloque, string vistaPorDefecto);
 }
@@ -27,11 +27,22 @@ public interface IRutasDeLasVistas
 ///
 /// <para><b>Una página por vista: la primera en el orden del árbol.</b> Dos páginas con la misma vista no son un
 /// error (una puede ser un borrador del editor), pero el enlace va a una sola, siempre la misma.</para>
+///
+/// <para><b>Una página que acota su vista no es la página de esa vista</b> (012-blogs-social, I6): «Ofertas» es una
+/// selección del catálogo y «#arquitectura» una de Explorar (<see cref="AliasDeLaSeleccion"/>). Así no se llevan el
+/// enlace de todo el sitio aunque el editor las ponga primero en el árbol. Si es la única página de su vista, esa vista
+/// se sigue abriendo en la página de cada uno.</para>
 /// </remarks>
 public sealed class RutasDeLasVistas : IRutasDeLasVistas
 {
     /// <summary>El alias de la propiedad del bloque que dice qué parte de la app muestra.</summary>
     public const string AliasDeLaVista = "vista";
+
+    /// <summary>
+    /// El alias de la propiedad del bloque que acota su vista: «Qué productos muestra» en la tienda y «Qué publicaciones
+    /// muestra» en Blogs.
+    /// </summary>
+    public const string AliasDeLaSeleccion = "seleccion";
 
     private const string AliasDelSitio = "siteRoot";
 
@@ -80,6 +91,11 @@ public sealed class RutasDeLasVistas : IRutasDeLasVistas
         {
             foreach (var bloque in PaginaQueColoca.Bloques(pagina, aliasDelBloque))
             {
+                if (AcotaSuVista(bloque))
+                {
+                    continue;
+                }
+
                 var vista = VistaDe(bloque) ?? vistaPorDefecto;
                 if (rutas.Exists(r => r.Vista == vista))
                 {
@@ -95,6 +111,18 @@ public sealed class RutasDeLasVistas : IRutasDeLasVistas
         }
 
         return rutas;
+    }
+
+    /// <summary>Si el bloque acota su vista: su selección tiene algo escrito o elegido.</summary>
+    public static bool AcotaSuVista(IPublishedElement bloque)
+    {
+        ArgumentNullException.ThrowIfNull(bloque);
+        return bloque.GetProperty(AliasDeLaSeleccion)?.GetValue() switch
+        {
+            string una => !string.IsNullOrWhiteSpace(una),
+            IEnumerable<string> varias => varias.Any(v => !string.IsNullOrWhiteSpace(v)),
+            _ => false,
+        };
     }
 
     /// <summary>

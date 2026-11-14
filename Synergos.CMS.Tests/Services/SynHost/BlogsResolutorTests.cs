@@ -44,6 +44,20 @@ public sealed class BlogsResolutorTests
         Assert.Empty(props.Rutas);
     }
 
+    /// <summary>
+    /// «Qué publicaciones muestra» (I6): la etiqueta que escribe el editor es el filtro fijo de Explorar, como sale del
+    /// cuerpo de una publicación (sin <c>#</c> y en minúsculas). Vacía, Explorar busca en toda la red.
+    /// </summary>
+    [Fact]
+    public void La_etiqueta_del_editor_es_el_filtro_fijo_de_Explorar()
+    {
+        var props = Resuelto(SinRutas(), ("vista", "explorar"), ("seleccion", " #Arquitectura "));
+
+        Assert.Equal([new FiltroFijo("etiqueta", "arquitectura")], props.Filtros);
+        Assert.Empty(Resuelto(SinRutas(), ("vista", "explorar")).Filtros);
+        Assert.Empty(Resuelto(SinRutas(), ("seleccion", " # ")).Filtros);
+    }
+
     private static BlogsProps Resuelto(IRutasDeLasVistas rutas, params (string Alias, object? Valor)[] propiedades)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeBlogs>>();

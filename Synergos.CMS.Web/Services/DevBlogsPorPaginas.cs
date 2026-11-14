@@ -17,6 +17,10 @@ namespace Synergos.CMS.Web.Services;
 ///
 /// <para>Las páginas no salen en el menú del sitio (<c>hideFromMainMenu</c>) ni llevan el título encima: la red tiene su
 /// propio riel, que enlaza cada una. El editor las puede sacar al menú cuando quiera.</para>
+///
+/// <para><b>Y una página por etiqueta</b> (I6, P9 A): «#arquitectura» bajo Explorar es el mismo bloque con la vista
+/// Explorar y «Qué publicaciones muestra» = <c>arquitectura</c>, con su título. Otra etiqueta es otra página igual, que
+/// el editor arma en el backoffice sin código.</para>
 /// </remarks>
 public sealed class DevBlogsPorPaginas
 {
@@ -32,8 +36,17 @@ public sealed class DevBlogsPorPaginas
     /// <summary>La raíz de Blogs de la demo (<c>/blogs/</c>), por su Key de uSync: ahí vive el inicio de la red.</summary>
     public static readonly Guid Blogs = Guid.Parse("0d857159-703a-410c-b9f5-a0ccc2c9b3eb");
 
-    /// <summary>Una página por componer: su nombre y la vista de la red que muestra.</summary>
-    public sealed record PaginaDeUnaVista(string Nombre, string Vista);
+    /// <summary>
+    /// Una página por componer: su nombre y la vista de la red que muestra. Con <paramref name="Bajo"/>, cuelga de esa
+    /// página de Blogs; con <paramref name="Seleccion"/>, acota su vista («Qué publicaciones muestra»), y lleva su título.
+    /// </summary>
+    public sealed record PaginaDeUnaVista(
+        string Nombre,
+        string Vista,
+        string? Bajo = null,
+        string? Seleccion = null,
+        string? Titulo = null,
+        string? Subtitulo = null);
 
     /// <summary>
     /// Las páginas, en el orden en que se crean. El inicio de la red ya existe: es la raíz de Blogs, con su bloque sin
@@ -54,6 +67,14 @@ public sealed class DevBlogsPorPaginas
         new("Estudio", "estudio"),
         // La cola de moderación (I5): de quien modera; el CMS dice quién puede verla.
         new("Moderación", "moderacion"),
+        // Una página por etiqueta (I6): Explorar acotado a #arquitectura, bajo Explorar.
+        new(
+            "Arquitectura",
+            "explorar",
+            Bajo: "Explorar",
+            Seleccion: "arquitectura",
+            Titulo: "#arquitectura",
+            Subtitulo: "Lo que la red publica sobre arquitectura de software."),
     ];
 
     private readonly IContentService _contenido;
@@ -84,8 +105,13 @@ public sealed class DevBlogsPorPaginas
 
         foreach (var pagina in Paginas)
         {
-            var existente = _contenido.GetPagedChildren(blogs.Id, 0, 500, out _)
-                .FirstOrDefault(hija => hija.GetCultureName(Cultura) == pagina.Nombre || hija.Name == pagina.Nombre);
+            var padre = pagina.Bajo is null ? blogs : Hija(blogs.Id, pagina.Bajo);
+            if (padre is null)
+            {
+                return new ResultadoDeLaComposicion(false, hechas, $"«{pagina.Nombre}»: falta la página {pagina.Bajo} bajo Blogs");
+            }
+
+            var existente = Hija(padre.Id, pagina.Nombre);
             if (existente is not null)
             {
                 hechas.Add($"{pagina.Nombre}: ya estaba (id {existente.Id})");
@@ -101,11 +127,28 @@ public sealed class DevBlogsPorPaginas
                 .Set("spacingBottom", "[\"none\"]")
                 .Set("spacingInline", "[\"none\"]")
                 .ApplyDefaults(_defectos.DefaultsFor(seccion.Key))
-                .AddChild(AreaDeLaSeccion, app.Key, bloque => bloque
-                    .Set("vista", $"[\"{pagina.Vista}\"]")
-                    .ApplyDefaults(_defectos.DefaultsFor(app.Key)));
+                .AddChild(AreaDeLaSeccion, app.Key, bloque =>
+                {
+                    bloque.Set("vista", $"[\"{pagina.Vista}\"]");
+                    if (pagina.Seleccion is not null)
+                    {
+                        bloque.Set("seleccion", pagina.Seleccion);
+                    }
 
-            var nueva = _contenido.Create(pagina.Nombre, blogs.Id, "pageBase");
+                    if (pagina.Titulo is not null)
+                    {
+                        bloque.Set("heading", pagina.Titulo);
+                    }
+
+                    if (pagina.Subtitulo is not null)
+                    {
+                        bloque.Set("subheading", pagina.Subtitulo);
+                    }
+
+                    bloque.ApplyDefaults(_defectos.DefaultsFor(app.Key));
+                });
+
+            var nueva = _contenido.Create(pagina.Nombre, padre.Id, "pageBase");
             // El contenido VARÍA POR CULTURA: sin el nombre de la cultura, guardar falla con «empty name».
             nueva.SetCultureName(pagina.Nombre, Cultura);
             nueva.SetValue(Rejilla, rejilla.Build(), Cultura);
@@ -130,4 +173,9 @@ public sealed class DevBlogsPorPaginas
 
         return new ResultadoDeLaComposicion(true, hechas, null);
     }
+
+    /// <summary>La hija de <paramref name="padre"/> con ese nombre, en la cultura del sitio o en el nombre del nodo.</summary>
+    private Umbraco.Cms.Core.Models.IContent? Hija(int padre, string nombre)
+        => _contenido.GetPagedChildren(padre, 0, 500, out _)
+            .FirstOrDefault(hija => hija.GetCultureName(Cultura) == nombre || hija.Name == nombre);
 }
