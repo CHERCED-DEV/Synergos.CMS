@@ -222,6 +222,10 @@ internal sealed class CitaDeSaludReal : IDisposable
         return Enviar(peticion);
     }
 
+    /// <summary>El estado de cuenta de un paciente (I7 P17), como lo pide el CMS con la llave compartida.</summary>
+    public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> EstadoDeCuenta(string pacienteId = "u-1")
+        => Enviar(new HttpRequestMessage(HttpMethod.Get, $"v1/estado-de-cuenta?pacienteKind=salud.paciente&pacienteId={pacienteId}"));
+
     /// <summary>Las cancelaciones del paciente, como «listar» de la puerta.</summary>
     public Task<(HttpStatusCode Estado, JsonElement Cuerpo)> ListarCancelaciones(string sujeto = "u-1")
         => Enviar(DeLaPuerta(HttpMethod.Get, "v1/flujos/salud.cancelacion?limit=50", sujeto));

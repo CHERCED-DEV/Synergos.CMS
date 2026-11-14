@@ -12,7 +12,7 @@ public sealed record HoldDto(string Id, string ResourceId, DateTimeOffset Expire
 public sealed record ReservationDto(string Id, string Status);
 public sealed record MoneyDto(decimal Amount, string Currency);
 public sealed record QuoteDto(MoneyDto Total);
-public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable);
+public sealed record PaymentDto(string Id, string Status, MoneyDto Amount, MoneyDto Refundable, MoneyDto? Refunded = null);
 public sealed record ResourceDto(string Id);
 
 // ── La consulta (003-salud-cita, I3): la agenda del día, la llegada y el sello de la nota ─────────
