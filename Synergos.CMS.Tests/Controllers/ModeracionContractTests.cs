@@ -4,6 +4,7 @@ using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.Moderacion;
 using Synergos.CMS.Web.Controllers;
+using Synergos.CMS.Web.Services.Lecturas;
 using Synergos.CMS.Web.Services.Moderacion;
 using static Synergos.CMS.Tests.Controllers.Lecturas.LecturasDePrueba;
 
@@ -41,6 +42,10 @@ public sealed class ModeracionContractTests : IDisposable
     private readonly StreamSinRetirados _red;
     private readonly IModeracion _moderacion;
 
+    // Los mensajes directos: la mensajería guardada y, por fuera, la que oculta lo retirado, como en el composer.
+    private readonly StubMessagingService _guardada;
+    private readonly MensajeriaSinRetirados _mensajeria;
+
     public ModeracionContractTests()
     {
         var stream = Substitute.For<IContentStream>();
@@ -53,11 +58,14 @@ public sealed class ModeracionContractTests : IDisposable
         _retirados = new RegistroDeRetirados(_almacen);
         _red = new StreamSinRetirados(stream, _retirados);
         _moderacion = new ModeracionLocal(_almacen, TimeProvider.System);
+        _guardada = new StubMessagingService(null, _almacen, StubMessagingService.DefaultResourceType);
+        _mensajeria = new MensajeriaSinRetirados(_guardada, _retirados);
     }
 
     public void Dispose()
     {
         _red.Dispose();
+        _mensajeria.Dispose();
         _retirados.Dispose();
         (_moderacion as IDisposable)?.Dispose();
     }
@@ -199,6 +207,10 @@ public sealed class ModeracionContractTests : IDisposable
         {
             new PublicacionesModerables(_red, _retirados, identidad),
             new ComentariosModerables(_red, lector, _moderacionDeComentarios),
+            new MensajesModerables(
+                _mensajeria,
+                _retirados,
+                [new ContextoDeMensajesDeBlogs(identidad, Substitute.For<ISocialProfileProjection>())]),
         };
         return new ModeracionController(
             moderacion ?? _moderacion, tipos, sesion, identidad, NullLogger<ModeracionController>.Instance);
@@ -217,4 +229,67 @@ public sealed class ModeracionContractTests : IDisposable
 
     private static ModeracionController.DenunciaPedida Publicacion(string id, string motivo = "Es spam")
         => new("blogs.publicacion", id, motivo);
+
+    private static ModeracionController.DenunciaPedida Mensaje(string id, string motivo = "Me acosa")
+        => new("blogs.mensaje", id, motivo);
+
+    // ─── Un mensaje directo: la conversación es privada ──────────────────────────
+
+    /// <summary>
+    /// Un mensaje directo lo denuncia quien está en la conversación, y sólo lo que le mandó la otra persona: quien no
+    /// participa recibe 404, para que la cola no le muestre a nadie una conversación ajena, y lo propio no se denuncia.
+    /// La cola lo resume con quien lo mandó, por su cara pública.
+    /// </summary>
+    [Fact]
+    public async Task Un_mensaje_directo_solo_lo_denuncia_quien_esta_en_la_conversacion()
+    {
+        var hilo = await _mensajeria.StartThreadAsync("dm", Ana, Yo, "Un mensaje que ofende");
+        var id = $"{hilo.ThreadId}:{hilo.Messages[0].MessageId}";
+
+        Assert.Equal(404, Estado(await Controlador(Sesion(), Otra).Denunciar(Mensaje(id), default)));
+        Assert.Equal(404, Estado(await Controlador(Sesion(), Ana).Denunciar(Mensaje(id), default)));
+        Assert.Equal(200, Estado(await Controlador(Sesion()).Denunciar(Mensaje(id), default)));
+
+        var caso = Assert.Single(Wire(await Controlador(Moderadora()).Cola(null, default)).GetProperty("casos").EnumerateArray());
+        Assert.Equal("blogs.mensaje", caso.GetProperty("tipo").GetString());
+        Assert.Equal("Ana Autora: Un mensaje que ofende", caso.GetProperty("resumen").GetString());
+    }
+
+    /// <summary>
+    /// Retirar un mensaje lo oculta para los dos, en su hilo y como el último de la bandeja, y sigue guardado. El resto
+    /// de la conversación sigue igual, y lo retirado ya no se puede denunciar.
+    /// </summary>
+    [Fact]
+    public async Task Retirar_un_mensaje_lo_oculta_para_los_dos_y_sigue_guardado()
+    {
+        var hilo = await _mensajeria.StartThreadAsync("dm", Yo, Ana, "Hola, ¿cómo vas?");
+        hilo = await _mensajeria.ReplyAsync(hilo.ThreadId, Ana, "Un mensaje que ofende");
+        var id = $"{hilo.ThreadId}:{hilo.Messages[^1].MessageId}";
+        var caso = Wire(await Controlador(Sesion()).Denunciar(Mensaje(id), default)).GetProperty("caso").GetString()!;
+
+        Assert.Equal(200, Estado(await Controlador(Moderadora()).Decidir(caso, new("retirar", "Acoso"), default)));
+
+        Assert.Equal(["Hola, ¿cómo vas?"], (await _mensajeria.GetThreadAsync(hilo.ThreadId))!.Messages.Select(m => m.Body));
+        foreach (var quien in new[] { Yo, Ana })
+        {
+            var resumen = Assert.Single(await _mensajeria.GetInboxAsync(quien));
+            Assert.Equal("Hola, ¿cómo vas?", resumen.LastMessagePreview);
+            Assert.Equal(1, resumen.MessageCount);
+        }
+
+        Assert.Equal(2, (await _guardada.GetThreadAsync(hilo.ThreadId))!.Messages.Count);
+        Assert.Equal(404, Estado(await Controlador(Sesion()).Denunciar(Mensaje(id), default)));
+    }
+
+    /// <summary>La mensajería es de todos: un hilo que no es un mensaje directo de Blogs pasa tal cual.</summary>
+    [Fact]
+    public async Task La_mensajeria_de_los_demas_pasa_tal_cual()
+    {
+        var deLaTienda = await _guardada.StartThreadAsync("shop:pedido-1", Yo, Ana, "¿Ya salió mi pedido?");
+        await _retirados.RetirarAsync(new ObjetivoModerable(
+            MensajesModerables.TipoDelMensaje, $"{deLaTienda.ThreadId}:{deLaTienda.Messages[0].MessageId}"));
+
+        Assert.Single((await _mensajeria.GetThreadAsync(deLaTienda.ThreadId))!.Messages);
+        Assert.Equal(1, Assert.Single(await _mensajeria.GetInboxAsync(Yo)).MessageCount);
+    }
 }

@@ -27,6 +27,10 @@ namespace Synergos.CMS.Interfaces.SynHost;
 ///
 /// <para><b>Y dónde se modera</b> (<c>ModeracionBase</c>, 012-blogs-social, I5): la moderación genérica del CMS
 /// (<c>/api/moderacion</c>), donde se denuncia y vive la cola. Vacía, la app no ofrece denunciar. Es del despliegue.</para>
+///
+/// <para><b>Y qué publicaciones muestra</b> (<c>Filtros</c>, 012-blogs-social, I6): la etiqueta que el editor escribe
+/// en el bloque, como filtro fijo de Explorar (<c>etiqueta = arquitectura</c>), igual que «Ofertas» en la tienda. El
+/// elemento lo aplica en cada búsqueda y no ofrece la faceta; vacía, Explorar busca en toda la red.</para>
 /// </remarks>
 [ElementoSynHost("blogs", TipoDeColocable.Funcionalidad, Diccionario = ["Blogs.Comentarios", "Blogs.Moderacion"])]
 public sealed record BlogsProps(
@@ -36,4 +40,5 @@ public sealed record BlogsProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string LecturasBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ModeracionBase,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Vista,
+    [property: CampoSynHost(OrigenDelCampo.Decision)] IReadOnlyList<FiltroFijo> Filtros,
     [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas);

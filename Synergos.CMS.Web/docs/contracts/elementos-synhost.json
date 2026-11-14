@@ -573,6 +573,7 @@
         "Blogs.Moderacion.Enviar",
         "Blogs.Moderacion.Fecha",
         "Blogs.Moderacion.Mantener",
+        "Blogs.Moderacion.Mensaje",
         "Blogs.Moderacion.Motivo",
         "Blogs.Moderacion.NoDecidida",
         "Blogs.Moderacion.NoEnviada",
@@ -621,6 +622,12 @@
           "nombre": "vista",
           "tipo": "string",
           "opcional": true,
+          "origen": "decision"
+        },
+        {
+          "nombre": "filtros",
+          "tipo": "FiltroFijo[]",
+          "opcional": false,
           "origen": "decision"
         },
         {
@@ -688,6 +695,12 @@
         "lecturasBase": "/api/lecturas/blogs",
         "moderacionBase": "/api/moderacion",
         "vista": "explorar",
+        "filtros": [
+          {
+            "campo": "etiqueta",
+            "valor": "arquitectura"
+          }
+        ],
         "rutas": [
           {
             "vista": "inicio",

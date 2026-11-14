@@ -10,13 +10,14 @@ namespace Synergos.CMS.Tests.Services;
 /// </summary>
 public sealed class DevBlogsPorPaginasTests
 {
+    /// <summary>Ninguna vista se repite entre las páginas que no la acotan; una etiqueta es una selección de Explorar.</summary>
     [Fact]
     public void Cada_pagina_pide_una_vista_del_desplegable_y_ninguna_se_repite()
     {
         var valores = ValoresDe("DTSelectVistaDeBlogs");
 
         Assert.All(DevBlogsPorPaginas.Paginas, p => Assert.Contains(p.Vista, valores));
-        Assert.Empty(DevBlogsPorPaginas.Paginas.GroupBy(p => p.Vista).Where(g => g.Count() > 1).Select(g => g.Key));
+        Assert.Empty(DePorVista().GroupBy(p => p.Vista).Where(g => g.Count() > 1).Select(g => g.Key));
         Assert.Empty(DevBlogsPorPaginas.Paginas.GroupBy(p => p.Nombre).Where(g => g.Count() > 1).Select(g => g.Key));
     }
 
@@ -25,8 +26,32 @@ public sealed class DevBlogsPorPaginasTests
     {
         Assert.Equal(
             ValoresDe("DTSelectVistaDeBlogs").Where(v => v != "inicio").Order(),
-            DevBlogsPorPaginas.Paginas.Select(p => p.Vista).Order());
+            DePorVista().Select(p => p.Vista).Order());
     }
+
+    /// <summary>
+    /// Una página que acota su vista (I6, «#arquitectura») cuelga de la página de esa vista, que se crea antes, y lleva
+    /// su título: sin él, la página de una etiqueta se llamaría «Explorar».
+    /// </summary>
+    [Fact]
+    public void Una_pagina_por_etiqueta_cuelga_de_la_de_su_vista_y_lleva_su_titulo()
+    {
+        var paginas = DevBlogsPorPaginas.Paginas.ToList();
+        var acotadas = paginas.Where(p => p.Seleccion is not null).ToList();
+
+        Assert.NotEmpty(acotadas);
+        Assert.All(acotadas, p =>
+        {
+            var deSuVista = paginas.FindIndex(q => q.Seleccion is null && q.Vista == p.Vista);
+            Assert.True(deSuVista >= 0, $"«{p.Nombre}» acota {p.Vista}, que no tiene página.");
+            Assert.Equal(paginas[deSuVista].Nombre, p.Bajo);
+            Assert.True(deSuVista < paginas.IndexOf(p), $"«{p.Nombre}» se crearía antes que la página de la que cuelga.");
+            Assert.False(string.IsNullOrWhiteSpace(p.Titulo));
+        });
+    }
+
+    private static IEnumerable<DevBlogsPorPaginas.PaginaDeUnaVista> DePorVista()
+        => DevBlogsPorPaginas.Paginas.Where(p => p.Seleccion is null);
 
     /// <summary>La raíz bajo la que cuelgan es la Blogs del repo, y coloca la app sin vista: es el inicio.</summary>
     [Fact]

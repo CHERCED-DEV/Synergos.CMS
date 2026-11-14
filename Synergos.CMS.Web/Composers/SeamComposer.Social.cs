@@ -167,6 +167,7 @@ public sealed partial class SeamComposer
         // 012-blogs-social, I5 — lo de la red que se puede denunciar: una publicación y un comentario.
         services.AddTransient<ITipoModerable, PublicacionesModerables>();
         services.AddTransient<ITipoModerable, ComentariosModerables>();
+        services.AddTransient<ITipoModerable, MensajesModerables>();
     }
 
     /// <summary>Cuántos comentarios aprobados tiene el hilo de una publicación, el mismo que cuenta la interina.</summary>

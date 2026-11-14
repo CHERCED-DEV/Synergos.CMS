@@ -280,7 +280,11 @@ public sealed class StubMessagingService : IMessagingService, IDisposable
         CreatedAt: state.CreatedAt,
         LastMessageAt: state.Messages.Count > 0 ? state.Messages[^1].SentAt : state.CreatedAt);
 
-    private static string Preview(string body)
+    /// <summary>
+    /// Cómo se resume el último mensaje en la bandeja. Público para que quien filtra los mensajes (la moderación de
+    /// Blogs, <c>MensajeriaSinRetirados</c>) resuma el que queda igual que aquí.
+    /// </summary>
+    public static string Preview(string body)
         => body.Length <= 80 ? body : body[..77] + "…";
 
     private static string RequireParticipant(string value, string paramName)

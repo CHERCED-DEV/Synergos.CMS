@@ -1,5 +1,6 @@
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Interfaces.Lecturas;
 using Synergos.CMS.Interfaces.Moderacion;
 
 namespace Synergos.CMS.Web.Services.Moderacion;
@@ -120,5 +121,88 @@ public sealed class ComentariosModerables : ITipoModerable
 
         var publicacion = await _stream.GetItemAsync(partes[0], cancellationToken).ConfigureAwait(false);
         return publicacion is null ? null : (HiloDeUnaPublicacion.Nodo(publicacion), partes[1]);
+    }
+}
+
+/// <summary>
+/// Un mensaje directo de la red como objetivo de moderación (012-blogs-social, I5). Su id es el del hilo y el del
+/// mensaje, <c>{hilo}:{mensaje}</c>, como el de un comentario.
+/// </summary>
+/// <remarks>
+/// <para><b>La conversación es privada.</b> Sólo lo denuncia quien participa en ella, y sólo lo que le mandó otra
+/// persona: si cualquiera pudiera denunciar cualquier id, la cola le mostraría a quien modera conversaciones ajenas. Sin
+/// quien denuncia lo lee la moderación (la cola en <c>Api</c>), que el controlador sólo abre a quien modera.</para>
+/// <para>Retirarlo lo oculta para los dos (<see cref="MensajeriaSinRetirados"/>), y sigue guardado.</para>
+/// </remarks>
+public sealed class MensajesModerables : ITipoModerable
+{
+    /// <summary>El tipo moderable de un mensaje directo de la red.</summary>
+    public const string TipoDelMensaje = "blogs.mensaje";
+
+    private readonly IMessagingService _mensajeria;
+    private readonly IRegistroDeRetirados _retirados;
+    private readonly IContextoDeMensajes _contexto;
+
+    /// <summary>Sobre la mensajería (ya sin lo retirado), el registro de lo retirado y los mensajes directos de Blogs.</summary>
+    public MensajesModerables(
+        IMessagingService mensajeria,
+        IRegistroDeRetirados retirados,
+        IEnumerable<IContextoDeMensajes> contextos)
+    {
+        _mensajeria = mensajeria ?? throw new ArgumentNullException(nameof(mensajeria));
+        _retirados = retirados ?? throw new ArgumentNullException(nameof(retirados));
+        _contexto = (contextos ?? throw new ArgumentNullException(nameof(contextos))).DelVertical(CatalogoDeBlogs.Vertical)
+            ?? throw new InvalidOperationException("Falta el contexto de los mensajes directos de Blogs.");
+    }
+
+    /// <inheritdoc />
+    public string Tipo => TipoDelMensaje;
+
+    /// <inheritdoc />
+    public async Task<ContenidoDenunciable?> LeerAsync(
+        string id,
+        string quienDenuncia,
+        CancellationToken cancellationToken = default)
+    {
+        if (Partes(id) is not { } partes)
+        {
+            return null;
+        }
+
+        var hilo = await _mensajeria.GetThreadAsync(partes.Hilo, cancellationToken).ConfigureAwait(false);
+        if (hilo is null || !_contexto.EsDelVertical(hilo.ContextRef))
+        {
+            return null;
+        }
+
+        var quien = (quienDenuncia ?? string.Empty).Trim();
+        if (quien.Length > 0 && !hilo.Participants.Any(p => EsQuien(p, quien)))
+        {
+            return null;
+        }
+
+        var mensaje = hilo.Messages.FirstOrDefault(m => string.Equals(m.MessageId, partes.Mensaje, StringComparison.Ordinal));
+        if (mensaje is null || (quien.Length > 0 && EsQuien(mensaje.From, quien)))
+        {
+            return null;
+        }
+
+        var deQuien = await _contexto.AsuntoAsync(hilo.ContextRef, mensaje.From, cancellationToken).ConfigureAwait(false);
+        return new ContenidoDenunciable($"{deQuien}: {PublicacionesDeLaRed.Resumen(mensaje.Body)}", null);
+    }
+
+    /// <inheritdoc />
+    public Task RetirarAsync(string id, CancellationToken cancellationToken = default)
+        => Partes(id) is { } partes
+            ? _retirados.RetirarAsync(new ObjetivoModerable(Tipo, $"{partes.Hilo}:{partes.Mensaje}"), cancellationToken)
+            : Task.CompletedTask;
+
+    private static bool EsQuien(string participante, string quien)
+        => string.Equals(participante?.Trim(), quien, StringComparison.OrdinalIgnoreCase);
+
+    private static (string Hilo, string Mensaje)? Partes(string? id)
+    {
+        var partes = (id ?? string.Empty).Split(':', 2, StringSplitOptions.TrimEntries);
+        return partes.Length == 2 && partes[0].Length > 0 && partes[1].Length > 0 ? (partes[0], partes[1]) : null;
     }
 }

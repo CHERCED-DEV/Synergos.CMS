@@ -132,6 +132,8 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
                 // (012-blogs-social, I4).
                 CmsTitle = string.IsNullOrWhiteSpace(post.Title) ? null : post.Title,
                 Category = string.IsNullOrWhiteSpace(post.Category) ? null : post.Category,
+                // Las etiquetas del editor: la página de una etiqueta las encuentra (012-blogs-social, I6).
+                Tags = post.Tags is { Count: > 0 } ? post.Tags : null,
             }
             : item;
 

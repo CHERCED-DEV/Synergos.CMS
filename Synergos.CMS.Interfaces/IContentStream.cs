@@ -132,6 +132,9 @@ public sealed record ContentStreamPage(
 ///   el catálogo de la red (012-blogs-social, I4).</param>
 /// <param name="Category">La categoría del post que alguien autoró (su página de categoría), o <c>null</c>. Lo de un
 ///   miembro no la tiene. Es la faceta «categoría» del catálogo de la red (012-blogs-social, I4).</param>
+/// <param name="Tags">Las etiquetas que el editor le puso al post que alguien autoró, o <c>null</c>. Lo repone al leer
+///   quien lo sembró, como <paramref name="Category"/>; las de un miembro son las <c>#etiquetas</c> de su cuerpo. Con las
+///   dos, la faceta «etiqueta» del catálogo de la red (012-blogs-social, I6).</param>
 public sealed record ContentStreamItem(
     string Id,
     string Kind,
@@ -144,7 +147,8 @@ public sealed record ContentStreamItem(
     int? CmsNodeId = null,
     string? CmsUrl = null,
     string? CmsTitle = null,
-    string? Category = null);
+    string? Category = null,
+    IReadOnlyList<string>? Tags = null);
 
 /// <summary>
 /// Autor de un item — proyección liviana del Member para el feed (lo rico vive

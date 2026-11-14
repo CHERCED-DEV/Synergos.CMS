@@ -70,7 +70,7 @@ public static class CatalogoDeBlogs
                 "Categoría",
                 i => string.IsNullOrWhiteSpace(i.Category) ? Array.Empty<string>() : new[] { i.Category }),
             new CatalogTermFilter<ContentStreamItem>(CampoAutor, "Autor", i => new[] { Autor(i.Author, identidad).Alias }),
-            new CatalogTermFilter<ContentStreamItem>(CampoEtiqueta, "Etiqueta", i => PublicacionesDeLaRed.Etiquetas(i.Body)),
+            new CatalogTermFilter<ContentStreamItem>(CampoEtiqueta, "Etiqueta", EtiquetasDe),
         });
 
     /// <summary>Una publicación en la forma neutra: la tarjeta con lo que la app pinta, y la ficha con el cuerpo entero.</summary>
@@ -87,6 +87,16 @@ public static class CatalogoDeBlogs
             Preguntas: []));
 
     /// <summary>Quien firma una publicación tal como sale: un miembro por su cara pública; los demás, como están.</summary>
+    /// <summary>
+    /// Las etiquetas de una publicación: las <c>#etiquetas</c> de su cuerpo y, si es de un artículo del CMS, las que le
+    /// puso el editor, sin repetir (012-blogs-social, I6). Con ellas se filtra y se arma la página de una etiqueta.
+    /// </summary>
+    internal static IReadOnlyList<string> EtiquetasDe(ContentStreamItem i)
+        => PublicacionesDeLaRed.Etiquetas(i.Body)
+            .Concat(i.Tags ?? [])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     public static AutorDeLaRed Autor(ContentAuthor autor, IIdentidadPublica identidad)
     {
         if (CaraPublica.EsCorreo(autor.Id))
@@ -121,7 +131,7 @@ public static class CatalogoDeBlogs
         }
 
         Poner(atributos, CampoCategoria, i.Category);
-        Poner(atributos, "etiquetas", string.Join(',', PublicacionesDeLaRed.Etiquetas(i.Body).Distinct(StringComparer.Ordinal)));
+        Poner(atributos, "etiquetas", string.Join(',', EtiquetasDe(i)));
         Poner(atributos, "menciones", string.Join(',', PublicacionesDeLaRed.Menciones(i.Body).Distinct(StringComparer.Ordinal)));
         Poner(atributos, "pagina", i.CmsUrl);
         if (!string.IsNullOrWhiteSpace(i.MediaUrl))

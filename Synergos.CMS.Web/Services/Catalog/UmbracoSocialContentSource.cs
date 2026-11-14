@@ -37,6 +37,9 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
     internal const string Vertical = "Social";
     private const string PostPageAlias = "postPage";
     private const string PostCategoryPageAlias = "postCategoryPage";
+
+    /// <summary>Las etiquetas del post (<c>compTagging</c>, un <c>Umbraco.Tags</c>).</summary>
+    private const string TagsAlias = "tags";
     private const string SiteRootAlias = "siteRoot";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
@@ -195,7 +198,23 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
             // La página de categoría de la que cuelga, si cuelga de una: la faceta «categoría» del catálogo de la red
             // (012-blogs-social, I4).
             Category: node.Ancestors().FirstOrDefault(a =>
-                string.Equals(a.ContentType.Alias, PostCategoryPageAlias, StringComparison.Ordinal))?.Name);
+                string.Equals(a.ContentType.Alias, PostCategoryPageAlias, StringComparison.Ordinal))?.Name,
+            // Las etiquetas que le puso el editor: la página de una etiqueta lo encuentra (012-blogs-social, I6).
+            Tags: EtiquetasDe(node));
+    }
+
+    /// <summary>
+    /// Las etiquetas que el editor le puso al post, sin <c>#</c>, en minúsculas y sin repetir, como salen las
+    /// <c>#etiquetas</c> del cuerpo; <c>null</c> si no tiene (012-blogs-social, I6).
+    /// </summary>
+    internal static IReadOnlyList<string>? EtiquetasDe(IPublishedContent node)
+    {
+        var etiquetas = (node.Value<IEnumerable<string>>(TagsAlias) ?? [])
+            .Select(t => t.Trim().TrimStart('#').Trim().ToLowerInvariant())
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return etiquetas.Count > 0 ? etiquetas : null;
     }
 
     private void Report(IReadOnlyList<SocialContentIssue> issues)

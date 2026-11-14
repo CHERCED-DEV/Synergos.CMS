@@ -31,7 +31,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
     public const string VistaPorDefecto = "inicio";
 
     /// <summary>«Qué productos muestra» del bloque (014-despiece-tienda, I5).</summary>
-    public const string AliasDeLaSeleccion = "seleccion";
+    public const string AliasDeLaSeleccion = RutasDeLasVistas.AliasDeLaSeleccion;
 
     /// <summary>
     /// La selección del editor como filtros fijos del catálogo: «ofertas» es <c>oferta = En oferta</c>. El vocabulario es
