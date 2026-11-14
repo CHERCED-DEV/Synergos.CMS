@@ -3,9 +3,11 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.Lecturas;
+using Synergos.CMS.Interfaces.Moderacion;
 using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
 using Synergos.CMS.Web.Services.Lecturas;
+using Synergos.CMS.Web.Services.Moderacion;
 
 namespace Synergos.CMS.Web.Composers;
 
@@ -102,13 +104,16 @@ public sealed partial class SeamComposer
 
         // El decorador envuelve al stub y NO lo sustituye: el stub sigue siendo el almacen del
         // feed —lo que se publica desde la app vive ahi— y el decorador solo mete lo autorado.
-        services.AddSingleton<IContentStream>(sp =>
+        // Y por fuera, lo que la moderación retiró no sale en ningún feed, ni en el catálogo, ni por su id
+        // (012-blogs-social, I5).
+        services.AddSingleton<IContentStream>(sp => new StreamSinRetirados(
             IsCmsSource(sp, UmbracoSocialContentSource.Vertical)
                 ? new CatalogContentStream(
                     sp.GetRequiredService<ICatalogSource<AuthoredPost>>(),
                     sp.GetRequiredService<IJsonEntityStore>(),
                     sp.GetRequiredService<StubContentStream>())
-                : sp.GetRequiredService<StubContentStream>());
+                : sp.GetRequiredService<StubContentStream>(),
+            sp.GetRequiredService<IRegistroDeRetirados>()));
         services.AddSingleton<ISocialProfileProjection>(sp =>
             new StubSocialProfileProjection(sp.GetRequiredService<SemillaDeLaRed>()));
 
@@ -158,6 +163,10 @@ public sealed partial class SeamComposer
             sp.GetRequiredService<IUserCollection>(),
             sp.GetServices<ILecturaDelCatalogo>()));
         services.AddTransient<IContextoDeMensajes, ContextoDeMensajesDeBlogs>();
+
+        // 012-blogs-social, I5 — lo de la red que se puede denunciar: una publicación y un comentario.
+        services.AddTransient<ITipoModerable, PublicacionesModerables>();
+        services.AddTransient<ITipoModerable, ComentariosModerables>();
     }
 
     /// <summary>Cuántos comentarios aprobados tiene el hilo de una publicación, el mismo que cuenta la interina.</summary>

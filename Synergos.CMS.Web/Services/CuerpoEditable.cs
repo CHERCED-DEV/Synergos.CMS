@@ -78,10 +78,10 @@ public sealed class CuerpoEditable
     /// Transforma una propiedad que guarda una LISTA en JSON (como texto o como arreglo) en cada bloque del tipo dado.
     /// La forma de guardarla se respeta. Devuelve cuántos bloques cambiaron.
     /// </summary>
-    public int TransformarLista(Guid tipo, string propiedad, Func<JsonArray, JsonArray> transformar)
+    public int TransformarLista(Guid tipo, string propiedad, Func<JsonArray, JsonArray> transformar, Func<JsonObject, bool>? filtro = null)
     {
         var n = 0;
-        foreach (var dato in DatosDe(tipo))
+        foreach (var dato in DatosDe(tipo, filtro))
         {
             var actual = dato[propiedad];
             var comoTexto = actual is JsonValue v && v.TryGetValue<string>(out _);
@@ -91,6 +91,36 @@ public sealed class CuerpoEditable
             if (lista is null) { continue; }
             var nueva = transformar(lista);
             JsonNode valor = comoTexto ? JsonValue.Create(nueva.ToJsonString(Legible))! : nueva;
+            if (JsonNode.DeepEquals(actual, valor)) { continue; }
+            dato[propiedad] = valor;
+            n++;
+        }
+        if (n > 0) { Cambios++; }
+        return n;
+    }
+
+    /// <summary>
+    /// Cambia el rótulo y el enlace de los botones de una lista anidada (<c>ctaItems</c> de una portada), en orden y en
+    /// su sitio: los bloques de la lista conservan su UDI, así que repetirlo no cambia nada. Un botón de más se ignora.
+    /// </summary>
+    public int CambiarBotones(Guid tipo, string propiedad, IReadOnlyList<(string Rotulo, string Enlace)> botones,
+        Func<JsonObject, bool>? filtro = null)
+    {
+        var n = 0;
+        foreach (var dato in DatosDe(tipo, filtro))
+        {
+            var actual = dato[propiedad];
+            var comoTexto = actual is JsonValue v && v.TryGetValue<string>(out _);
+            var lista = (comoTexto ? JsonNode.Parse(actual!.GetValue<string>()) : actual?.DeepClone()) as JsonObject;
+            if (lista?["contentData"] is not JsonArray datos) { continue; }
+            for (var i = 0; i < Math.Min(datos.Count, botones.Count); i++)
+            {
+                var boton = (JsonObject)datos[i]!;
+                boton["ctaLabel"] = botones[i].Rotulo;
+                // El enlace llega como el JSON de un selector de enlaces; se guarda como lo guarda el bloque.
+                boton["ctaLink"] = boton["ctaLink"] is JsonArray ? JsonNode.Parse(botones[i].Enlace) : botones[i].Enlace;
+            }
+            JsonNode valor = comoTexto ? JsonValue.Create(lista.ToJsonString(Legible))! : lista;
             if (JsonNode.DeepEquals(actual, valor)) { continue; }
             dato[propiedad] = valor;
             n++;

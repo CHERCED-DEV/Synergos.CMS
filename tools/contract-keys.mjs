@@ -99,6 +99,8 @@ const PARES = [
         controllers: [
             'BlogsController.cs',
             'LecturaDelCatalogoController.cs', 'LecturaDeColeccionesController.cs', 'LecturaDeMensajesController.cs',
+            // Denunciar y la cola de moderación (I5).
+            'ModeracionController.cs',
         ],
         registros: ['Synergos.CMS.Interfaces/Lecturas'],
         dominio: { nombre: 'blogs' },

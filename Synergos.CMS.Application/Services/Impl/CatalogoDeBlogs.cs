@@ -87,7 +87,7 @@ public static class CatalogoDeBlogs
             Preguntas: []));
 
     /// <summary>Quien firma una publicación tal como sale: un miembro por su cara pública; los demás, como están.</summary>
-    internal static AutorDeLaRed Autor(ContentAuthor autor, IIdentidadPublica identidad)
+    public static AutorDeLaRed Autor(ContentAuthor autor, IIdentidadPublica identidad)
     {
         if (CaraPublica.EsCorreo(autor.Id))
         {

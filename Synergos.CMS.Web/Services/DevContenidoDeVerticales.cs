@@ -83,6 +83,8 @@ public sealed class DevContenidoDeVerticales
             ["hoteles"] = (Hoteles, RecetaHoteles),
             ["educacion"] = (Educacion, RecetaEducacion),
             ["eventos"] = (Eventos, RecetaEventos),
+            ["gobierno"] = (Gobierno, RecetaGobierno),
+            ["tienda"] = (DevTiendaPorPaginas.Tienda, RecetaTienda),
         };
 
     /// <summary>
@@ -91,6 +93,26 @@ public sealed class DevContenidoDeVerticales
     /// </summary>
     public Resultado Componer(string vertical)
     {
+        if (string.Equals(vertical, "tienda-fichas", StringComparison.OrdinalIgnoreCase)) { return FichasDeLaTienda(); }
+        if (string.Equals(vertical, "hoteles-promesas", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "hoteles-promesas", RecetaPromesasDeHoteles(), 0);
+        }
+        if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaEntradasDeCategorias();
+            return new Resultado(hecho.EndsWith("faltan:0", StringComparison.Ordinal), "categorias", hecho, 0);
+        }
+        if (string.Equals(vertical, "evento-y-curso", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "evento-y-curso", RecetaEventoYCurso(), 0);
+        }
+        if (string.Equals(vertical, "propiedades-fichas", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaFichasDePropiedades();
+            return new Resultado(hecho.Contains("sin-datos:0", StringComparison.Ordinal), "propiedades-fichas", hecho, 0);
+        }
+
         var tieneReceta = Verticales.TryGetValue(vertical, out var receta);
         var tieneAtribucion = Atribuciones.TryGetValue(vertical, out var atribucion);
         if (!tieneReceta && !tieneAtribucion)
@@ -412,6 +434,200 @@ public sealed class DevContenidoDeVerticales
             : null;
     }
 
+    // ───────────────────────────── Evento y Curso del catálogo (2.ª medición, S3) ─────────────────────────────
+
+    /// <summary>La página «Evento» de Eventos, por su Key de uSync.</summary>
+    public static readonly Guid PaginaDelEvento = Guid.Parse("c90ae9cb-2cff-422a-837d-d54cc2b3e4fe");
+
+    /// <summary>La página «Curso» de Educación, por su Key de uSync.</summary>
+    public static readonly Guid PaginaDelCurso = Guid.Parse("46d6f33c-cd8c-463d-910d-5a5f6f4fb0ef");
+
+    /// <summary>La ficha de la Cumbre Tech en la app de eventos, que vive en la portada de Eventos (su id en el catálogo).</summary>
+    public const string EnlaceDelEvento = "/eventos/#/eventos/e/evt-cumbre-tech";
+
+    /// <summary>La ficha del curso de design systems en la app de cursos, que vive en la portada de Educación.</summary>
+    public const string EnlaceDelCurso = "/educacion/#/academy/curso/design-systems-atomic";
+
+    /// <summary>
+    /// «Evento» y «Curso» eran muestras sobre el motor: un «Synergos Summit» con un cartel de ponentes inventados y un
+    /// formulario de registro que no vende nada, y un curso con un instructor inventado, «acceso de por vida» y «14
+    /// días de garantía». Ahora cuentan un evento y un curso que SÍ están en el catálogo —la Cumbre Tech y «Design
+    /// Systems con Atomic Design»— y llevan a su ficha en la app, donde se compran y se inscriben de verdad. Lo que el
+    /// catálogo no respalda (grabaciones, factura, garantía) sale.
+    /// </summary>
+    private string RecetaEventoYCurso()
+    {
+        var n = 0;
+        var hero = KeyOf("elementCompHero");
+        var mision = KeyOf("elementCorpMissionBlock");
+        var preguntas = KeyOf("elementSynFaqSection");
+        var cierre = KeyOf("elementCompCtaBanner");
+        var formulario = KeyOf("elementSynFormStepper");
+
+        var evento = _contentService.GetById(PaginaDelEvento);
+        if (evento is not null)
+        {
+            var c = new CuerpoEditable(evento.GetValue<string>(Cuerpo, Cultura));
+            c.Reemplazar(hero, "headingTitle", "Cumbre Tech");
+            c.Reemplazar(hero, "headingSubtitle", "Conferencia · Bogotá · Ágora Centro de Convenciones");
+            c.Reemplazar(hero, "textBody",
+                "<p>Keynotes de líderes de la industria, talleres prácticos y networking. La fecha, los planes y los cupos están en la cartelera, donde compras tu entrada.</p>");
+            c.Reemplazar(hero, "mediaAlt", "Cumbre Tech, conferencia de tecnología en Bogotá");
+            c.CambiarBotones(hero, "ctaItems",
+                [("Comprar entradas", Enlace("Comprar entradas", EnlaceDelEvento)), ("Ver la cartelera", Enlace("Ver la cartelera", "/eventos/agenda"))]);
+            c.Reemplazar(mision, "textBody",
+                "<p>Una jornada en el Ágora Centro de Convenciones, en el corazón de Bogotá: keynotes de líderes de producto e ingeniería, demos en vivo de startups colombianas y networking. Con el plan Pro suman los talleres prácticos de la tarde.</p>",
+                CuerpoEditable.Donde("headingTitle", "Lo que vas a vivir"));
+            var programa = KeyOf("elementSynTimelineHorizontal");
+            // Sin el ajuste por franjas: al cargar, el carril se desplazaba a la primera y el rótulo fijo la tapaba.
+            c.Reemplazar(programa, "snapEnabled", "0");
+            c.TransformarLista(programa, "eventsJson", _ => new JsonArray(
+                Momento("08:30", "Registro y acreditación", "Recoges tu escarapela en la entrada del Ágora."),
+                Momento("09:30", "Keynote de apertura", "El futuro del software en Colombia."),
+                Momento("11:00", "Panel", "Escalar producto en mercados latinoamericanos."),
+                Momento("13:30", "Talleres prácticos", "Sesiones simultáneas, con acceso del plan Pro."),
+                Momento("16:00", "Networking y cierre", "Conversaciones abiertas para despedir la jornada.")));
+            var rejilla = KeyOf("elementSynFeatureGrid");
+            var esElCartel = Alguno("headingText", "Lineup de speakers", "Planes de entrada");
+            c.TransformarLista(rejilla, "itemsJson", _ => new JsonArray(
+                new JsonObject { ["heading"] = "Estándar", ["body"] = "La jornada completa en el auditorio principal, de la apertura al cierre: keynote, panel, zona de demos, almuerzo y café." },
+                new JsonObject { ["heading"] = "Pro", ["body"] = "Todo lo del plan Estándar más los talleres prácticos de la tarde, con cupo en el que elijas." }),
+                esElCartel);
+            c.Reemplazar(rejilla, "columns", "2", esElCartel);
+            c.Reemplazar(rejilla, "headingText", "Planes de entrada", esElCartel);
+            var esLaCompra = Alguno("headingTitle", "Registro y tickets", "Cómo compras tu entrada");
+            c.Reemplazar(mision, "textBody",
+                "<p>En la cartelera eliges el plan y la cantidad, pagas y ves tu entrada con su código QR en «Mis tickets». Desde ahí también la puedes transferir.</p>",
+                esLaCompra);
+            c.Reemplazar(mision, "headingTitle", "Cómo compras tu entrada", esLaCompra);
+            c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "registro-evento"));
+            var mapa = KeyOf("elementCorpMapEmbed");
+            c.Reemplazar(mapa, "mapTitle", "Ágora Centro de Convenciones, Bogotá");
+            // El Ágora queda junto a Corferias. La coordenada del catálogo (4.6280, -74.0644) cae en el Parque Nacional.
+            c.Reemplazar(mapa, "mapUrl",
+                "https://www.openstreetmap.org/export/embed.html?bbox=-74.1015%2C4.6221%2C-74.0815%2C4.6381&layer=mapnik&marker=4.6301%2C-74.0915");
+            var antesDeRegistrarte = Alguno("headingText", "Antes de registrarte", "Antes de comprar");
+            c.TransformarLista(preguntas, "itemsJson", _ => new JsonArray(
+                Pregunta("¿Qué incluye cada plan?", "El Estándar da la jornada completa en el auditorio principal; el Pro suma los talleres prácticos de la tarde. El detalle de cada plan está en la cartelera."),
+                Pregunta("¿Dónde queda mi entrada?", "En «Mis tickets», con su código QR. Preséntalo en el acceso el día del evento."),
+                Pregunta("¿Puedo comprar para otras personas?", "Sí. Eliges la cantidad al comprar, y si alguien más va a usar una entrada, se la transfieres desde «Mis tickets».")),
+                antesDeRegistrarte);
+            c.Reemplazar(preguntas, "headingText", "Antes de comprar", antesDeRegistrarte);
+            c.Reemplazar(cierre, "headingSubtitle", "Elige tu plan y compra tu entrada en la cartelera.");
+            c.Reemplazar(cierre, "ctaLabel", "Comprar entradas");
+            c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Comprar entradas", EnlaceDelEvento))!);
+            n += Guardar(evento, c, "Cumbre Tech", "Cumbre Tech · Eventos",
+                "Cumbre Tech en Bogotá: keynotes, panel, talleres prácticos y networking en el Ágora Centro de Convenciones.");
+        }
+
+        var curso = _contentService.GetById(PaginaDelCurso);
+        if (curso is not null)
+        {
+            var c = new CuerpoEditable(curso.GetValue<string>(Cuerpo, Cultura));
+            c.Reemplazar(hero, "headingTitle", "Design Systems con Atomic Design");
+            c.Reemplazar(hero, "headingSubtitle", "Diseño · Nivel principiante · 3 lecciones · Certificado al completar");
+            c.Reemplazar(hero, "textBody",
+                "<p>De los tokens semánticos a los organismos: cómo modelar un design system que sobreviva a un rebrand entero cambiando un solo archivo. Incluye la grilla de 8 puntos y el ritmo vertical.</p>");
+            c.Reemplazar(hero, "mediaAlt", "Curso Design Systems con Atomic Design");
+            c.CambiarBotones(hero, "ctaItems",
+                [("Ver el curso", Enlace("Ver el curso", EnlaceDelCurso)), ("Ver más cursos", Enlace("Ver más cursos", "/educacion/cursos"))]);
+            c.Reemplazar(mision, "textBody",
+                "<p>Al terminar vas a poder modelar tokens semánticos que aguanten un rebrand completo, aplicar la grilla de 8 puntos para un ritmo vertical consistente y componer átomos, moléculas y organismos reutilizables.</p>",
+                CuerpoEditable.Donde("headingTitle", "Lo que vas a lograr"));
+            c.TransformarLista(KeyOf("elementSynAccordion"), "itemsJson", _ => new JsonArray(
+                new JsonObject { ["title"] = "Módulo 1 · Tokens y fundamentos", ["content"] = "Tokens semánticos frente a literales y la grilla de 8 puntos, con una hoja de referencia de espaciados." },
+                new JsonObject { ["title"] = "Módulo 2 · Componiendo el sistema", ["content"] = "Átomos, moléculas y organismos: del botón a la tarjeta y al encabezado, y dónde trazar la frontera de cada nivel." }));
+            c.DesconectarSeccionesCon(KeyOf("elementSynMediaText"), CuerpoEditable.Donde("headingText", "Tu instructor"));
+            c.Reemplazar(mision, "textBody",
+                "<p>Te inscribes en la ficha del curso, con tu cuenta. Las lecciones quedan en «Mi aprendizaje» y, al completarlas, obtienes tu certificado.</p>",
+                CuerpoEditable.Donde("headingTitle", "Inscríbete al curso"));
+            c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "inscripcion-curso"));
+            c.TransformarLista(preguntas, "itemsJson", _ => new JsonArray(
+                Pregunta("¿Cuánto dura?", "Tres lecciones cortas, de 11 a 17 minutos cada una. Avanzas a tu ritmo."),
+                Pregunta("¿Recibo certificado?", "Sí, al completar el curso."),
+                Pregunta("¿Necesito experiencia previa?", "No. Es un curso de nivel principiante.")),
+                CuerpoEditable.Donde("headingText", "Antes de inscribirte"));
+            c.Reemplazar(cierre, "headingSubtitle", "Mira el temario en la ficha del curso y empieza por la primera lección.");
+            c.Reemplazar(cierre, "ctaLabel", "Ver el curso");
+            c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Ver el curso", EnlaceDelCurso))!);
+            n += Guardar(curso, c, "Design Systems con Atomic Design", "Design Systems con Atomic Design · Educación",
+                "Curso de nivel principiante: tokens semánticos, la grilla de 8 puntos y átomos, moléculas y organismos. Certificado al completar.");
+        }
+        return $"paginas:{n}";
+
+        // Un bloque se reconoce por su título de antes o por el de ahora: la receta se puede volver a pasar.
+        static Func<JsonObject, bool> Alguno(string propiedad, params string[] valores) =>
+            d => valores.Any(v => CuerpoEditable.Donde(propiedad, v)(d));
+        static JsonObject Momento(string hora, string titulo, string texto) =>
+            new() { ["date"] = hora, ["title"] = titulo, ["description"] = texto };
+        static JsonObject Pregunta(string pregunta, string respuesta) =>
+            new() { ["question"] = pregunta, ["answer"] = respuesta };
+    }
+
+    /// <summary>Guarda y publica el cuerpo y los títulos de la página si algo cambió. Devuelve 1 si la publicó.</summary>
+    private int Guardar(IContent pagina, CuerpoEditable cuerpo, string titulo, string seoTitulo, string seoDescripcion)
+    {
+        var cambio = cuerpo.Cambio;
+        foreach (var (alias, valor) in new[] { ("heading", titulo), ("seoTitle", seoTitulo), ("seoDescription", seoDescripcion) })
+        {
+            if (pagina.HasProperty(alias) && pagina.GetValue<string>(alias, Cultura) != valor)
+            {
+                pagina.SetValue(alias, valor, Cultura);
+                cambio = true;
+            }
+        }
+        if (!cambio) { return 0; }
+        if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+        _contentService.SaveAndPublish(pagina, new[] { Cultura });
+        return 1;
+    }
+
+    // ───────────────────────────── Entradas de las categorías (2.ª medición, S4) ─────────────────────────────
+
+    /// <summary>
+    /// La entrada de cada categoría, por la Key de uSync de su página: qué hay, para quién es y cómo se consigue. Antes
+    /// era una línea («Sesiones con especialistas.»). Comprar en línea en la Tienda, agendar la visita en Propiedades y
+    /// reservar en Booking: lo que de verdad hace la ficha de cada sitio.
+    /// </summary>
+    private static readonly (Guid Pagina, string Entrada)[] EntradasDeCategorias =
+    [
+        (Guid.Parse("a7275dec-c0a0-4dc2-ab65-6b473bab1491"),
+            "Termos, tazas, morrales, llaveros y otros detalles para el día a día o para regalar. Agregas al carrito lo que te guste y finalizas tu pedido en línea."),
+        (Guid.Parse("d12a749e-c0b6-4036-9de7-b942996035dd"),
+            "Libretas, bolígrafos, notas adhesivas y organizadores para quien trabaja o estudia en su escritorio. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
+        (Guid.Parse("3338ca4f-1b7c-48be-8ac5-ca56878ebb43"),
+            "Camisetas, buzos, una chaqueta cortavientos y gorras para el uso diario. Agregas al carrito lo que te guste y finalizas tu pedido en línea."),
+        (Guid.Parse("623ce787-89d7-49e8-803b-a8623c3c118e"),
+            "Audífonos, mouse, hubs USB-C, fundas y organizadores para tu escritorio y tus dispositivos. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
+        (Guid.Parse("10195c7f-440a-46c1-82b1-284ccc890206"),
+            "Apartamentos en Bogotá para vivir en familia o con las amenidades de un conjunto. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("6e68d98e-f370-4d81-bc08-ea7b47a685f6"),
+            "Casas con espacio propio: jardín, terraza o un lote amplio. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("abb93d6b-414f-44b7-91e0-669b93c90143"),
+            "Un local a pie de calle en la Zona T y una oficina en torre empresarial, para tu negocio. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
+        (Guid.Parse("a5104fec-03c2-454a-adb3-3f5300a56cec"),
+            "Un masaje terapéutico de 60 minutos y una valoración con plan nutricional, para cuidarte. Eliges el servicio y lo reservas desde su ficha."),
+        (Guid.Parse("c3ba00e2-5d3a-49a3-a21e-8d1073f254d9"),
+            "Asesorías de 30 minutos y consultorías estratégicas de 60 con especialistas, para resolver una duda o planear tu próximo paso. Eliges la sesión y la reservas desde su ficha."),
+        (Guid.Parse("c61376b9-dafa-490a-89b6-16ab0dbb25bc"),
+            "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
+    ];
+
+    private string RecetaEntradasDeCategorias()
+    {
+        int cambiadas = 0, faltan = 0;
+        foreach (var (key, entrada) in EntradasDeCategorias)
+        {
+            var pagina = _contentService.GetById(key);
+            if (pagina is null || !pagina.HasProperty("categoryDescription")) { faltan++; continue; }
+            if (pagina.GetValue<string>("categoryDescription", Cultura) == entrada) { continue; }
+            pagina.SetValue("categoryDescription", entrada, Cultura);
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+        return $"categorias:{cambiadas};faltan:{faltan}";
+    }
+
     private Dictionary<string, IContent> PaginasDeProducto(Guid raiz)
     {
         var nodo = _contentService.GetById(raiz)
@@ -616,6 +832,331 @@ public sealed class DevContenidoDeVerticales
         return $"proximos:listado;secciones-nuevas:{nuevas};desconectadas:{fuera}";
     }
 
+    // ───────────────────────────── Gobierno (I7) ─────────────────────────────
+
+    private sealed record Tramite(string Id, string Nombre, string Linea, string Resumen);
+
+    /// <summary>Tres trámites del catálogo de la app (<c>/api/gov/services</c>): entidad, tasa y plazo como los pinta la app.</summary>
+    private static readonly Tramite[] TramitesMasConsultados =
+    [
+        new("trm-cedula", "Renovación de cédula de ciudadanía", "Registraduría Nacional · $ 65.500 · unos 15 días hábiles",
+            "Renueva tu cédula por deterioro, pérdida o actualización de datos."),
+        new("trm-pasaporte", "Expedición de pasaporte", "Cancillería · $ 189.000 · unos 8 días hábiles",
+            "Pide la expedición de tu pasaporte colombiano para viajar al exterior."),
+        new("trm-licencia-conduccion", "Renovación de licencia de conducción", "Secretaría de Movilidad · $ 95.000 · unos 5 días hábiles",
+            "Renueva tu licencia vigente o vencida. Necesitas el examen médico aprobado."),
+    ];
+
+    private string RecetaGobierno(CuerpoEditable cuerpo)
+    {
+        // La portada era la app y «Cómo funciona». Debajo: los trámites más pedidos con enlace a su ficha, las entidades
+        // que atienden aquí, las preguntas de siempre (radicado, tasa, plazos, subsanar) y el cierre a «Mis solicitudes».
+        if (cuerpo.Contiene(Marca("gobierno"))) { return "ya-compuesta"; }
+
+        var b = new BlockGridJsonBuilder();
+        var destacados = Seccion(b, null, Marca("gobierno"));
+        Encabezado(destacados, "Trámites más consultados");
+        FilasDeTarjetas(destacados, TramitesMasConsultados.Select(t => new Tarjeta(
+            t.Nombre, t.Linea, t.Resumen, null, t.Nombre, "Ver el trámite", $"/gobierno/#/gov/tramite/{t.Id}")).ToArray());
+
+        Rejilla(b, "surface", "Entidades que atienden aquí", 4,
+            ("Registraduría Nacional", "Renovación de la cédula de ciudadanía."),
+            ("Cancillería", "Expedición del pasaporte."),
+            ("Secretaría de Movilidad", "Renovación de la licencia de conducción."),
+            ("Secretaría de Salud", "Afiliación al régimen subsidiado de salud."),
+            ("Alcaldía Municipal", "Certificado de residencia."),
+            ("Cámara de Comercio", "Registro mercantil de tu empresa."),
+            ("Ministerio de Vivienda", "Solicitud del subsidio de vivienda."));
+
+        Preguntas(b, "Preguntas frecuentes",
+            ("¿Qué es el número de radicado?", "Es el código que recibe tu solicitud al enviarla. Con él la encuentras en «Mis solicitudes» y la identifica la entidad."),
+            ("¿Cuánto tarda un trámite?", "Cada trámite dice su plazo en días hábiles. Se cuentan desde que radicas; los fines de semana y festivos no cuentan."),
+            ("¿Cómo pago la tasa?", "Si el trámite tiene tasa, la pagas en línea al radicar. Los trámites gratuitos lo dicen en su ficha."),
+            ("¿Qué pasa si falta un documento?", "La entidad te pide subsanar y te avisamos en «Notificaciones». Completas lo que falta y el trámite sigue."),
+            ("¿Se realizan cobros reales?", "No. Este es un sitio de demostración: las solicitudes y los pagos no tienen efecto ante ninguna entidad."));
+
+        Cierre(b, "¿Ya radicaste?", "Consulta en qué etapa va tu expediente y lo que te ha pedido la entidad.",
+            "Ver mis solicitudes", "/gobierno/#/gov/mis-solicitudes");
+
+        var n = cuerpo.Sumar(b.Build());
+        return $"mas-consultados:{TramitesMasConsultados.Length};entidades:7;preguntas:5;cierre:1;secciones:{n}";
+    }
+
+    // ───────────────────────────── Tienda (I8) ─────────────────────────────
+
+    /// <summary>Las páginas del flujo de compra: se llega a ellas desde la tienda, no desde el pie.</summary>
+    private static readonly string[] PaginasDelFlujo = ["Catálogo", "Producto", "Carrito", "Pago", "Confirmación", "Mi cuenta"];
+
+    private string RecetaTienda(CuerpoEditable cuerpo)
+    {
+        // 1. La rejilla SSR de productos repetía, debajo, lo que ya muestra la app arriba: se desconecta (la pieza sigue).
+        var fuera = cuerpo.DesconectarSeccionesCon(KeyOf("elementShopProductGrid"));
+
+        // 2. El cierre hablaba en voseo («Lanzá») y su botón llevaba al catálogo de ropa: ahora invita a vender y lleva
+        //    a la consola del vendedor.
+        var cierre = KeyOf("elementCompCtaBanner");
+        var esElDeVender = CuerpoEditable.Donde("headingTitle", "¿Listo para vender online?");
+        var n = cuerpo.Reemplazar(cierre, "headingSubtitle", "Lanza tu tienda esta semana: publica tus productos desde la consola del vendedor.", esElDeVender);
+        n += cuerpo.Reemplazar(cierre, "ctaLabel", "Empieza a vender", esElDeVender);
+        n += cuerpo.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Empieza a vender", "/tienda/vender/"))!, esElDeVender);
+
+        // 3. El pie listaba las páginas internas del flujo de compra.
+        var ocultas = OcultarDelPie(DevTiendaPorPaginas.Tienda, PaginasDelFlujo);
+        return $"rejilla-repetida:{fuera};cierre:{n};ocultas-del-pie:{ocultas}";
+    }
+
+    private int OcultarDelPie(Guid raiz, IReadOnlyCollection<string> nombres)
+    {
+        var padre = _contentService.GetById(raiz);
+        if (padre is null) { return 0; }
+        var n = 0;
+        foreach (var hija in _contentService.GetPagedChildren(padre.Id, 0, 200, out _))
+        {
+            var nombre = hija.GetCultureName(Cultura) ?? hija.Name ?? string.Empty;
+            if (!nombres.Contains(nombre) || !hija.HasProperty("hideFromFooter")) { continue; }
+            if (hija.GetValue<bool>("hideFromFooter")) { continue; }
+            hija.SetValue("hideFromFooter", true);
+            _contentService.SaveAndPublish(hija, new[] { Cultura });
+            n++;
+        }
+        return n;
+    }
+
+    private sealed record Ficha(string Uso, string[] Detalles);
+
+    /// <summary>
+    /// Lo que cada ficha añade a su descripción (para qué sirve) y su lista de detalles, sacados de lo que el producto ya
+    /// declara (subtítulo y descripción del catálogo). Nada de promesas nuevas: ni garantías ni envíos.
+    /// </summary>
+    private static readonly Dictionary<string, Ficha> Fichas = new(StringComparer.Ordinal)
+    {
+        ["Audífonos de diadema"] = new("Para concentrarte en la oficina, estudiar o viajar sin el ruido de fondo.",
+            ["Cancelación activa de ruido", "Hasta 30 horas de batería", "Diseño de diadema, sobre la oreja"]),
+        ["Base para celular"] = new("Deja el teléfono a la vista en el escritorio para videollamadas, recetas o mensajes.",
+            ["Cuerpo de aluminio", "Ángulo ajustable", "Base con peso que no se desliza"]),
+        ["Bolígrafo de aluminio"] = new("Un bolígrafo de todos los días que se siente firme en la mano.",
+            ["Aluminio anodizado", "Peso equilibrado", "Recarga estándar fácil de conseguir"]),
+        ["Botella térmica"] = new("Lleva agua fría al gimnasio o café caliente a la oficina en la misma botella.",
+            ["Acero inoxidable de doble pared", "Capacidad de 750 ml", "12 horas frío y 6 horas caliente"]),
+        ["Buzo con cierre"] = new("La capa que te pones y te quitas según cambie el clima durante el día.",
+            ["Cierre completo", "Bolsillos laterales", "Uso como capa intermedia"]),
+        ["Camiseta esencial negra"] = new("El básico para combinar con jeans, chaqueta o lo que tengas a mano.",
+            ["Algodón premium de 180 g", "Corte regular", "Color negro"]),
+        ["Camiseta oversize blanca"] = new("Una silueta suelta para el día a día, sola o debajo de una chaqueta.",
+            ["Algodón peinado", "Corte amplio con hombro caído", "Color blanco"]),
+        ["Chaqueta cortavientos"] = new("Va en el morral doblada y sale cuando el cielo cambia de opinión.",
+            ["Tejido repelente al agua", "Se pliega en su propio bolsillo", "Capucha para la lluvia"]),
+        ["Funda para laptop"] = new("Protege el portátil dentro del morral o cuando lo llevas en la mano.",
+            ["Neopreno de 5 mm", "Interior afelpado", "Para portátiles de 14 pulgadas"]),
+        ["Gorra clásica"] = new("Para el sol de mediodía o para completar el atuendo de fin de semana.",
+            ["Correa ajustable", "Bordado al frente", "Visera curva"]),
+        ["Hoodie gris premium"] = new("Abriga en las mañanas frías sin verse como ropa de casa.",
+            ["Felpa pesada con interior perchado", "Capucha forrada", "Color gris"]),
+        ["Hub USB-C"] = new("Conecta pantalla, memorias y cargador a un portátil que sólo trae puertos USB-C.",
+            ["7 puertos en uno", "HDMI 4K y tres USB-A", "Lector SD y carga passthrough de 100 W"]),
+        ["Libreta de puntos"] = new("Sirve para listas, bocetos, diarios o planes: la retícula guía sin imponer renglones.",
+            ["Tamaño A5", "Retícula de puntos cada 5 mm", "Para escribir o dibujar"]),
+        ["Libreta de tapa dura"] = new("Para tomar notas en reuniones o llevar un diario que aguante el uso diario.",
+            ["Tamaño A5", "160 páginas de papel de 100 g", "Abre plana y no traspasa la tinta"]),
+        ["Llavero de cuero"] = new("Un llavero sencillo que gana carácter con el uso.",
+            ["Cuero curtido al vegetal", "Herraje macizo", "Para llaves de casa, carro o moto"]),
+        ["Morral urbano"] = new("Para ir al trabajo o a clase con el portátil y lo del día en un solo morral.",
+            ["Capacidad de 22 litros", "Compartimento acolchado para laptop de 15 pulgadas", "Espalda ventilada"]),
+        ["Mouse inalámbrico"] = new("Cambia entre el portátil y el computador de escritorio sin volver a emparejar.",
+            ["Clic silencioso", "Conexión 2.4 GHz y Bluetooth", "Botón para cambiar de equipo"]),
+        ["Mousepad de tela"] = new("Ordena el escritorio debajo del teclado y del mouse a la vez.",
+            ["90 × 40 cm", "Tela con borde cosido", "Base antideslizante"]),
+        ["Organizador de cables"] = new("Mantiene los cables del cargador y los audífonos al borde del escritorio.",
+            ["Set de 6 piezas", "Silicona", "Se pegan al escritorio"]),
+        ["Organizador de escritorio"] = new("Un sitio para bolígrafos, notas y el celular, para que el escritorio respire.",
+            ["Bambú macizo", "5 compartimentos", "Para lápices, notas y celular"]),
+        ["Pack de stickers"] = new("Para personalizar la laptop, la agenda o la botella.",
+            ["10 unidades", "Vinilo resistente al agua", "Para superficies lisas"]),
+        ["Set de notas adhesivas"] = new("Para recordatorios, lluvias de ideas o marcar páginas.",
+            ["5 blocs", "Adhesivo reposicionable", "No deja residuo"]),
+        ["Taza cerámica"] = new("La taza del café de la mañana, en casa o en la oficina.",
+            ["Cerámica de 350 ml", "Apta para microondas", "Apta para lavavajillas"]),
+        ["Tote bag de lona"] = new("Para el mercado, la playa o el día a día, en lugar de las bolsas plásticas.",
+            ["Lona resistente", "Asas reforzadas", "Reutilizable"]),
+    };
+
+    /// <summary>
+    /// Las 24 fichas de la Tienda: la descripción suma para qué sirve el producto, «Detalles» deja el texto genérico
+    /// (igual en todas) por la lista de lo que el producto declara, y el cierre deja el voseo («Agregá… completá»).
+    /// Idempotente: una ficha que ya dice lo nuevo no se toca.
+    /// </summary>
+    public Resultado FichasDeLaTienda()
+    {
+        var productos = PaginasDeProducto(DevTiendaPorPaginas.Tienda);
+        var mision = KeyOf("elementCorpMissionBlock");
+        var split = KeyOf("elementCompMediaTextSplit");
+        var cierre = KeyOf("elementCompCtaBanner");
+        int cambiadas = 0, sinFicha = 0;
+
+        foreach (var (nombre, pagina) in productos)
+        {
+            if (!Fichas.TryGetValue(nombre, out var ficha)) { sinFicha++; continue; }
+            var descripcion = (pagina.GetValue<string>("productDescriptionText", Cultura) ?? pagina.GetValue<string>("productDescriptionText") ?? string.Empty)
+                .Replace("Personalizá", "Personaliza", StringComparison.Ordinal);
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            Func<string, string> html = TextoHtml;
+
+            cuerpo.Reemplazar(mision, "textBody", $"<p>{html(descripcion)}</p><p>{html(ficha.Uso)}</p>",
+                CuerpoEditable.Donde("headingTitle", "Descripción"));
+            cuerpo.Reemplazar(split, "textBody",
+                "<ul>" + string.Concat(ficha.Detalles.Select(d => $"<li>{html(d)}</li>")) + "</ul>",
+                CuerpoEditable.Donde("headingTitle", "Detalles"));
+            cuerpo.Reemplazar(cierre, "headingSubtitle", "Agrega al carrito y completa tu compra en minutos.",
+                CuerpoEditable.Donde("headingTitle", "¿Listo para comprar?"));
+
+            var descripcionCambio = false;
+            foreach (var cultura in new string?[] { Cultura, null })
+            {
+                if (!pagina.HasProperty("productDescriptionText")) { break; }
+                var actual = pagina.GetValue<string>("productDescriptionText", cultura);
+                if (actual is not null && actual.Contains("Personalizá", StringComparison.Ordinal))
+                {
+                    pagina.SetValue("productDescriptionText", actual.Replace("Personalizá", "Personaliza", StringComparison.Ordinal), cultura);
+                    descripcionCambio = true;
+                }
+            }
+
+            if (!cuerpo.Cambio && !descripcionCambio) { continue; }
+            if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+
+        var detalle = $"fichas:{cambiadas};sin-ficha:{sinFicha}";
+        _logger.LogInformation("Fichas de la Tienda: {Detalle}.", detalle);
+        return new Resultado(sinFicha == 0, "tienda-fichas", detalle, cambiadas);
+    }
+
+    // ───────────────────────────── Fichas de Propiedades (2.ª medición, punto 1) ─────────────────────────────
+
+    /// <summary>
+    /// La ficha técnica de cada inmueble con SUS datos, sacados de lo que su ficha ya dice en «Sobre la propiedad».
+    /// Antes era la misma en las seis, y en el local y la oficina hablaba de «Dormitorios con buena iluminación».
+    /// </summary>
+    private static readonly Dictionary<string, (string Rotulo, string Valor)[]> FichasTecnicas = new(StringComparer.Ordinal)
+    {
+        ["Apartamento de lujo en Chicó"] =
+            [("Área", "120 m²"), ("Habitaciones", "3"), ("Parqueaderos", "2"), ("Destacado", "Balcón con vista panorámica")],
+        ["Apartamento familiar en Cedritos"] =
+            [("Área", "78 m²"), ("Habitaciones", "2"), ("Cocina", "Integral"), ("Conjunto", "Piscina y gimnasio")],
+        ["Casa campestre en Los Lagos"] =
+            [("Área", "180 m²"), ("Habitaciones", "3"), ("Exteriores", "Terraza y BBQ"), ("Lote", "Amplio y arborizado")],
+        ["Casa con jardín en Usaquén"] =
+            [("Área", "240 m² en dos niveles"), ("Habitaciones", "4 y estudio"), ("Jardín", "Privado"), ("Garaje", "Doble")],
+        ["Local comercial en Zona T"] =
+            [("Área", "140 m²"), ("Ubicación", "A pie de calle, en la Zona T"), ("Vitrina", "Amplia, con alto flujo peatonal"), ("Uso", "Retail o gastronomía")],
+        ["Oficina en torre empresarial"] =
+            [("Área", "95 m²"), ("Edificio", "Torre AAA con recepción"), ("Salas de reunión", "2"), ("Vista", "A la ciudad")],
+    };
+
+    private string RecetaFichasDePropiedades()
+    {
+        var fichas = PaginasDeProducto(Propiedades);
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var esLaFichaTecnica = CuerpoEditable.Donde("headingText", "Ficha técnica");
+        int cambiadas = 0, sinDatos = 0;
+
+        foreach (var (nombre, pagina) in fichas)
+        {
+            if (!FichasTecnicas.TryGetValue(nombre, out var datos)) { sinDatos++; continue; }
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.TransformarLista(rejilla, "itemsJson",
+                _ => new JsonArray(datos.Select(d => (JsonNode)new JsonObject { ["heading"] = d.Rotulo, ["body"] = d.Valor }).ToArray()),
+                esLaFichaTecnica);
+            if (!cuerpo.Cambio) { continue; }
+            pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            cambiadas++;
+        }
+        return $"fichas-tecnicas:{cambiadas};sin-datos:{sinDatos}";
+    }
+
+    // ───────────────────────────── Promesas de Hoteles (2.ª medición, punto 2) ─────────────────────────────
+
+    /// <summary>La página Reservar de Hoteles, por su Key de uSync.</summary>
+    public static readonly Guid ReservarHoteles = Guid.Parse("cd926cac-d872-4acd-bd51-9b6764ad7625");
+
+    /// <summary>
+    /// Cambia, en los elementos de una lista JSON de los bloques del tipo dado, los campos de <paramref name="cambios"/>
+    /// de los elementos cuyo <paramref name="clave"/> vale <paramref name="valorClave"/>.
+    /// </summary>
+    private static int CambiarEnLista(CuerpoEditable cuerpo, Guid tipo, string propiedad, string clave, string valorClave,
+        params (string Campo, string Valor)[] cambios) =>
+        cuerpo.TransformarLista(tipo, propiedad, lista =>
+        {
+            var nueva = new JsonArray();
+            foreach (var item in lista)
+            {
+                var copia = (JsonObject)item!.DeepClone();
+                if (copia[clave] is JsonValue v && v.TryGetValue<string>(out var texto) && texto == valorClave)
+                {
+                    foreach (var (campo, valor) in cambios) { copia[campo] = valor; }
+                }
+                nueva.Add(copia);
+            }
+            return nueva;
+        });
+
+    /// <summary>
+    /// Hoteles prometía lo que su asistente no hace: «Mejor precio garantizado», confirmación y recordatorios «por
+    /// correo», «Cancelación gratuita hasta 48 horas». El asistente muestra el comprobante con el número de la reserva y,
+    /// por habitación, si la tarifa es reembolsable y su política; el correo sólo sale con Bff.Viajes encendido, que no es
+    /// el modo por defecto. Los textos dicen eso.
+    /// </summary>
+    private string RecetaPromesasDeHoteles()
+    {
+        var n = 0;
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var portada = _contentService.GetById(Hoteles);
+        if (portada is not null)
+        {
+            var cuerpo = new CuerpoEditable(portada.GetValue<string>(Cuerpo, Cultura));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Confirmación inmediata",
+                ("body", "Al confirmar ves tu comprobante con el número de la reserva, sin esperar una llamada."));
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Mejor precio garantizado",
+                ("heading", "Tarifas claras"),
+                ("body", "Cada habitación muestra su precio y si la tarifa es reembolsable antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                portada.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(portada, new[] { Cultura });
+                n++;
+            }
+        }
+
+        var reservar = _contentService.GetById(ReservarHoteles);
+        if (reservar is not null)
+        {
+            var cuerpo = new CuerpoEditable(reservar.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
+                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Al confirmar ves tu comprobante con el número de la reserva.</p>");
+            cuerpo.Reemplazar(KeyOf("elementCorpMissionBlock"), "textBody",
+                "<p>El asistente te guía paso a paso y te muestra las habitaciones libres para tus fechas. Antes de confirmar ves el total y si la tarifa es reembolsable.</p>",
+                CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
+            CambiarEnLista(cuerpo, KeyOf("elementSynAccordion"), "itemsJson", "title", "Política de cancelación",
+                ("content", "Depende de la tarifa: el asistente te muestra si es reembolsable y su política de cancelación antes de confirmar."));
+            var preguntas = KeyOf("elementSynFaqSection");
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo modificar mi reserva?",
+                ("answer", "Escríbenos con el número de tu reserva. Los cambios dependen de la política de la tarifa que elegiste."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Recibo recordatorios?",
+                ("answer", "Por ahora no enviamos recordatorios. Guarda el número de reserva que ves al confirmar."));
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo se cobra la estadía?",
+                ("answer", "El precio se muestra en pesos colombianos y el total aparece antes de que confirmes."));
+            if (cuerpo.Cambio)
+            {
+                reservar.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(reservar, new[] { Cultura });
+                n++;
+            }
+        }
+        return $"paginas:{n}";
+    }
+
     // ───────────────────────────── Atribuciones (I6) ─────────────────────────────
 
     /// <summary>
@@ -708,7 +1249,7 @@ public sealed class DevContenidoDeVerticales
                     {
                         c.Set("headingTitle", t.Titulo)
                          .Set("headingSubtitle", t.Subtitulo)
-                         .Set("textBody", $"<p>{System.Net.WebUtility.HtmlEncode(t.Texto)}</p>")
+                         .Set("textBody", $"<p>{TextoHtml(t.Texto)}</p>")
                          .Set("mediaAlt", t.Alt)
                          .Set("ctaLabel", t.Cta)
                          .Set("ctaLink", Enlace(t.Cta, t.Url));
@@ -805,6 +1346,12 @@ public sealed class DevContenidoDeVerticales
             .Set("ctaItems", lista.Build())
             .ApplyDefaults(_defaults.DefaultsFor(heroKey)));
     }
+
+    /// <summary>Texto plano dentro de HTML: escapa lo que rompe el marcado y deja las tildes como se leen en el editor.</summary>
+    private static string TextoHtml(string texto) =>
+        texto.Replace("&", "&amp;", StringComparison.Ordinal)
+             .Replace("<", "&lt;", StringComparison.Ordinal)
+             .Replace(">", "&gt;", StringComparison.Ordinal);
 
     private static string Enlace(string nombre, string url) =>
         new JsonArray(new JsonObject

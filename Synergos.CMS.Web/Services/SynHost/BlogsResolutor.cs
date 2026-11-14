@@ -48,6 +48,7 @@ public sealed class BlogsResolutor : IResolutorSynHost<BlogsProps>
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
             LecturasBase: negocio.LecturasBase,
+            ModeracionBase: negocio.ModeracionBase,
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
             Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));
     }

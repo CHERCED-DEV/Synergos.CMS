@@ -183,6 +183,26 @@ public sealed class FileSystemCommentRepositoryTests : IDisposable
 
     // ── idempotente: like sobre comment no aprobado es no-op ──────
 
+    /// <summary>
+    /// Retirado por moderación (012-blogs-social, I5): deja de mostrarse y de aceptar «me gusta», no vuelve a la cola de
+    /// pendientes y sigue guardado; retirarlo otra vez no falla.
+    /// </summary>
+    [Fact]
+    public async Task RetirarAsync_LoOcultaSinBorrarlo_YEsIdempotente()
+    {
+        var retirado = await _sut.AddAsync(new NewComment(NodeId, null, "Alice", "Ofensivo"), CancellationToken.None);
+        var otro = await _sut.AddAsync(new NewComment(NodeId, null, "Bob", "Bien"), CancellationToken.None);
+
+        Assert.True(await _sut.RetirarAsync(NodeId, retirado.Id, CancellationToken.None));
+        Assert.True(await _sut.RetirarAsync(NodeId, retirado.Id, CancellationToken.None));
+
+        Assert.Equal(new[] { otro.Id }, _sut.GetApprovedForNode(NodeId).Select(c => c.Id));
+        Assert.Empty(_sut.GetPendingForNode(NodeId));
+        Assert.Null(await _sut.LikeAsync(NodeId, retirado.Id, CancellationToken.None));
+        Assert.True(_sut.ReadByRefs(new[] { new CommentRef(NodeId, retirado.Id) }).Single().Retirado);
+        Assert.False(await _sut.RetirarAsync(NodeId, "no-existe", CancellationToken.None));
+    }
+
     [Fact]
     public async Task LikeAsync_PendingComment_ReturnsNullDoesNotMutate()
     {
