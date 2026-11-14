@@ -549,7 +549,8 @@
       "record": "BlogsProps",
       "diccionario": [
         "Blogs.Comentarios",
-        "Blogs.Moderacion"
+        "Blogs.Moderacion",
+        "Blogs.Red"
       ],
       "claves": [
         "Blogs.Comentarios.EnRevision",
@@ -585,7 +586,9 @@
         "Blogs.Moderacion.SinPermiso",
         "Blogs.Moderacion.SinSesion",
         "Blogs.Moderacion.Titulo",
-        "Blogs.Moderacion.YaNoEsta"
+        "Blogs.Moderacion.YaNoEsta",
+        "Blogs.Red.PerfilSinSesion",
+        "Blogs.Red.PerfilSinSesionTexto"
       ],
       "campos": [
         {

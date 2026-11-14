@@ -81,7 +81,10 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
         await SeedAsync(cancellationToken).ConfigureAwait(false);
 
         var page = await _inner.GetFeedAsync(query, cancellationToken).ConfigureAwait(false);
-        return page with { Items = page.Items.Select(ConAutor).ToList() };
+
+        // Con la fecha de publicación repuesta, el orden de la página es el de esa fecha: el almacén conoce la de la
+        // siembra, que es la misma para todos los artículos (012-blogs-social, vuelta de valor).
+        return page with { Items = page.Items.Select(ConAutor).OrderByDescending(i => i.CreatedUtc).ToList() };
     }
 
     public async Task<ContentStreamItem?> GetItemAsync(string id, CancellationToken cancellationToken = default)
@@ -134,6 +137,9 @@ public sealed class CatalogContentStream : IContentStream, IDisposable
                 Category = string.IsNullOrWhiteSpace(post.Category) ? null : post.Category,
                 // Las etiquetas del editor: la página de una etiqueta las encuentra (012-blogs-social, I6).
                 Tags = post.Tags is { Count: > 0 } ? post.Tags : null,
+                // Cuándo se publicó, si el editor lo dijo: el item guardado lleva la hora de la siembra, que es la misma
+                // para todos y hacía decir «hace 1 d» a artículos de junio (012-blogs-social, vuelta de valor).
+                CreatedUtc = post.PublishedUtc is { } publicado ? DateTime.SpecifyKind(publicado, DateTimeKind.Utc) : item.CreatedUtc,
             }
             : item;
 

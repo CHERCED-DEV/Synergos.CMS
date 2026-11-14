@@ -292,6 +292,27 @@ public class CatalogContentStreamTests
     }
 
     /// <summary>
+    /// La fecha de un artículo es la de su publicación, no la de la siembra, que es la misma para todos: con ella la red
+    /// decía «hace 1 d» de artículos de junio. El feed los ordena por esa fecha; uno sin fecha conserva la de la siembra.
+    /// </summary>
+    [Fact]
+    public async Task La_fecha_de_un_articulo_es_la_de_su_publicacion_y_el_feed_ordena_por_ella()
+    {
+        var junio10 = new DateTime(2026, 6, 10, 0, 0, 0, DateTimeKind.Utc);
+        var junio20 = new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
+        var source = new FakeSource();
+        source.Posts.Add(Post(slug: "de-junio-10", excerpt: "Uno.") with { PublishedUtc = junio10 });
+        source.Posts.Add(Post(slug: "de-junio-20", excerpt: "Dos.") with { PublishedUtc = junio20 });
+        source.Posts.Add(Post(slug: "sin-fecha", excerpt: "Tres.") with { PublishedUtc = null });
+
+        var feed = await FeedDe(new CatalogContentStream(source, new InMemoryJsonEntityStore(), Feed()));
+
+        var articulos = feed.Where(i => i.CmsUrl is not null).ToList();
+        Assert.Equal(["/blog/sin-fecha", "/blog/de-junio-20", "/blog/de-junio-10"], articulos.Select(i => i.CmsUrl));
+        Assert.Equal([new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), junio20, junio10], articulos.Select(i => i.CreatedUtc));
+    }
+
+    /// <summary>
     /// Las etiquetas del editor se reponen al leer, como la categoría: el item guardado no las lleva, y sin ellas la
     /// página de una etiqueta (012-blogs-social, I6) no encontraría el artículo. Sin etiquetas, no viaja una lista vacía.
     /// </summary>
