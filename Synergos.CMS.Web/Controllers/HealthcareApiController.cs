@@ -107,8 +107,12 @@ public sealed partial class HealthcareApiController : ControllerBase
         IPrivateFileStore? archivos = null,
         IRenovaciones? renovaciones = null,
         IMessagingService? mensajeria = null,
-        IDoctorDirectory? directorio = null)
+        IDoctorDirectory? directorio = null,
+        ITransactionalNotifier? avisos = null,
+        ILogger<HealthcareApiController>? log = null)
     {
+        _avisos = avisos;
+        _log = log;
         _mensajeria = mensajeria;
         _directorio = directorio;
         _renovaciones = renovaciones;
@@ -804,6 +808,7 @@ public sealed partial class HealthcareApiController : ControllerBase
         {
             await _ordenes.GuardarResultadoAsync(
                 resultado with { LiberadoPor = medico, LiberadoUtc = _reloj.GetUtcNow().UtcDateTime }, ct);
+            await AvisarAlPacienteAsync(patientKey, NotificationTypes.SaludResultadoLiberado, resultadoId.ToString("N"), RutaDelPortal, ct);
         }
         var resultados = await _ordenes.ListResultadosAsync(patientKey, ct);
         var conEstado = OrdenesClinicas.ConSuEstado(orden, resultados);
@@ -1075,6 +1080,7 @@ public sealed partial class HealthcareApiController : ControllerBase
                 Estado = RecetasClinicas.Aprobada, ResueltaPor = medico, ResueltaUtc = ahora, NuevaRecetaId = nueva!.PrescriptionId,
             };
             await _renovaciones.GuardarAsync(aprobada, ct);
+            await AvisarAlPacienteAsync(patientKey, NotificationTypes.SaludRenovacionRespondida, solicitudId.ToString("N"), RutaDelPortal, ct);
             return Ok(RecetasClinicas.ParaLeer(aprobada));
         }
         finally
@@ -1114,6 +1120,7 @@ public sealed partial class HealthcareApiController : ControllerBase
             Motivo = motivo is { Length: > 500 } ? motivo[..500] : motivo,
         };
         await _renovaciones.GuardarAsync(rechazada, ct);
+        await AvisarAlPacienteAsync(patientKey, NotificationTypes.SaludRenovacionRespondida, solicitudId.ToString("N"), RutaDelPortal, ct);
         return Ok(RecetasClinicas.ParaLeer(rechazada));
     }
 

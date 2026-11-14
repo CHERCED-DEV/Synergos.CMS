@@ -24,6 +24,13 @@
     "body": "<p>Hola {nombre}:</p><p>Tu cita <b>{numero}</b> en {sitio} quedó confirmada.</p><p>Fecha y hora: <b>{ventana}</b>. Copago cobrado: <b>{total}</b>.</p><p>El profesional y el detalle de la cita están en <a href=\"{enlace}\">{enlace}</a>.</p>"
   },
   {
+    "_": "El recordatorio de la cita (003-salud-cita, I8 P18): lo programa el paso notifications.programar al final de «cerrar» en salud.cita para que Api.Notifications lo mande el día antes (Salud:Recordatorio:HorasAntes, 24 por defecto); una cita para dentro de menos de eso no lo programa. Cancelar la cita lo retira (salud.cancelacion, notifications.retirar). Los marcadores son los FIJOS del paso, sin el total (nombre, numero, enlace, sitio), y el DECLARADO {ventana}, en la hora del sitio. PlantillaDeLaCitaTests los cruza en los dos sentidos. Sin el profesional ni el motivo: están detrás del enlace.",
+    "key": "salud.cita.recordatorio",
+    "channel": "Email",
+    "subject": "Recordatorio: tu cita {numero} es mañana",
+    "body": "<p>Hola {nombre}:</p><p>Te recordamos tu cita <b>{numero}</b> en {sitio}: <b>{ventana}</b>.</p><p>Si ya no puedes ir, cancélala desde «Mis citas»: <a href=\"{enlace}\">{enlace}</a>.</p>"
+  },
+  {
     "_": "El aviso al comprador de la tienda (004-tienda-compra): lo manda el paso notifications.avisar al final de «cerrar» en tienda.compra —después de cobrar, despachar y cumplir el pedido—, a la dirección que pone la puerta, que nunca se guarda en la saga. Los marcadores son los valores FIJOS del paso (nombre, numero, total, enlace, sitio) y PlantillaDeLaCompraDeTiendaTests los cruza en los dos sentidos. Las líneas NO van en el correo (el paso no las manda; N-10 al núcleo): están detrás del enlace, que abre la compra en la tienda. No promete fechas de entrega ni dice cómo devolver: la entrega la sabe la transportadora, y la devolución se pide desde «Mis compras».",
     "key": "tienda.compra.confirmada",
     "channel": "Email",

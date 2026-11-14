@@ -24,8 +24,15 @@ public static class CancelacionDeLaCita
     /// <summary>El flujo posterior que cancela una cita confirmada por la puerta.</summary>
     public const string Flujo = "salud.cancelacion";
 
-    /// <summary>Los pasos propios, para sumarlos a los comunes en el registro del orquestador.</summary>
-    public static IPaso[] Pasos(TimeProvider reloj) => [new PasoDevolucionPorAntelacion(reloj)];
+    /// <summary>Los pasos propios, para sumarlos a los comunes en el registro del orquestador: la devolución de la cancelación
+    /// y el momento del recordatorio de la cita (I8), los dos con el reloj del orquestador.</summary>
+    public static IPaso[] Pasos(
+        TimeProvider reloj, int horasDelRecordatorio, Synergos.Bff.Pasos.IAvisosProgramados avisos, TimeZoneInfo zona, ILogger log)
+        =>
+        [
+            new PasoDevolucionPorAntelacion(reloj), new PasoMomentoDelRecordatorio(reloj, horasDelRecordatorio),
+            new PasoRecordarLaCita(new PasoProgramarAvisoDeSalud(avisos, zona), log),
+        ];
 }
 
 /// <summary>

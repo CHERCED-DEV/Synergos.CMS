@@ -81,7 +81,9 @@ if (declarado)
     builder.Services.AddSingleton<IRegistroDePasos>(sp => PasosComunes.Registro(sp.GetRequiredService<PuertosHttp>(), zona,
     [
         new PasoLeerOriginal(sp.GetRequiredService<ISagaStore<SagaDeFlujo>>(), TiposDeValor.Sumados(sp.GetServices<TiposDeValor>())),
-        .. CancelacionDeLaCita.Pasos(sp.GetRequiredService<TimeProvider>()),
+        .. CancelacionDeLaCita.Pasos(sp.GetRequiredService<TimeProvider>(),
+            builder.Configuration.GetValue($"{vocabulario.Origin}:Recordatorio:HorasAntes", PasoMomentoDelRecordatorio.HorasPorDefecto),
+            sp.GetRequiredService<IAvisosProgramados>(), zona, sp.GetRequiredService<ILoggerFactory>().CreateLogger("Synergos.Bff.Salud.Recordatorio")),
     ]));
 }
 

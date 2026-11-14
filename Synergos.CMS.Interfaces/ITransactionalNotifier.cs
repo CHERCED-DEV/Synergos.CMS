@@ -21,6 +21,12 @@ public static class NotificationTypes
     public const string EnrollmentActive = "academy.enrollment.active";
     public const string GovCaseFiled = "gov.case.filed";
     public const string GovCaseDecided = "gov.case.decided";
+
+    // Salud (003-salud-cita, I8 P18): lo que el consultorio le avisa al paciente. Ninguno lleva el dato clínico: el correo
+    // dice que hay algo nuevo, y el detalle está detrás del enlace, con su sesión.
+    public const string SaludResultadoLiberado = "salud.resultado.liberado";
+    public const string SaludRenovacionRespondida = "salud.renovacion.respondida";
+    public const string SaludMensajeRespondido = "salud.mensaje.respondido";
 }
 
 /// <summary>

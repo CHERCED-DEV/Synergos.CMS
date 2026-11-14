@@ -78,6 +78,29 @@ public static class TransactionalEmailCopy
                 Intro: "Tu solicitud fue revisada y tiene una decisión. Consulta el detalle con tu número de radicado.",
                 CodeLabel: "Radicado",
                 ActionLabel: "Ver la decisión"),
+
+            // Salud (003-salud-cita, I8 P18): sin el dato clínico —ni el examen, ni el medicamento, ni el mensaje—, que se
+            // lee en el portal con la sesión del paciente. El código es la fecha del aviso.
+            [NotificationTypes.SaludResultadoLiberado] = new(
+                Subject: "Tienes un resultado nuevo",
+                Heading: "Tu consultorio liberó un resultado",
+                Intro: "El médico revisó un resultado de tus exámenes y ya lo puedes ver en tu portal, con su rango de referencia.",
+                CodeLabel: "Fecha",
+                ActionLabel: "Ver mis resultados"),
+
+            [NotificationTypes.SaludRenovacionRespondida] = new(
+                Subject: "Respondieron tu pedido de renovación",
+                Heading: "Tu consultorio respondió tu renovación",
+                Intro: "El médico revisó la renovación de receta que pediste. En tu portal ves si salió una receta nueva.",
+                CodeLabel: "Fecha",
+                ActionLabel: "Ver mis medicamentos"),
+
+            [NotificationTypes.SaludMensajeRespondido] = new(
+                Subject: "Tu consultorio te respondió",
+                Heading: "Tienes una respuesta nueva",
+                Intro: "El consultorio contestó tu mensaje. Lo puedes leer en tu portal.",
+                CodeLabel: "Fecha",
+                ActionLabel: "Ver mis mensajes"),
         };
 
     /// <summary>Copy por variante de un hecho, con la clave <c>{Type}|{Variant}</c>.</summary>

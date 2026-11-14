@@ -241,6 +241,55 @@ public sealed class EstadoDeCuentaDelPacienteTests
     }
 }
 
+/// <summary>
+/// El recordatorio de la cita (I8 P18) contra Notifications real: confirmar lo programa el día antes, y cancelar la cita lo
+/// retira antes de que salga.
+/// </summary>
+public sealed class RecordatorioDeLaCitaTests
+{
+    private sealed class Reloj : TimeProvider
+    {
+        public DateTimeOffset Ahora { get; set; } = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Ahora;
+    }
+
+    private static async Task<List<JsonElement>> Entregas(CitaDeSaludReal c)
+        => (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").EnumerateArray().ToList();
+
+    [Fact]
+    public async Task Confirmar_programa_el_recordatorio_el_dia_antes_y_cancelar_lo_retira()
+    {
+        var reloj = new Reloj();
+        using var c = new CitaDeSaludReal(reloj: reloj);
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        await c.Cerrar(id);
+
+        var antes = await Entregas(c);
+        var recordatorio = Assert.Single(antes, e => e.GetProperty("templateKey").GetString() == "salud.cita.recordatorio");
+        Assert.Equal(CitaDeSaludReal.Inicio.AddHours(-24), recordatorio.GetProperty("notBeforeUtc").GetDateTimeOffset());
+
+        reloj.Ahora = CitaDeSaludReal.Inicio.AddHours(-5);
+        var (estado, cancelacion) = await c.CancelarConfirmada(id);
+        Assert.True(estado == HttpStatusCode.Created, cancelacion.ToString());
+
+        var retirado = (await Entregas(c)).Single(e => e.GetProperty("id").GetString() == recordatorio.GetProperty("id").GetString());
+        Assert.Equal("Queued", recordatorio.GetProperty("status").GetString());
+        Assert.NotEqual("Queued", retirado.GetProperty("status").GetString());
+    }
+
+    [Theory]
+    [InlineData(48, true)]
+    [InlineData(25, true)]
+    [InlineData(23, false)]
+    public void El_recordatorio_sale_un_dia_antes_y_no_se_programa_si_ese_momento_ya_paso(int horasAntes, bool seProgramma)
+    {
+        var inicio = new DateTimeOffset(2027, 3, 10, 15, 0, 0, TimeSpan.Zero);
+        var momento = PasoMomentoDelRecordatorio.Momento(inicio, inicio.AddHours(-horasAntes), 24);
+        Assert.Equal(seProgramma ? inicio.AddHours(-24) : null, momento);
+    }
+}
+
 /// <summary>La regla de la devolución, sola: los bordes de cada tramo y el redondeo hacia abajo.</summary>
 public sealed class PoliticaDeDevolucionTests
 {
