@@ -252,6 +252,9 @@ public sealed partial class SeamComposer
         // I4: las órdenes médicas y sus resultados, en el almacén PHI; el PDF del informe, en el privado cifrado (T6).
         services.AddSingleton<IOrdenesMedicas, FileSystemOrdenesMedicas>();
 
+        // I5: las solicitudes de renovación de recetas, en el almacén PHI.
+        services.AddSingleton<IRenovaciones, FileSystemRenovaciones>();
+
         services.AddSingleton<Services.Salud.IPublicadorDeOfertasDeProfesionales>(sp => new Services.Salud.PublicadorDeOfertasDeProfesionales(
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<Services.Salud.PublicadorDeOfertasDeProfesionales>>(),

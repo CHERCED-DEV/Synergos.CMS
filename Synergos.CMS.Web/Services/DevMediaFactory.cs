@@ -193,6 +193,27 @@ public sealed class DevMediaFactory
         return true;
     }
 
+    /// <summary>
+    /// Los medios cuya licencia cumple <paramref name="filtro"/>, con su texto alternativo, su licencia y su crédito,
+    /// ordenados por nombre: lo que una página de créditos tiene que mostrar.
+    /// </summary>
+    public IReadOnlyList<(string Nombre, string Alt, string Licencia, string Credito)> ConLicencia(Func<string, bool> filtro)
+    {
+        var encontrados = new List<(string, string, string, string)>();
+        foreach (var raiz in _mediaService.GetRootMedia())
+        {
+            foreach (var medio in new[] { raiz }.Concat(_mediaService.GetPagedDescendants(raiz.Id, 0, int.MaxValue, out _)))
+            {
+                if (medio.HasProperty("license") && medio.GetValue<string>("license") is { Length: > 0 } licencia && filtro(licencia))
+                {
+                    encontrados.Add((medio.Name ?? string.Empty, medio.GetValue<string>("altDefault") ?? string.Empty, licencia,
+                        medio.GetValue<string>("creditLabel") ?? string.Empty));
+                }
+            }
+        }
+        return encontrados.OrderBy(m => m.Item1, StringComparer.Ordinal).ToList();
+    }
+
     /// <summary>La Key del nodo de Media con ese nombre, si existe (raíz o carpeta de primer nivel).</summary>
     public Guid? KeyByName(string name) => FindMediaByName(name)?.Key;
 

@@ -32,7 +32,7 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// productos muestra», ya como filtros fijos del catálogo. Vacío, todo el catálogo; «ofertas», sólo las ofertas.</para>
 /// </remarks>
 // «seleccion» elige DATOS, qué productos salen, y no vocabulario: viaja ya como `Filtros` (#196, tanda D).
-[ElementoSynHost("storefront", TipoDeColocable.Funcionalidad, Diccionario = ["Storefront.Purchase"], SelectoresDeDatos = ["seleccion"])]
+[ElementoSynHost("storefront", TipoDeColocable.Funcionalidad, Diccionario = ["Storefront.Purchase", "Storefront.Cart"], SelectoresDeDatos = ["seleccion"])]
 public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,

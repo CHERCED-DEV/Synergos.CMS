@@ -24,6 +24,9 @@ public interface IPrescriptionService
 
     /// <summary>Marca una receta como <c>revoked</c>. False si no existe.</summary>
     Task<bool> RevokeAsync(Guid prescriptionId, CancellationToken cancellationToken);
+
+    /// <summary>Guarda la receta tal cual, con su firma (003-salud-cita, I5 P13: la receta firmada y la renovada).</summary>
+    Task GuardarAsync(PrescriptionRecord record, CancellationToken cancellationToken);
 }
 
 /// <summary>Solicitud de emisión de receta. Tiempos en UTC.</summary>
@@ -49,4 +52,6 @@ public sealed record PrescriptionRecord(
     DateTime ValidFromUtc,
     DateTime ValidToUtc,
     DateTime IssuedAtUtc,
-    string Status);
+    string Status,
+    FirmaDeLaNota? Firma = null,
+    Guid? RenuevaA = null);

@@ -45,6 +45,12 @@ public sealed class FileSystemPrescriptionService : IPrescriptionService
         return result.OrderByDescending(r => r.IssuedAtUtc).ToList();
     }
 
+    public Task GuardarAsync(PrescriptionRecord record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return _store.WriteAsync(ResourceType, record.PrescriptionId, JsonSerializer.Serialize(record), cancellationToken);
+    }
+
     public async Task<bool> RevokeAsync(Guid prescriptionId, CancellationToken cancellationToken)
     {
         var json = await _store.ReadAsync(ResourceType, prescriptionId, cancellationToken).ConfigureAwait(false);
