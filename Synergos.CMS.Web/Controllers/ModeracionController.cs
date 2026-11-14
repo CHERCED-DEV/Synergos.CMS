@@ -26,18 +26,21 @@ public sealed class ModeracionController : ControllerBase
     private readonly IModeracion _moderacion;
     private readonly IEnumerable<ITipoModerable> _tipos;
     private readonly IMemberAccessGate _sesion;
+    private readonly IIdentidadPublica _identidad;
     private readonly ILogger<ModeracionController> _log;
 
-    /// <summary>Con la moderación, lo denunciable de cada vertical y la sesión de quien pide.</summary>
+    /// <summary>Con la moderación, lo denunciable de cada vertical, la sesión de quien pide y su cara pública.</summary>
     public ModeracionController(
         IModeracion moderacion,
         IEnumerable<ITipoModerable> tipos,
         IMemberAccessGate sesion,
+        IIdentidadPublica identidad,
         ILogger<ModeracionController> log)
     {
         _moderacion = moderacion ?? throw new ArgumentNullException(nameof(moderacion));
         _tipos = tipos ?? throw new ArgumentNullException(nameof(tipos));
         _sesion = sesion ?? throw new ArgumentNullException(nameof(sesion));
+        _identidad = identidad ?? throw new ArgumentNullException(nameof(identidad));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -74,10 +77,19 @@ public sealed class ModeracionController : ControllerBase
             return NotFound(new { error = "No encontramos lo que quieres denunciar." });
         }
 
-        var caso = await _moderacion.DenunciarAsync(
-            new DenunciaNueva(new ObjetivoModerable(tipo.Tipo, id), contenido.Resumen, contenido.Enlace, yo, motivo),
-            cancellationToken);
-        return Ok(new DenunciaRecibida(caso.Id));
+        try
+        {
+            // Quien denuncia va por su llave pública, nunca por su correo: viaja a la moderación, y en Api, a otro proceso.
+            var caso = await _moderacion.DenunciarAsync(
+                new DenunciaNueva(
+                    new ObjetivoModerable(tipo.Tipo, id), contenido.Resumen, contenido.Enlace, _identidad.De(yo).Llave, motivo),
+                cancellationToken);
+            return Ok(new DenunciaRecibida(caso.Id));
+        }
+        catch (ModeracionNoDisponibleException)
+        {
+            return NoContesto("No pudimos recibir la denuncia. Vuelve a intentarlo.");
+        }
     }
 
     /// <summary>La cola: los casos abiertos, del más antiguo al más reciente.</summary>
@@ -89,8 +101,16 @@ public sealed class ModeracionController : ControllerBase
             return sinPermiso;
         }
 
-        var casos = await _moderacion.AbiertosAsync(cuantos is > 0 ? cuantos.Value : 50, cancellationToken);
-        return Ok(new ColaDeModeracion(casos.Select(CasoEnLaCola.De).ToList()));
+        try
+        {
+            var casos = await _moderacion.AbiertosAsync(cuantos is > 0 ? cuantos.Value : 50, cancellationToken);
+            return Ok(new ColaDeModeracion(casos.Select(CasoEnLaCola.De).ToList()));
+        }
+        catch (ModeracionNoDisponibleException)
+        {
+            // No se pinta una cola vacía: «no hay nada» y «no se pudo leer» no son lo mismo.
+            return NoContesto("No pudimos leer la cola. Vuelve a intentarlo.");
+        }
     }
 
     /// <summary>Decide un caso: mantener o retirar, con el motivo. Retirar lo saca para todos.</summary>
@@ -122,10 +142,21 @@ public sealed class ModeracionController : ControllerBase
             return BadRequest(new { error = $"Di por qué lo decides, en hasta {LargoMaximoDelMotivo} caracteres." });
         }
 
-        var quien = string.IsNullOrWhiteSpace(_sesion.CurrentMemberDisplayName)
-            ? "Moderación"
-            : _sesion.CurrentMemberDisplayName.Trim();
-        var tomada = await _moderacion.DecidirAsync(id, decision.Value, quien, motivo, cancellationToken);
+        // Quien decide: su llave es la traza y su nombre público lo que se muestra; nunca su correo.
+        var cara = _identidad.De(_sesion.CurrentMemberEmail ?? string.Empty);
+        var quien = new QuienModera(
+            cara.Llave,
+            string.IsNullOrWhiteSpace(_sesion.CurrentMemberDisplayName) ? cara.Nombre : _sesion.CurrentMemberDisplayName.Trim());
+        DecisionTomada tomada;
+        try
+        {
+            tomada = await _moderacion.DecidirAsync(id, decision.Value, quien, motivo, cancellationToken);
+        }
+        catch (ModeracionNoDisponibleException)
+        {
+            return NoContesto("No pudimos guardar la decisión. Vuelve a intentarlo.");
+        }
+
         switch (tomada.Resultado)
         {
             case ResultadoDeDecidir.NoExiste:
@@ -162,6 +193,9 @@ public sealed class ModeracionController : ControllerBase
 
     /// <summary>Lo más largo de un motivo, el de la moderación.</summary>
     private const int LargoMaximoDelMotivo = 500;
+
+    /// <summary>503: la moderación no contestó, y lo pedido no quedó.</summary>
+    private ObjectResult NoContesto(string error) => StatusCode(StatusCodes.Status503ServiceUnavailable, new { error });
 
     private ITipoModerable? TipoDe(string tipo)
         => _tipos.FirstOrDefault(t => string.Equals(t.Tipo, tipo.Trim(), StringComparison.OrdinalIgnoreCase));

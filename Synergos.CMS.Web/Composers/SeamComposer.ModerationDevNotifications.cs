@@ -1,8 +1,10 @@
+using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Interfaces.Moderacion;
 using Synergos.CMS.Web.Notifications;
 using Synergos.CMS.Web.Services;
+using Synergos.CMS.Web.Services.Moderacion;
 using Umbraco.Cms.Core.Notifications;
 
 namespace Synergos.CMS.Web.Composers;
@@ -13,12 +15,35 @@ public sealed partial class SeamComposer
     {
         var services = builder.Services;
 
-        // 012-blogs-social, I5 — la moderación de lo publicado, en Local: los casos y lo retirado en el almacén común.
-        // Genérica: cada vertical declara lo suyo denunciable con su ITipoModerable. Singletons, porque cada una pone
-        // en fila sus escrituras.
-        services.AddSingleton<IModeracion>(sp => new ModeracionLocal(
-            sp.GetRequiredService<IJsonEntityStore>(),
-            sp.GetRequiredService<TimeProvider>()));
+        // 012-blogs-social, I5 — la moderación de lo publicado: denunciar, la cola y decidir. Genérica: cada vertical
+        // declara lo suyo denunciable con su ITipoModerable, y retirar lo hace siempre el CMS (el registro de lo
+        // retirado, singleton porque pone en fila sus escrituras).
+        // Con Mode=Api los casos viven en Api.Moderation, según su contrato publicado; sin BaseUrl no se adivina un
+        // puerto y la moderación no contesta (fallar cerrado). Sin el modo, en el almacén común: la vuelta atrás y el
+        // desarrollo. La sección se ENLAZA, como Synergos:Audit. Gate: ModeracionWiringTests.
+        services.Configure<ModeracionSettings>(builder.Config.GetSection("Synergos:Moderation"));
+        if (Interruptor.Encendido(builder.Config, "Synergos:Moderation:Mode", "Api", new ModeracionSettings().Mode))
+        {
+            var moderacion = builder.Config.GetSection("Synergos:Moderation");
+            if (!string.IsNullOrWhiteSpace(moderacion["BaseUrl"]))
+            {
+                services.AddClienteDelArbolDeServicios(
+                    ModeracionEnApi.ClientName,
+                    DestinoDelArbol.De(moderacion, moderacion["BaseUrl"]!, new ModeracionSettings().TimeoutSeconds));
+                services.AddTransient<IModeracion, ModeracionEnApi>();
+            }
+            else
+            {
+                services.AddSingleton<IModeracion, ModeracionSinDestino>();
+            }
+        }
+        else
+        {
+            services.AddSingleton<IModeracion>(sp => new ModeracionLocal(
+                sp.GetRequiredService<IJsonEntityStore>(),
+                sp.GetRequiredService<TimeProvider>()));
+        }
+
         services.AddSingleton<IRegistroDeRetirados>(sp => new RegistroDeRetirados(sp.GetRequiredService<IJsonEntityStore>()));
 
         // Ola 68 — Comments runtime (ADR 0038). FileSystemCommentRepository

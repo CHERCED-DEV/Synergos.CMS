@@ -81,6 +81,9 @@ internal static class ContratoOpenApi
         // Los procesos (009-P2): lo construye la línea de Gobierno con este molde y lo revisa el núcleo, que
         // espera por él para los pasos comunes workflow.arrancar, disparar y leer.
         new PiezaPublicada<Synergos.Api.Workflow.Contracts.InstanceResponse>("Workflow"),
+        // La moderación (012-P6 A): la publica la línea de Blogs con este molde, para el cliente del CMS detrás de
+        // Synergos:Moderation:Mode. La revisa el director al integrar (A-4).
+        new PiezaPublicada<Synergos.Api.Moderation.Contracts.CaseResponse>("Moderation"),
         new PiezaPublicada<Synergos.Bff.Eventos.Contracts.TicketPurchaseResponse>("Eventos"),
         new PiezaPublicada<Synergos.Bff.Salud.Contracts.AppointmentResponse>("Salud"),
         new PiezaPublicada<Synergos.Bff.Tienda.Contracts.PurchaseResponse>("Tienda"),
