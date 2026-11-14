@@ -645,7 +645,17 @@ public sealed class DevContenidoDeVerticales
             if (apps.HasProperty(alias) && apps.GetValue<string>(alias, Cultura) != valor) { apps.SetValue(alias, valor, Cultura); cambio = true; }
         }
         if (cambio) { _contentService.SaveAndPublish(apps, new[] { Cultura }); }
-        return cambio ? "apps:1" : "apps:0";
+
+        // La portada de Educación no tenía seoTitle y caía al nombre del nodo, «Educacion» (4.ª vuelta, A-1).
+        var educacion = _contentService.GetById(Educacion);
+        var cambioEducacion = false;
+        if (educacion is not null && educacion.HasProperty("seoTitle") && educacion.GetValue<string>("seoTitle", Cultura) != "Educación")
+        {
+            educacion.SetValue("seoTitle", "Educación", Cultura);
+            _contentService.SaveAndPublish(educacion, new[] { Cultura });
+            cambioEducacion = true;
+        }
+        return $"apps:{(cambio ? 1 : 0)};educacion:{(cambioEducacion ? 1 : 0)}";
     }
 
     /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
@@ -1413,10 +1423,13 @@ public sealed class DevContenidoDeVerticales
         {
             var cuerpo = new CuerpoEditable(reservar.GetValue<string>(Cuerpo, Cultura));
             cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
-                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Al confirmar ves tu comprobante con el número de la reserva.</p>");
+                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Antes de confirmar ves el total y si la tarifa es reembolsable; al confirmar, tu comprobante con el número de la reserva.</p>");
             cuerpo.Reemplazar(KeyOf("elementCorpMissionBlock"), "textBody",
                 "<p>El asistente te guía paso a paso y te muestra las habitaciones libres para tus fechas. Antes de confirmar ves el total y si la tarifa es reembolsable.</p>",
                 CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
+            // El asistente quedaba a ~1.000 px, bajo la portada y un bloque que la repetía (016, 4.ª vuelta): el bloque sale
+            // de la página (desconectado; el tipo sigue) y su única frase nueva pasa a la portada.
+            cuerpo.DesconectarSeccionesCon(KeyOf("elementCorpMissionBlock"), CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
             CambiarEnLista(cuerpo, KeyOf("elementSynAccordion"), "itemsJson", "title", "Política de cancelación",
                 ("content", "Depende de la tarifa: el asistente te muestra si es reembolsable y su política de cancelación antes de confirmar."));
             var preguntas = KeyOf("elementSynFaqSection");
