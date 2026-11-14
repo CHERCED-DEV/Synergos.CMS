@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Media Key="e85f5a5c-36f2-4cc6-96a0-0c615354a491" Alias="Producto Morral" Level="2">
+  <Info>
+    <Parent Key="efb652dc-66ad-4600-99b0-990c6151be4c">Productos</Parent>
+    <Path>/Productos/ProductoMorral</Path>
+    <Trashed>false</Trashed>
+    <ContentType>synImage</ContentType>
+    <CreateDate>2026-07-17T07:40:20</CreateDate>
+    <NodeName Default="Producto Morral" />
+    <SortOrder>32</SortOrder>
+  </Info>
+  <Properties>
+    <altDefault>
+      <Value><![CDATA[Morral negro de líneas rectas sobre fondo blanco]]></Value>
+    </altDefault>
+    <copyright>
+      <Value><![CDATA[]]></Value>
+    </copyright>
+    <creditLabel>
+      <Value><![CDATA[Foto: albertoziveri · «Incase Backpacks» · https://www.flickr.com/photos/92167476@N03/9415888389]]></Value>
+    </creditLabel>
+    <creditLink>
+      <Value><![CDATA[]]></Value>
+    </creditLink>
+    <license>
+      <Value><![CDATA[CC BY 2.0]]></Value>
+    </license>
+    <umbracoFile>
+      <Value><![CDATA[{
+  "src": "/media/egane2lw/producto-morral-urbano.jpg"
+}]]></Value>
+    </umbracoFile>
+  </Properties>
+</Media>

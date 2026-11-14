@@ -129,6 +129,25 @@ public sealed class CuerpoEditable
         return n;
     }
 
+    /// <summary>
+    /// Transforma una propiedad de TEXTO (un HTML, un rótulo) en cada bloque del tipo dado. Devuelve cuántos cambiaron;
+    /// si la función devuelve lo mismo, no cuenta.
+    /// </summary>
+    public int TransformarTexto(Guid tipo, string propiedad, Func<string, string> transformar, Func<JsonObject, bool>? filtro = null)
+    {
+        var n = 0;
+        foreach (var dato in DatosDe(tipo, filtro))
+        {
+            if (dato[propiedad] is not JsonValue v || !v.TryGetValue<string>(out var actual)) { continue; }
+            var nuevo = transformar(actual);
+            if (string.Equals(nuevo, actual, StringComparison.Ordinal)) { continue; }
+            dato[propiedad] = nuevo;
+            n++;
+        }
+        if (n > 0) { Cambios++; }
+        return n;
+    }
+
     /// <summary>Un filtro para las operaciones: los bloques cuya <paramref name="propiedad"/> vale <paramref name="valor"/>.</summary>
     public static Func<JsonObject, bool> Donde(string propiedad, string valor) =>
         d => d[propiedad] is JsonValue v && v.TryGetValue<string>(out var texto) && string.Equals(texto, valor, StringComparison.Ordinal);

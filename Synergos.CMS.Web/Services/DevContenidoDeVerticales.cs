@@ -98,6 +98,14 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "hoteles-promesas", RecetaPromesasDeHoteles(), 0);
         }
+        if (string.Equals(vertical, "creditos", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "creditos", RecetaCreditos(), 0);
+        }
+        if (string.Equals(vertical, "tienda-vender", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "tienda-vender", RecetaTiendaYVender(), 0);
+        }
         if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaEntradasDeCategorias();
@@ -628,6 +636,213 @@ public sealed class DevContenidoDeVerticales
         return $"categorias:{cambiadas};faltan:{faltan}";
     }
 
+    // ───────────────────────────── La Tienda y su consola (2.ª medición, S7) ─────────────────────────────
+
+    /// <summary>La página «Vender» de la Tienda (la consola del vendedor), por su Key de uSync.</summary>
+    public static readonly Guid PaginaVender = Guid.Parse("13dda046-015b-4639-b6cc-bdf37329b19d");
+
+    /// <summary>
+    /// «Vender» era, para quien llega sin sesión —casi todo el que pulsa «Vender»—, un candado en un panel. Ahora dice
+    /// qué se hace desde la consola y quién entra. Y la portada de la Tienda deja de prometer lo que el sitio no hace:
+    /// envíos a toda Colombia, pago contra entrega, «lanza tu tienda esta semana» hacia una consola del personal, y
+    /// tres testimonios de «cliente verificado» que nadie dio (la sección se desconecta; el tipo sigue en el esquema).
+    /// </summary>
+    private string RecetaTiendaYVender()
+    {
+        var n = 0;
+        var vender = _contentService.GetById(PaginaVender);
+        if (vender is not null)
+        {
+            var cuerpo = new CuerpoEditable(vender.GetValue<string>(Cuerpo, Cultura));
+            if (!cuerpo.Contiene("Qué haces desde la consola"))
+            {
+                var b = new BlockGridJsonBuilder();
+                Rejilla(b, "surface", "Qué haces desde la consola", 2,
+                    ("Panel", "Las ventas, las publicaciones activas, pausadas o agotadas, y las devoluciones por revisar."),
+                    ("Publicar", "Un producto nuevo en cuatro pasos: datos, fotos, precio y stock, y una revisión antes de que quede visible en la tienda."),
+                    ("Mensajes y preguntas", "Respondes a los compradores desde el mismo panel."),
+                    ("Reputación", "Entregas a tiempo, órdenes con reclamo y preguntas respondidas."));
+                Preguntas(b, "Sobre la consola",
+                    ("¿Quién entra a la consola?", "El personal de la tienda, con su cuenta. Si eres parte del equipo y no puedes entrar, pide a quien administra la tienda que te dé el rol de personal."),
+                    ("¿Lo que publico se ve enseguida?", "Sí. Al terminar la revisión, el producto queda visible en el catálogo de la tienda."));
+                cuerpo.Sumar(b.Build());
+            }
+            if (cuerpo.Cambio)
+            {
+                vender.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(vender, new[] { Cultura });
+                n++;
+            }
+        }
+
+        var tienda = _contentService.GetById(DevTiendaPorPaginas.Tienda);
+        if (tienda is not null)
+        {
+            var cuerpo = new CuerpoEditable(tienda.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.DesconectarSeccionesCon(KeyOf("elementSynTestimonialCarousel"));
+            cuerpo.TransformarLista(KeyOf("elementSynFaqSection"), "itemsJson", _ => new JsonArray(
+                    new JsonObject { ["question"] = "¿Hacen envíos?", ["answer"] = "No. Es un sitio de demostración: puedes hacer todo el recorrido de compra, pero no se cobra ni se despacha nada." },
+                    new JsonObject { ["question"] = "¿Puedo devolver un producto?", ["answer"] = "Sí. Desde «Mi cuenta» pides la devolución de una compra, y la revisa el personal de la tienda." },
+                    new JsonObject { ["question"] = "¿Cómo sigo mi pedido?", ["answer"] = "En «Mi cuenta» ves tus compras y el estado de cada una." }),
+                CuerpoEditable.Donde("headingText", "Preguntas frecuentes"));
+            var cierre = KeyOf("elementCompCtaBanner");
+            cuerpo.Reemplazar(cierre, "headingTitle", "¿Atiendes la tienda?");
+            cuerpo.Reemplazar(cierre, "headingSubtitle", "Ventas, publicaciones, mensajes y devoluciones en un solo panel.");
+            cuerpo.Reemplazar(cierre, "ctaLabel", "Ir a la consola");
+            cuerpo.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Ir a la consola", "/tienda/vender/"))!);
+            if (cuerpo.Cambio)
+            {
+                tienda.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                _contentService.SaveAndPublish(tienda, new[] { Cultura });
+                n++;
+            }
+        }
+        return $"paginas:{n}";
+    }
+
+    // ───────────────────────────── Créditos de las fotos (CC BY visibles) ─────────────────────────────
+
+    /// <summary>La página «Legal y privacidad», que enlaza la nota del pie de todos los sitios.</summary>
+    public static readonly Guid PaginaLegal = Guid.Parse("ee12bad1-ede8-4ba2-9ef8-0566f0f3c1f9");
+
+    /// <summary>«Términos y condiciones»: la hermana de la que la página de créditos toma su forma.</summary>
+    private static readonly Guid PaginaTerminos = Guid.Parse("078221ac-103d-4b1e-9fad-2236ac31c1b2");
+
+    /// <summary>La nota del pie «Legal y privacidad», que sale en todas las páginas.</summary>
+    private static readonly Guid NotaLegalDelPie = Guid.Parse("c42d6650-306b-420e-b841-324e362537a7");
+
+    private const string TituloDeCreditos = "Créditos de las fotos";
+
+    /// <summary>
+    /// Una foto CC BY sólo se puede usar si su crédito SE VE. La forma con menos piezas: una página «Créditos de las
+    /// fotos» hija de Legal —el mismo tipo y los mismos bloques que sus hermanas—, enlazada desde la lista de Legal y
+    /// nombrada en la nota del pie, que sale en todas las páginas. La lista sale de la metadata de cada medio
+    /// (<c>license</c> y <c>creditLabel</c>), así que una foto CC BY nueva aparece al volver a pasar esta receta.
+    /// </summary>
+    private string RecetaCreditos()
+    {
+        var legal = _contentService.GetById(PaginaLegal) ?? throw new InvalidOperationException("No existe la página Legal.");
+        var terminos = _contentService.GetById(PaginaTerminos) ?? throw new InvalidOperationException("No existe Términos.");
+        var texto = KeyOf("elementTextRichtext");
+        var lista = CreditosDeFotos.Html(_media.ConLicencia(CreditosDeFotos.PideAtribucion).Select(m => (m.Alt, m.Licencia, m.Credito)));
+        var cuerpoDeLaLista = "<p>Estas fotos se usan con una licencia que pide decir quién las hizo. Las demás son de dominio público o CC0.</p>" + lista;
+
+        var pagina = _contentService.GetPagedChildren(legal.Id, 0, 100, out _)
+            .FirstOrDefault(c => string.Equals(c.GetCultureName(Cultura) ?? c.Name, TituloDeCreditos, StringComparison.Ordinal));
+        var cambio = false;
+        if (pagina is null)
+        {
+            pagina = _contentService.Create(TituloDeCreditos, legal.Key, terminos.ContentType.Alias);
+            pagina.SetCultureName(TituloDeCreditos, Cultura);
+            foreach (var propiedad in terminos.Properties)
+            {
+                if (propiedad.Alias is Cuerpo or "heading" or "seoTitle" or "seoDescription" or "canonicalLink") { continue; }
+                if (!pagina.HasProperty(propiedad.Alias)) { continue; }
+                if (propiedad.PropertyType.VariesByCulture()) { pagina.SetValue(propiedad.Alias, terminos.GetValue(propiedad.Alias, Cultura), Cultura); }
+                else { pagina.SetValue(propiedad.Alias, terminos.GetValue(propiedad.Alias)); }
+            }
+            cambio = true;
+        }
+        if (cambio || !pagina.Published)
+        {
+            // Nueva, o guardada sin publicar por un intento anterior: el cuerpo entero otra vez.
+            pagina.SetValue(Cuerpo, CuerpoDeCreditos(terminos, cuerpoDeLaLista), Cultura);
+            cambio = true;
+        }
+        else
+        {
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.Reemplazar(texto, "textBody", cuerpoDeLaLista);
+            if (cuerpo.Cambio) { pagina.SetValue(Cuerpo, cuerpo.Json, Cultura); cambio = true; }
+        }
+        foreach (var (alias, valor) in new[]
+                 {
+                     ("heading", TituloDeCreditos),
+                     ("seoTitle", "Créditos de las fotos · SynergosLabs"),
+                     ("seoDescription", "Autor, origen y licencia de las fotos del sitio que piden crédito."),
+                 })
+        {
+            if (pagina.HasProperty(alias) && pagina.GetValue<string>(alias, Cultura) != valor) { pagina.SetValue(alias, valor, Cultura); cambio = true; }
+        }
+        if (cambio || !pagina.Published)
+        {
+            var publicada = _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            if (!publicada.Success)
+            {
+                var invalidas = string.Join(",", publicada.InvalidProperties?.Select(p => p.Alias) ?? []);
+                return $"pagina-sin-publicar:{publicada.Result};invalidas:{invalidas}";
+            }
+        }
+
+        // La lista de Legal la enlaza, como a sus hermanas.
+        var enlace = $"<li><a href=\"/{{localLink:umb://document/{pagina.Key:N}}}\" title=\"{TituloDeCreditos}\">{TituloDeCreditos}</a></li>";
+        var cuerpoLegal = new CuerpoEditable(legal.GetValue<string>(Cuerpo, Cultura));
+        if (!cuerpoLegal.Contiene(pagina.Key.ToString("N")))
+        {
+            cuerpoLegal.TransformarTexto(texto, "textBody", html => html.Replace("</ul>", enlace + "</ul>", StringComparison.Ordinal));
+        }
+        cuerpoLegal.Reemplazar(KeyOf("elementCompHero"), "headingSubtitle",
+            "Términos y condiciones, tratamiento de datos personales, cookies y créditos de las fotos de SynergosLabs.");
+        if (cuerpoLegal.Cambio)
+        {
+            legal.SetValue(Cuerpo, cuerpoLegal.Json, Cultura);
+            _contentService.SaveAndPublish(legal, new[] { Cultura });
+        }
+
+        // La nota del pie, en todas las páginas, lo nombra.
+        var nota = _contentService.GetById(NotaLegalDelPie);
+        const string TextoDeLaNota = "SynergosLabs es un sitio de demostración. Términos, tratamiento de datos, cookies y créditos de las fotos:";
+        if (nota is not null && nota.HasProperty("footerNoteText") && nota.GetValue<string>("footerNoteText", Cultura) != TextoDeLaNota)
+        {
+            nota.SetValue("footerNoteText", TextoDeLaNota, Cultura);
+            _contentService.SaveAndPublish(nota, new[] { Cultura });
+        }
+
+        var cuantas = _media.ConLicencia(CreditosDeFotos.PideAtribucion).Select(m => (m.Credito, m.Licencia)).Distinct().Count();
+        return $"creditos:{cuantas};pagina:{(cambio ? "publicada" : "igual")}";
+    }
+
+    /// <summary>El cuerpo de la página de créditos: la portada de su hermana Términos (misma imagen) y la lista.</summary>
+    private string CuerpoDeCreditos(IContent terminos, string lista)
+    {
+        var heroKey = KeyOf("elementCompHero");
+        var original = System.Text.Json.Nodes.JsonNode.Parse(terminos.GetValue<string>(Cuerpo, Cultura) ?? "{}");
+        var heroDeTerminos = (original?["contentData"] as JsonArray)?
+            .OfType<JsonObject>()
+            .FirstOrDefault(d => string.Equals(d["contentTypeKey"]?.GetValue<string>(), heroKey.ToString(), StringComparison.OrdinalIgnoreCase));
+
+        var b = new BlockGridJsonBuilder();
+        var seccionKey = KeyOf("elementLayoutSection");
+        var portada = b.AddTopLevelBlock(seccionKey);
+        portada.Set("spacingTop", "[\"none\"]").Set("spacingBottom", "[\"none\"]").Set("spacingInline", "[\"none\"]");
+        portada.ApplyDefaults(_defaults.DefaultsFor(seccionKey));
+        // Como sus hermanas, la portada lleva su botón de vuelta: la lista de botones no se queda vacía.
+        var botonKey = KeyOf("elementActionButton");
+        var botones = new BlockListJsonBuilder();
+        botones.AddBlock(botonKey).Set("ctaLabel", "Todo lo legal")
+            .Set("ctaLink", new JsonArray(new JsonObject
+            {
+                ["name"] = "Todo lo legal", ["url"] = null, ["target"] = "", ["udi"] = $"umb://document/{PaginaLegal:N}",
+                ["icon"] = null, ["queryString"] = null,
+            }).ToJsonString())
+            .ApplyDefaults(_defaults.DefaultsFor(botonKey));
+        portada.AddChild(AreaDeLaSeccion, heroKey, h =>
+        {
+            h.Set("ctaItems", botones.Build());
+            h.Set("headingTitle", TituloDeCreditos)
+             .Set("headingSubtitle", "Autor, origen y licencia de las fotos que piden crédito.")
+             .Set("mediaAlt", heroDeTerminos?["mediaAlt"]?.GetValue<string>() ?? string.Empty);
+            // En la base el selector ya es TEXTO con JSON: se copia tal cual, sin volver a serializarlo.
+            var imagen = heroDeTerminos?["mediaReference"];
+            if (imagen is JsonValue v && v.TryGetValue<string>(out var comoTexto)) { h.Set("mediaReference", comoTexto); }
+            else if (imagen is not null) { h.Set("mediaReference", imagen.ToJsonString()); }
+            h.ApplyDefaults(_defaults.DefaultsFor(heroKey));
+        });
+        var texto = KeyOf("elementTextRichtext");
+        Seccion(b, null).AddChild(AreaDeLaSeccion, texto, t => t.Set("textBody", lista).ApplyDefaults(_defaults.DefaultsFor(texto)));
+        return b.Build();
+    }
+
     private Dictionary<string, IContent> PaginasDeProducto(Guid raiz)
     {
         var nodo = _contentService.GetById(raiz)
@@ -679,6 +894,9 @@ public sealed class DevContenidoDeVerticales
                 var ruta = Path.Combine(carpeta, foto.Archivo);
                 var marca = $"-{foto.Ambiente}.";
                 var encontrado = false;
+                // Sin archivo, el ambiente sale de la galería: un marcador genérico no se queda haciéndose pasar por
+                // una foto del inmueble (una «Habitación principal» en un local comercial).
+                var quitar = string.IsNullOrWhiteSpace(foto.Archivo);
                 cuerpo.TransformarLista(galeria, "imagesJson", lista =>
                 {
                     var nueva = new JsonArray();
@@ -686,6 +904,12 @@ public sealed class DevContenidoDeVerticales
                     {
                         var copia = (JsonObject)item!.DeepClone();
                         var url = copia["fullUrl"]?.GetValue<string>() ?? string.Empty;
+                        if (quitar && url.Contains(marca, StringComparison.OrdinalIgnoreCase))
+                        {
+                            encontrado = true;
+                            continue;
+                        }
+                        if (quitar) { nueva.Add(copia); continue; }
                         if (url.Contains(marca, StringComparison.OrdinalIgnoreCase) && _media.KeyByUrl(url) is { } clave)
                         {
                             encontrado = true;
@@ -700,10 +924,12 @@ public sealed class DevContenidoDeVerticales
                     }
                     return nueva;
                 });
-                if (!encontrado) { faltan++; }
+                // Quitar lo que ya no está no es una falta: así la receta se puede volver a pasar.
+                if (!encontrado && !quitar) { faltan++; }
             }
 
-            var tarjeta = grupo.FirstOrDefault(f => f.Ambiente == "exterior") ?? grupo.FirstOrDefault(f => f.Ambiente == "sala");
+            // La tarjeta del inmueble es su fachada: una tanda que sólo trae la sala no se la cambia.
+            var tarjeta = grupo.FirstOrDefault(f => f.Ambiente == "exterior" && !string.IsNullOrWhiteSpace(f.Archivo));
             var imagenesDeLaFicha = pagina.HasProperty("productImages")
                 ? (pagina.Properties["productImages"]!.PropertyType.VariesByCulture()
                     ? pagina.GetValue<string>("productImages", Cultura)
