@@ -57,6 +57,10 @@
  *      Patrones: Ã¡/Ã©/Ã­/Ã³/Ãº/Ã±/Â¿/Â¡. Error level — los XMLs uSync
  *      con mojibake muestran texto roto en backoffice.
  *      Cap-300 Batch B (Ola 299).
+ *  14. Nombres de fichero que uSync lee: todo fichero de uSync/v9 termina en .config y sin caracteres de control
+ *      ni del rango U+F000–U+F0FF (016, 35a1b88b: 30 medios con un CR al final del nombre, que uSync no veía).
+ *  15. Cada medio tiene su binario: el umbracoFile de uSync/v9/Media apunta a un fichero de wwwroot/media
+ *      (el mismo commit dejó 28 medios apuntando a .png borrados). Los dos viven en tools/usync-ficheros.mjs.
  *  10. Bloqueos externos declarados: todo marker [Bloqueado externamente]
  *      tiene que estar en la línea «**Bloqueos vigentes:**» de CLAUDE.md
  *      §9, y esa línea no puede nombrar bloqueos que el schema no tenga.
@@ -67,6 +71,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { problemasDeFicheros } from './usync-ficheros.mjs';
 
 const ROOT = path.resolve(process.cwd(), 'Synergos.CMS.Web/uSync/v9');
 const VIEWS = path.resolve(process.cwd(), 'Synergos.CMS.Web/Views');
@@ -519,6 +524,11 @@ async function audit() {
 }
 
 await audit();
+
+// ─── 14 y 15. Los ficheros se llaman como uSync los lee, y cada medio tiene su binario ───
+for (const problema of await problemasDeFicheros(ROOT, path.resolve(process.cwd(), 'Synergos.CMS.Web/wwwroot'))) {
+    findings.errors.push(problema);
+}
 
 const okIcon = '✓';
 const errIcon = '✗';

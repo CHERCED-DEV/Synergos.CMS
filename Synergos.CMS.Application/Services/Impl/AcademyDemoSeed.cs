@@ -26,24 +26,26 @@ internal static class AcademyDemoSeed
     /// <summary>Instructores sembrados (forma autor de Blogs: avatar + bio).</summary>
     public static readonly IReadOnlyList<CourseInstructor> Instructors = new[]
     {
+        // Sin foto (016, V3): las .webp no existieron nunca en disco y cada ficha pedía un 404 antes de caer a las
+        // iniciales. Vacío, la ficha pinta las iniciales sin pedir nada.
         new CourseInstructor(
             Id: "ins-elena",
             Name: "Elena Restrepo",
             Headline: "Arquitecta de software · 15 años diseñando sistemas",
             Bio: "Lidera plataformas a escala y enseña arquitectura limpia. Le obsesiona el acoplamiento bajo y el código que se puede borrar sin miedo.",
-            AvatarUrl: "/media/academy/instructors/elena.webp"),
+            AvatarUrl: ""),
         new CourseInstructor(
             Id: "ins-mateo",
             Name: "Mateo Gil",
             Headline: "Diseñador de producto · Design systems",
             Bio: "Construye design systems atómicos para equipos de producto. Tipografía, ritmo vertical y tokens semánticos.",
-            AvatarUrl: "/media/academy/instructors/mateo.webp"),
+            AvatarUrl: ""),
         new CourseInstructor(
             Id: "ins-sofia",
             Name: "Sofía Camargo",
             Headline: "Data & ML · Cuenta historias con datos",
             Bio: "Científica de datos. Enseña ML aplicado sin humo: del dato sucio al modelo en producción.",
-            AvatarUrl: "/media/academy/instructors/sofia.webp"),
+            AvatarUrl: ""),
     };
 
     /// <summary>

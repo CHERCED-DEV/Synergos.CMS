@@ -487,8 +487,8 @@ public sealed class DevContenidoDeVerticales
                 "<p>Una jornada en el Ágora Centro de Convenciones, en el corazón de Bogotá: keynotes de líderes de producto e ingeniería, demos en vivo de startups colombianas y networking. Con el plan Pro suman los talleres prácticos de la tarde.</p>",
                 CuerpoEditable.Donde("headingTitle", "Lo que vas a vivir"));
             var programa = KeyOf("elementSynTimelineHorizontal");
-            // Sin el ajuste por franjas: al cargar, el carril se desplazaba a la primera y el rótulo fijo la tapaba.
-            c.Reemplazar(programa, "snapEnabled", "0");
+            // El ajuste por franjas vuelve (016, V6): el componente ya alinea la hora después del rótulo fijo.
+            c.Reemplazar(programa, "snapEnabled", "1");
             c.TransformarLista(programa, "eventsJson", _ => new JsonArray(
                 Momento("08:30", "Registro y acreditación", "Recoges tu escarapela en la entrada del Ágora."),
                 Momento("09:30", "Keynote de apertura", "El futuro del software en Colombia."),
@@ -511,7 +511,7 @@ public sealed class DevContenidoDeVerticales
             c.DesconectarSeccionesCon(formulario, CuerpoEditable.Donde("formInternalKey", "registro-evento"));
             var mapa = KeyOf("elementCorpMapEmbed");
             c.Reemplazar(mapa, "mapTitle", "Ágora Centro de Convenciones, Bogotá");
-            // El Ágora queda junto a Corferias. La coordenada del catálogo (4.6280, -74.0644) cae en el Parque Nacional.
+            // El Ágora queda junto a Corferias: la misma coordenada que su evento en el catálogo.
             c.Reemplazar(mapa, "mapUrl",
                 "https://www.openstreetmap.org/export/embed.html?bbox=-74.1015%2C4.6221%2C-74.0815%2C4.6381&layer=mapnik&marker=4.6301%2C-74.0915");
             var antesDeRegistrarte = Alguno("headingText", "Antes de registrarte", "Antes de comprar");
@@ -621,6 +621,20 @@ public sealed class DevContenidoDeVerticales
             "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
     ];
 
+    /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
+    private string? TituloDeCategoria(IContent categoria)
+    {
+        var sitio = _contentService.GetById(categoria.ParentId);
+        var nombreDelSitio = sitio is not null && sitio.HasProperty("siteDisplayName")
+            ? sitio.GetValue<string>("siteDisplayName", sitio.Properties["siteDisplayName"]!.PropertyType.VariesByCulture() ? Cultura : null)
+            : null;
+        var nombre = categoria.HasProperty("categoryName") ? categoria.GetValue<string>("categoryName", Cultura) : null;
+        nombre = string.IsNullOrWhiteSpace(nombre) ? categoria.GetCultureName(Cultura) ?? categoria.Name : nombre;
+        return string.IsNullOrWhiteSpace(nombreDelSitio) || string.IsNullOrWhiteSpace(nombre)
+            ? null
+            : $"{nombre} — {nombreDelSitio.Trim()} SynergosLabs";
+    }
+
     private string RecetaEntradasDeCategorias()
     {
         int cambiadas = 0, faltan = 0;
@@ -628,8 +642,20 @@ public sealed class DevContenidoDeVerticales
         {
             var pagina = _contentService.GetById(key);
             if (pagina is null || !pagina.HasProperty("categoryDescription")) { faltan++; continue; }
-            if (pagina.GetValue<string>("categoryDescription", Cultura) == entrada) { continue; }
-            pagina.SetValue("categoryDescription", entrada, Cultura);
+            var cambio = false;
+            if (pagina.GetValue<string>("categoryDescription", Cultura) != entrada)
+            {
+                pagina.SetValue("categoryDescription", entrada, Cultura);
+                cambio = true;
+            }
+            // El título nombra SU sitio (016, V7): el sembrador puso «Casas — Tienda SynergosLabs» a todas.
+            if (TituloDeCategoria(pagina) is { } titulo && pagina.HasProperty("seoTitle")
+                && pagina.GetValue<string>("seoTitle", Cultura) != titulo)
+            {
+                pagina.SetValue("seoTitle", titulo, Cultura);
+                cambio = true;
+            }
+            if (!cambio) { continue; }
             _contentService.SaveAndPublish(pagina, new[] { Cultura });
             cambiadas++;
         }

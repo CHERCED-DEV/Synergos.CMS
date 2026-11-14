@@ -380,7 +380,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 PriceFrom: 250_000m,
                 Currency: Currency,
                 Mode: "general",
-                Geo: new EventGeo(4.6280, -74.0644)), // Ágora Bogotá
+                Geo: new EventGeo(4.6301, -74.0915)), // Ágora Bogotá, junto a Corferias (antes 4.6280, -74.0644: el Parque Nacional)
             Description: "Keynotes de líderes de la industria, talleres prácticos y networking. El evento de tecnología más grande del país.",
             Organizer: "Synergos Labs",
             Tiers: new[]
