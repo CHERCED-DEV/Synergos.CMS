@@ -326,6 +326,17 @@ services:
       Synergos__Consent__BaseUrl: "http://api-consent:8080"
       Synergos__Consent__ApiKey: ${SYNERGOS_API_KEY}
 
+      # Donde viven las denuncias y sus decisiones (012-blogs-social, I5). Con Api
+      # los casos van a Api.Moderation y retirar lo sigue haciendo el CMS; si la
+      # capacidad no contesta, denunciar y la cola dicen que no se pudo. Sin
+      # BaseUrl el CMS no adivina un puerto: por eso la direccion va escrita aqui.
+      #
+      # El default de ESTE compose es Local (el almacen comun del CMS) hasta que
+      # se decida encenderla en produccion: es la vuelta atras.
+      Synergos__Moderation__Mode: ${SYNERGOS_MODERATION_MODE:-Local}
+      Synergos__Moderation__BaseUrl: "http://api-moderation:8080"
+      Synergos__Moderation__ApiKey: ${SYNERGOS_API_KEY}
+
       # Contra que se valida el avance de un pedido (HU #46). Los cuatro dominios
       # comparten esta seccion y cada uno pide SU definicion: tracking.shop,
       # tracking.travel, tracking.events, tracking.academy. Una compartida leeria

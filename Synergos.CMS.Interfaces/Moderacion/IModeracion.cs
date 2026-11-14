@@ -32,9 +32,39 @@ public interface IModeracion
     Task<DecisionTomada> DecidirAsync(
         string id,
         DecisionDeModeracion decision,
-        string quien,
+        QuienModera quien,
         string porQue,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Quien decide un caso: su llave pública, que es la traza (nunca su correo), y su nombre público, que es lo que se
+/// muestra (012-blogs-social, I5).
+/// </summary>
+public sealed record QuienModera(string Llave, string Nombre);
+
+/// <summary>
+/// La moderación no contestó: <c>Api.Moderation</c> caída, o encendida sin dirección. Lo que se pidió no quedó, y no
+/// se finge que quedó (012-blogs-social, I5).
+/// </summary>
+public sealed class ModeracionNoDisponibleException : Exception
+{
+    /// <summary>Sin detalle.</summary>
+    public ModeracionNoDisponibleException()
+    {
+    }
+
+    /// <summary>Con lo que pasó.</summary>
+    public ModeracionNoDisponibleException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>Con lo que pasó y lo que lo causó.</summary>
+    public ModeracionNoDisponibleException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }
 
 /// <summary>Lo que se puede denunciar: su tipo (<c>blogs.publicacion</c>, <c>blogs.comentario</c>…) y su id.</summary>
@@ -42,8 +72,8 @@ public sealed record ObjetivoModerable(string Tipo, string Id);
 
 /// <summary>
 /// Una denuncia. <paramref name="Resumen"/> es lo que la cola muestra de lo denunciado, leído al denunciar por su
-/// <see cref="ITipoModerable"/>; <paramref name="Denunciante"/> es quien denuncia por dentro (su correo), y no se
-/// publica.
+/// <see cref="ITipoModerable"/>; <paramref name="Denunciante"/> es la llave pública de quien denuncia: sirve para que
+/// la misma persona no cuente dos veces, y no se publica.
 /// </summary>
 public sealed record DenunciaNueva(
     ObjetivoModerable Objetivo,

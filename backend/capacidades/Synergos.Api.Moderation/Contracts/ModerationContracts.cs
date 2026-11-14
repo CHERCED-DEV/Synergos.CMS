@@ -6,10 +6,12 @@ namespace Synergos.Api.Moderation.Contracts;
 
 /// <summary>Reportar algo.</summary>
 public sealed record ReportRequest(
-    string? TargetKind, string? TargetId, string? ReporterKind, string? ReporterId, string? Reason);
+    string? TargetKind = null, string? TargetId = null, string? ReporterKind = null, string? ReporterId = null,
+    string? Reason = null);
 
 /// <summary>Resolver un caso.</summary>
-public sealed record DecideRequest(string? Decision, string? DecidedByKind, string? DecidedById, string? Note);
+public sealed record DecideRequest(
+    string? Decision = null, string? DecidedByKind = null, string? DecidedById = null, string? Note = null);
 
 /// <summary>Cómo sale un caso.</summary>
 public sealed record CaseResponse(

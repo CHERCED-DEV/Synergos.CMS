@@ -100,6 +100,7 @@ ensamblado, igual que su `info.title`.
 | [`openapi/Synergos.Api.Orders.json`](openapi/Synergos.Api.Orders.json) | La capacidad de pedidos (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 | [`openapi/Synergos.Api.Fulfillment.json`](openapi/Synergos.Api.Fulfillment.json) | La capacidad de despachos y su rastro (núcleo N2). | CMS: los cuatro gates de abajo + `ContratoConsumidorPasosTests` |
 | [`openapi/Synergos.Api.Workflow.json`](openapi/Synergos.Api.Workflow.json) | La capacidad de procesos: definiciones como dato (inmutables: versionar es publicar otra clave), instancias por sujeto y transiciones con guarda por rol (009-P2: la construyó la línea de Gobierno con el molde del núcleo, y el núcleo la revisa para sus pasos comunes `workflow.arrancar`, disparar y leer). Disparar declara la llave y el token de identidad, que es lo que prueba los roles. | CMS: los cuatro gates de abajo + `ConsumidorCmsDeApiWorkflowTests` (la ruta directa del trámite) |
+| [`openapi/Synergos.Api.Moderation.json`](openapi/Synergos.Api.Moderation.json) | La capacidad de moderación: denunciar algo (un caso por denuncia, con su llave), la cola de lo abierto, los casos de un objetivo y decidir mantener o retirar con quién y por qué (012-P6 A: la publicó la línea de Blogs con el molde del núcleo). No retira nada: ejecutar la decisión es de quien la llama. | CMS: los cuatro gates de abajo + `ConsumidorCmsDeApiModerationTests` (la moderación en Api, `ModeracionEnApi`) |
 
 Los cuatro los vigilan, en `Synergos.Servicios.Tests`:
 
