@@ -1728,7 +1728,9 @@ public sealed class DevContenidoDeVerticales
     /// <item>Booking: «Confirmación al instante», y su propia portada dice que el negocio te contacta para confirmar; y
     /// «crear cuenta te deja gestionar tus reservas», sin una vista de reservas en el sitio.</item>
     /// <item>Booking, D-016-C12: «Planes para tu negocio» y «Gestión centralizada… para tu equipo» le hablaban al negocio
-    /// en una portada para quien pide una cita; se desconectan (SUPERSET).</item>
+    /// en una portada para quien pide una cita; se desconectan (SUPERSET). Y, aprobado después, «Tu agenda abierta a toda
+    /// hora» y «Empieza a recibir reservas hoy» pasan a la voz de quien reserva, y los testimonios de cargos de negocio
+    /// salen de la página.</item>
     /// <item>Eventos: «recibe tu acceso por correo al instante»: ningún correo sale con la entrada; la compra pide
     /// sesión y las entradas, con su QR firmado, quedan en «Mis tickets», desde donde se transfieren.</item>
     /// </list>
@@ -1768,7 +1770,19 @@ public sealed class DevContenidoDeVerticales
                     .Where(i => i?["heading"]?.GetValue<string>() != "Gestión centralizada")
                     .Select(i => i!.DeepClone()).ToArray()),
                 CuerpoEditable.Donde("headingText", "Por qué reservar con nosotros"))
-            + cuerpo.Reemplazar(rejilla, "columns", "2", CuerpoEditable.Donde("headingText", "Por qué reservar con nosotros")));
+            + cuerpo.Reemplazar(rejilla, "columns", "2", CuerpoEditable.Donde("headingText", "Por qué reservar con nosotros"))
+            // Lo aprobado tras D-016-C12: lo que quedaba en voz de negocio pasa a la de quien reserva, y los testimonios
+            // —todos de cargos de un negocio («Gerente de operaciones»), ninguno de alguien que reservó— salen de la
+            // página: la sección se desconecta y el tipo sigue en el esquema (SUPERSET), como en la Tienda.
+            + CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Disponibilidad 24/7",
+                ("heading", "Pide a cualquier hora"),
+                ("body", "Cuando quieras — Envías tu solicitud de día o de noche, sin depender del horario de atención."))
+            + cuerpo.DesconectarSeccionesCon(KeyOf("elementSynTestimonialCarousel"))
+            + cuerpo.Reemplazar(KeyOf("elementCompCtaBanner"), "headingSubtitle",
+                "Elige el servicio en el catálogo y pide el día y la hora que te sirven.",
+                CuerpoEditable.Donde("headingTitle", "Empieza a recibir reservas hoy"))
+            + cuerpo.Reemplazar(KeyOf("elementCompCtaBanner"), "headingTitle", "Reserva tu primera cita",
+                CuerpoEditable.Donde("headingTitle", "Empieza a recibir reservas hoy")));
 
         Corregir(Eventos, "eventos", cuerpo =>
             CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo consigo mi entrada?",
