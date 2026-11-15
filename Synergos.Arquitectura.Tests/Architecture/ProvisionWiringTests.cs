@@ -372,7 +372,7 @@ public sealed class ProvisionWiringTests
     /// </summary>
     /// <remarks>
     /// <para>UNA corrida, y las plantillas ya publicadas y de a todas por página: lo que se mira acá es el recurso, y cada
-    /// corrida y cada página de más son intérpretes de Python contra el plazo de dos minutos. Que <c>--verificar</c> lo da
+    /// corrida y cada página de más son intérpretes de Python contra el tiempo de la suite y el plazo de cada corrida. Que <c>--verificar</c> lo da
     /// en rojo, y que una segunda corrida no lo revisa otra vez, se comprobó a mano contra una agenda de mentira (bitácora
     /// de 008, 2026-10-22); el veredicto que decide las dos cosas es el del comparador, y ése lo corre la autoprueba.</para>
     /// </remarks>
@@ -438,7 +438,7 @@ public sealed class ProvisionWiringTests
         };
 
         // Sin plantillas (`[]`, que el guion admite para quien trae su propio fichero): lo que se mira son las
-        // definiciones, y cada plantilla es un intérprete de Python contra el plazo de dos minutos de cada corrida.
+        // definiciones, y cada plantilla es un intérprete de Python contra el tiempo de la suite y el plazo de cada corrida.
         var sinPlantillas = Path.Combine(Path.GetTempPath(), "provisionar-sin-plantillas-" + Guid.NewGuid().ToString("n") + ".json");
         await File.WriteAllTextAsync(sinPlantillas, "[]");
         try
@@ -503,6 +503,48 @@ public sealed class ProvisionWiringTests
             ["body"] = cuerpo,
         };
 
+    /// <summary>La variable con la que se cambia el plazo de cada corrida del guion, en minutos enteros.</summary>
+    internal const string VariableDelPlazo = "SYNERGOS_PROVISIONAR_PLAZO_MIN";
+
+    /// <summary>
+    /// El plazo de cada corrida del guion: el valor de <see cref="VariableDelPlazo"/>, o diez minutos si no está.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No mide nada: sólo corta un guion colgado</b>, así que tiene que aguantar la máquina cargada. Cada corrida
+    /// arranca un Python por plantilla y por sección. La más pesada (publicar las plantillas de a una por página) tarda
+    /// menos de un minuto con la máquina libre, y pasaba de los dos minutos de antes con la CPU al 100 % por otras suites:
+    /// la prueba caía con <c>TaskCanceledException</c> sin decir nada del guion. Diez minutos dejan margen de sobra para eso
+    /// y siguen cortando un cuelgue. Un valor que no sea un entero positivo es un error de quien lo pone: no se ignora.</para>
+    /// </remarks>
+    internal static TimeSpan PlazoDelGuion(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            return TimeSpan.FromMinutes(10);
+        }
+        if (int.TryParse(valor, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var minutos)
+            && minutos > 0)
+        {
+            return TimeSpan.FromMinutes(minutos);
+        }
+        throw new InvalidOperationException($"{VariableDelPlazo}=«{valor}»: tiene que ser un número entero de minutos, mayor que cero.");
+    }
+
+    /// <summary>
+    /// El plazo de las corridas del guion es de diez minutos si nadie lo cambia, se cambia con la variable, y un valor
+    /// inválido no se traga en silencio.
+    /// </summary>
+    [Fact]
+    public void El_plazo_del_guion_aguanta_la_maquina_cargada_y_se_cambia_con_su_variable()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), PlazoDelGuion(null));
+        Assert.Equal(TimeSpan.FromMinutes(10), PlazoDelGuion(" "));
+        Assert.Equal(TimeSpan.FromMinutes(25), PlazoDelGuion("25"));
+        Assert.Throws<InvalidOperationException>(() => PlazoDelGuion("0"));
+        Assert.Throws<InvalidOperationException>(() => PlazoDelGuion("-3"));
+        Assert.Throws<InvalidOperationException>(() => PlazoDelGuion("diez"));
+    }
+
     /// <summary>
     /// Corre <c>tools/provisionar.sh</c> contra <paramref name="url"/>, con un manifiesto de
     /// entidades vacío: lo que se mira acá son las plantillas.
@@ -543,17 +585,25 @@ public sealed class ProvisionWiringTests
             var error = p.StandardError.ReadToEndAsync();
             // Con plazo: un guion colgado no puede colgar la suite. `curl` ya lleva el suyo por
             // petición, así que esto sólo salta si algo que no es la red se atasca.
-            using var plazo = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            var limite = PlazoDelGuion(Environment.GetEnvironmentVariable(VariableDelPlazo));
+            using var plazo = new CancellationTokenSource(limite);
+            var cortado = false;
             try
             {
                 await p.WaitForExitAsync(plazo.Token);
             }
             catch (OperationCanceledException)
             {
+                cortado = true;
                 p.Kill(entireProcessTree: true);
-                throw;
+                await p.WaitForExitAsync();
             }
-            return (p.ExitCode, await salida + await error);
+            var todo = await salida + await error;
+            Assert.False(cortado,
+                $"tools/provisionar.sh {string.Join(' ', extra)} no terminó en {limite.TotalMinutes} min y se cortó. Con la "
+                + $"máquina cargada, súbelo con {VariableDelPlazo} (minutos); con la máquina libre, el guion se colgó."
+                + Environment.NewLine + todo);
+            return (p.ExitCode, todo);
         }
         finally
         {
