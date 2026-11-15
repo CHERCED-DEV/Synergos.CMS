@@ -1743,6 +1743,8 @@ public sealed class DevContenidoDeVerticales
     /// salen de la página.</item>
     /// <item>Educación, D-016-C15: «Planes de acceso» (curso suelto a $89.000, membresía con cohortes en vivo) no es lo
     /// que cobra ni ofrece la app; se desconecta, y la FAQ deja de prometer cohortes.</item>
+    /// <item>Educación y Propiedades (tanda 8): «cada curso termina en un proyecto», «rutas de aprendizaje», «instructores
+    /// de la industria» y «fotos reales» pasan a lo que la ficha sí trae.</item>
     /// <item>Eventos: «recibe tu acceso por correo al instante»: ningún correo sale con la entrada; la compra pide
     /// sesión y las entradas, con su QR firmado, quedan en «Mis tickets», desde donde se transfieren.</item>
     /// </list>
@@ -1808,7 +1810,27 @@ public sealed class DevContenidoDeVerticales
         Corregir(Educacion, "educacion", cuerpo =>
             cuerpo.DesconectarSeccionesCon(KeyOf("elementPricingTable"), CuerpoEditable.Donde("tableHeading", "Planes de acceso"))
             + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo estudiar a mi ritmo?",
-                ("answer", "Sí. El contenido queda disponible y avanzas cuando puedas.")));
+                ("answer", "Sí. El contenido queda disponible y avanzas cuando puedas."))
+            // 4.ª vuelta, tanda 8: ningún curso termina en un proyecto (sus lecciones son de contenido), no hay rutas de
+            // aprendizaje (la API las devuelve vacías) y los instructores del catálogo son personajes de demostración. Se
+            // dice lo que la ficha sí trae: lo que sabrás hacer, quién enseña, el nivel y el certificado de cada curso.
+            + CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Proyectos reales",
+                ("heading", "Lo que sabrás hacer"),
+                ("body", "Claro desde el principio — Cada curso dice qué sabrás hacer al terminar, y sus lecciones van a eso."))
+            + CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Instructores expertos",
+                ("heading", "Cada curso, su instructor"),
+                ("body", "Antes de inscribirte — La ficha te dice quién lo enseña, su nivel y cuánto dura."))
+            + CambiarEnLista(cuerpo, rejilla, "itemsJson", "body", "Avala tu progreso — Obtén un certificado verificable al completar cada ruta de aprendizaje.",
+                ("body", "Avala tu progreso — Obtén un certificado verificable al completar cada curso."))
+            + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Necesito conocimientos previos?",
+                ("answer", "Cada curso indica su nivel: hay cursos para empezar desde cero y cursos avanzados.")));
+
+        // 4.ª vuelta, tanda 8: «fotos reales» no lo son (son fotos de stock con su crédito) y la revisión no se ve en la app.
+        // Se dice lo que cada ficha sí trae.
+        Corregir(Propiedades, "propiedades", cuerpo =>
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Listado curado",
+                ("heading", "Fichas completas"),
+                ("body", "Todo a la vista — Precio, área, habitaciones, baños, estrato y ubicación en el mapa, en cada inmueble.")));
 
         return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
     }
