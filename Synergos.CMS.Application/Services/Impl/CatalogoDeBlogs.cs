@@ -176,15 +176,20 @@ public static class CatalogoDeBlogs
 public sealed record AutorDeLaRed(string Id, string Alias, string Nombre, string? Imagen, bool Verificado);
 
 /// <summary>
-/// El contenido de la red como fuente del catálogo: todo el feed «para ti», página a página, hasta un tope.
+/// El contenido de la red como fuente del catálogo: todo el feed «para ti», en una sola lectura del stream.
 /// </summary>
 /// <remarks>
-/// Es lo que leía Explorar (las cien primeras del mismo feed), sin el corte en cien. El tope sólo evita que un stream
-/// que no deja de devolver cursores deje colgada la lectura.
+/// <para>Es lo que leía Explorar (las cien primeras del mismo feed), sin el corte en cien. El tope de páginas sólo evita
+/// que un stream que no deja de devolver cursores deje colgada la lectura.</para>
+/// <para><b>Una lectura, no una por página</b> (012-blogs-social, el catálogo lento): el stream del CMS lee todo su
+/// almacén en cada página, así que leerlo de cien en cien costaba una lectura entera por cada cien publicaciones. Con las
+/// 1336 de la base real, Explorar y las tendencias tardaban de 14 a 27 s por llamada.</para>
 /// </remarks>
 public sealed class FuenteDeLaRed : ICatalogSource<ContentStreamItem>
 {
-    private const int PorPagina = 100;
+    /// <summary>Cuántas publicaciones pide cada lectura: todas las de una red de hoy, de una vez.</summary>
+    internal const int PorPagina = 5000;
+
     private const int TopeDePaginas = 20;
 
     private readonly IContentStream _stream;
