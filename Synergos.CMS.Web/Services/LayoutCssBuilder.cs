@@ -66,6 +66,13 @@ public static class LayoutCssBuilder
         if (model.Value<bool>("noPaddingBottom")) yield return "syn-preset--no-pad-bottom";
         if (model.Value<bool>("noMarginTop")) yield return "syn-preset--no-mar-top";
         if (model.Value<bool>("noMarginBottom")) yield return "syn-preset--no-mar-bottom";
+        // compDomVisibility: la sección de layout la trae en su esquema y el render no la leía, así que «Ocultar en
+        // móvil» no ocultaba nada. Las mismas clases que SynHostWrapperBuilder (syn-utilities.css). Con las tres, la
+        // sección queda desconectada sin salir del contenido (012-blogs-social, D-012-V9).
+        if (model.Value<bool>("hideOnMobile")) yield return "syn-hidden-mobile";
+        if (model.Value<bool>("hideOnTablet")) yield return "syn-hidden-tablet";
+        if (model.Value<bool>("hideOnDesktop")) yield return "syn-hidden-desktop";
+
         var mobileCollapse = Val(model, "mobileCollapseMode");
         if (mobileCollapse is not null && mobileCollapse != "auto")
         {

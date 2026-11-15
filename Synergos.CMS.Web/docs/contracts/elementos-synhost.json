@@ -3687,6 +3687,7 @@
         "Share.CopyFailed",
         "Share.Email",
         "Share.Label",
+        "Share.Mail",
         "Share.On"
       ],
       "campos": [

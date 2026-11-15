@@ -17,6 +17,10 @@ internal static class SocialDemoSeed
     public static readonly DateTime Epoch = new(2026, 6, 20, 9, 0, 0, DateTimeKind.Utc);
 
     /// <summary>Perfiles sociales sembrados (actores de la demo).</summary>
+    // Los nombres de la demo no son de nadie conocido (D-016-C18): «Mateo Gil» y «Sofía Camargo» eran los de un director
+    // de cine y una cineasta reales, y pasan a «Tobías Galindo» e «Inés Arciniegas», como en Academy, con su handle a
+    // juego. Los ids se quedan, porque a ellos apuntan el grafo, las reacciones y los mensajes. Sin foto ni banner: las
+    // .webp no existieron nunca en disco y cada perfil pedía un 404 antes de caer a las iniciales (012-blogs-social).
     public static readonly IReadOnlyList<SocialProfile> Profiles = new[]
     {
         new SocialProfile(
@@ -24,26 +28,26 @@ internal static class SocialDemoSeed
             Handle: "elena.dev",
             DisplayName: "Elena Restrepo",
             Bio: "Arquitecta de software · me obsesiona el diseño de sistemas y el café bien hecho.",
-            AvatarUrl: "/media/blogs/avatars/elena.webp",
-            BannerUrl: "/media/blogs/banners/elena.webp",
+            AvatarUrl: null,
+            BannerUrl: null,
             Verified: true,
             JoinedUtc: new DateTime(2025, 1, 14, 0, 0, 0, DateTimeKind.Utc)),
         new SocialProfile(
             ActorId: "act-mateo",
-            Handle: "mateo.design",
-            DisplayName: "Mateo Gil",
+            Handle: "tobias.design",
+            DisplayName: "Tobías Galindo",
             Bio: "Diseñador de producto. Atomic design, design systems y tipografía.",
-            AvatarUrl: "/media/blogs/avatars/mateo.webp",
-            BannerUrl: "/media/blogs/banners/mateo.webp",
+            AvatarUrl: null,
+            BannerUrl: null,
             Verified: false,
             JoinedUtc: new DateTime(2025, 3, 2, 0, 0, 0, DateTimeKind.Utc)),
         new SocialProfile(
             ActorId: "act-sofia",
-            Handle: "sofia.data",
-            DisplayName: "Sofía Camargo",
+            Handle: "ines.data",
+            DisplayName: "Inés Arciniegas",
             Bio: "Data & ML. Cuento historias con datos. Bogotá ↔ remoto.",
-            AvatarUrl: "/media/blogs/avatars/sofia.webp",
-            BannerUrl: "/media/blogs/banners/sofia.webp",
+            AvatarUrl: null,
+            BannerUrl: null,
             Verified: true,
             JoinedUtc: new DateTime(2025, 2, 20, 0, 0, 0, DateTimeKind.Utc)),
         new SocialProfile(
@@ -51,7 +55,7 @@ internal static class SocialDemoSeed
             Handle: "andres.cloud",
             DisplayName: "Andrés Quintero",
             Bio: "Infra y plataforma. Kubernetes, observabilidad y costos.",
-            AvatarUrl: "/media/blogs/avatars/andres.webp",
+            AvatarUrl: null,
             BannerUrl: null,
             Verified: false,
             JoinedUtc: new DateTime(2025, 4, 11, 0, 0, 0, DateTimeKind.Utc)),
@@ -157,7 +161,7 @@ internal static class SocialDemoSeed
         new SeedDmThread(new[]
         {
             new SeedDm("act-mateo", "Vi tu post de arquitectura, brutal. ¿Tenés algo escrito más largo sobre el patrón stub-first?"),
-            new SeedDm("act-elena", "¡Gracias Mateo! Justo estoy armando un artículo. Te paso el borrador esta semana."),
+            new SeedDm("act-elena", "¡Gracias Tobías! Justo estoy armando un artículo. Te paso el borrador esta semana."),
             new SeedDm("act-mateo", "Perfecto, quedo atento 🙌"),
         }),
         new SeedDmThread(new[]
