@@ -1727,6 +1727,8 @@ public sealed class DevContenidoDeVerticales
     /// <list type="bullet">
     /// <item>Booking: «Confirmación al instante», y su propia portada dice que el negocio te contacta para confirmar; y
     /// «crear cuenta te deja gestionar tus reservas», sin una vista de reservas en el sitio.</item>
+    /// <item>Booking, D-016-C12: «Planes para tu negocio» y «Gestión centralizada… para tu equipo» le hablaban al negocio
+    /// en una portada para quien pide una cita; se desconectan (SUPERSET).</item>
     /// <item>Eventos: «recibe tu acceso por correo al instante»: ningún correo sale con la entrada; la compra pide
     /// sesión y las entradas, con su QR firmado, quedan en «Mis tickets», desde donde se transfieren.</item>
     /// </list>
@@ -1756,7 +1758,17 @@ public sealed class DevContenidoDeVerticales
                 ("heading", "Tu solicitud, al instante"),
                 ("body", "Sin llamadas — Tu solicitud le llega al negocio en cuanto la envías y te contactan para confirmarla."))
             + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Necesito crear una cuenta para reservar?",
-                ("answer", "No. Eliges el servicio, la fecha y la hora, dejas tus datos y el negocio te escribe para confirmar.")));
+                ("answer", "No. Eliges el servicio, la fecha y la hora, dejas tus datos y el negocio te escribe para confirmar."))
+            // D-016-C12: la portada habla a quien pide una cita, no al negocio. «Planes para tu negocio» sale de la página
+            // (desconectada: la tabla y su tipo siguen en el esquema) y «Gestión centralizada… para tu equipo» sale de la
+            // rejilla, que queda en dos columnas para no dejar un hueco.
+            + cuerpo.DesconectarSeccionesCon(KeyOf("elementPricingTable"), CuerpoEditable.Donde("tableHeading", "Planes para tu negocio"))
+            + cuerpo.TransformarLista(rejilla, "itemsJson",
+                lista => new JsonArray(lista
+                    .Where(i => i?["heading"]?.GetValue<string>() != "Gestión centralizada")
+                    .Select(i => i!.DeepClone()).ToArray()),
+                CuerpoEditable.Donde("headingText", "Por qué reservar con nosotros"))
+            + cuerpo.Reemplazar(rejilla, "columns", "2", CuerpoEditable.Donde("headingText", "Por qué reservar con nosotros")));
 
         Corregir(Eventos, "eventos", cuerpo =>
             CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo consigo mi entrada?",
