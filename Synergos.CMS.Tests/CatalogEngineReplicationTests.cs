@@ -280,12 +280,12 @@ public class CatalogEngineReplicationTests
     [Fact]
     public async Task Academy_SinTildes_Encuentra()
     {
-        // "Sofía" y NO "Diseño": la ñ se PRESERVA a propósito, así que "Diseño" vs "diseño"
+        // "Inés" y NO "Diseño": la ñ se PRESERVA a propósito, así que "Diseño" vs "diseño"
         // solo se diferencian en la mayúscula y no probarían el plegado de tildes en
-        // absoluto — daban falsa confianza. Sofía es una instructora, así que además ejercita
+        // absoluto — daban falsa confianza. Inés es una instructora, así que además ejercita
         // el campo del descriptor que resuelve el JOIN por lambda.
-        var conTilde = await Academy().SearchAsync(new CourseQuery(Text: "Sofía"));
-        var sinTilde = await Academy().SearchAsync(new CourseQuery(Text: "sofia"));
+        var conTilde = await Academy().SearchAsync(new CourseQuery(Text: "Inés"));
+        var sinTilde = await Academy().SearchAsync(new CourseQuery(Text: "ines"));
 
         Assert.NotEmpty(conTilde.Courses);
         Assert.Equal(conTilde.Courses.Select(c => c.Id), sinTilde.Courses.Select(c => c.Id));
