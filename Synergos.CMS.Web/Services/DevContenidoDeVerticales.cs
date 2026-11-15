@@ -115,6 +115,10 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "promesas", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "promesas", RecetaPromesasDeLasVerticales(), 0);
+        }
         if (string.Equals(vertical, "titulos-y-descripciones", StringComparison.OrdinalIgnoreCase))
         {
             return new Resultado(true, "titulos-y-descripciones", RecetaTitulosYDescripciones(), 0);
@@ -1717,6 +1721,51 @@ public sealed class DevContenidoDeVerticales
             }
             return nueva;
         });
+
+    /// <summary>
+    /// 4.ª vuelta, tanda 3 (016): Booking y Eventos prometían lo que la app no hace, medido contra la app.
+    /// <list type="bullet">
+    /// <item>Booking: «Confirmación al instante», y su propia portada dice que el negocio te contacta para confirmar; y
+    /// «crear cuenta te deja gestionar tus reservas», sin una vista de reservas en el sitio.</item>
+    /// <item>Eventos: «recibe tu acceso por correo al instante»: ningún correo sale con la entrada; la compra pide
+    /// sesión y las entradas, con su QR firmado, quedan en «Mis tickets», desde donde se transfieren.</item>
+    /// </list>
+    /// Idempotente.
+    /// </summary>
+    private string RecetaPromesasDeLasVerticales()
+    {
+        var partes = new List<string>();
+
+        void Corregir(Guid raiz, string etiqueta, Func<CuerpoEditable, int> cambiar)
+        {
+            var pagina = _contentService.GetById(raiz);
+            if (pagina is null) { partes.Add($"{etiqueta}:sin-pagina"); return; }
+            var cuerpo = new CuerpoEditable(pagina.GetValue<string>(Cuerpo, Cultura));
+            cambiar(cuerpo);
+            if (!cuerpo.Cambio) { return; }
+            pagina.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            var r = _contentService.SaveAndPublish(pagina, new[] { Cultura });
+            partes.Add(r.Success ? etiqueta : $"{etiqueta}:fallo:{r.Result}");
+        }
+
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var preguntas = KeyOf("elementSynFaqSection");
+
+        Corregir(Booking, "booking", cuerpo =>
+            CambiarEnLista(cuerpo, rejilla, "itemsJson", "heading", "Confirmación al instante",
+                ("heading", "Tu solicitud, al instante"),
+                ("body", "Sin llamadas — Tu solicitud le llega al negocio en cuanto la envías y te contactan para confirmarla."))
+            + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Necesito crear una cuenta para reservar?",
+                ("answer", "No. Eliges el servicio, la fecha y la hora, dejas tus datos y el negocio te escribe para confirmar.")));
+
+        Corregir(Eventos, "eventos", cuerpo =>
+            CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Cómo consigo mi entrada?",
+                ("answer", "Elige el evento, inicia sesión y completa la compra: tus entradas, con su código QR, quedan en «Mis tickets»."))
+            + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo transferir mi entrada?",
+                ("answer", "Sí. En «Mis tickets» eliges la entrada y la transfieres a otra persona con su correo.")));
+
+        return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
+    }
 
     /// <summary>
     /// Hoteles prometía lo que su asistente no hace: «Mejor precio garantizado», confirmación y recordatorios «por
