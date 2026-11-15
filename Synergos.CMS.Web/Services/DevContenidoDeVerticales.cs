@@ -115,6 +115,11 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "propiedad-oculta", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = OcultarDeLaNavegacion(PaginaPropiedad);
+            return new Resultado(!hecho.Contains("fallo", StringComparison.Ordinal), "propiedad-oculta", hecho, 0);
+        }
         if (string.Equals(vertical, "casos", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaCasosSinHistoriasInventadas();
@@ -1840,6 +1845,31 @@ public sealed class DevContenidoDeVerticales
                 ("body", "Todo a la vista — Precio, área, habitaciones, baños, estrato y ubicación en el mapa, en cada inmueble.")));
 
         return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
+    }
+
+    /// <summary>La página de demostración «Propiedad» de Propiedades, por su Key de uSync.</summary>
+    private static readonly Guid PaginaPropiedad = Guid.Parse("c4e874b0-b607-4313-a76b-b35ae1ba7dff");
+
+    /// <summary>
+    /// D-016-C20, punto 4: la página de demostración «Propiedad» repetía una ficha (con recuadros sin foto) y estaba en el
+    /// menú y en el pie. Sale de los dos (<c>hideFromMainMenu</c> y <c>hideFromFooter</c>); sigue publicada. Idempotente.
+    /// </summary>
+    private string OcultarDeLaNavegacion(Guid clave)
+    {
+        var pagina = _contentService.GetById(clave);
+        if (pagina is null) { return "sin-pagina"; }
+        var cambio = false;
+        foreach (var oculto in new[] { "hideFromMainMenu", "hideFromFooter" })
+        {
+            if (pagina.HasProperty(oculto) && !pagina.GetValue<bool>(oculto))
+            {
+                pagina.SetValue(oculto, true);
+                cambio = true;
+            }
+        }
+        if (!cambio) { return "nada-que-hacer"; }
+        var r = _contentService.SaveAndPublish(pagina, new[] { Cultura });
+        return r.Success ? "oculta-del-menu-y-del-pie" : $"fallo:{r.Result}";
     }
 
     /// <summary>

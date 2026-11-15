@@ -1,12 +1,13 @@
 @*
     elementMemberLogin renderer (Ola 35). SSR skeleton.
-    Middleware C# Members auth wiring pendiente.
+    El destino sólo puede ser una ruta del sitio y el campo del usuario es el que lee el
+    controlador de entrada (BloqueDeEntrada, 016 D-016-C21).
 *@
 @using Umbraco.Cms.Core.Models
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @{
-    var endpoint = Model.Value<string>("loginEndpoint");
-    if (string.IsNullOrWhiteSpace(endpoint)) { return; }
+    var endpoint = Synergos.CMS.Web.Services.BloqueDeEntrada.Destino(Model.Value<string>("loginEndpoint"));
+    if (endpoint is null) { return; }
     var redirectLink = Model.Value<Link>("redirectLink");
     var redirect = redirectLink?.Url;
     var variant = Model.Value<string>("variantKey");
@@ -25,7 +26,7 @@
     }
     <div class="syn-member-login__field">
         <label class="syn-member-login__label" for="syn-login-email-@Model.Key">Email</label>
-        <input id="syn-login-email-@Model.Key" type="email" name="email" required autocomplete="username" />
+        <input id="syn-login-email-@Model.Key" type="email" name="@Synergos.CMS.Web.Services.BloqueDeEntrada.CampoDelUsuario" required autocomplete="username" />
     </div>
     <div class="syn-member-login__field">
         <label class="syn-member-login__label" for="syn-login-password-@Model.Key">Contraseña</label>
