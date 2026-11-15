@@ -16,4 +16,12 @@ public sealed class UmbracoBuscadorDeMiembros : IBuscadorDeMiembros
         if (string.IsNullOrEmpty(limpio)) return Task.FromResult<Guid?>(null);
         return Task.FromResult(_miembros.GetByEmail(limpio)?.Key);
     }
+
+    public Task<ContactoDelMiembro?> ContactoAsync(Guid clave, CancellationToken cancellationToken)
+    {
+        var miembro = clave == Guid.Empty ? null : _miembros.GetByKey(clave);
+        return Task.FromResult(miembro is null || string.IsNullOrWhiteSpace(miembro.Email)
+            ? null
+            : new ContactoDelMiembro(miembro.Email.Trim(), miembro.Name ?? string.Empty));
+    }
 }

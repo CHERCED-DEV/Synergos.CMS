@@ -826,6 +826,71 @@ public sealed class HistoriaDelPacienteTests : IDisposable
         Assert.Equal(503, Assert.IsType<StatusCodeResult>(caida).StatusCode);
     }
 
+    // ── Los avisos del consultorio al paciente (I8 P18) ─────────────────────────────────────────────────
+
+    private readonly ITransactionalNotifier _avisos = Substitute.For<ITransactionalNotifier>();
+
+    private HealthcareApiController ConAvisos()
+    {
+        var miembros = Substitute.For<IBuscadorDeMiembros>();
+        miembros.ContactoAsync(Miembro, Arg.Any<CancellationToken>()).Returns(new ContactoDelMiembro("camila@ejemplo.co", "Camila"));
+        return new(
+            _guard, _patients, Substitute.For<IAppointmentScheduler>(), Recetas, Substitute.For<IConsentLedger>(), _gate,
+            new EditorDeLaHistoriaClinica(_patients), miembros: miembros, consulta: _consulta, ordenes: Ordenes, archivos: _archivos,
+            renovaciones: Renovaciones, mensajeria: _mensajeria, directorio: _directorio, avisos: _avisos);
+    }
+
+    [Fact]
+    public async Task Avisos_Liberar_un_resultado_responder_una_renovacion_y_contestar_un_mensaje_le_avisan_al_paciente_sin_el_dato_clinico()
+    {
+        var (key, receta) = await UnaRecetaEmitida();
+        ComoMedico();
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConAvisos().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value);
+        var cargada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConAvisos().CargarResultado(key, orden.Id, HbA1c("e1"), CancellationToken.None)).Value);
+        SesionDe(Miembro);
+        var pedida = Assert.IsType<RenovacionParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConAvisos().PedirRenovacion(receta.Id, null, CancellationToken.None)).Value);
+        var hilo = await ElPacienteEscribe("¿Ya salió mi examen?");
+
+        ComoMedico();
+        await ConAvisos().LiberarResultado(key, cargada.Examenes[0].Resultado!.Id, CancellationToken.None);
+        await ConAvisos().LiberarResultado(key, cargada.Examenes[0].Resultado!.Id, CancellationToken.None);
+        await ConAvisos().AprobarRenovacion(key, pedida.Id, null, CancellationToken.None);
+        await ConAvisos().ResponderMensaje(hilo.Id, new MensajeEscrito(Texto: "Sí, ya está liberado."), CancellationToken.None);
+
+        var enviados = _avisos.ReceivedCalls().Select(c => (NotificationEvent)c.GetArguments()[0]!).ToList();
+        Assert.Equal(new[] { NotificationTypes.SaludResultadoLiberado, NotificationTypes.SaludRenovacionRespondida, NotificationTypes.SaludMensajeRespondido },
+            enviados.Select(e => e.Type));
+        Assert.All(enviados, e =>
+        {
+            Assert.Equal(("camila@ejemplo.co", "/healthcare/"), (e.ToEmail, e.ActionPath));
+            var todo = System.Text.Json.JsonSerializer.Serialize(e);
+            Assert.DoesNotContain("HbA1c", todo, StringComparison.Ordinal);
+            Assert.DoesNotContain("Metformina", todo, StringComparison.Ordinal);
+            Assert.DoesNotContain("liberado.", todo, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Avisos_Si_el_aviso_no_sale_el_resultado_queda_liberado_igual()
+    {
+        var key = await HistoriaDe(Miembro);
+        ComoMedico();
+        GuardiaDice(true);
+        _avisos.DispatchAsync(Arg.Any<NotificationEvent>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(new InvalidOperationException("sin correo")));
+        var orden = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(await ConAvisos().Ordenar(
+            key, new OrdenEscrita("laboratorio", ["HbA1c"]), CancellationToken.None)).Value);
+        var cargada = Assert.IsType<OrdenParaLeer>(Assert.IsType<OkObjectResult>(
+            await ConAvisos().CargarResultado(key, orden.Id, HbA1c("e1"), CancellationToken.None)).Value);
+
+        var r = await ConAvisos().LiberarResultado(key, cargada.Examenes[0].Resultado!.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(r);
+        Assert.True((await Ordenes.GetResultadoAsync(cargada.Examenes[0].Resultado!.Id, CancellationToken.None))!.Liberado);
+    }
+
     private sealed class ArchivosEnMemoria : IPrivateFileStore
     {
         private readonly Dictionary<string, PrivateFileContent> _datos = new();
