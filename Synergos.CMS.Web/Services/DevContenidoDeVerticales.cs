@@ -1804,6 +1804,13 @@ public sealed class DevContenidoDeVerticales
             + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo transferir mi entrada?",
                 ("answer", "Sí. En «Mis tickets» eliges la entrada y la transfieres a otra persona con su correo.")));
 
+        // 4.ª vuelta, tanda 9: la portada de Viajes prometía «vuelos, hoteles y paquetes»; la app ofrece estadías, vuelos y
+        // autos en un solo carrito, y no tiene paquetes.
+        Corregir(Viajes, "viajes", cuerpo =>
+            cuerpo.Reemplazar(KeyOf("elementSynTravelShell"), "subheading",
+                "Estadías, vuelos y autos en un solo carrito. Busca, compara y reserva en minutos.",
+                CuerpoEditable.Donde("subheading", "Vuelos, hoteles y paquetes en un solo lugar. Busca, compara y reserva en minutos.")));
+
         // D-016-C15: «Planes de acceso» vendía un «Curso suelto» a $89.000 (el catálogo cobra cada curso a su precio) y una
         // membresía con cohortes en vivo que la app no tiene: la sección se desconecta (SUPERSET), y la FAQ deja de
         // prometer cohortes.
