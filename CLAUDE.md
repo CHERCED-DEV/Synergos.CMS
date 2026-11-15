@@ -53,7 +53,7 @@
    tocar una capacidad aunque alguien quiera: se lo impide el compilador.
    Y la excepción a §0.B.11 —poder ver los dos lados— queda en **un** proyecto y
    con su nombre, en vez de ser una nota dentro del de al lado.
-   **67 de los 95 gates no usan un solo tipo de producción**: leen la FUENTE del
+   **68 de los 96 gates no usan un solo tipo de producción**: leen la FUENTE del
    disco, que es lo que les permite vigilar un Razor, un `.mjs`, un compose o un
    `appsettings` — ninguno de los cuales tiene tipos.
    Memoria `feedback_tests_after_full_migration` (status: superseded). En el árbol de servicios el gate es más duro:
@@ -1573,7 +1573,7 @@ Las que salieron de construir el árbol de servicios (§0.B):
   árboles están separados exige poder ver los dos, así que la exención existe —
   pero ahora es un proyecto entero que se llama `Synergos.Arquitectura.Tests`, no
   un comentario dentro del proyecto de al lado. Al medirlo apareció el dato que
-  lo hace baratísimo: **67 de los 95 gates no usan un solo tipo de producción**
+  lo hace baratísimo: **68 de los 96 gates no usan un solo tipo de producción**
   —leen la FUENTE del disco, que es lo que les permite vigilar un Razor, un
   `.mjs`, un compose o un `appsettings`— así que ese proyecto referencia
   **cuatro** cosas y no veintiocho.
@@ -3781,7 +3781,7 @@ Lo que falta es que el arquitecto cree el VPS — decisión de compra, no códig
   `docs/product/11-mapa-del-cableado.md`) contó los 51 `Stub*` y los
   clasificó: **13** son cableado pendiente, **5** ya salen del contenido
   de Umbraco (cablearlos sería un retroceso) y **33** se quedan en stub a
-  propósito. Y 20 de los 51 **ya son durables** — «stub» en este repo
+  propósito. Y 21 de los 51 **ya son durables** — «stub» en este repo
   dejó hace tiempo de querer decir «en memoria». Hay gate
   (`WiringMapTests`): un stub nuevo sin mapear rompe el build, y desde
   #50 **también cuadra las cifras de la prosa** contra el inventario y
