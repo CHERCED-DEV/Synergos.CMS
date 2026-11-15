@@ -115,6 +115,11 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "testimonios", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaSinTestimoniosInventados();
+            return new Resultado(!hecho.Contains("fallo", StringComparison.Ordinal), "testimonios", hecho, 0);
+        }
         if (string.Equals(vertical, "promesas", StringComparison.OrdinalIgnoreCase))
         {
             return new Resultado(true, "promesas", RecetaPromesasDeLasVerticales(), 0);
@@ -1794,6 +1799,36 @@ public sealed class DevContenidoDeVerticales
     }
 
     /// <summary>
+    /// D-016-C13: un testimonio inventado lo es con nombre o con rol y ciudad, y unos logos de clientes que no lo son
+    /// serían una afirmación falsa en producción (corrige la decisión del 2026-11-13). Salen de su página los carruseles
+    /// de testimonios de Educación, Eventos, Hoteles, Propiedades, la portada de Synergos y Casos, y las dos nubes de logos
+    /// del hub. Cada sección es sólo su encabezado y el bloque, así que no deja un título suelto. SUPERSET: se desconecta
+    /// la sección; el tipo, los textos y las fotos siguen en el esquema y en el repo. Idempotente.
+    /// </summary>
+    private string RecetaSinTestimoniosInventados()
+    {
+        var partes = new List<string>();
+        var carrusel = KeyOf("elementSynTestimonialCarousel");
+        var logos = KeyOf("elementMediaLogoCloud");
+        foreach (var (pagina, etiqueta, conLogos) in new[]
+                 {
+                     (Educacion, "educacion", false), (Eventos, "eventos", false), (Hoteles, "hoteles", false),
+                     (Propiedades, "propiedades", false), (Synergos, "synergos", true), (Casos, "casos", true),
+                 })
+        {
+            var contenido = _contentService.GetById(pagina);
+            if (contenido is null) { partes.Add($"{etiqueta}:sin-pagina"); continue; }
+            var cuerpo = new CuerpoEditable(contenido.GetValue<string>(Cuerpo, Cultura));
+            var fuera = cuerpo.DesconectarSeccionesCon(carrusel) + (conLogos ? cuerpo.DesconectarSeccionesCon(logos) : 0);
+            if (!cuerpo.Cambio) { continue; }
+            contenido.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            var r = _contentService.SaveAndPublish(contenido, new[] { Cultura });
+            partes.Add(r.Success ? $"{etiqueta}:{fuera}" : $"{etiqueta}:fallo:{r.Result}");
+        }
+        return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
+    }
+
+    /// <summary>
     /// Hoteles prometía lo que su asistente no hace: «Mejor precio garantizado», confirmación y recordatorios «por
     /// correo», «Cancelación gratuita hasta 48 horas». El asistente muestra el comprobante con el número de la reserva y,
     /// por habitación, si la tarifa es reembolsable y su política; el correo sólo sale con Bff.Viajes encendido, que no es
@@ -1856,6 +1891,8 @@ public sealed class DevContenidoDeVerticales
     /// <summary>
     /// Lo que cada sitio dice de sí (su <c>seoDescription</c>, que el pie usa como frase) y a quién atribuye sus
     /// testimonios: rol y ciudad, nunca un nombre inventado (decisión del director, 2026-11-13).
+    /// Desde D-016-C13 esos carruseles salen de su página (<see cref="RecetaSinTestimoniosInventados"/>): esta tabla
+    /// sólo cambia un carrusel que siga conectado.
     /// </summary>
     private sealed record Atribucion(Guid Pagina, string? Descripcion, (string Autor, string Ciudad)[] Testimonios);
 
