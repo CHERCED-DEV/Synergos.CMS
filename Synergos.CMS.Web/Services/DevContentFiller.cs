@@ -1294,7 +1294,7 @@ public sealed class DevContentFiller
             new[] { "Catálogo", "Carrito", "Checkout", "Pagos", "Envíos" }),
         new("booking", "Booking",
             "Reservas y citas: catálogo de servicios, calendario y registro multipaso — una plataforma de reservas completa sobre el mismo motor.",
-            "Reservas y citas con disponibilidad en tiempo real sobre el motor transaccional.",
+            "Reservas y citas en línea sobre el motor transaccional: cada solicitud queda registrada.",
             "grid", "Turismo", "Viajero",
             new[] { "Reservas", "Disponibilidad", "Pagos", "Itinerarios" }),
         new("eventos", "Eventos",
@@ -1470,7 +1470,7 @@ public sealed class DevContentFiller
 
         // OLA 4.6 — vertical #7 Educación: identidad académica "Scholar" (light, marfil/teal/gold).
         SeedVertical(pr.Id, "Educacion", "educacion", "SynergosLabs Educación", "scholar", "educacion.synergos.local",
-            BuildEducacionHome(), details);
+            BuildEducacionHome(), details, displayName: "Educación");
 
         // OLA 4.6 — vertical #8 Booking: registro enterprise de reservas/citas con
         // identidad propia "Meridian" (el tema lo define otro agente; acá solo se referencia).
@@ -1503,13 +1503,14 @@ public sealed class DevContentFiller
     }
 
     private void SeedVertical(int parentId, string name, string brandKey, string brandDisplayName,
-        string themeVariant, string hostname, string sectionsJson, List<string> details)
+        string themeVariant, string hostname, string sectionsJson, List<string> details, string? displayName = null)
     {
         var existing = _contentService.GetPagedChildren(parentId, 0, 100, out _)
             .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && Matches(c, name));
         var site = existing ?? _contentService.Create(name, parentId, "siteRoot");
         site.SetCultureName(name, Culture);
-        SetIdentityField(site, "siteDisplayName", name);              // mandatory (Culture)
+        // El nombre que el sitio MUESTRA puede llevar tilde aunque el del nodo (la ruta) no: «Educación» en /educacion (016, C8).
+        SetIdentityField(site, "siteDisplayName", displayName ?? name); // mandatory (Culture)
         SetIdentityField(site, "brandKey", brandKey);                // mandatory (Nothing), ^[a-z][a-z0-9-]*$
         SetIdentityField(site, "brandDisplayName", brandDisplayName); // mandatory (Culture)
         site.SetValue("pageThemeVariant", $"[\"{themeVariant}\"]");   // FlexibleDropdown → JSON array (trampa conocida)

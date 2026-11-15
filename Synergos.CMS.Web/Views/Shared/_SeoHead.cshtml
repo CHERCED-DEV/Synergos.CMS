@@ -8,8 +8,9 @@
     1. Si compSeo.seoTitle está seteado, úsalo. Fallback
        siteConfigSettings.defaultSeoTitle. Fallback page.Name. Fallback
        siteRoot.siteDisplayName.
-    2. Si compSeo.seoDescription está seteado, úsalo. Fallback
-       siteConfigSettings.defaultSeoDescription.
+    2. Descripción: DescripcionDeLaPagina — compSeo.seoDescription, el
+       resumen propio de la ficha, siteConfigSettings.defaultSeoDescription
+       y la seoDescription del siteRoot.
     3. canonicalLink (UrlPicker) override la URL canónica auto-computed.
     4. ogImage (MediaPicker) fallback a siteConfigSettings.socialOgImage.
     5. ogType default "website".
@@ -63,8 +64,11 @@
     if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = ConfigString("defaultSeoTitle");
     if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = page?.Name ?? siteName;
 
-    var seoDesc = PageString("seoDescription");
-    if (string.IsNullOrWhiteSpace(seoDesc)) seoDesc = ConfigString("defaultSeoDescription");
+    // La de la página, su resumen propio (ficha de producto, categoría, equipo), la de la marca y la de su sitio (016, C9).
+    var seoDesc = Synergos.CMS.Web.Services.DescripcionDeLaPagina.Resolver(
+        alias => page is not null && page.HasProperty(alias) ? page.Value<string>(alias) : null,
+        ConfigString("defaultSeoDescription"),
+        siteRoot?.Value<string>("seoDescription"));
 
     var canonicalLink = page?.Value<Link>("canonicalLink");
     var canonicalUrl = canonicalLink?.Url;

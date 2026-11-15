@@ -115,6 +115,10 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "titulos-y-descripciones", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "titulos-y-descripciones", RecetaTitulosYDescripciones(), 0);
+        }
         if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaEntradasDeCategorias();
@@ -705,6 +709,66 @@ public sealed class DevContenidoDeVerticales
             cambioEducacion = true;
         }
         return $"apps:{(cambio ? 1 : 0)};educacion:{(cambioEducacion ? 1 : 0)}";
+    }
+
+    /// <summary>Las páginas Cursos (Educación) y Ofertas (Tienda), por su Key de uSync.</summary>
+    private static readonly Guid PaginaCursos = Guid.Parse("21100675-769e-42d3-95c0-2fa903d2c4d9");
+    private static readonly Guid PaginaOfertas = Guid.Parse("8166a0f0-8f18-41c1-8d23-d9ba36289749");
+
+    /// <summary>
+    /// La descripción de las páginas del hub que no tenían ninguna (016, 4.ª vuelta, C9), por su Key de uSync. La de la
+    /// raíz es también la frase de su pie. Las de las fichas de Apps son las que el editor dejó en el lanzador de
+    /// Soluciones: copy ya revisado, que no promete lo que la app no hace.
+    /// </summary>
+    internal static readonly (Guid Pagina, string Descripcion)[] DescripcionesDelHub =
+    [
+        (Synergos, "Un motor, muchas apps reales: tienda, reservas, eventos, cursos y más, sobre la misma base."),
+        (Casos, "Negocios de verdad sobre SynergosLabs: qué necesitaban, qué montaron y cómo les va."),
+        (Guid.Parse("08b80e68-6afb-4790-90e3-6ddf0d23a1e5"), "De la idea a producción en cuatro pasos: modelas el contenido, compones las páginas, conectas tus servicios y publicas."),
+        (Guid.Parse("1aa79edd-65be-4931-8056-be6df9c2726f"), "Planes de SynergosLabs que crecen con tu negocio: qué incluye cada uno y cuándo conviene pasar al siguiente."),
+        (Guid.Parse("ba82f156-7b18-4410-8815-37687056f789"), "Un motor, muchos productos: los componentes y las apps que puedes combinar para armar el tuyo."),
+        (Guid.Parse("c052e893-16d9-4299-a9a4-9de162775522"), "Una solución para cada tipo de negocio: tienda, reservas, eventos, educación, inmobiliaria y más, listas para arrancar."),
+        (Guid.Parse("48b2f5fb-91de-4b4d-ba2a-d92a714b616b"), "Del catálogo al checkout: e-commerce completo con precios es-CO reales."),
+        (Guid.Parse("64c93cd1-d6c2-4588-b54f-84679efe7bc6"), "Reservas y citas en línea sobre el motor transaccional: cada solicitud queda registrada."),
+        (Guid.Parse("62c68173-3e43-42fe-8390-6e76799e0059"), "Cartelera, tickets con retención de cupo y agenda viva del evento."),
+        (Guid.Parse("a9f996c2-5937-4598-a0ff-76516171c974"), "Portal inmobiliario premium: fichas inmersivas y visitas sin paso de pago."),
+        (Guid.Parse("dcd02568-677d-4ebe-bc37-b7c677095b63"), "Una academia online: catálogo, temario interactivo e inscripciones."),
+        (Guid.Parse("89a622e1-d8c4-4933-9815-635821f0abc8"), "La cara social del motor: feed editorial, autores y comentarios en vivo."),
+        (Guid.Parse("35c999e4-7ef5-49d0-bc08-3650b7c0807e"), "Historia clínica, agenda sin sobrecupos y acceso auditado por consentimiento."),
+        (Guid.Parse("eb0c7007-5722-4e34-83ef-dbae580d0bc5"), "Alojamiento de punta a punta: catálogo, tarifas y asistente de reserva."),
+        (Guid.Parse("7a299138-4e0b-4e9c-968f-a1e92be084f0"), "Trámites en lenguaje claro con carpeta ciudadana y seguimiento por etapas."),
+        (Guid.Parse("29612282-8a76-4d33-a3aa-aacb8ddfc40b"), "Equipos por días con la cotización por tramos y la garantía retenida, no cobrada."),
+    ];
+
+    /// <summary>
+    /// C8 y C9 de la 4.ª vuelta (016): Educación se llama con tilde donde el sitio dice su nombre (pie, vuelta a la
+    /// plataforma, og:site_name y el sufijo de sus títulos), Ofertas lleva el sufijo de su sitio, y las páginas del hub
+    /// sin descripción reciben la suya. Una descripción que el editor ya escribió NO se pisa. Idempotente.
+    /// </summary>
+    private string RecetaTitulosYDescripciones()
+    {
+        var cambios = new List<string>();
+
+        void Poner(Guid clave, string alias, string valor, bool soloSiVacio, string etiqueta)
+        {
+            var pagina = _contentService.GetById(clave);
+            if (pagina is null || !pagina.HasProperty(alias)) { cambios.Add($"{etiqueta}:sin-pagina"); return; }
+            var cultura = pagina.Properties[alias]!.PropertyType.VariesByCulture() ? Cultura : null;
+            var actual = pagina.GetValue<string>(alias, cultura);
+            if (actual == valor || (soloSiVacio && !string.IsNullOrWhiteSpace(actual))) { return; }
+            pagina.SetValue(alias, valor, cultura);
+            var r = _contentService.SaveAndPublish(pagina, new[] { cultura ?? Cultura });
+            cambios.Add(r.Success ? etiqueta : $"{etiqueta}:fallo:{r.Result}");
+        }
+
+        Poner(Educacion, "siteDisplayName", "Educación", soloSiVacio: false, "educacion");
+        Poner(PaginaCursos, "seoTitle", "Cursos — Educación", soloSiVacio: false, "cursos");
+        Poner(PaginaOfertas, "seoTitle", "Ofertas — Tienda", soloSiVacio: false, "ofertas");
+        foreach (var (pagina, descripcion) in DescripcionesDelHub)
+        {
+            Poner(pagina, "seoDescription", descripcion, soloSiVacio: true, $"desc:{pagina.ToString()[..8]}");
+        }
+        return cambios.Count == 0 ? "nada-que-hacer" : string.Join(";", cambios);
     }
 
     /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
