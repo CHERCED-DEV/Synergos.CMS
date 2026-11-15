@@ -20,7 +20,7 @@ namespace Synergos.CMS.Web.Controllers;
 /// </remarks>
 [ApiController]
 [Route("api/healthcare")]
-public sealed class HealthcareApiController : ControllerBase
+public sealed partial class HealthcareApiController : ControllerBase
 {
     private readonly IPhiAccessGuard _guard;
     private readonly IPatientRepository _patients;
@@ -51,6 +51,9 @@ public sealed class HealthcareApiController : ControllerBase
         public const string Resultado = "salud.resultado";
         public const string Receta = "salud.receta";
         public const string Renovacion = "salud.renovacion";
+        public const string Mensajes = "salud.mensajes";
+        public const string Bandeja = "salud.bandeja";
+        public const string Cuenta = "salud.cuenta";
     }
 
     /// <summary>Las solicitudes de renovación de recetas, en el almacén PHI (I5 P14).</summary>
@@ -102,8 +105,12 @@ public sealed class HealthcareApiController : ControllerBase
         IOptions<HealthcareSettings>? salud = null,
         IOrdenesMedicas? ordenes = null,
         IPrivateFileStore? archivos = null,
-        IRenovaciones? renovaciones = null)
+        IRenovaciones? renovaciones = null,
+        IMessagingService? mensajeria = null,
+        IDoctorDirectory? directorio = null)
     {
+        _mensajeria = mensajeria;
+        _directorio = directorio;
         _renovaciones = renovaciones;
         _ordenes = ordenes;
         _archivos = archivos;

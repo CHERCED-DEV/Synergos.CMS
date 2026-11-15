@@ -201,6 +201,46 @@ public sealed class CancelacionDeLaCitaTests
     }
 }
 
+/// <summary>
+/// El estado de cuenta del paciente (I7 P17) contra Booking y Payments reales: una línea por cita cobrada, con lo que dice
+/// Payments de lo capturado y lo devuelto; la cita de otro paciente y la que no se confirmó no salen.
+/// </summary>
+public sealed class EstadoDeCuentaDelPacienteTests
+{
+    private sealed class Reloj : TimeProvider
+    {
+        public DateTimeOffset Ahora { get; set; } = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Ahora;
+    }
+
+    [Fact]
+    public async Task La_cuenta_trae_lo_cobrado_y_lo_devuelto_de_cada_cita_confirmada_y_solo_del_paciente()
+    {
+        var reloj = new Reloj();
+        using var c = new CitaDeSaludReal(reloj: reloj);
+        await c.RegistrarAgenda();
+        var (_, abierta) = await c.Abrir();
+        var id = abierta.GetProperty("id").GetString()!;
+        await c.Cerrar(id);
+        reloj.Ahora = CitaDeSaludReal.Inicio.AddHours(-5);
+        await c.CancelarConfirmada(id);
+        reloj.Ahora = DateTimeOffset.UtcNow;
+        // Otro paciente abre una cita y no la confirma: el cobro queda autorizado, sin capturar.
+        await c.Abrir("cita-u2", "u-2", profesionalId: CitaDeSaludReal.ConAgenda);
+
+        var (estado, cuenta) = await c.EstadoDeCuenta();
+        var (_, ajena) = await c.EstadoDeCuenta("u-2");
+
+        Assert.True(estado == HttpStatusCode.OK, cuenta.ToString());
+        var linea = Assert.Single(cuenta.GetProperty("lineas").EnumerateArray());
+        Assert.Equal(id, linea.GetProperty("citaId").GetString());
+        Assert.Equal((50_000m, 25_000m, "COP"), (linea.GetProperty("cobrado").GetDecimal(), linea.GetProperty("devuelto").GetDecimal(),
+            linea.GetProperty("moneda").GetString()));
+        Assert.Equal(CitaDeSaludReal.Inicio, linea.GetProperty("inicio").GetDateTimeOffset());
+        Assert.Empty(ajena.GetProperty("lineas").EnumerateArray());
+    }
+}
+
 /// <summary>La regla de la devolución, sola: los bordes de cada tramo y el redondeo hacia abajo.</summary>
 public sealed class PoliticaDeDevolucionTests
 {

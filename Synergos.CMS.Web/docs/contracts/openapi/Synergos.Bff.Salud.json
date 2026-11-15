@@ -805,6 +805,102 @@
         }
       }
     },
+    "/v1/estado-de-cuenta": {
+      "get": {
+        "operationId": "EstadoDeCuenta",
+        "parameters": [
+          {
+            "name": "pacienteKind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pacienteId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoDeCuentaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta la llave compartida o no es la buena (sin cuerpo)."
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rechazo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/flujos/compensaciones": {
       "get": {
         "operationId": "FlujosCompensaciones",
@@ -3926,6 +4022,57 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "EstadoDeCuentaResponse": {
+        "required": [
+          "lineas"
+        ],
+        "type": "object",
+        "properties": {
+          "lineas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineaDeCuenta"
+            }
+          }
+        }
+      },
+      "LineaDeCuenta": {
+        "required": [
+          "citaId",
+          "numero",
+          "inicio",
+          "cobrado",
+          "devuelto",
+          "moneda"
+        ],
+        "type": "object",
+        "properties": {
+          "citaId": {
+            "type": "string"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "inicio": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "cobrado": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "devuelto": {
+            "type": "number",
+            "format": "decimal"
+          },
+          "moneda": {
+            "type": "string"
           }
         }
       },
