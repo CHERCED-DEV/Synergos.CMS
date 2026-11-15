@@ -140,13 +140,17 @@ internal sealed class CitaDeSaludReal : IDisposable
         // La plantilla de VERDAD, la que publica provisionar.sh: el correo que se abre es el que recibiría el paciente.
         using var plantillas = JsonDocument.Parse(File.ReadAllText(Path.Combine(
             Synergos.CMS.Tests.Architecture.Proyectos.Raiz(), "tools", "provisionar.plantillas.json")));
-        var cita = plantillas.RootElement.EnumerateArray()
-            .Single(e => e.TryGetProperty("key", out var k) && k.GetString() == "salud.cita.confirmada");
-        await Post("notifications", "v1/templates", new
+        // Todas las de la cita: la confirmación y el recordatorio (I8).
+        foreach (var cita in plantillas.RootElement.EnumerateArray()
+                     .Where(e => e.TryGetProperty("key", out var k) && k.GetString()!.StartsWith("salud.cita.", StringComparison.Ordinal)))
         {
-            key = cita.GetProperty("key").GetString(), channel = cita.GetProperty("channel").GetString(),
-            subject = cita.GetProperty("subject").GetString(), body = cita.GetProperty("body").GetString(),
-        }, "plantilla");
+            var clave = cita.GetProperty("key").GetString()!;
+            await Post("notifications", "v1/templates", new
+            {
+                key = clave, channel = cita.GetProperty("channel").GetString(),
+                subject = cita.GetProperty("subject").GetString(), body = cita.GetProperty("body").GetString(),
+            }, "plantilla-" + clave);
+        }
     }
 
     private async Task Post(string capacidad, string ruta, object cuerpo, string llave)
@@ -279,7 +283,10 @@ internal sealed class CitaDeSaludReal : IDisposable
         {
             using var r = await Orquestador.SendAsync(peticion);
             var texto = await r.Content.ReadAsStringAsync();
-            return (r.StatusCode, string.IsNullOrWhiteSpace(texto) ? default : JsonDocument.Parse(texto).RootElement.Clone());
+            if (string.IsNullOrWhiteSpace(texto)) return (r.StatusCode, default);
+            // Lo que no es JSON (la página de un 500) vuelve como texto, para que la prueba que falle diga qué contestó.
+            try { return (r.StatusCode, JsonDocument.Parse(texto).RootElement.Clone()); }
+            catch (JsonException) { return (r.StatusCode, JsonSerializer.SerializeToElement(texto)); }
         }
     }
 
@@ -365,7 +372,10 @@ public sealed class CitaDeSaludTests
         Assert.Equal("Confirmed", (await c.Leer("booking", $"v1/reservations/{reserva}")).GetProperty("status").GetString());
         var cobro = c.Servicios.GetRequiredService<SagaEngine<SagaDeFlujo>>().Find(id)!.Datos["cobroId"].Valor!.Value.GetString()!;
         Assert.Equal("Captured", (await c.Leer("payments", $"v1/payments/{cobro}")).GetProperty("status").GetString());
-        Assert.Equal(1, (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").GetArrayLength());
+        // Una confirmación y un recordatorio programado (I8), cada uno una sola vez.
+        Assert.Equal(new[] { "salud.cita.confirmada", "salud.cita.recordatorio" },
+            (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").EnumerateArray()
+                .Select(e => e.GetProperty("templateKey").GetString()).Order(StringComparer.Ordinal));
 
         // El orden del cierre lo fija el oráculo: capturar ANTES de confirmar la franja.
         Assert.True(c.Llamadas.ToList().FindIndex(l => l.EndsWith("/capture", StringComparison.Ordinal))
@@ -579,7 +589,10 @@ public sealed class CitaDeSaludTests
         var (_, segunda) = await c.Cerrar(id);
         Assert.Equal("Completed", segunda.GetProperty("estado").GetString());
         Assert.Equal(1, c.Llamadas.Count(l => l.EndsWith("/capture", StringComparison.Ordinal)));
-        Assert.Equal(1, (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").GetArrayLength());
+        // Una confirmación y un recordatorio programado (I8), cada uno una sola vez.
+        Assert.Equal(new[] { "salud.cita.confirmada", "salud.cita.recordatorio" },
+            (await c.Leer("notifications", "v1/deliveries?toKind=salud.paciente&toId=u-1")).GetProperty("items").EnumerateArray()
+                .Select(e => e.GetProperty("templateKey").GetString()).Order(StringComparer.Ordinal));
     }
 
     [Fact]

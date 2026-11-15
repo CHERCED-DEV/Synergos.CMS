@@ -30,6 +30,14 @@ public sealed partial class HealthcareApiController
     /// <summary>El directorio de profesionales: a quién se le escribe y cómo se llama.</summary>
     private readonly IDoctorDirectory? _directorio;
 
+    /// <summary>Los avisos al paciente (I8 P18): un resultado liberado, una renovación respondida, una respuesta nueva.</summary>
+    private readonly ITransactionalNotifier? _avisos;
+
+    private readonly ILogger<HealthcareApiController>? _log;
+
+    /// <summary>A dónde lleva el enlace de un aviso del consultorio: el portal, donde el paciente entra con su sesión.</summary>
+    private const string RutaDelPortal = "/healthcare/";
+
     // ── Mensajes (P15) ─────────────────────────────────────────
 
     /// <summary>Los hilos del paciente de la sesión con los profesionales del consultorio, del más reciente al más antiguo.</summary>
@@ -113,6 +121,7 @@ public sealed partial class HealthcareApiController
         }
         var profesional = MensajesClinicos.ProfesionalDe(hilo!.Participants)!;
         var respondido = await _mensajeria!.ReplyAsync(hilo.ThreadId, MensajesClinicos.BuzonDelProfesional(profesional), body!.Texto!.Trim(), ct);
+        await AvisarAlPacienteAsync(patientKey, NotificationTypes.SaludMensajeRespondido, respondido.Messages[^1].MessageId, RutaDelPortal, ct);
         return Ok(await DelConsultorioAsync(respondido, patientKey, ct));
     }
 
@@ -271,6 +280,36 @@ public sealed partial class HealthcareApiController
                 hilo.LastMessageAt, MensajesClinicos.ProfesionalDe(hilo.Participants)));
         }
         return items;
+    }
+
+    /// <summary>
+    /// Le avisa al paciente de la historia que hay algo nuevo (I8 P18), por el notificador transaccional, que decide si los
+    /// avisos están encendidos y no manda dos veces el mismo hecho. Sin el dato clínico: el correo dice qué pasó y el enlace
+    /// lleva al portal. Lo que ya se hizo no depende del correo: si no se puede avisar, se registra y sigue.
+    /// </summary>
+    private async Task AvisarAlPacienteAsync(Guid patientKey, string tipo, string hecho, string ruta, CancellationToken ct)
+    {
+        if (_avisos is null || _miembros is null)
+        {
+            return;
+        }
+        try
+        {
+            if (await _patients.GetAsync(patientKey, ct) is not { MemberKey: var miembro } || miembro == Guid.Empty
+                || await _miembros.ContactoAsync(miembro, ct) is not { } contacto)
+            {
+                return;
+            }
+            var ahora = _reloj.GetUtcNow();
+            await _avisos.DispatchAsync(new NotificationEvent(
+                Type: tipo, SubjectId: hecho, ToEmail: contacto.Correo, ToName: contacto.Nombre,
+                Code: TimeZoneInfo.ConvertTime(ahora, _zona).ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture),
+                OccurredAt: ahora, ActionPath: ruta, DedupeKey: $"{tipo}:{hecho}"), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log?.LogWarning(ex, "No se pudo avisar al paciente ({Tipo}); lo hecho queda hecho.", tipo);
+        }
     }
 
     private static string StubMessagingServicePreview(string texto)

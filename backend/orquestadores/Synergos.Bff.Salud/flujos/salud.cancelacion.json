@@ -11,17 +11,18 @@
     "cobroId": { "tipo": "texto?", "de": "original" },
     "total": { "tipo": "dinero", "de": "original" },
     "ventana": { "tipo": "ventana", "de": "original" },
-    "reservaId": { "tipo": "texto", "de": "original" }
+    "reservaId": { "tipo": "texto", "de": "original" },
+    "recordatorioId": { "tipo": "texto?", "de": "original" }
   },
   "salida": ["cita", "aDevolver"],
   "fases": {
-    "abrir": ["original", "devolucion", "cancelar", "devolver"]
+    "abrir": ["original", "devolucion", "cancelar", "retirar", "devolver"]
   },
   "pasos": {
     "original": {
       "tipo": "flow.leer-original",
       "lee": ["cita"],
-      "escribe": ["cobroId", "total", "ventana", "reservaId"]
+      "escribe": ["cobroId", "total", "ventana", "reservaId", "recordatorioId"]
     },
     "devolucion": {
       "tipo": "salud.devolucion-por-antelacion",
@@ -32,6 +33,11 @@
       "tipo": "booking.cancelar",
       "lee": ["reservaId"],
       "motivo": "la agenda no dejó cancelar la cita"
+    },
+    "retirar": {
+      "tipo": "notifications.retirar",
+      "lee": ["recordatorioId"],
+      "motivo": "no se pudo retirar el recordatorio de la cita"
     },
     "devolver": {
       "tipo": "payments.devolver",

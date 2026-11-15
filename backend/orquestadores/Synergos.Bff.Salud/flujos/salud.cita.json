@@ -11,7 +11,7 @@
     "hasta": "instante"
   },
   "salida": ["profesional", "ventana", "total", "reservaId"],
-  "para_lo_posterior": ["cobroId", "total", "ventana", "reservaId"],
+  "para_lo_posterior": ["cobroId", "total", "ventana", "reservaId", "recordatorioId"],
   "lecturas": {
     "disponibilidad": {
       "entrada": ["profesional", "desde", "hasta"],
@@ -22,7 +22,7 @@
   "efimera": { "cerrar": ["contacto"] },
   "fases": {
     "abrir": ["permiso", "lineas", "copago", "desglose", "agenda", "apartar", "autorizar"],
-    "cerrar": ["capturar", "confirmar", "avisar"]
+    "cerrar": ["capturar", "confirmar", "avisar", "momento", "recordar"]
   },
   "pasos": {
     "permiso": { "tipo": "consent.verificar", "lee": ["paciente"], "proposito": "salud.agenda" },
@@ -84,6 +84,20 @@
       "plantilla": "salud.cita.confirmada",
       "valores": ["ventana"],
       "al_fallar": "seguir"
+    },
+    "momento": {
+      "tipo": "salud.momento-del-recordatorio",
+      "lee": ["ventana"],
+      "escribe": ["recordarEn"]
+    },
+    "recordar": {
+      "tipo": "salud.recordar",
+      "lee": ["paciente", "contacto", "recordarEn"],
+      "escribe": ["recordatorioId"],
+      "llave": "recordatorio",
+      "plantilla": "salud.cita.recordatorio",
+      "valores": ["ventana"],
+      "omitir_si_falta": "recordarEn"
     }
   }
 }

@@ -33,14 +33,20 @@ public sealed class PlantillaDeLaCitaTests
         return new Template("provisionada", clave, canal, p.GetProperty("subject").GetString()!, p.GetProperty("body").GetString()!);
     }
 
-    [Fact]
-    public void La_plantilla_de_la_cita_usa_justo_los_valores_que_manda_el_paso()
+    /// <summary>
+    /// Las plantillas de la cita por la puerta: el aviso de la cita confirmada y su recordatorio (I8, sin el total: lo
+    /// programa <c>salud.recordar</c> con el paso común <c>notifications.programar</c>).
+    /// </summary>
+    [Theory]
+    [InlineData("salud.cita.json", "avisar", true)]
+    [InlineData("salud.cita.json", "recordar", false)]
+    public void La_plantilla_de_la_cita_usa_justo_los_valores_que_manda_el_paso(string definicion, string id, bool conTotal)
     {
-        var paso = ElAvisoDeLaCita();
+        var paso = FlujosDeclarados.Incrustado(typeof(AppointmentResponse).Assembly, "flujos/" + definicion).Pasos[id];
         var plantilla = LaAprovisionada(paso.Plantilla!);
         var valores = new Dictionary<string, string>(
             PasoAvisar.Valores("pta-cita-1", new Contacto("paciente@ejemplo.co", "Ana", "https://sitio/healthcare/?cita=x", "Clínica"),
-                Money.Of(50_000m, "COP")),
+                conTotal ? Money.Of(50_000m, "COP") : null),
             StringComparer.Ordinal);
         // Y los que declara la definición (NN-6, núcleo T091): lo que se cruza son los marcadores, no el texto.
         foreach (var nombre in paso.Valores ?? []) valores[nombre] = $"<{nombre}>";
