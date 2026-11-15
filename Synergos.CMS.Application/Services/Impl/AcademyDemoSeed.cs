@@ -28,6 +28,8 @@ internal static class AcademyDemoSeed
     {
         // Sin foto (016, V3): las .webp no existieron nunca en disco y cada ficha pedía un 404 antes de caer a las
         // iniciales. Vacío, la ficha pinta las iniciales sin pedir nada.
+        // Nombres inventados que no son de nadie conocido (016, D-016-C18): «Mateo Gil» y «Sofía Camargo» eran los de un
+        // director de cine y una cineasta reales. Los ids se quedan, para no romper lo que ya apunta a ellos.
         new CourseInstructor(
             Id: "ins-elena",
             Name: "Elena Restrepo",
@@ -36,13 +38,13 @@ internal static class AcademyDemoSeed
             AvatarUrl: ""),
         new CourseInstructor(
             Id: "ins-mateo",
-            Name: "Mateo Gil",
+            Name: "Tobías Galindo",
             Headline: "Diseñador de producto · Design systems",
             Bio: "Construye design systems atómicos para equipos de producto. Tipografía, ritmo vertical y tokens semánticos.",
             AvatarUrl: ""),
         new CourseInstructor(
             Id: "ins-sofia",
-            Name: "Sofía Camargo",
+            Name: "Inés Arciniegas",
             Headline: "Data & ML · Cuenta historias con datos",
             Bio: "Científica de datos. Enseña ML aplicado sin humo: del dato sucio al modelo en producción.",
             AvatarUrl: ""),
