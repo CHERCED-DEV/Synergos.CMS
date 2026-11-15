@@ -3072,7 +3072,7 @@ public sealed class DevContentFiller
         // AddSynTravelShell sale no-op con grace y el home conserva el hero + sub-secciones.
         AddSynTravelShell(b,
             "Reserva tu próximo viaje",
-            "Vuelos, hoteles y paquetes en un solo lugar. Busca, compara y reserva en minutos.");
+            "Estadías, vuelos y autos en un solo carrito. Busca, compara y reserva en minutos.");
 
         AddFallbackHero(b, "elementSynTravelShell", "Reservas y citas, sin fricción",
             "Tu agenda en línea, disponible 24/7",
