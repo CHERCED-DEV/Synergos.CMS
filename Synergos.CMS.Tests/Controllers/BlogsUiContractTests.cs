@@ -254,6 +254,51 @@ public sealed class BlogsUiContractTests
         Assert.True(autor.GetProperty("postsCount").GetInt32() > 0);
     }
 
+    /// <summary>
+    /// Quien firma los artículos del CMS tiene perfil (012-blogs-social, vuelta de valor): su nombre, su rol como bio, sus
+    /// artículos y la marca <c>editorial</c>, para que la app no le ofrezca mensajes directos. Antes era un 404, y la app
+    /// decía «No pudimos cargar el perfil».
+    /// </summary>
+    [Fact]
+    public async Task El_perfil_de_un_autor_del_CMS_trae_sus_articulos_y_dice_que_es_editorial()
+    {
+        var graph = new StubSocialGraphService();
+        var reactions = new StubReactionService();
+        var articulos = new ArticulosDelCms(ArticuloDelEquipo("uno"), ArticuloDelEquipo("dos"));
+        using var stream = new CatalogContentStream(articulos, new InMemoryJsonEntityStore(), new StubContentStream(graph, reactions));
+        var gate = Substitute.For<IMemberAccessGate>();
+        var c = new BlogsController(
+            stream, graph, reactions, new PerfilesConLosAutoresDelCms(new StubSocialProfileProjection(), articulos),
+            new SinComentarios(), new StubMessagingService(), new StubUserCollection(), new StubNotificationFeed(graph, reactions),
+            gate, IdentidadDePrueba.Con());
+
+        var perfil = Wire(await c.Profile("equipo-synergoslabs", CancellationToken.None));
+
+        var autor = perfil.GetProperty("author");
+        Assert.Equal("Equipo SynergosLabs", autor.GetProperty("displayName").GetString());
+        Assert.Equal("Redacción", autor.GetProperty("bio").GetString());
+        Assert.True(autor.GetProperty("editorial").GetBoolean());
+        Assert.Equal(2, autor.GetProperty("postsCount").GetInt32());
+        Assert.Equal(2, perfil.GetProperty("posts").GetArrayLength());
+    }
+
+    private sealed class ArticulosDelCms(params AuthoredPost[] posts) : ICatalogSource<AuthoredPost>
+    {
+        public Task<IReadOnlyList<AuthoredPost>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AuthoredPost>>(posts);
+    }
+
+    private static AuthoredPost ArticuloDelEquipo(string slug) => new(
+        Id: slug,
+        Title: slug,
+        Excerpt: "El resumen de " + slug,
+        Url: "/blogs/" + slug + "/",
+        HeroImageUrl: null,
+        HeroImageAlt: null,
+        PublishedUtc: new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc),
+        Kind: "article",
+        Author: new AuthoredPostAuthor("autor-equipo-synergoslabs", "equipo-synergoslabs", "Equipo SynergosLabs", null, "Redacción"));
+
     // ══════════════════════ Explorar / tendencias ══════════════════════
 
     /// <summary>

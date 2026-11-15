@@ -85,8 +85,11 @@ public sealed record AuthoredPost(
 /// propio default. <b>El disparador para reabrirlo</b>: que alguien pida el check en el
 /// backoffice.</para>
 /// </remarks>
+/// <param name="Role">Su rol en la página de autor (<c>authorRole</c>, «Redacción»), o <c>null</c>: la bio de su perfil en la
+///   red (012-blogs-social, vuelta de valor).</param>
 public sealed record AuthoredPostAuthor(
     string ActorId,
     string Handle,
     string DisplayName,
-    string? AvatarUrl);
+    string? AvatarUrl,
+    string? Role = null);

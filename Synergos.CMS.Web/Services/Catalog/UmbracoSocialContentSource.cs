@@ -192,7 +192,9 @@ public sealed class UmbracoSocialContentSource : ICatalogSource<AuthoredPost>
                 ActorId: "autor-" + handle,
                 Handle: handle,
                 DisplayName: nombre!,
-                AvatarUrl: autorNodo?.Value<IPublishedContent>("authorAvatar")?.Url()),
+                AvatarUrl: autorNodo?.Value<IPublishedContent>("authorAvatar")?.Url(),
+                // Su rol en la página de autor: la bio de su perfil en la red (012-blogs-social, vuelta de valor).
+                Role: autorNodo?.Value<string>("authorRole")?.Trim() is { Length: > 0 } rol ? rol : null),
             // El hilo de comentarios de la página del post es el de su nodo: la app comenta en ése.
             NodeId: node.Id,
             // La página de categoría de la que cuelga, si cuelga de una: la faceta «categoría» del catálogo de la red

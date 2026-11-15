@@ -42,6 +42,8 @@ public interface ISocialProfileProjection
 /// <param name="BannerUrl">URL del banner/header, o <c>null</c>.</param>
 /// <param name="Verified">Cuenta verificada.</param>
 /// <param name="JoinedUtc">Fecha de alta de la cuenta.</param>
+/// <param name="Editorial">Si es un autor del CMS (una página de autor) y no un miembro: tiene perfil y se le sigue, pero
+///   no recibe mensajes directos, porque no hay nadie detrás que los lea (012-blogs-social, vuelta de valor).</param>
 public sealed record SocialProfile(
     string ActorId,
     string Handle,
@@ -50,4 +52,5 @@ public sealed record SocialProfile(
     string? AvatarUrl,
     string? BannerUrl,
     bool Verified,
-    DateTime JoinedUtc);
+    DateTime JoinedUtc,
+    bool Editorial = false);

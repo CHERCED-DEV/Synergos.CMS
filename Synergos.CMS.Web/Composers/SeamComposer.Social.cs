@@ -114,8 +114,14 @@ public sealed partial class SeamComposer
                     sp.GetRequiredService<StubContentStream>())
                 : sp.GetRequiredService<StubContentStream>(),
             sp.GetRequiredService<IRegistroDeRetirados>()));
+        // Y con el contenido del CMS, quien firma los artículos tiene perfil en la red (012-blogs-social, vuelta de valor).
         services.AddSingleton<ISocialProfileProjection>(sp =>
-            new StubSocialProfileProjection(sp.GetRequiredService<SemillaDeLaRed>()));
+        {
+            var deSiempre = new StubSocialProfileProjection(sp.GetRequiredService<SemillaDeLaRed>());
+            return IsCmsSource(sp, UmbracoSocialContentSource.Vertical)
+                ? new PerfilesConLosAutoresDelCms(deSiempre, sp.GetRequiredService<ICatalogSource<AuthoredPost>>())
+                : deSiempre;
+        });
 
         // OLA 6 Blogs (doc 21 §2.3) — app social completa sobre el motor social ya
         // vivo. Aditivo (no toca los otros dominios). El único seam NUEVO es el

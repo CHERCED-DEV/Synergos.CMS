@@ -1014,7 +1014,8 @@ public sealed class BlogsController : ControllerBase
         // La bio y el banner ya vivían en SocialProfile; el DTO no los llevaba, así
         // que el header del perfil salía sin biografía y sin portada.
         Bio: p.Bio,
-        BannerUrl: p.BannerUrl);
+        BannerUrl: p.BannerUrl,
+        Editorial: p.Editorial);
 
     private static FeedScope ParseScope(string? scope) => (scope?.Trim().ToLowerInvariant()) switch
     {
@@ -1313,7 +1314,10 @@ public sealed class BlogsController : ControllerBase
         string? BannerUrl = null,
         int FollowersCount = 0,
         int FollowingCount = 0,
-        int PostsCount = 0);
+        int PostsCount = 0,
+        // Contrato UI (header de perfil): un autor del CMS tiene perfil y se le sigue, pero no recibe mensajes
+        // directos (012-blogs-social, vuelta de valor).
+        bool Editorial = false);
 
     public sealed record ReactionsDto(
         int Total,
