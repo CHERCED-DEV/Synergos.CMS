@@ -115,6 +115,11 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "casos", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaCasosSinHistoriasInventadas();
+            return new Resultado(!hecho.Contains("fallo", StringComparison.Ordinal), "casos", hecho, 0);
+        }
         if (string.Equals(vertical, "testimonios", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaSinTestimoniosInventados();
@@ -1796,6 +1801,36 @@ public sealed class DevContenidoDeVerticales
                 ("answer", "Sí. En «Mis tickets» eliges la entrada y la transfieres a otra persona con su correo.")));
 
         return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
+    }
+
+    /// <summary>
+    /// D-016-C14: Casos contaba historias de negocios que no existen («Retail Norte», «Grupo Andino») con sus cifras. Salen
+    /// de la página «Casos de éxito», las tres cifras y «Cómo lo lograron» (SUPERSET: se desconectan; el tipo, los textos
+    /// y las fotos siguen en el esquema y en el repo). Sin contenido real, la página sale del menú y del pie
+    /// (<c>hideFromMainMenu</c> y <c>hideFromFooter</c>): sigue publicada, y nada más la enlaza. Idempotente.
+    /// </summary>
+    private string RecetaCasosSinHistoriasInventadas()
+    {
+        var casos = _contentService.GetById(Casos);
+        if (casos is null) { return "sin-pagina"; }
+        var cuerpo = new CuerpoEditable(casos.GetValue<string>(Cuerpo, Cultura));
+        var fuera = cuerpo.DesconectarSeccionesCon(KeyOf("elementSynFeatureGrid"), CuerpoEditable.Donde("headingText", "Casos de éxito"))
+            + cuerpo.DesconectarSeccionesCon(KeyOf("elementSynStatTicker"))
+            + cuerpo.DesconectarSeccionesCon(KeyOf("elementSynMediaText"), CuerpoEditable.Donde("headingText", "Cómo lo lograron"));
+        var cambio = cuerpo.Cambio;
+        if (cambio) { casos.SetValue(Cuerpo, cuerpo.Json, Cultura); }
+        // El menú y el pie se ocultan cada uno con su propiedad (NavegacionDelSitio): las dos.
+        foreach (var oculto in new[] { "hideFromMainMenu", "hideFromFooter" })
+        {
+            if (casos.HasProperty(oculto) && !casos.GetValue<bool>(oculto))
+            {
+                casos.SetValue(oculto, true);
+                cambio = true;
+            }
+        }
+        if (!cambio) { return "nada-que-hacer"; }
+        var r = _contentService.SaveAndPublish(casos, new[] { Cultura });
+        return r.Success ? $"secciones:{fuera};oculta-del-menu" : $"fallo:{r.Result}";
     }
 
     /// <summary>
