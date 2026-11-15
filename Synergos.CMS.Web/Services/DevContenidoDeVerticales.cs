@@ -106,6 +106,11 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "tienda-vender", RecetaTiendaYVender(), 0);
         }
+        if (string.Equals(vertical, "alquiler", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaAlquiler();
+            return new Resultado(!hecho.Contains("sin-publicar", StringComparison.Ordinal), "alquiler", hecho, 0);
+        }
         if (string.Equals(vertical, "titulo-apps", StringComparison.OrdinalIgnoreCase))
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
@@ -381,7 +386,7 @@ public sealed class DevContenidoDeVerticales
 
     /// <summary>
     /// Importa las fotos de <paramref name="carpeta"/> según sus manifiestos (<c>tienda.json</c>, <c>booking.json</c>,
-    /// <c>propiedades.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
+    /// <c>propiedades.json</c>, <c>alquiler.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
     /// usa su destino —misma Key, así que páginas y catálogo siguen apuntando bien— y la página se republica. Idempotente:
     /// un medio que ya tiene esa licencia y ese crédito no se toca.
     /// </summary>
@@ -410,6 +415,12 @@ public sealed class DevContenidoDeVerticales
             partes.Add($"fichas:{n}"); cambios += n; ok &= faltan == 0;
             if (faltan > 0) { partes.Add($"ambientes-no-encontrados:{faltan}"); }
         }
+        if (Leer(carpeta, "alquiler.json") is { } alquiler)
+        {
+            var (n, sinEquipo) = FotosDeEquipos(alquiler, carpeta);
+            partes.Add($"alquiler:{n}"); cambios += n; ok &= sinEquipo == 0;
+            if (sinEquipo > 0) { partes.Add($"alquiler-sin-equipo:{sinEquipo}"); }
+        }
         if (Leer(carpeta, "laureles.json") is { } medios)
         {
             var n = 0;
@@ -427,6 +438,44 @@ public sealed class DevContenidoDeVerticales
         var detalle = string.Join(";", partes);
         _logger.LogInformation("Fotos importadas: {Detalle}.", detalle);
         return new Resultado(ok, "fotos", detalle, cambios);
+    }
+
+    /// <summary>
+    /// La portada (<c>equipmentCover</c>) de cada equipo de Alquiler, por su slug (<c>producto</c> en el manifiesto
+    /// <c>alquiler.json</c>), con su licencia y su crédito (C7). Idempotente: una portada con esa licencia y ese crédito
+    /// no se toca.
+    /// </summary>
+    private (int Cambiados, int SinEquipo) FotosDeEquipos(IReadOnlyList<FotoImportada> fotos, string carpeta)
+    {
+        var plataforma = _contentService.GetById(RaizDeLaPlataforma);
+        var raiz = plataforma is null ? null : _contentService.GetPagedChildren(plataforma.Id, 0, 100, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && string.Equals(c.GetCultureName(Cultura) ?? c.Name, NombreDeAlquiler, StringComparison.Ordinal));
+        if (raiz is null) { return (0, fotos.Count); }
+        var equipos = _contentService.GetPagedChildren(raiz.Id, 0, 200, out _).Where(c => c.ContentType.Alias == "equipmentPage").ToList();
+        int cambiados = 0, sinEquipo = 0;
+        foreach (var foto in fotos.Where(f => f.Producto is not null && !string.IsNullOrWhiteSpace(f.Archivo)))
+        {
+            var pagina = equipos.FirstOrDefault(c => string.Equals(c.GetValue<string>("equipmentSlug"), foto.Producto, StringComparison.Ordinal));
+            if (pagina is null) { sinEquipo++; continue; }
+            var ruta = Path.Combine(carpeta, foto.Archivo);
+            var nombre = $"equipo {foto.Producto}";
+            var cambio = false;
+            var clave = _media.KeyByName(nombre);
+            if (clave is null)
+            {
+                Poner(pagina, "equipmentCover", _media.GetOrCreatePhotoPickerValue(nombre, foto.Alt, ruta, foto.Licencia));
+                clave = _media.KeyByName(nombre);
+                cambio = true;
+            }
+            if (clave is { } k)
+            {
+                cambio |= _media.ReplacePhoto(k, ruta, nombre, foto.Alt, foto.Licencia, foto.Credito);
+            }
+            if (!cambio) { continue; }
+            _contentService.SaveAndPublish(pagina, pagina.ContentType.VariesByCulture() ? new[] { Cultura } : Array.Empty<string>());
+            cambiados++;
+        }
+        return (cambiados, sinEquipo);
     }
 
     /// <summary>Compatibilidad: <c>/dev/fotos-de-la-tienda</c> importa sólo el manifiesto de la Tienda.</summary>
@@ -903,6 +952,220 @@ public sealed class DevContenidoDeVerticales
         });
         var texto = KeyOf("elementTextRichtext");
         Seccion(b, null).AddChild(AreaDeLaSeccion, texto, t => t.Set("textBody", lista).ApplyDefaults(_defaults.DefaultsFor(texto)));
+        return b.Build();
+    }
+
+    // ───────────────────────────── Alquiler de equipos (4.ª vuelta, C7) ─────────────────────────────
+
+    /// <summary>El platformRoot del que cuelgan las raíces de las verticales.</summary>
+    private static readonly Guid RaizDeLaPlataforma = Guid.Parse("0461c64c-63a9-4bd1-ad59-a247253eb107");
+
+    private const string NombreDeAlquiler = "Alquiler";
+
+    /// <summary>Un equipo del catálogo de Alquiler, tal como lo autora el editor (<c>equipmentPage</c>).</summary>
+    private sealed record EquipoAutorado(
+        string Slug, string Nombre, string Categoria, string Resumen, string Descripcion, int Unidades,
+        int Diaria, int Garantia, int MinDias, int MaxDias, string[] Incluye, string[] Requiere,
+        (string Rotulo, string Valor)[] Ficha, (string Codigo, string Rotulo, int DesdeDias, int PorDia, string Texto)[] Tarifas);
+
+    /// <summary>
+    /// Ocho equipos para obra, eventos y oficina, con precios en pesos colombianos. Las tres primeras fichas son las de
+    /// la semilla, ahora autoradas; el catálogo del sitio las lee del CMS (<c>Synergos:Catalog:Sources:Alquiler = cms</c>).
+    /// </summary>
+    private static readonly EquipoAutorado[] EquiposDeAlquiler =
+    [
+        new("andamio-multidireccional-2m", "Andamio multidireccional 2 m", "Andamios",
+            "Cuerpo de andamio certificado para trabajo en altura hasta 2 metros.",
+            "Estructura modular de acero galvanizado con plataforma antideslizante y barandas. Se entrega armada y se recoge desarmada.",
+            12, 38_000, 250_000, 1, 30,
+            ["Plataforma", "Dos barandas", "Rodachines con freno"], ["Arnés propio", "Cédula del responsable"],
+            [("Altura útil", "2,0 m"), ("Carga máxima", "250 kg")],
+            [("semana", "Semana completa", 7, 30_000, "A partir de 7 días."), ("mes", "Mes", 28, 24_000, "A partir de 28 días.")]),
+        new("escalera-tijera-3m", "Escalera de tijera de 3 m", "Andamios",
+            "Escalera de aluminio de doble acceso para trabajos de mantenimiento.",
+            "Escalera de tijera en aluminio con peldaños antideslizantes y tensor de seguridad. Liviana para moverla entre pisos.",
+            8, 18_000, 120_000, 1, 30,
+            ["Tensor de seguridad"], ["Cédula del responsable"],
+            [("Altura", "3,0 m"), ("Carga máxima", "150 kg"), ("Peso", "9 kg")],
+            [("semana", "Semana completa", 7, 14_000, "A partir de 7 días.")]),
+        new("planta-electrica-5kva", "Planta eléctrica 5 kVA", "Energía",
+            "Generador a gasolina para obra o evento, arranque manual.",
+            "Planta monofásica de 5 kVA con tanque de 25 litros y autonomía aproximada de ocho horas al 60 % de carga.",
+            3, 145_000, 900_000, 1, 15,
+            ["Cable de 10 m", "Embudo de carga"], ["Devolver con el tanque lleno"],
+            [("Potencia", "5 kVA"), ("Combustible", "Gasolina corriente"), ("Peso", "78 kg")],
+            [("semana", "Semana completa", 7, 115_000, string.Empty)]),
+        new("reflector-led-200w", "Reflector LED de 200 W con trípode", "Energía",
+            "Iluminación de obra o de evento al aire libre, con trípode regulable.",
+            "Reflector LED resistente al agua con trípode de hasta 1,8 m. Se conecta a una toma corriente o a una planta.",
+            6, 35_000, 150_000, 1, 30,
+            ["Trípode", "Cable de 5 m"], [],
+            [("Potencia", "200 W"), ("Protección", "IP65"), ("Altura del trípode", "Hasta 1,8 m")],
+            [("semana", "Semana completa", 7, 28_000, "A partir de 7 días.")]),
+        new("kit-sonido-500w", "Kit de sonido 500 W", "Audiovisual",
+            "Dos cabinas activas, consola de cuatro canales y dos micrófonos.",
+            "Equipo para reuniones y eventos de hasta 150 personas en interior.",
+            5, 220_000, 600_000, 1, 10,
+            ["Dos trípodes", "Cableado", "Dos micrófonos alámbricos"], [],
+            [("Potencia total", "500 W"), ("Canales de la consola", "4")],
+            []),
+        new("video-beam-4000-lumenes", "Video beam de 4.000 lúmenes con pantalla", "Audiovisual",
+            "Proyector y pantalla de trípode para presentaciones y capacitaciones.",
+            "Proyector de 4.000 lúmenes con entrada HDMI y pantalla de trípode de 2 metros. Para salas con luz ambiente.",
+            4, 120_000, 500_000, 1, 10,
+            ["Pantalla de trípode de 2 m", "Cable HDMI de 5 m", "Control remoto"], ["Cédula del responsable"],
+            [("Brillo", "4.000 lúmenes"), ("Entradas", "HDMI y VGA"), ("Pantalla", "2,0 m de ancho")],
+            []),
+        new("rotomartillo-800w", "Rotomartillo de 800 W", "Herramienta",
+            "Para perforar concreto y ladrillo, con función de cincelado.",
+            "Rotomartillo con portabrocas SDS Plus y tres modos: taladro, percusión y cincel. Se entrega con su maletín.",
+            6, 45_000, 300_000, 1, 30,
+            ["Maletín", "Tres brocas para concreto", "Un cincel plano"], ["Gafas de seguridad propias"],
+            [("Potencia", "800 W"), ("Portabrocas", "SDS Plus"), ("Energía de impacto", "2,8 J")],
+            [("semana", "Semana completa", 7, 36_000, "A partir de 7 días.")]),
+        new("mezcladora-concreto-1-bulto", "Mezcladora de concreto de un bulto", "Construcción",
+            "Trompo eléctrico para mezclas de un bulto de cemento por tanda.",
+            "Mezcladora eléctrica con tambor de 350 litros sobre ruedas. Mezcla un bulto de cemento por tanda.",
+            3, 95_000, 700_000, 1, 30,
+            [], ["Toma de 110 V a menos de 20 m", "Devolverla lavada"],
+            [("Tambor", "350 L"), ("Motor", "1,5 HP"), ("Capacidad", "Un bulto por tanda")],
+            [("semana", "Semana completa", 7, 80_000, "A partir de 7 días."), ("mes", "Mes", 28, 65_000, "A partir de 28 días.")]),
+    ];
+
+    /// <summary>
+    /// La raíz «Alquiler» compuesta como las demás (C7): su tema, su cabecera y su pie, y una portada con el bloque de
+    /// la app, cómo funciona, preguntas y un cierre. Los equipos son <c>equipmentPage</c> autorados bajo la raíz, si el
+    /// esquema los admite ahí; si no, la receta lo dice y no los crea saltándose la estructura.
+    /// </summary>
+    private string RecetaAlquiler()
+    {
+        var partes = new List<string>();
+        var plataforma = _contentService.GetById(RaizDeLaPlataforma) ?? throw new InvalidOperationException("No existe el platformRoot.");
+        var raiz = _contentService.GetPagedChildren(plataforma.Id, 0, 100, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && string.Equals(c.GetCultureName(Cultura) ?? c.Name, NombreDeAlquiler, StringComparison.Ordinal));
+        var nueva = raiz is null;
+        raiz ??= _contentService.Create(NombreDeAlquiler, plataforma.Id, "siteRoot");
+        raiz.SetCultureName(NombreDeAlquiler, Cultura);
+        var cambio = nueva;
+        foreach (var (alias, valor) in new (string, object)[]
+                 {
+                     ("siteDisplayName", NombreDeAlquiler),
+                     ("brandKey", "alquiler"),
+                     ("brandDisplayName", "SynergosLabs Alquiler"),
+                     ("pageThemeVariant", "[\"dark\"]"),
+                     ("canonicalHostname", "alquiler.synergos.local"),
+                     ("seoDescription", "Andamios, energía, sonido y herramienta por días, con la garantía retenida y no cobrada."),
+                 })
+        {
+            cambio |= Poner(raiz, alias, valor);
+        }
+        if (nueva)
+        {
+            raiz.SetValue(Cuerpo, PortadaDeAlquiler(), Cultura);
+        }
+        if (cambio)
+        {
+            var publicada = _contentService.SaveAndPublish(raiz, new[] { Cultura });
+            if (!publicada.Success)
+            {
+                return $"raiz-sin-publicar:{publicada.Result};invalidas:{string.Join(",", publicada.InvalidProperties?.Select(p => p.Alias) ?? [])}";
+            }
+        }
+        partes.Add(nueva ? "raiz:creada" : cambio ? "raiz:actualizada" : "raiz:igual");
+
+        var admite = _contentTypeService.Get("siteRoot")?.AllowedContentTypes?
+            .Any(t => string.Equals(t.Alias, "equipmentPage", StringComparison.Ordinal)) == true;
+        if (!admite)
+        {
+            partes.Add("equipos:esquema-no-los-admite-bajo-siteRoot");
+            return string.Join(";", partes);
+        }
+
+        int creados = 0, cambiados = 0;
+        var existentes = _contentService.GetPagedChildren(raiz.Id, 0, 200, out _).Where(c => c.ContentType.Alias == "equipmentPage").ToList();
+        foreach (var e in EquiposDeAlquiler)
+        {
+            var pagina = existentes.FirstOrDefault(c => string.Equals(c.GetValue<string>("equipmentSlug"), e.Slug, StringComparison.Ordinal));
+            var esNueva = pagina is null;
+            pagina ??= _contentService.Create(e.Nombre, raiz.Id, "equipmentPage");
+            if (pagina.ContentType.VariesByCulture()) { pagina.SetCultureName(e.Nombre, Cultura); }
+            var c = esNueva;
+            c |= Poner(pagina, "equipmentSlug", e.Slug);
+            c |= Poner(pagina, "equipmentName", e.Nombre);
+            c |= Poner(pagina, "equipmentCategory", e.Categoria);
+            c |= Poner(pagina, "equipmentSummary", e.Resumen);
+            c |= Poner(pagina, "equipmentDescription", e.Descripcion);
+            c |= Poner(pagina, "equipmentUnits", e.Unidades);
+            c |= Poner(pagina, "equipmentDailyRate", e.Diaria);
+            c |= Poner(pagina, "equipmentDepositAmount", e.Garantia);
+            c |= Poner(pagina, "equipmentMinDays", e.MinDias);
+            c |= Poner(pagina, "equipmentMaxDays", e.MaxDias);
+            c |= Poner(pagina, "equipmentIncludes", string.Join("\n", e.Incluye));
+            c |= Poner(pagina, "equipmentRequirements", string.Join("\n", e.Requiere));
+            c |= Poner(pagina, "hideFromMainMenu", 1);
+            if (esNueva)
+            {
+                var spec = KeyOf("elementEquipmentSpec");
+                var ficha = new BlockListJsonBuilder();
+                foreach (var (rotulo, valor) in e.Ficha)
+                {
+                    ficha.AddBlock(spec).Set("specLabel", rotulo).Set("specValue", valor).ApplyDefaults(_defaults.DefaultsFor(spec));
+                }
+                Poner(pagina, "equipmentSpecs", ficha.Build());
+                var rate = KeyOf("elementEquipmentRate");
+                var tarifas = new BlockListJsonBuilder();
+                foreach (var (codigo, rotulo, desde, porDia, texto) in e.Tarifas)
+                {
+                    tarifas.AddBlock(rate).Set("rateCode", codigo).Set("rateLabel", rotulo).Set("rateMinDays", desde)
+                        .Set("rateAmount", porDia).Set("rateDescription", texto).ApplyDefaults(_defaults.DefaultsFor(rate));
+                }
+                Poner(pagina, "equipmentRates", tarifas.Build());
+            }
+            if (!c) { continue; }
+            var r = _contentService.SaveAndPublish(pagina, pagina.ContentType.VariesByCulture() ? new[] { Cultura } : Array.Empty<string>());
+            if (!r.Success)
+            {
+                partes.Add($"equipo-sin-publicar:{e.Slug}:{r.Result}:{string.Join(",", r.InvalidProperties?.Select(p => p.Alias) ?? [])}");
+                continue;
+            }
+            if (esNueva) { creados++; } else { cambiados++; }
+        }
+        partes.Add($"equipos-creados:{creados};equipos-cambiados:{cambiados}");
+        return string.Join(";", partes);
+    }
+
+    /// <summary>Pone un valor respetando si la propiedad varía por cultura. Devuelve si cambió.</summary>
+    private static bool Poner(IContent nodo, string alias, object valor)
+    {
+        if (!nodo.HasProperty(alias)) { return false; }
+        var porCultura = nodo.Properties[alias]!.PropertyType.VariesByCulture();
+        var actual = porCultura ? nodo.GetValue(alias, Cultura) : nodo.GetValue(alias);
+        // Una lista vacía se guarda como nulo: «nada» y «""» son lo mismo, o la receta cambiaría en cada pasada.
+        if (string.Equals(actual?.ToString() ?? string.Empty, valor.ToString() ?? string.Empty, StringComparison.Ordinal)) { return false; }
+        if (porCultura) { nodo.SetValue(alias, valor, Cultura); } else { nodo.SetValue(alias, valor); }
+        return true;
+    }
+
+    /// <summary>La portada de Alquiler: el bloque de la app, cómo funciona, preguntas y un cierre.</summary>
+    private string PortadaDeAlquiler()
+    {
+        var b = new BlockGridJsonBuilder();
+        var app = KeyOf("elementSynAlquiler");
+        Seccion(b, null).AddChild(AreaDeLaSeccion, app, a => a
+            .Set("heading", "Alquiler de equipos")
+            .Set("subheading", "Andamios, energía, sonido y herramienta por días. La garantía se retiene, no se cobra.")
+            .ApplyDefaults(_defaults.DefaultsFor(app)));
+        Rejilla(b, "surface", "Cómo funciona", 4,
+            ("Elige y calcula", "Escoge el equipo, las fechas y las unidades, y ve el valor antes de reservar."),
+            ("Reserva y paga", "Apartamos tus unidades unos minutos; al confirmar pagas el alquiler y se retiene la garantía."),
+            ("Tu contrato", "En «Mis alquileres» queda tu contrato sellado, con la fecha hasta la que puedes cancelar."),
+            ("Devuelve", "Al entregar el equipo declaras la devolución; el personal la revisa y libera la garantía."));
+        Preguntas(b, "Preguntas frecuentes",
+            ("¿La garantía se cobra?", "No. Se retiene en tu medio de pago y se libera cuando el personal confirma la devolución. Si el equipo vuelve con daño, el valor del daño se toma de la garantía."),
+            ("¿Necesito una cuenta?", "Sí, para alquilar: tus contratos van atados a tu cuenta, no a este navegador."),
+            ("¿Por cuántos días puedo alquilar?", "Cada equipo dice su mínimo y su máximo. Hay un tope general porque la retención de la garantía tiene una vigencia limitada."),
+            ("¿Puedo cancelar?", "Sí, hasta la fecha que indica tu contrato en «Mis alquileres»."));
+        Cierre(b, "¿Ya sabes qué necesitas?", "Elige el equipo y calcula el valor de tus fechas.", "Ver equipos", "/alquiler/");
         return b.Build();
     }
 

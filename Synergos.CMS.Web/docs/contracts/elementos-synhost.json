@@ -150,6 +150,7 @@
         "Alquiler.Errors.ReserveFailed",
         "Alquiler.Errors.RetentionExpired",
         "Alquiler.Errors.ReturnFailed",
+        "Alquiler.Errors.SignInAction",
         "Alquiler.Errors.SignInToRent",
         "Alquiler.Errors.StaffRequired",
         "Alquiler.Errors.WindowOutOfBounds",

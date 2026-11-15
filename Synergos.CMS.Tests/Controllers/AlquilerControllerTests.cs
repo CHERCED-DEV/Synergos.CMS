@@ -309,6 +309,22 @@ public sealed class AlquilerControllerTests
     }
 
     [Fact]
+    public async Task Sin_sesion_calcular_y_reservar_dicen_401_falta_la_sesion_y_no_400()
+    {
+        // 400 alquiler.bad_request se lee como «pediste algo mal»; la app ofrece el enlace para entrar con el 401 (016, C7).
+        var borde = Borde(new RentalResult(RentalOutcome.Ok, Alquiler(), null, null), out _, conSesion: false);
+
+        var cotizar = await borde.Quote(new QuoteRequest("andamio-multidireccional-2m", 1, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 4)), CancellationToken.None);
+        var reservar = await borde.Reserve(Pedido(), CancellationToken.None);
+
+        foreach (var p in new[] { Problema(cotizar.Result), Problema(reservar.Result) })
+        {
+            Assert.Equal(StatusCodes.Status401Unauthorized, p.Estado);
+            Assert.Equal("alquiler.session_required", p.Codigo);
+        }
+    }
+
+    [Fact]
     public async Task Sin_sesion_la_bandeja_NO_devuelve_lista_vacia()
     {
         // `[]` diría «todavía ninguno» sobre alguien que ni siquiera se identificó — la
