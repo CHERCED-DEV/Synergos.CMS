@@ -106,6 +106,10 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "tienda-vender", RecetaTiendaYVender(), 0);
         }
+        if (string.Equals(vertical, "titulo-apps", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
+        }
         if (string.Equals(vertical, "categorias", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaEntradasDeCategorias();
@@ -620,6 +624,39 @@ public sealed class DevContenidoDeVerticales
         (Guid.Parse("c61376b9-dafa-490a-89b6-16ab0dbb25bc"),
             "Salas de reuniones por dos horas y un auditorio por jornada, para tu equipo o tu evento. Eliges el espacio y lo reservas desde su ficha."),
     ];
+
+    /// <summary>La página «Apps» de Synergos, por su Key de uSync.</summary>
+    private static readonly Guid PaginaApps = Guid.Parse("1c9e334b-08ac-4d20-91cf-ec3aa8fd97b8");
+
+    /// <summary>
+    /// «Apps — Apps SynergosLabs» repetía la palabra, y la página no tenía descripción (016, junto a V2).
+    /// </summary>
+    private string RecetaTituloDeApps()
+    {
+        var apps = _contentService.GetById(PaginaApps);
+        if (apps is null) { return "sin-pagina"; }
+        var cambio = false;
+        foreach (var (alias, valor) in new[]
+                 {
+                     ("seoTitle", "Apps — SynergosLabs"),
+                     ("seoDescription", "Las apps de SynergosLabs por dentro: qué hace cada una, cómo se ve y dónde probarla."),
+                 })
+        {
+            if (apps.HasProperty(alias) && apps.GetValue<string>(alias, Cultura) != valor) { apps.SetValue(alias, valor, Cultura); cambio = true; }
+        }
+        if (cambio) { _contentService.SaveAndPublish(apps, new[] { Cultura }); }
+
+        // La portada de Educación no tenía seoTitle y caía al nombre del nodo, «Educacion» (4.ª vuelta, A-1).
+        var educacion = _contentService.GetById(Educacion);
+        var cambioEducacion = false;
+        if (educacion is not null && educacion.HasProperty("seoTitle") && educacion.GetValue<string>("seoTitle", Cultura) != "Educación")
+        {
+            educacion.SetValue("seoTitle", "Educación", Cultura);
+            _contentService.SaveAndPublish(educacion, new[] { Cultura });
+            cambioEducacion = true;
+        }
+        return $"apps:{(cambio ? 1 : 0)};educacion:{(cambioEducacion ? 1 : 0)}";
+    }
 
     /// <summary>«{categoría} — {sitio} SynergosLabs», con el nombre que el sitio muestra (siteDisplayName).</summary>
     private string? TituloDeCategoria(IContent categoria)
@@ -1386,10 +1423,13 @@ public sealed class DevContenidoDeVerticales
         {
             var cuerpo = new CuerpoEditable(reservar.GetValue<string>(Cuerpo, Cultura));
             cuerpo.Reemplazar(KeyOf("elementCompHero"), "textBody",
-                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Al confirmar ves tu comprobante con el número de la reserva.</p>");
+                "<p>Completa tu reserva en pocos pasos: fechas, huéspedes, habitación y datos de contacto. Antes de confirmar ves el total y si la tarifa es reembolsable; al confirmar, tu comprobante con el número de la reserva.</p>");
             cuerpo.Reemplazar(KeyOf("elementCorpMissionBlock"), "textBody",
                 "<p>El asistente te guía paso a paso y te muestra las habitaciones libres para tus fechas. Antes de confirmar ves el total y si la tarifa es reembolsable.</p>",
                 CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
+            // El asistente quedaba a ~1.000 px, bajo la portada y un bloque que la repetía (016, 4.ª vuelta): el bloque sale
+            // de la página (desconectado; el tipo sigue) y su única frase nueva pasa a la portada.
+            cuerpo.DesconectarSeccionesCon(KeyOf("elementCorpMissionBlock"), CuerpoEditable.Donde("headingTitle", "Completa tu reserva"));
             CambiarEnLista(cuerpo, KeyOf("elementSynAccordion"), "itemsJson", "title", "Política de cancelación",
                 ("content", "Depende de la tarifa: el asistente te muestra si es reembolsable y su política de cancelación antes de confirmar."));
             var preguntas = KeyOf("elementSynFaqSection");

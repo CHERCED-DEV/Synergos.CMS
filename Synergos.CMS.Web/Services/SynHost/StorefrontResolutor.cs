@@ -48,6 +48,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
     private readonly IRutasDeLasVistas _rutas;
     private readonly string _zona;
     private readonly ILogger<StorefrontResolutor> _log;
+    private readonly ICabeceraDeLasApps? _cabecera;
 
     public StorefrontResolutor(
         IPublishedValueFallback fallback,
@@ -55,8 +56,10 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
         ICaminoDeLosFlujos caminos,
         IRutasDeLasVistas rutas,
         IOptions<ListadosSettings> listados,
-        ILogger<StorefrontResolutor> log)
+        ILogger<StorefrontResolutor> log,
+        ICabeceraDeLasApps? cabecera = null)
     {
+        _cabecera = cabecera;
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
@@ -80,6 +83,7 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             ZonaHoraria: _zona,
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
             Filtros: FiltrosDe(editor.Opciones(AliasDeLaSeleccion)),
-            Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto)));
+            Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto),
+            Cabecera: _cabecera?.Actual()));
     }
 }

@@ -917,6 +917,7 @@ public sealed class ContratoSynHostTests
             .AddSingleton(ElementoFalso.Urls())
             .AddSingleton(IconosDeUSync())
             .AddSingleton<IRutasDeLasVistas>(new RutasDeMuestra())
+            .AddSingleton<Synergos.CMS.Web.Services.SynHost.ICabeceraDeLasApps>(new CabeceraDeMuestra())
             .AddLogging()
             .AddResolutoresSynHost()
             .BuildServiceProvider();
@@ -1017,6 +1018,12 @@ public sealed class ContratoSynHostTests
     /// Un sitio compuesto con una página por vista (014-despiece-tienda, I3): sin petición no hay sitio que recorrer,
     /// y una ruta que no viajara en la muestra no la miraría ningún gate.
     /// </summary>
+    /// <summary>La cabecera de una app dentro de un sitio (D-016-V2): el campo viaja en la muestra.</summary>
+    private sealed class CabeceraDeMuestra : Synergos.CMS.Web.Services.SynHost.ICabeceraDeLasApps
+    {
+        public string Actual() => ModoDeCabecera.Secundaria;
+    }
+
     private sealed class RutasDeMuestra : IRutasDeLasVistas
     {
         public IReadOnlyList<RutaDeUnaVista> Del(string aliasDelBloque, string vistaPorDefecto)

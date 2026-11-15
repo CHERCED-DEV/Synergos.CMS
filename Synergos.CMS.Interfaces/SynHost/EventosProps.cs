@@ -38,4 +38,6 @@ public sealed record EventosProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal FeePercent,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] decimal PlatformFeePercent,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string PurchasePath,
+    // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);
