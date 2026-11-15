@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 
@@ -22,8 +25,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// referencia ese item — el cuerpo/transcripción sale del MISMO motor de feed
 /// que usa Blogs para sus posts, vía la abstracción (DIP, ADR 0002). Educación
 /// depende de <see cref="IContentStream"/>, NO del módulo Blogs ni de su schema:
-/// no instancia Blogs, reusa el seam. El siembre es idempotente (una sola vez por
-/// instancia, con doble-checked lock).
+/// no instancia Blogs, reusa el seam. La siembra es idempotente también entre
+/// arranques: el mapping vive en el store (<see cref="LessonContentResourceType"/>)
+/// con la huella de lo sembrado, como el de <see cref="CatalogCourseCatalogProvider"/>.
 /// </para>
 /// <para>
 /// Lógica pura y determinista en <c>Synergos.CMS.Application</c> — cero
@@ -34,8 +38,31 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
 {
+    /// <summary>
+    /// Familia del store para el mapping <c>lessonId → item del feed</c> de las lecciones de la demo, con la huella de
+    /// lo sembrado. Es durable, como la de <see cref="CatalogCourseCatalogProvider"/>: con el mapping en memoria, cada
+    /// arranque volvía a sembrar las 14 lecciones en el stream, que sí es durable, y la base real llegó a 1358, 97 copias
+    /// de cada una (012-blogs-social, el catálogo lento).
+    /// </summary>
+    public const string LessonContentResourceType = "academy-demo-lesson-content";
+
+    // Cuando hay que buscar en el stream una lección para adoptarla: las de la base real, de una sola lectura, como
+    // FuenteDeLaRed, y un tope por si el stream creciera sin medida.
+    private const int StreamPageSize = 5000;
+    private const int MaxStreamReads = 20;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
     private readonly IContentStream _contentStream;
+    private readonly IJsonEntityStore _store;
     private readonly object _seedLock = new();
+
+    // La siembra: una sola por instancia, aunque lleguen dos peticiones a la vez. Si falla, la próxima la reintenta.
+    private Task<Dictionary<string, string>>? _seeding;
 
     // Cara de LECTURA del motor de matrícula (alumnos + ingresos por curso) para
     // el panel del instructor. Opcional (null = métricas en cero): se enchufa por
@@ -71,9 +98,14 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
     /// </summary>
     /// <param name="zonaDelSitio">La zona del sitio (<c>Synergos:Listados:ZonaHoraria</c>): en ella
     /// es el día con que se fecha una publicación. Sin ella, UTC.</param>
-    public StubCourseCatalogProvider(IContentStream contentStream, TimeZoneInfo? zonaDelSitio = null)
+    /// <param name="store">Dónde se anotan las lecciones ya sembradas (<see cref="LessonContentResourceType"/>): con el
+    /// durable, un arranque no las vuelve a sembrar. Sin él, en memoria.</param>
+    public StubCourseCatalogProvider(
+        IContentStream contentStream,
+        TimeZoneInfo? zonaDelSitio = null,
+        IJsonEntityStore? store = null)
         : this(contentStream, new InMemoryCatalogIndex<CourseSummary>(Descriptor, CatalogSettings.Unpaged),
-            zonaDelSitio: zonaDelSitio)
+            zonaDelSitio: zonaDelSitio, store: store)
     {
     }
 
@@ -86,12 +118,14 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
         IContentStream contentStream,
         ICatalogIndex<CourseSummary> index,
         Func<DateTimeOffset>? now = null,
-        TimeZoneInfo? zonaDelSitio = null)
+        TimeZoneInfo? zonaDelSitio = null,
+        IJsonEntityStore? store = null)
     {
         _contentStream = contentStream ?? throw new ArgumentNullException(nameof(contentStream));
         _index = index ?? throw new ArgumentNullException(nameof(index));
         _now = now ?? (() => DateTimeOffset.UtcNow);
         _zona = zonaDelSitio ?? TimeZoneInfo.Utc;
+        _store = store ?? new InMemoryJsonEntityStore();
     }
 
     private readonly Func<DateTimeOffset> _now;
@@ -368,36 +402,162 @@ public sealed class StubCourseCatalogProvider : ICourseCatalogProvider
             return;
         }
 
-        // Crea los items fuera del lock (CreateAsync es async), luego publica el
-        // mapping bajo lock con doble check para no sembrar dos veces.
+        Task<Dictionary<string, string>> seeding;
+        lock (_seedLock)
+        {
+            if (_seeding is null || _seeding.IsFaulted || _seeding.IsCanceled)
+            {
+                _seeding = Task.Run(() => SeedLessonsAsync());
+            }
+
+            seeding = _seeding;
+        }
+
+        // Quien cancela deja de esperar, pero la siembra sigue: es de todos los que llegan.
+        var map = await seeding.WaitAsync(cancellationToken);
+        lock (_seedLock)
+        {
+            _lessonContentIds ??= map;
+        }
+    }
+
+    /// <summary>
+    /// Siembra en el stream las lecciones de la demo que no estén ya sembradas, y anota cada una en el store con la
+    /// huella de lo sembrado.
+    /// </summary>
+    /// <remarks>
+    /// <para>Una lección está sembrada si su anotación tiene la huella de hoy (autor, cuerpo y video: si el seed cambia,
+    /// se vuelve a sembrar) y su item sigue en el stream.</para>
+    /// <para><b>Sin anotación, adopta la que ya esté en el stream</b> con el mismo autor, cuerpo y video, la más
+    /// reciente: la base que ya las tiene repetidas no suma otra tanda en el primer arranque con el mapping durable. Es
+    /// la misma que deja <c>tools/lecciones-repetidas.mjs</c> al quitar las repetidas, así que da igual qué corra
+    /// primero.</para>
+    /// </remarks>
+    private async Task<Dictionary<string, string>> SeedLessonsAsync()
+    {
+        var seeded = await LoadSeededAsync();
+        IReadOnlyList<ContentStreamItem>? inStream = null;
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
+
         foreach (var course in AcademyDemoSeed.Courses)
         {
             foreach (var module in course.Modules)
             {
                 foreach (var lesson in module.Lessons)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    // Lo que el stream guarda: CreateAsync recorta el cuerpo y el video, y un video en blanco es null.
+                    var body = lesson.ContentBody.Trim();
+                    var video = string.IsNullOrWhiteSpace(lesson.VideoRef) ? null : lesson.VideoRef.Trim();
+                    var fingerprint = Fingerprint(course.InstructorId, body, video);
 
-                    // El cuerpo editorial de la lección entra al MISMO motor de feed
-                    // que usa Blogs, con Kind=lesson — polimorfismo, no instanciación.
-                    var item = await _contentStream.CreateAsync(
-                        new NewContentItem(
-                            AuthorId: course.InstructorId,
-                            Body: lesson.ContentBody,
-                            MediaUrl: lesson.VideoRef,
-                            Kind: "lesson"),
-                        cancellationToken);
-                    map[lesson.Id] = item.Id;
+                    if (seeded.TryGetValue(lesson.Id, out var hit)
+                        && string.Equals(hit.Fingerprint, fingerprint, StringComparison.Ordinal)
+                        && await _contentStream.GetItemAsync(hit.ContentItemId) is not null)
+                    {
+                        map[lesson.Id] = hit.ContentItemId;
+                        continue;
+                    }
+
+                    inStream ??= await LessonsInStreamAsync();
+                    var itemId = inStream.FirstOrDefault(i => IsSameLesson(i, course.InstructorId, body, video))?.Id;
+                    if (itemId is null)
+                    {
+                        // El cuerpo editorial de la lección entra al MISMO motor de feed
+                        // que usa Blogs, con Kind=lesson — polimorfismo, no instanciación.
+                        var item = await _contentStream.CreateAsync(
+                            new NewContentItem(
+                                AuthorId: course.InstructorId,
+                                Body: lesson.ContentBody,
+                                MediaUrl: lesson.VideoRef,
+                                Kind: "lesson"));
+                        itemId = item.Id;
+                    }
+
+                    await _store.WriteAsync(
+                        LessonContentResourceType,
+                        lesson.Id,
+                        JsonSerializer.Serialize(new SeededLesson(lesson.Id, itemId, fingerprint), JsonOptions));
+                    map[lesson.Id] = itemId;
                 }
             }
         }
 
-        lock (_seedLock)
-        {
-            _lessonContentIds ??= map;
-        }
+        return map;
     }
+
+    /// <summary>Lo que el store dice que ya está sembrado. Una anotación ilegible se salta: esa lección se siembra.</summary>
+    private async Task<Dictionary<string, SeededLesson>> LoadSeededAsync()
+    {
+        var documents = await _store.ListAsync(LessonContentResourceType);
+        var map = new Dictionary<string, SeededLesson>(documents.Count, StringComparer.Ordinal);
+        foreach (var json in documents)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                continue;
+            }
+
+            SeededLesson? record;
+            try
+            {
+                record = JsonSerializer.Deserialize<SeededLesson>(json, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            if (record is not null
+                && !string.IsNullOrWhiteSpace(record.LessonId)
+                && !string.IsNullOrWhiteSpace(record.ContentItemId)
+                && !string.IsNullOrWhiteSpace(record.Fingerprint))
+            {
+                map[record.LessonId] = record;
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>Las lecciones que ya están en el stream, la más reciente primero, como las ordena el stream.</summary>
+    private async Task<IReadOnlyList<ContentStreamItem>> LessonsInStreamAsync()
+    {
+        var lessons = new List<ContentStreamItem>();
+        string? cursor = null;
+        for (var read = 0; read < MaxStreamReads; read++)
+        {
+            var page = await _contentStream.GetFeedAsync(
+                new FeedQuery(Scope: FeedScope.ForYou, Cursor: cursor, Kind: "lesson", PageSize: StreamPageSize));
+            lessons.AddRange(page.Items);
+            cursor = page.NextCursor;
+            if (string.IsNullOrEmpty(cursor))
+            {
+                break;
+            }
+        }
+
+        return lessons
+            .OrderByDescending(i => i.CreatedUtc)
+            .ThenBy(i => i.Id, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool IsSameLesson(ContentStreamItem item, string authorId, string body, string? video)
+        => string.Equals(item.Kind, "lesson", StringComparison.OrdinalIgnoreCase)
+           && string.Equals(item.Author?.Id, authorId, StringComparison.Ordinal)
+           && string.Equals(item.Body, body, StringComparison.Ordinal)
+           && string.Equals(item.MediaUrl, video, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Huella de lo sembrado: el autor, el cuerpo y el video, que es lo que guarda el item. SHA-256 recortado, como la de
+    /// <see cref="CatalogCourseCatalogProvider"/>: no es un secreto, sólo tiene que cambiar cuando cambie la lección.
+    /// </summary>
+    private static string Fingerprint(string authorId, string body, string? video)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{authorId}\n{body}\n{video}")))[..16]
+            .ToLowerInvariant();
+
+    /// <summary>Lo que se recuerda de una lección de la demo ya sembrada: su item en el stream y la huella.</summary>
+    private sealed record SeededLesson(string LessonId, string ContentItemId, string Fingerprint);
 
     private CourseLesson ToLesson(AcademyDemoSeed.SeedLesson l)
     {

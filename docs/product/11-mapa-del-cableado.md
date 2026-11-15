@@ -35,7 +35,7 @@ forma conocida de que una cifra a mano sobreviva a la cuarta ola.
 | **C — se queda en stub a propósito** | 33 | no hay capacidad detrás — o la hay y el stub es el camino por defecto |
 
 > **La brecha es menor de lo que «una capacidad de veinte conectada» sugiere**, y por una razón
-> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 20 de los 51
+> que no se ve desde el conteo: **más de un tercio de los stubs ya son durables**. 21 de los 51
 > escriben tras `IJsonEntityStore`, `IPrivateFileStore` o `IPhiStore` (ADR 0105, ADR 0116 fase 6, doc 25,
 > T6). «Stub» en este repo dejó hace tiempo de querer decir «en memoria», y leerlo así es lo que
 > hace que un ticket prometa arreglar algo que ya está arreglado — ver la nota sobre #26 al final.
