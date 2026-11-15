@@ -39,7 +39,7 @@ public sealed class VitrinaDeAppsTests
         {
             Sitio("Blogs", "blogs"), Sitio("Tienda", "ecommerce"), Sitio("Healthcare", "healthcare"),
             Sitio("Educacion", "educacion"), Sitio("Booking", "meridian"), Sitio("Eventos", "eventos"),
-            Sitio("Propiedades", "propiedades"), Sitio("Hoteles", "hoteles"), Sitio("Gobierno", "gobierno"),
+            Sitio("Propiedades", "propiedades"), Sitio("Hoteles", "hoteles"), Sitio("Gobierno", "gobierno"), Sitio("Alquiler", "alquiler"),
         };
         var urls = new DefaultShortStringHelper(new DefaultShortStringHelperConfig().WithDefault(new RequestHandlerSettings()));
 
@@ -148,5 +148,92 @@ public sealed class VitrinaDeAppsTests
 
         Assert.Equal(0, lanzadores);
         Assert.Same(sinLanzador, despues);
+    }
+
+    // ── Las otras puertas del hub (016, C7): la cifra de verticales y la tarjeta del índice ──
+
+    private static readonly Guid Tarjeta = Guid.Parse("c646696c-8819-4630-bc7a-121f0839bb16");
+
+    private static string Cifras(string valor) =>
+        "{\"layout\":{\"Umbraco.BlockGrid\":[]},\"contentData\":["
+        + $"{{\"udi\":\"umb://element/a\",\"statLabel\":\"verticales de negocio\",\"statValue\":\"{valor}\"}},"
+        + "{\"udi\":\"umb://element/b\",\"statLabel\":\"componentes listos para usar\",\"statValue\":\"9\"}"
+        + "],\"settingsData\":[]}";
+
+    [Fact]
+    public void La_cifra_de_verticales_se_pone_al_dia_y_las_demas_cifras_no()
+    {
+        var despues = DevContentFiller.ConLaCifraDeVerticales(Cifras("9"), "10", out var cifras);
+
+        Assert.Equal(1, cifras);
+        var bloques = System.Text.Json.Nodes.JsonNode.Parse(despues!)!["contentData"]!;
+        Assert.Equal("10", bloques[0]!["statValue"]!.GetValue<string>());
+        Assert.Equal("9", bloques[1]!["statValue"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Con_la_cifra_al_dia_devuelve_el_mismo_texto()
+    {
+        var antes = Cifras("10");
+
+        Assert.Same(antes, DevContentFiller.ConLaCifraDeVerticales(antes, "10", out _));
+    }
+
+    private static string Indice() =>
+        "{\"layout\":{\"Umbraco.BlockGrid\":[{\"contentUdi\":\"umb://element/s\",\"columnSpan\":12,\"rowSpan\":1,\"areas\":[{\"key\":\"k\",\"items\":["
+        + "{\"contentUdi\":\"umb://element/t1\",\"columnSpan\":12,\"rowSpan\":1,\"areas\":[]}]}]}]},"
+        + "\"contentData\":[{\"udi\":\"umb://element/s\",\"cssClass\":\"syn-launcher__grid\"},"
+        + $"{{\"contentTypeKey\":\"{Tarjeta}\",\"udi\":\"umb://element/t1\",\"cssClass\":\"syn-launcher__card\",\"headingTitle\":\"Gobierno\","
+        + "\"ctaLink\":[{\"name\":\"Gobierno\",\"url\":\"/synergos/apps/gobierno\"}]}],\"settingsData\":[]}";
+
+    [Fact]
+    public void El_recorrido_sin_tarjeta_gana_una_en_la_misma_area_y_las_que_hay_no_cambian()
+    {
+        var despues = DevContentFiller.ConLasTarjetasDeLaVitrina(Indice(), Tarjeta,
+            new[] { ("Gobierno", "gobierno", "Trámites."), ("Alquiler", "alquiler", "Equipos por días.") }, out var nuevas);
+
+        Assert.Equal(1, nuevas);
+        var raiz = System.Text.Json.Nodes.JsonNode.Parse(despues!)!;
+        var nueva = raiz["contentData"]![2]!;
+        Assert.Equal("Alquiler", nueva["headingTitle"]!.GetValue<string>());
+        Assert.Equal("/synergos/apps/alquiler", nueva["ctaLink"]![0]!["url"]!.GetValue<string>());
+        Assert.Equal("syn-launcher__card", nueva["cssClass"]!.GetValue<string>());
+        Assert.NotEqual("umb://element/t1", nueva["udi"]!.GetValue<string>());
+        var area = raiz["layout"]!["Umbraco.BlockGrid"]![0]!["areas"]![0]!["items"]!.AsArray();
+        Assert.Equal(2, area.Count);
+        Assert.Equal(nueva["udi"]!.GetValue<string>(), area[1]!["contentUdi"]!.GetValue<string>());
+        Assert.Equal("Gobierno", raiz["contentData"]![1]!["headingTitle"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Con_todas_las_tarjetas_devuelve_el_mismo_texto()
+    {
+        var antes = Indice();
+
+        Assert.Same(antes, DevContentFiller.ConLasTarjetasDeLaVitrina(antes, Tarjeta, new[] { ("Gobierno", "gobierno", "Trámites.") }, out var nuevas));
+        Assert.Equal(0, nuevas);
+    }
+
+    [Fact]
+    public void Al_lanzador_se_le_agrega_la_app_que_falta_y_las_que_hay_conservan_su_texto()
+    {
+        const string editada = "[{\"id\":\"booking\",\"name\":\"Booking\",\"tagline\":\"Cada solicitud queda registrada.\"}]";
+        const string catalogo = "[{\"id\":\"booking\",\"name\":\"Booking\",\"tagline\":\"Disponibilidad en tiempo real.\"},{\"id\":\"alquiler\",\"name\":\"Alquiler\"}]";
+
+        var despues = DevContentFiller.ConLasAppsQueFaltan(Pagina(ComoTexto(editada)), Lanzador, catalogo, out var lanzadores);
+
+        Assert.Equal(1, lanzadores);
+        var apps = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.Nodes.JsonNode.Parse(despues!)!["contentData"]![1]!["apps"]!.GetValue<string>())!.AsArray();
+        Assert.Equal(2, apps.Count);
+        Assert.Equal("Cada solicitud queda registrada.", apps[0]!["tagline"]!.GetValue<string>());
+        Assert.Equal("alquiler", apps[1]!["id"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Sin_apps_que_falten_el_lanzador_no_cambia_aunque_el_texto_difiera()
+    {
+        var antes = Pagina(Siete);
+
+        Assert.Same(antes, DevContentFiller.ConLasAppsQueFaltan(antes, Lanzador, "[{\"id\":\"eventos\",\"name\":\"Otro texto\"}]", out _));
     }
 }
