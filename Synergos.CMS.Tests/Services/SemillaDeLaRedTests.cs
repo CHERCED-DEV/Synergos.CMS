@@ -111,7 +111,7 @@ public sealed class SemillaDeLaRedTests
             fuente);
         foreach (var stub in new[] { "StubReactionService", "StubSocialGraphService", "StubContentStream", "StubSocialProfileProjection", "StubNotificationFeed" })
         {
-            var construccion = new Regex($@"new {stub}\((?<args>[^;]*?)\)\);", RegexOptions.Singleline).Match(fuente);
+            var construccion = new Regex($@"new {stub}\((?<args>[^;]*);", RegexOptions.Singleline).Match(fuente);
             Assert.True(construccion.Success, $"No encuentro la construcción de {stub} en el composer.");
             Assert.Contains("GetRequiredService<SemillaDeLaRed>()", construccion.Groups["args"].Value, StringComparison.Ordinal);
         }
