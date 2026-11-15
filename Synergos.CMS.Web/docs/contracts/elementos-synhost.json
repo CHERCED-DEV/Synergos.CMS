@@ -595,6 +595,8 @@
         "Blogs.Moderacion.SinSesion",
         "Blogs.Moderacion.Titulo",
         "Blogs.Moderacion.YaNoEsta",
+        "Blogs.Red.EscribirSinSesion",
+        "Blogs.Red.EscribirSinSesionTexto",
         "Blogs.Red.PerfilSinSesion",
         "Blogs.Red.PerfilSinSesionTexto",
         "Blogs.Red.Publicaciones",
