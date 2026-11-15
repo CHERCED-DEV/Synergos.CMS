@@ -115,6 +115,11 @@ public sealed class DevContenidoDeVerticales
         {
             return new Resultado(true, "titulo-apps", RecetaTituloDeApps(), 0);
         }
+        if (string.Equals(vertical, "inmuebles", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaInmuebles();
+            return new Resultado(!hecho.Contains("sin-publicar", StringComparison.Ordinal) && !hecho.Contains("esquema", StringComparison.Ordinal), "inmuebles", hecho, 0);
+        }
         if (string.Equals(vertical, "propiedad-oculta", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = OcultarDeLaNavegacion(PaginaPropiedad);
@@ -1225,6 +1230,10 @@ public sealed class DevContenidoDeVerticales
         var actual = porCultura ? nodo.GetValue(alias, Cultura) : nodo.GetValue(alias);
         // Una lista vacía se guarda como nulo: «nada» y «""» son lo mismo, o la receta cambiaría en cada pasada.
         if (string.Equals(actual?.ToString() ?? string.Empty, valor.ToString() ?? string.Empty, StringComparison.Ordinal)) { return false; }
+        // Un decimal vuelve con otra escala («3800000.0» frente a 3800000): se compara el valor, no el texto (016, F1).
+        if (valor is decimal nuevo && actual is not null
+            && decimal.TryParse(Convert.ToString(actual, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var guardado) && guardado == nuevo) { return false; }
         if (porCultura) { nodo.SetValue(alias, valor, Cultura); } else { nodo.SetValue(alias, valor); }
         return true;
     }
@@ -1845,6 +1854,136 @@ public sealed class DevContenidoDeVerticales
                 ("body", "Todo a la vista — Precio, área, habitaciones, baños, estrato y ubicación en el mapa, en cada inmueble.")));
 
         return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
+    }
+
+    /// <summary>Las categorías de Propiedades (<c>productCategoryPage</c>), por su Key de uSync.</summary>
+    private static readonly Guid CategoriaApartamentos = Guid.Parse("10195c7f-440a-46c1-82b1-284ccc890206");
+    private static readonly Guid CategoriaCasas = Guid.Parse("6e68d98e-f370-4d81-bc08-ea7b47a685f6");
+    private static readonly Guid CategoriaComercial = Guid.Parse("abb93d6b-414f-44b7-91e0-669b93c90143");
+
+    /// <summary>
+    /// Un inmueble del inventario del CMS. Es la ÚNICA fuente de sus datos (D-016-C20/C22): de aquí salen el
+    /// <c>propertyListing</c> que leen la app, el mapa y el listado, y la ficha técnica de su <c>productPage</c> (si la
+    /// tiene), así que los dos no pueden decir cosas distintas.
+    /// </summary>
+    internal sealed record InmuebleDelCms(
+        string Slug, string Titulo, string Operacion, string Tipo, decimal Precio, Guid Categoria, Guid? Ficha,
+        string Ciudad, string Barrio, int Habitaciones, int Banos, int AreaM2, int Parqueaderos, int Estrato,
+        decimal Lat, decimal Lng, Guid Foto, string Descripcion, string[] Amenidades);
+
+    /// <summary>
+    /// Los inmuebles del CMS: las 6 fichas de venta que ya existían como <c>productPage</c> (mismos nombres, precios y
+    /// fotos) y 3 arriendos con fotos ya acreditadas. Contenido de demostración; sin agente con nombre.
+    /// </summary>
+    internal static readonly InmuebleDelCms[] InmueblesDelCms =
+    [
+        new("apto-lujo-chico-bogota", "Apartamento de lujo en Chicó", "venta", "apartamento", 1_250_000_000m, CategoriaApartamentos,
+            Guid.Parse("07a38c3d-5ca0-4588-878d-2c60709da0d3"), "Bogotá", "Chicó", 3, 2, 120, 2, 6, 4.6760m, -74.0480m,
+            Guid.Empty, "Apartamento de 120 m² con acabados premium, tres habitaciones, balcón panorámico y dos parqueaderos. En el corazón de Chicó.",
+            ["Balcón con vista panorámica", "Acabados premium"]),
+        new("apto-familiar-cedritos-bogota", "Apartamento familiar en Cedritos", "venta", "apartamento", 620_000_000m, CategoriaApartamentos,
+            Guid.Parse("bf5075a8-0f24-430b-825d-d697e0070a39"), "Bogotá", "Cedritos", 2, 2, 78, 1, 4, 4.7230m, -74.0410m,
+            Guid.Empty, "Acogedor apartamento de 78 m² con dos habitaciones, cocina integral y zona social iluminada. Conjunto con piscina y gimnasio.",
+            ["Cocina integral", "Piscina", "Gimnasio"]),
+        new("casa-campestre-los-lagos-la-calera", "Casa campestre en Los Lagos", "venta", "casa", 1_480_000_000m, CategoriaCasas,
+            Guid.Parse("89f2d378-5ff8-4597-b094-2fd9675d1c22"), "La Calera", "Los Lagos", 3, 3, 180, 2, 5, 4.7210m, -73.9690m,
+            Guid.Empty, "Casa campestre de 180 m² con tres habitaciones, terraza, BBQ y amplio lote arborizado. Ideal para descanso y naturaleza.",
+            ["Terraza", "BBQ", "Lote arborizado"]),
+        new("casa-jardin-usaquen-bogota", "Casa con jardín en Usaquén", "venta", "casa", 2_100_000_000m, CategoriaCasas,
+            Guid.Parse("836a3901-642e-4a48-ab3c-dec46e38490e"), "Bogotá", "Usaquén", 4, 4, 240, 2, 6, 4.6950m, -74.0310m,
+            Guid.Empty, "Casa de 240 m² en dos niveles, cuatro habitaciones, estudio, jardín privado y garaje doble. Sector residencial exclusivo.",
+            ["Estudio", "Jardín privado", "Garaje doble"]),
+        new("local-zona-t-bogota", "Local comercial en Zona T", "venta", "local", 1_650_000_000m, CategoriaComercial,
+            Guid.Parse("1254bad8-3ee6-490c-a8bd-675cb30f70a0"), "Bogotá", "Zona T", 0, 1, 140, 0, 0, 4.6670m, -74.0540m,
+            Guid.Empty, "Local de 140 m² a pie de calle en la Zona T, con vitrina amplia y alto flujo peatonal. Ideal para retail o gastronomía.",
+            ["A pie de calle", "Vitrina amplia", "Alto flujo peatonal"]),
+        new("oficina-centro-internacional-bogota", "Oficina en torre empresarial", "venta", "oficina", 890_000_000m, CategoriaComercial,
+            Guid.Parse("20e1de52-c2c6-4b1d-b7c4-d7218f4dd1a8"), "Bogotá", "Centro Internacional", 0, 2, 95, 2, 0, 4.6150m, -74.0690m,
+            Guid.Empty, "Oficina de 95 m² en torre AAA con recepción, dos salas de reunión y vista a la ciudad. Excelente conectividad y parqueaderos.",
+            ["Torre AAA", "Recepción", "2 salas de reunión", "Vista a la ciudad"]),
+        new("apto-arriendo-poblado-medellin", "Apartamento en El Poblado", "arriendo", "apartamento", 3_800_000m, CategoriaApartamentos,
+            null, "Medellín", "El Poblado", 2, 2, 85, 1, 6, 6.2086m, -75.5660m,
+            Guid.Parse("9bfd8dc2-16ba-4fca-854f-a9b38b35987c"), "Apartamento moderno amoblado, ideal para ejecutivos, con vista panorámica y a pasos del Parque Lleras y la zona financiera.",
+            ["Amoblado", "Gimnasio", "Piscina", "Coworking", "Pet friendly"]),
+        new("casa-arriendo-cedritos-bogota", "Casa en Cedritos", "arriendo", "casa", 6_500_000m, CategoriaCasas,
+            null, "Bogotá", "Cedritos", 4, 3, 210, 2, 4, 4.7240m, -74.0320m,
+            Guid.Parse("bb54e982-ccea-4e05-ba6c-1eeeb0371007"), "Casa espaciosa con antejardín y zona verde, en un sector residencial tranquilo y bien conectado del norte de Bogotá.",
+            ["Antejardín", "Chimenea", "Cuarto de servicio", "Bodega", "Garaje doble"]),
+        new("oficina-santa-monica-cali", "Oficina en Santa Mónica", "arriendo", "oficina", 5_200_000m, CategoriaComercial,
+            null, "Cali", "Santa Mónica", 0, 2, 130, 4, 5, 3.4699m, -76.5290m,
+            Guid.Parse("c141182f-be33-4f78-8401-b2b993b6d69d"), "Oficina diáfana lista para adecuar, con recepción, sala de juntas y excelente conectividad de transporte en el norte de Cali.",
+            ["Recepción", "Sala de juntas", "Aire acondicionado", "Planta eléctrica", "Fibra óptica"]),
+    ];
+
+    /// <summary>
+    /// D-016-C20/C22, F1b: el inventario de Propiedades vive en el CMS. Por cada <see cref="InmueblesDelCms"/> hay un
+    /// <c>propertyListing</c> bajo su categoría (lo que lee <c>UmbracoPropertyCatalogSource</c>). La foto de una venta
+    /// es la de su ficha (<c>productImages</c>); la de un arriendo, la que ya está acreditada. Idempotente.
+    /// </summary>
+    private string RecetaInmuebles()
+    {
+        var listado = _contentTypeService.Get("propertyListing");
+        var admite = listado is not null && _contentTypeService.Get("productCategoryPage")?.AllowedContentTypes?
+            .Any(t => t.Id.Value == listado.Id || string.Equals(t.Alias, "propertyListing", StringComparison.Ordinal)) == true;
+        if (!admite) { return "esquema:productCategoryPage-no-admite-propertyListing"; }
+
+        int creados = 0, cambiados = 0;
+        var partes = new List<string>();
+        foreach (var i in InmueblesDelCms)
+        {
+            var categoria = _contentService.GetById(i.Categoria);
+            if (categoria is null) { partes.Add($"sin-categoria:{i.Slug}"); continue; }
+
+            var foto = i.Foto;
+            if (foto == Guid.Empty && i.Ficha is { } fichaKey && _contentService.GetById(fichaKey) is { } ficha)
+            {
+                var imagenes = ficha.GetValue<string>("productImages", ficha.Properties["productImages"]!.PropertyType.VariesByCulture() ? Cultura : null);
+                var m = System.Text.RegularExpressions.Regex.Match(imagenes ?? string.Empty, "\"mediaKey\"\\s*:\\s*\"([0-9a-fA-F-]{36})\"");
+                if (m.Success) { foto = Guid.Parse(m.Groups[1].Value); }
+            }
+
+            var existentes = _contentService.GetPagedChildren(categoria.Id, 0, 200, out _).Where(c => c.ContentType.Alias == "propertyListing");
+            var nodo = existentes.FirstOrDefault(c => string.Equals(c.GetValue<string>("propertySlug"), i.Slug, StringComparison.Ordinal));
+            var esNuevo = nodo is null;
+            // El nodo se llama distinto de su ficha hermana (productPage): en el árbol se ve qué es cada uno.
+            var nombre = $"{i.Titulo} · inventario";
+            nodo ??= _contentService.Create(nombre, categoria.Id, "propertyListing");
+
+            var c = esNuevo;
+            if (nodo.ContentType.VariesByCulture() && nodo.GetCultureName(Cultura) != nombre) { nodo.SetCultureName(nombre, Cultura); c = true; }
+            c |= Poner(nodo, "propertySlug", i.Slug);
+            c |= Poner(nodo, "propertyTitle", i.Titulo);
+            c |= Poner(nodo, "propertyOperation", $"[\"{i.Operacion}\"]");
+            c |= Poner(nodo, "propertyType", $"[\"{i.Tipo}\"]");
+            c |= Poner(nodo, "propertyPrice", i.Precio);
+            c |= Poner(nodo, "propertyDescription", i.Descripcion);
+            c |= Poner(nodo, "propertyAmenities", string.Join("\n", i.Amenidades));
+            c |= Poner(nodo, "propertyBeds", i.Habitaciones);
+            c |= Poner(nodo, "propertyBaths", i.Banos);
+            c |= Poner(nodo, "propertyAreaM2", i.AreaM2);
+            c |= Poner(nodo, "propertyParking", i.Parqueaderos);
+            c |= Poner(nodo, "propertyStratum", i.Estrato);
+            c |= Poner(nodo, "propertyCity", i.Ciudad);
+            c |= Poner(nodo, "propertyNeighborhood", i.Barrio);
+            c |= Poner(nodo, "propertyLat", i.Lat);
+            c |= Poner(nodo, "propertyLng", i.Lng);
+            if (foto != Guid.Empty)
+            {
+                // La clave del elemento sale del slug y la foto: repetir la receta no la cambia.
+                var clave = new Guid(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(i.Slug + foto)).AsSpan(0, 16));
+                c |= Poner(nodo, "propertyGallery", $"[{{\"key\":\"{clave}\",\"mediaKey\":\"{foto}\",\"crops\":[],\"focalPoint\":null}}]");
+            }
+            if (!c) { continue; }
+            var r = _contentService.SaveAndPublish(nodo, nodo.ContentType.VariesByCulture() ? new[] { Cultura } : Array.Empty<string>());
+            if (!r.Success)
+            {
+                partes.Add($"sin-publicar:{i.Slug}:{r.Result}:{string.Join(",", r.InvalidProperties?.Select(x => x.Alias) ?? [])}");
+                continue;
+            }
+            if (esNuevo) { creados++; } else { cambiados++; }
+        }
+        partes.Insert(0, $"inmuebles:{InmueblesDelCms.Length};creados:{creados};cambiados:{cambiados}");
+        return string.Join(";", partes);
     }
 
     /// <summary>La página de demostración «Propiedad» de Propiedades, por su Key de uSync.</summary>
