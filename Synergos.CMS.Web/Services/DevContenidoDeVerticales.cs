@@ -1741,6 +1741,8 @@ public sealed class DevContenidoDeVerticales
     /// en una portada para quien pide una cita; se desconectan (SUPERSET). Y, aprobado después, «Tu agenda abierta a toda
     /// hora» y «Empieza a recibir reservas hoy» pasan a la voz de quien reserva, y los testimonios de cargos de negocio
     /// salen de la página.</item>
+    /// <item>Educación, D-016-C15: «Planes de acceso» (curso suelto a $89.000, membresía con cohortes en vivo) no es lo
+    /// que cobra ni ofrece la app; se desconecta, y la FAQ deja de prometer cohortes.</item>
     /// <item>Eventos: «recibe tu acceso por correo al instante»: ningún correo sale con la entrada; la compra pide
     /// sesión y las entradas, con su QR firmado, quedan en «Mis tickets», desde donde se transfieren.</item>
     /// </list>
@@ -1799,6 +1801,14 @@ public sealed class DevContenidoDeVerticales
                 ("answer", "Elige el evento, inicia sesión y completa la compra: tus entradas, con su código QR, quedan en «Mis tickets»."))
             + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo transferir mi entrada?",
                 ("answer", "Sí. En «Mis tickets» eliges la entrada y la transfieres a otra persona con su correo.")));
+
+        // D-016-C15: «Planes de acceso» vendía un «Curso suelto» a $89.000 (el catálogo cobra cada curso a su precio) y una
+        // membresía con cohortes en vivo que la app no tiene: la sección se desconecta (SUPERSET), y la FAQ deja de
+        // prometer cohortes.
+        Corregir(Educacion, "educacion", cuerpo =>
+            cuerpo.DesconectarSeccionesCon(KeyOf("elementPricingTable"), CuerpoEditable.Donde("tableHeading", "Planes de acceso"))
+            + CambiarEnLista(cuerpo, preguntas, "itemsJson", "question", "¿Puedo estudiar a mi ritmo?",
+                ("answer", "Sí. El contenido queda disponible y avanzas cuando puedas.")));
 
         return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
     }
