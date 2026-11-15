@@ -105,6 +105,13 @@ public sealed class AlquilerController : ControllerBase
     [HttpPost("quote")]
     public async Task<ActionResult<QuoteDto>> Quote([FromBody] QuoteRequest body, CancellationToken ct)
     {
+        // Sin sesión es 401, como las demás acciones de este controlador (016, C7): la app lo lee como «falta entrar» y
+        // ofrece el enlace. Antes salía 400 alquiler.bad_request, que se lee como «pediste algo mal».
+        if (QuienAlquila() is null)
+        {
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required", "Hay que iniciar sesión para alquilar.");
+        }
+
         if (!TryLeer(body?.EquipmentId, body?.Quantity, body?.Start, body?.End, out var pedido, out var porQue))
         {
             return Problema(StatusCodes.Status400BadRequest, "alquiler.bad_request", porQue);
@@ -121,6 +128,13 @@ public sealed class AlquilerController : ControllerBase
     [HttpPost("rentals")]
     public async Task<ActionResult<RentalDto>> Reserve([FromBody] ReserveRequest body, CancellationToken ct)
     {
+        // Sin sesión es 401, como las demás acciones de este controlador (016, C7): la app lo lee como «falta entrar» y
+        // ofrece el enlace. Antes salía 400 alquiler.bad_request, que se lee como «pediste algo mal».
+        if (QuienAlquila() is null)
+        {
+            return Problema(StatusCodes.Status401Unauthorized, "alquiler.session_required", "Hay que iniciar sesión para alquilar.");
+        }
+
         if (!TryLeer(body?.EquipmentId, body?.Quantity, body?.Start, body?.End, out var pedido, out var porQue))
         {
             return Problema(StatusCodes.Status400BadRequest, "alquiler.bad_request", porQue);

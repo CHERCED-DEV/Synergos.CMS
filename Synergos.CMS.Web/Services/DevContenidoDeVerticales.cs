@@ -386,7 +386,7 @@ public sealed class DevContenidoDeVerticales
 
     /// <summary>
     /// Importa las fotos de <paramref name="carpeta"/> según sus manifiestos (<c>tienda.json</c>, <c>booking.json</c>,
-    /// <c>propiedades.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
+    /// <c>propiedades.json</c>, <c>alquiler.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
     /// usa su destino —misma Key, así que páginas y catálogo siguen apuntando bien— y la página se republica. Idempotente:
     /// un medio que ya tiene esa licencia y ese crédito no se toca.
     /// </summary>
@@ -415,6 +415,12 @@ public sealed class DevContenidoDeVerticales
             partes.Add($"fichas:{n}"); cambios += n; ok &= faltan == 0;
             if (faltan > 0) { partes.Add($"ambientes-no-encontrados:{faltan}"); }
         }
+        if (Leer(carpeta, "alquiler.json") is { } alquiler)
+        {
+            var (n, sinEquipo) = FotosDeEquipos(alquiler, carpeta);
+            partes.Add($"alquiler:{n}"); cambios += n; ok &= sinEquipo == 0;
+            if (sinEquipo > 0) { partes.Add($"alquiler-sin-equipo:{sinEquipo}"); }
+        }
         if (Leer(carpeta, "laureles.json") is { } medios)
         {
             var n = 0;
@@ -432,6 +438,44 @@ public sealed class DevContenidoDeVerticales
         var detalle = string.Join(";", partes);
         _logger.LogInformation("Fotos importadas: {Detalle}.", detalle);
         return new Resultado(ok, "fotos", detalle, cambios);
+    }
+
+    /// <summary>
+    /// La portada (<c>equipmentCover</c>) de cada equipo de Alquiler, por su slug (<c>producto</c> en el manifiesto
+    /// <c>alquiler.json</c>), con su licencia y su crédito (C7). Idempotente: una portada con esa licencia y ese crédito
+    /// no se toca.
+    /// </summary>
+    private (int Cambiados, int SinEquipo) FotosDeEquipos(IReadOnlyList<FotoImportada> fotos, string carpeta)
+    {
+        var plataforma = _contentService.GetById(RaizDeLaPlataforma);
+        var raiz = plataforma is null ? null : _contentService.GetPagedChildren(plataforma.Id, 0, 100, out _)
+            .FirstOrDefault(c => c.ContentType.Alias == "siteRoot" && string.Equals(c.GetCultureName(Cultura) ?? c.Name, NombreDeAlquiler, StringComparison.Ordinal));
+        if (raiz is null) { return (0, fotos.Count); }
+        var equipos = _contentService.GetPagedChildren(raiz.Id, 0, 200, out _).Where(c => c.ContentType.Alias == "equipmentPage").ToList();
+        int cambiados = 0, sinEquipo = 0;
+        foreach (var foto in fotos.Where(f => f.Producto is not null && !string.IsNullOrWhiteSpace(f.Archivo)))
+        {
+            var pagina = equipos.FirstOrDefault(c => string.Equals(c.GetValue<string>("equipmentSlug"), foto.Producto, StringComparison.Ordinal));
+            if (pagina is null) { sinEquipo++; continue; }
+            var ruta = Path.Combine(carpeta, foto.Archivo);
+            var nombre = $"equipo {foto.Producto}";
+            var cambio = false;
+            var clave = _media.KeyByName(nombre);
+            if (clave is null)
+            {
+                Poner(pagina, "equipmentCover", _media.GetOrCreatePhotoPickerValue(nombre, foto.Alt, ruta, foto.Licencia));
+                clave = _media.KeyByName(nombre);
+                cambio = true;
+            }
+            if (clave is { } k)
+            {
+                cambio |= _media.ReplacePhoto(k, ruta, nombre, foto.Alt, foto.Licencia, foto.Credito);
+            }
+            if (!cambio) { continue; }
+            _contentService.SaveAndPublish(pagina, pagina.ContentType.VariesByCulture() ? new[] { Cultura } : Array.Empty<string>());
+            cambiados++;
+        }
+        return (cambiados, sinEquipo);
     }
 
     /// <summary>Compatibilidad: <c>/dev/fotos-de-la-tienda</c> importa sólo el manifiesto de la Tienda.</summary>
