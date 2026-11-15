@@ -1332,6 +1332,11 @@ public sealed class DevContentFiller
             "Trámites en lenguaje claro con carpeta ciudadana y seguimiento por etapas.",
             "document", "Sector público", "Ciudadano",
             new[] { "Trámites", "Radicación", "Expedientes", "Notificaciones" }),
+        new("alquiler", "Alquiler",
+            "Alquiler de equipos por días: catálogo, cotización por tramos y garantía retenida — un negocio de alquiler completo sobre el mismo motor.",
+            "Equipos por días con la cotización por tramos y la garantía retenida, no cobrada.",
+            "grid", "Construcción y eventos", "Contratista",
+            new[] { "Catálogo", "Cotización", "Garantía", "Devolución" }),
     };
 
     /// <summary>
@@ -4015,7 +4020,9 @@ public sealed class DevContentFiller
 
     /// <summary>
     /// Pone al día la vitrina SIN PISAR: crea las fichas <c>/synergos/apps/&lt;slug&gt;</c> que
-    /// falten y deja la lista del lanzador de Soluciones igual al catálogo. Nada más.
+    /// falten; a los lanzadores de Soluciones, la portada, el índice de Apps y la raíz les agrega
+    /// las apps que no tienen; al índice, la tarjeta del recorrido que falte; y pone al día las
+    /// cifras «N verticales». Nada más.
     /// </summary>
     /// <remarks>
     /// <para><b>Existe porque arreglar el sembrador no arregla lo ya sembrado.</b> El #187 le dio a
@@ -4027,9 +4034,9 @@ public sealed class DevContentFiller
     /// <para><b>Re-sembrar no era la salida</b>: <see cref="FillSynergosPages"/> reescribe páginas
     /// enteras y vuelve a subir cada imagen (<see cref="DevMediaFactory"/> reemplaza el fichero de
     /// la media que ya existe), así que habría pisado los ajustes del editor y llenado la demo
-    /// versionada de PNG duplicados. Esto toca dos cosas: crea la ficha que no existe (una ficha
-    /// existente NO se reescribe, aunque su recorrido haya cambiado) y reemplaza la propiedad
-    /// <c>apps</c> del lanzador de Soluciones sin tocar ningún otro bloque.</para>
+    /// versionada de PNG duplicados. Aquí la ficha que no existe se crea (una ficha existente NO se
+    /// reescribe, aunque su recorrido haya cambiado), y en las listas sólo se AGREGA lo que falta
+    /// (<see cref="ConLasAppsQueFaltan"/>): una app que ya está conserva el texto del editor.</para>
     /// <para><b>Idempotente</b>: la segunda vez no crea nada ni guarda nada, y lo dice.</para>
     /// </remarks>
     public FillResult CompletarVitrina()
@@ -4077,7 +4084,7 @@ public sealed class DevContentFiller
         }
 
         var antes = soluciones.GetValue<string>(SectionsAlias, Culture);
-        var despues = ConLaListaDelLanzador(antes, lanzador.Value, BuildAppsCatalogJson(AppsDeSoluciones()), out var lanzadores);
+        var despues = ConLasAppsQueFaltan(antes, lanzador.Value, BuildAppsCatalogJson(AppsDeSoluciones()), out var lanzadores);
         if (lanzadores == 0)
         {
             details.Add("Soluciones:sin-lanzador-colocado");
@@ -4099,8 +4106,201 @@ public sealed class DevContentFiller
             cambios++;
         }
 
+        // Las otras puertas del hub (016, C7): la portada, el índice de Apps y el lanzador de la raíz
+        // llevan el MISMO catálogo de dominios; el índice, además, una tarjeta por recorrido; y las
+        // cifras «N verticales» salen de la misma lista. Cada página se guarda sólo si cambia.
+        var entidadName = site.GetValue<string>("siteDisplayName", Culture) is { Length: > 0 } dn ? dn : BrandName;
+        var hub = BuildAppsCatalogJson(DomainAppCatalog(entidadName));
+        var raiz = _contentService.GetRootContent().FirstOrDefault(c => c.ContentType.Alias == "platformRoot");
+
+        bool Guardar(IContent pagina, string alias, string? antes, string? despues, string etiqueta)
+        {
+            if (despues == antes) { return true; }
+            pagina.SetValue(alias, despues, Culture);
+            var r = _contentService.SaveAndPublish(pagina, new[] { Culture });
+            if (!r.Success) { details.Add($"{etiqueta}:save-failed:{r.Result}"); return false; }
+            details.Add($"{etiqueta}:al-dia");
+            cambios++;
+            return true;
+        }
+
+        foreach (var (pagina, alias, etiqueta) in new (IContent? Pagina, string Alias, string Etiqueta)[]
+        {
+            (_contentService.GetById(site.Id), SectionsAlias, "Portada"),
+            (_contentService.GetById(indice.Id), SectionsAlias, "Apps"),
+            (raiz, "introBody", "Lanzador"),
+        })
+        {
+            if (pagina is null || !pagina.HasProperty(alias)) { continue; }
+            var valor = pagina.GetValue<string>(alias, Culture);
+            var nuevo = ConLasAppsQueFaltan(valor, lanzador.Value, hub, out _);
+            if (etiqueta == "Apps" && _contentTypeService.Get("elementCompCard")?.Key is { } tarjeta)
+            {
+                nuevo = ConLasTarjetasDeLaVitrina(nuevo, tarjeta, ShowcaseCatalog().Select(d => (d.Name, d.Slug, d.Blurb)), out _);
+            }
+            if (!Guardar(pagina, alias, valor, nuevo, etiqueta)) { return new FillResult(false, cambios, string.Join("; ", details)); }
+        }
+
+        foreach (var id in new[] { site.Id }.Concat(_contentService.GetPagedDescendants(site.Id, 0, 500, out _).Select(c => c.Id)))
+        {
+            var pagina = _contentService.GetById(id);
+            if (pagina is null || !pagina.HasProperty(SectionsAlias)) { continue; }
+            var valor = pagina.GetValue<string>(SectionsAlias, Culture);
+            var nuevo = ConLaCifraDeVerticales(valor, VerticalCount, out _);
+            if (!Guardar(pagina, SectionsAlias, valor, nuevo, $"Cifra:{pagina.Name}")) { return new FillResult(false, cambios, string.Join("; ", details)); }
+        }
+
         if (cambios == 0) { details.Add("Vitrina:nada-que-hacer"); }
         return new FillResult(true, cambios, string.Join("; ", details));
+    }
+
+    /// <summary>
+    /// El valor <c>sections</c> con cada lanzador completado: las apps del catálogo que su lista no
+    /// tiene (por <c>id</c>) se agregan al final, y las que ya están NO se tocan.
+    /// </summary>
+    /// <remarks>
+    /// Reemplazar la lista entera (<see cref="ConLaListaDelLanzador"/>) pisaba lo que el editor
+    /// corrigió después de sembrar. Medido en el piloto de 016: el texto de Booking en Soluciones
+    /// («cada solicitud queda registrada») volvía a «disponibilidad en tiempo real», que la app no
+    /// tiene. Sin nada que agregar devuelve el mismo texto.
+    /// </remarks>
+    internal static string? ConLasAppsQueFaltan(string? sectionsJson, Guid lanzador, string appsJson, out int lanzadores)
+    {
+        lanzadores = 0;
+        if (Bloques(sectionsJson) is not { } partes) { return sectionsJson; }
+        if (System.Text.Json.Nodes.JsonNode.Parse(appsJson) is not System.Text.Json.Nodes.JsonArray catalogo) { return sectionsJson; }
+
+        static string? Id(System.Text.Json.Nodes.JsonNode? app)
+            => app?["id"] is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var id) ? id : null;
+
+        var cambio = false;
+        foreach (var bloque in partes.Bloques.OfType<System.Text.Json.Nodes.JsonObject>())
+        {
+            if (!Guid.TryParse(bloque["contentTypeKey"]?.GetValue<string>(), out var tipo) || tipo != lanzador) { continue; }
+            lanzadores++;
+
+            var actual = bloque["apps"];
+            var comoTexto = actual is System.Text.Json.Nodes.JsonValue t && t.TryGetValue<string>(out _);
+            var lista = (comoTexto ? System.Text.Json.Nodes.JsonNode.Parse(actual!.GetValue<string>()) : actual?.DeepClone())
+                as System.Text.Json.Nodes.JsonArray ?? new System.Text.Json.Nodes.JsonArray();
+            var ids = lista.Select(Id).Where(i => i is not null).ToHashSet(StringComparer.Ordinal);
+            var faltan = catalogo.Where(a => Id(a) is { } i && !ids.Contains(i)).ToList();
+            if (faltan.Count == 0) { continue; }
+
+            foreach (var app in faltan) { lista.Add(app!.DeepClone()); }
+            bloque["apps"] = comoTexto ? lista.ToJsonString() : lista;
+            cambio = true;
+        }
+
+        return cambio ? partes.Raiz.ToJsonString() : sectionsJson;
+    }
+
+    /// <summary>Las etiquetas de las cifras que cuentan los verticales (las de <see cref="VerticalCount"/>).</summary>
+    internal static readonly IReadOnlySet<string> EtiquetasDeLaCifra = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "verticales de negocio", "verticales sobre la misma base", "verticales base", "verticales listas para arrancar",
+    };
+
+    /// <summary>
+    /// El valor <c>sections</c> con cada cifra de verticales (<see cref="EtiquetasDeLaCifra"/>) en
+    /// <paramref name="valor"/>. Ningún otro bloque cambia; sin cambio devuelve el mismo texto.
+    /// </summary>
+    internal static string? ConLaCifraDeVerticales(string? sectionsJson, string valor, out int cifras)
+    {
+        cifras = 0;
+        if (Bloques(sectionsJson) is not { } partes) { return sectionsJson; }
+        var cambio = false;
+        foreach (var bloque in partes.Bloques.OfType<System.Text.Json.Nodes.JsonObject>())
+        {
+            if (bloque["statLabel"] is not System.Text.Json.Nodes.JsonValue etiqueta
+                || !etiqueta.TryGetValue<string>(out var texto) || !EtiquetasDeLaCifra.Contains(texto)) { continue; }
+            cifras++;
+            if (bloque["statValue"] is System.Text.Json.Nodes.JsonValue actual && actual.TryGetValue<string>(out var v) && v == valor) { continue; }
+            bloque["statValue"] = valor;
+            cambio = true;
+        }
+        return cambio ? partes.Raiz.ToJsonString() : sectionsJson;
+    }
+
+    /// <summary>
+    /// El valor <c>sections</c> del índice de Apps con una tarjeta para cada recorrido que no la tenga
+    /// (enlaza <c>/synergos/apps/&lt;slug&gt;</c>). La nueva copia la forma de la última tarjeta —en la
+    /// misma área de la misma sección— con su propia Key; las demás no cambian.
+    /// </summary>
+    internal static string? ConLasTarjetasDeLaVitrina(string? sectionsJson, Guid tarjeta,
+        IEnumerable<(string Name, string Slug, string Blurb)> recorridos, out int nuevas)
+    {
+        nuevas = 0;
+        if (Bloques(sectionsJson) is not { } partes) { return sectionsJson; }
+
+        var tarjetas = partes.Bloques.OfType<System.Text.Json.Nodes.JsonObject>()
+            .Where(b => Guid.TryParse(b["contentTypeKey"]?.GetValue<string>(), out var k) && k == tarjeta
+                        && DestinoDeLaTarjeta(b)?.StartsWith("/synergos/apps/", StringComparison.Ordinal) == true)
+            .ToList();
+        if (tarjetas.Count == 0) { return sectionsJson; }
+
+        var modelo = tarjetas[^1];
+        var (lista, item) = ItemDelLayout(partes.Raiz["layout"]?["Umbraco.BlockGrid"] as System.Text.Json.Nodes.JsonArray,
+            modelo["udi"]?.GetValue<string>() ?? string.Empty);
+        if (lista is null || item is null) { return sectionsJson; }
+
+        foreach (var (name, slug, blurb) in recorridos)
+        {
+            var url = $"/synergos/apps/{slug}";
+            if (tarjetas.Any(b => DestinoDeLaTarjeta(b) == url)) { continue; }
+
+            var udi = $"umb://element/{Guid.NewGuid():N}";
+            var enlace = LinkJson(name, url);
+            var nueva = (System.Text.Json.Nodes.JsonObject)modelo.DeepClone();
+            nueva["udi"] = udi;
+            nueva["headingTitle"] = name;
+            nueva["mediaAlt"] = name;
+            nueva["textBody"] = $"<p>{blurb}</p>";
+            nueva["ctaLabel"] = $"Conocer {name} →";
+            nueva["ctaLink"] = modelo["ctaLink"] is System.Text.Json.Nodes.JsonValue
+                ? enlace : System.Text.Json.Nodes.JsonNode.Parse(enlace);
+            partes.Bloques.Add(nueva);
+
+            var nuevoItem = (System.Text.Json.Nodes.JsonObject)item.DeepClone();
+            nuevoItem["contentUdi"] = udi;
+            lista.Add(nuevoItem);
+            tarjetas.Add(nueva);
+            nuevas++;
+        }
+
+        return nuevas > 0 ? partes.Raiz.ToJsonString() : sectionsJson;
+    }
+
+    private static string? DestinoDeLaTarjeta(System.Text.Json.Nodes.JsonObject bloque)
+    {
+        var link = bloque["ctaLink"];
+        var lista = link is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var texto)
+            ? System.Text.Json.Nodes.JsonNode.Parse(texto) : link;
+        return lista is System.Text.Json.Nodes.JsonArray a && a.Count > 0 && a[0]?["url"] is System.Text.Json.Nodes.JsonValue u
+               && u.TryGetValue<string>(out var url) ? url : null;
+    }
+
+    private static (System.Text.Json.Nodes.JsonObject Raiz, System.Text.Json.Nodes.JsonArray Bloques)? Bloques(string? sectionsJson)
+        => !string.IsNullOrWhiteSpace(sectionsJson)
+           && System.Text.Json.Nodes.JsonNode.Parse(sectionsJson) is System.Text.Json.Nodes.JsonObject raiz
+           && raiz["contentData"] is System.Text.Json.Nodes.JsonArray bloques
+            ? (raiz, bloques) : null;
+
+    private static (System.Text.Json.Nodes.JsonArray? Lista, System.Text.Json.Nodes.JsonObject? Item) ItemDelLayout(
+        System.Text.Json.Nodes.JsonArray? items, string udi)
+    {
+        if (items is null) { return (null, null); }
+        foreach (var it in items.OfType<System.Text.Json.Nodes.JsonObject>())
+        {
+            if (it["contentUdi"] is System.Text.Json.Nodes.JsonValue c && c.TryGetValue<string>(out var k) && k == udi) { return (items, it); }
+            if (it["areas"] is not System.Text.Json.Nodes.JsonArray areas) { continue; }
+            foreach (var area in areas.OfType<System.Text.Json.Nodes.JsonObject>())
+            {
+                var hallado = ItemDelLayout(area["items"] as System.Text.Json.Nodes.JsonArray, udi);
+                if (hallado.Item is not null) { return hallado; }
+            }
+        }
+        return (null, null);
     }
 
     /// <summary>
@@ -4170,6 +4370,7 @@ public sealed class DevContentFiller
             ["healthcare"] = (f, _) => f.BuildShowcaseHealthcare(),
             ["hoteles"] = (f, _) => f.BuildShowcaseHoteles(),
             ["gobierno"] = (f, appUrl) => f.BuildShowcaseGobierno(appUrl),
+            ["alquiler"] = (f, appUrl) => f.BuildShowcaseAlquiler(appUrl),
         };
 
     /// <summary>Los slugs que la vitrina ENLAZA: uno por vertical.</summary>
@@ -4559,6 +4760,51 @@ public sealed class DevContentFiller
         {
             AddCta(b, "La app de Gobierno está en camino",
                 "El motor ya está listo para trámites; mientras la app llega, explora las demás apps del ecosistema.",
+                "Ver todas las apps", "/synergos/apps");
+        }
+        return b.Build();
+    }
+
+    private const string AlquilerFrom = "#0F172A", AlquilerTo = "#B45309";   // obra: pizarra y ámbar (on-brand, NO define tema)
+
+    // Origen del copy: la raíz «Alquiler» (016, C7) y la app <synergos-alquiler>: catálogo, cotización
+    // por tramos, garantía retenida y devolución. Sin sitio todavía (appUrl vacío), el recorrido no enlaza.
+    private string BuildShowcaseAlquiler(string appUrl)
+    {
+        var hasApp = !string.IsNullOrEmpty(appUrl);
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Alquiler — equipos por días",
+            "Andamios, energía, sonido y herramienta, sobre el mismo motor",
+            "<p>La app Alquiler demuestra el motor en un negocio de equipos: catálogo con precio por día, cotización por tramos de duración y una garantía que se retiene, no se cobra. Para empresas que alquilan andamios, plantas, sonido o herramienta y quieren reservar en línea.</p>",
+            "Apps Alquiler Hero", "Preview de la app Alquiler", AlquilerFrom, AlquilerTo,
+            hasApp
+                ? new[] { ("Abrir la app", appUrl), ("Ver todas las apps", "/synergos/apps") }
+                : new[] { ("Ver todas las apps", "/synergos/apps"), ("Hablar con ventas", "/synergos/contacto") });
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "La garantía se retiene, no se cobra", new (string title, string subtitle, string body)[]
+        {
+            ("Tarifa por tramos", "Semana y mes más baratos", "El precio por día baja cuando el alquiler es largo, y la cotización dice qué tramo aplicó."),
+            ("Garantía retenida", "Cobro y retención aparte", "Lo que se cobra y lo que sólo se retiene salen separados en la cotización y en la reserva."),
+            ("Equipos del CMS", "Contenido autorado", "Cada equipo es una página del CMS: ficha, límites de días, requisitos y lo que incluye."),
+        }, 3);
+
+        FeatureGridAuto(b, "Así se alquila", "Del catálogo a la devolución", new (string title, string subtitle, string body)[]
+        {
+            ("1 · Elige el equipo", "Catálogo por categoría", "Ves el precio por día, la garantía y las unidades antes de pedir nada."),
+            ("2 · Cotiza tus fechas", "Precio exacto", "Eliges desde y hasta, y la cotización te dice el total, el tramo y lo retenido."),
+            ("3 · Reserva y devuelve", "Mis alquileres", "Sigues cada alquiler y, al devolver, ves qué se liberó de la garantía."),
+        }, 3);
+
+        if (hasApp)
+        {
+            AddCta(b, "Recorre la app completa",
+                "Catálogo, cotización y reserva en la app real.",
+                "Abrir la app", appUrl);
+        }
+        else
+        {
+            AddCta(b, "La app de Alquiler está en camino",
+                "El motor ya está listo para alquilar; mientras la app llega, explora las demás apps del ecosistema.",
                 "Ver todas las apps", "/synergos/apps");
         }
         return b.Build();
