@@ -31,16 +31,18 @@ public sealed class GovResolutor : IResolutorSynHost<GovProps>
     private readonly ICaminoDeLosFlujos _caminos;
     private readonly IPuertaDeLosFlujos _puerta;
     private readonly ILogger<GovResolutor> _log;
+    private readonly ICabeceraDeLasApps? _cabecera;
 
     public GovResolutor(
         IPublishedValueFallback fallback, INegocioDelSitio<NegocioDeGov> negocio, ICaminoDeLosFlujos caminos,
-        IPuertaDeLosFlujos puerta, ILogger<GovResolutor> log)
+        IPuertaDeLosFlujos puerta, ILogger<GovResolutor> log, ICabeceraDeLasApps? cabecera = null)
     {
         _fallback = fallback;
         _negocio = negocio;
         _caminos = caminos;
         _puerta = puerta;
         _log = log;
+        _cabecera = cabecera;
     }
 
     public ElementoResuelto<GovProps> Resolver(IPublishedElement elemento)
@@ -53,6 +55,7 @@ public sealed class GovResolutor : IResolutorSynHost<GovProps>
             Heading: editor.Texto("heading"),
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
-            Camino: camino == CaminoDelFlujo.Puerta && !_puerta.Abre(FlujoDeLaRadicacion) ? NoDisponible : camino));
+            Camino: camino == CaminoDelFlujo.Puerta && !_puerta.Abre(FlujoDeLaRadicacion) ? NoDisponible : camino,
+            Cabecera: _cabecera?.Actual()));
     }
 }

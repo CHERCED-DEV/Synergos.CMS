@@ -194,7 +194,7 @@ public sealed partial class SeamComposer
         services.AddTransient<IPageRenderContextResolver, DefaultPageRenderContextResolver>();
 
         // La cabecera de las apps dentro de un sitio (D-016-V2): por defecto secundaria; un sitio pide la completa por
-        // la Key de su siteRoot. La leen los resolutores de la Tienda, Eventos y Educación, por el siteRoot de la página.
+        // la Key de su siteRoot. La leen los resolutores de la Tienda, Eventos, Educación, Viajes y Gobierno, por el siteRoot de la página.
         services.AddSeccionDeNegocio<CabeceraFeatureSettings, NegocioDeCabecera>(builder.Config.GetSection("Synergos:Features:Cabecera"));
         services.AddTransient<ICabeceraDeLasApps, CabeceraDeLasApps>();
 

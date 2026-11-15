@@ -22,4 +22,6 @@ public sealed record TravelShellProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Heading,
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string BookingPath);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string BookingPath,
+    // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);
