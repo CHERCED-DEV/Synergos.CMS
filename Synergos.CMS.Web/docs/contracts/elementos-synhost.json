@@ -1262,6 +1262,7 @@
         "DataGrid.Loading",
         "DataGrid.Location",
         "DataGrid.NoResults",
+        "DataGrid.PerMonth",
         "DataGrid.Place",
         "DataGrid.Price",
         "DataGrid.PriceFrom"

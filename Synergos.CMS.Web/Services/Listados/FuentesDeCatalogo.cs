@@ -110,8 +110,15 @@ public sealed class InmueblesDelCatalogo : IFuenteDeListado
                 Specs:
                 [
                     new(peticion.Rotulo("DataGrid.Location", "Ubicación"), string.IsNullOrWhiteSpace(l.Neighborhood) ? l.City : $"{l.Neighborhood}, {l.City}"),
-                    new(peticion.Rotulo("DataGrid.Price", "Precio"), FormatoDelListado.Precio(l.Price, l.Currency, peticion.Cultura)),
+                    // Un arriendo se cobra por mes: sin «/mes», «$ 3.800.000» se leía como el precio de venta (016). El
+                    // catálogo dice «arriendo» (la API lo traduce a «rent»); se aceptan las dos.
+                    new(peticion.Rotulo("DataGrid.Price", "Precio"), FormatoDelListado.Precio(l.Price, l.Currency, peticion.Cultura)
+                        + (EsArriendo(l.Operation) ? peticion.Rotulo("DataGrid.PerMonth", "/mes") : string.Empty)),
                 ]))
             .ToList();
     }
+
+    internal static bool EsArriendo(string? operacion)
+        => string.Equals(operacion, "arriendo", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(operacion, "rent", StringComparison.OrdinalIgnoreCase);
 }
