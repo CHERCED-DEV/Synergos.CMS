@@ -74,6 +74,8 @@ public class StubEventCatalogProviderTests
         {
             Assert.Equal(0, (await catalogo.GetEventAsync(resumen.Id))!.Artist!.Followers);
         }
+        // Quien da la charla de la conferencia es «Ponente», no «Artista».
+        Assert.Equal("Ponente", (await catalogo.GetEventAsync("evt-cumbre-tech"))!.Artist!.Role);
     }
 
     [Fact] // empty: sin query devuelve todo el catálogo, ordenado por fecha

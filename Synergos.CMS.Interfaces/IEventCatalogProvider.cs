@@ -116,8 +116,9 @@ public sealed record EventSeatMap(
 /// El acto/artista protagonista de la ficha (perfil "Artista"). Adaptado al tipo
 /// de evento: headliner (música), keynote (conferencia), compañía (teatro), etc.
 /// <see cref="Followers"/> es el seguimiento social aproximado (chip "N seguidores").
+/// <see cref="Role"/> es cómo se llama su papel en la ficha («Ponente» en una conferencia); sin él, la ficha dice «Artista».
 /// </summary>
-public sealed record EventArtist(string Name, string Headline, int Followers);
+public sealed record EventArtist(string Name, string Headline, int Followers, string? Role = null);
 
 /// <summary>
 /// Una entrada de la agenda del evento (sección "Agenda" de la ficha): hora +

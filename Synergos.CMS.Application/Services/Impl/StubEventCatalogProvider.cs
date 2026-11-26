@@ -416,7 +416,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                     SaleClosesUtc: AlTerminarElDia(ancla, 48)),
             },
             SeatMap: null,
-            Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 0),
+            Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 0, Role: "Ponente"),
             Highlights: new[]
             {
                 "Keynotes de líderes de producto e ingeniería",
