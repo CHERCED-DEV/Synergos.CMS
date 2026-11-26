@@ -204,6 +204,10 @@ public sealed partial class SeamComposer
             IsCmsSource(sp, UmbracoProfessionalDirectorySource.Vertical)
                 ? new CatalogDoctorDirectory(sp.GetRequiredService<ICatalogSource<MedicalDoctor>>())
                 : new StubDoctorDirectory());
+        // Si el árbol publicado ya muestra la raíz de Salud: la pregunta del manejador al publicar un profesional, con la
+        // misma fuente (la receta de IRaizDelAlquiler). Con la muestra no hay raíz que esperar.
+        services.AddSingleton<IRaizDeSalud>(sp =>
+            sp.GetRequiredService<ICatalogSource<MedicalDoctor>>() as IRaizDeSalud ?? new RaizDeSaludDeLaMuestra());
 
         // 003-salud-cita, I1 de producción — los profesionales en las lecturas genéricas (api/lecturas/salud/…), con
         // la misma fuente que el directorio. Transient, como la de la tienda.

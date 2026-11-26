@@ -32,17 +32,20 @@ public sealed class OfertaDeProfesionalAlPublicar : INotificationAsyncHandler<Co
     private readonly IDoctorDirectory _directorio;
     private readonly IPublicadorDeOfertasDeProfesionales _ofertas;
     private readonly IOptionsMonitor<CatalogSettings> _fuentes;
+    private readonly IRaizDeSalud _raiz;
     private readonly ILogger<OfertaDeProfesionalAlPublicar> _log;
 
     public OfertaDeProfesionalAlPublicar(
         IDoctorDirectory directorio,
         IPublicadorDeOfertasDeProfesionales ofertas,
         IOptionsMonitor<CatalogSettings> fuentes,
+        IRaizDeSalud raiz,
         ILogger<OfertaDeProfesionalAlPublicar> log)
     {
         _directorio = directorio;
         _ofertas = ofertas;
         _fuentes = fuentes;
+        _raiz = raiz;
         _log = log;
     }
 
@@ -54,6 +57,17 @@ public sealed class OfertaDeProfesionalAlPublicar : INotificationAsyncHandler<Co
             .Where(c => string.Equals(c.ContentType.Alias, UmbracoProfessionalDirectorySource.ProfessionalPageAlias, StringComparison.Ordinal))
             .ToList();
         if (fichas.Count == 0 || !DelContenido(_fuentes)) return;
+
+        // En un import la raíz todavía no está en la caché: preguntarle al directorio escribía un error por cada uno
+        // (el ensayo de reconstrucción no pasa con errores), y su respuesta vacía no dice nada de ninguno.
+        if (!_raiz.SeVe())
+        {
+            _log.LogWarning(
+                "Se publicaron {Profesionales} y el árbol publicado todavía no muestra la raíz del sitio de Salud (como en un "
+                + "import): no se toca ninguna oferta. Se repara republicándolos con la raíz ya publicada.",
+                string.Join(", ", fichas.Select(c => c.GetValue<string>(PropiedadDelProfesional)?.Trim() ?? $"#{c.Id}")));
+            return;
+        }
 
         foreach (var ficha in fichas)
         {
