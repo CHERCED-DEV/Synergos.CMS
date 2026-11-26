@@ -14,7 +14,7 @@ namespace Synergos.CMS.Tests.Services;
 /// </summary>
 public class AcademyOla5SmokeTests
 {
-    private const string PaidCourse = "dev-clean-architecture"; // 320.000 COP, ins-elena
+    private const string PaidCourse = "dev-clean-architecture"; // 89.000 COP (D-016-C26), ins-elena
     private const string FreeCourse = "dev-git-fundamentals";   // 0 COP, ins-elena
     private const string Instructor = "ins-elena";
 
@@ -115,9 +115,9 @@ public class AcademyOla5SmokeTests
         Assert.NotEmpty(result.Courses);
         var paidRow = result.Courses.Single(c => c.Course.Id == PaidCourse);
         Assert.Equal(1, paidRow.Metrics.Students);
-        Assert.Equal(320_000m, paidRow.Metrics.Revenue); // ingreso del curso de pago
+        Assert.Equal(89_000m, paidRow.Metrics.Revenue); // ingreso del curso de pago
         Assert.True(result.TotalStudents >= 2);
-        Assert.Equal(320_000m, result.TotalRevenue);
+        Assert.Equal(89_000m, result.TotalRevenue);
     }
 
     // ── Publicar curso (curriculum builder) ─────────────────────────────

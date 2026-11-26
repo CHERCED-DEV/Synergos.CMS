@@ -13,7 +13,7 @@ namespace Synergos.CMS.Tests.Services;
 /// </summary>
 public class StubEnrollmentServiceTests
 {
-    private const string PaidCourse = "dev-clean-architecture"; // 320.000 COP
+    private const string PaidCourse = "dev-clean-architecture"; // 89.000 COP (D-016-C26)
     private const string FreeCourse = "dev-git-fundamentals";   // 0 COP
 
     private static StubContentStream ContentStream()
@@ -42,7 +42,7 @@ public class StubEnrollmentServiceTests
     /// cobro, ni el expediente de la matrícula, ni un log decían nada.
     ///
     /// <para><b>El fixture EXIGE la regla porque los dos montos son DISTINTOS.</b> El plan de
-    /// cuotas lleva un recargo del 8 %, así que 320.000 de contado son 345.600 financiados. Con
+    /// cuotas lleva un recargo del 8 %, así que 89.000 de contado son 96.120 financiados. Con
     /// un plan que costara lo mismo que el curso —el de contado— el test pasaría en verde con
     /// el planId descartado, que es exactamente el defecto.</para>
     /// </remarks>
@@ -264,7 +264,7 @@ public class StubEnrollmentServiceTests
         Assert.False(result.Enrolled);
         Assert.False(string.IsNullOrWhiteSpace(result.OrderRef));
         Assert.False(string.IsNullOrWhiteSpace(result.PaymentSessionId));
-        Assert.Equal(320_000m, result.Amount); // precio del catálogo, no del cliente
+        Assert.Equal(89_000m, result.Amount); // precio del catálogo, no del cliente
         Assert.Equal("COP", result.Currency);
     }
 
@@ -455,6 +455,6 @@ public class StubEnrollmentServiceTests
         // 4) Las métricas del panel cuentan la matrícula persistida UNA sola vez.
         var stats = await afterRestart.GetCourseStatsAsync(PaidCourse);
         Assert.Equal(1, stats.Students);
-        Assert.Equal(320_000m, stats.Revenue);
+        Assert.Equal(89_000m, stats.Revenue);
     }
 }
