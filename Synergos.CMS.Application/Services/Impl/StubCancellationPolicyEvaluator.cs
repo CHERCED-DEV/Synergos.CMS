@@ -30,6 +30,8 @@ public sealed class StubCancellationPolicyEvaluator : ICancellationPolicyEvaluat
     // El adapter real recibe/consulta el desglose real del rate plan.
     private const decimal OneNightPenalty = 220_000m;
 
+    private static readonly System.Globalization.CultureInfo EsCo = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+
     public CancellationOutcome Evaluate(string ratePlanCode, DateOnly checkIn, DateOnly asOf)
     {
         var refundable = !IsNonRefundable(ratePlanCode);
@@ -42,14 +44,16 @@ public sealed class StubCancellationPolicyEvaluator : ICancellationPolicyEvaluat
                 Description: "Tarifa no reembolsable: la cancelación no genera devolución.");
         }
 
-        // Refundable: gratis si se cancela con más de 1 día de antelación.
+        // Refundable: gratis si se cancela con más de 1 día de antelación, es decir, hasta dos días antes del check-in.
+        // La descripción dice esa fecha: «a tiempo» no le decía a nadie hasta cuándo (D-016-C23).
         var freeUntil = checkIn.AddDays(-1);
         if (asOf < freeUntil)
         {
+            var ultimoDiaGratis = checkIn.AddDays(-2).ToString("d 'de' MMMM", EsCo);
             return new CancellationOutcome(
                 Refundable: true,
                 PenaltyAmount: 0m,
-                Description: "Cancelación gratuita: sin penalidad por cancelar a tiempo.");
+                Description: $"Cancelación gratuita hasta el {ultimoDiaGratis}; después se cobra una noche.");
         }
 
         return new CancellationOutcome(

@@ -115,8 +115,9 @@ public sealed class BookingController : ControllerBase
                 RoomTypeName: offer.RoomTypeName,
                 RatePlanCode: offer.RatePlanCode,
                 BoardBasis: offer.BoardBasis,
-                // `board` es la clave que lee la UI; `boardBasis` se conserva.
-                Board: offer.BoardBasis,
+                // `board` es lo que la UI pinta: el régimen en palabras («BB» no le dice nada a quien reserva). Un código
+                // que no se conoce no se pinta; `boardBasis` conserva el código (D-016-C23).
+                Board: RegimenDe(offer.BoardBasis),
                 TotalPrice: offer.TotalPrice,
                 TotalPriceFormatted: _priceFormatter.Format(offer.TotalPrice, offer.Currency),
                 Currency: offer.Currency,
@@ -131,6 +132,25 @@ public sealed class BookingController : ControllerBase
             CheckIn: request.CheckIn,
             CheckOut: request.CheckOut,
             Offers: results));
+    }
+
+    /// <summary>
+    /// El régimen de comidas de una tarifa, como se lee en Colombia. Un código conocido se traduce; lo que ya viene en
+    /// palabras («Desayuno») pasa tal cual; un código que no se conoce («XX») no se pinta.
+    /// </summary>
+    internal static string RegimenDe(string? regimen)
+    {
+        var valor = (regimen ?? string.Empty).Trim();
+        return valor.ToUpperInvariant() switch
+        {
+            "RO" => "Solo alojamiento",
+            "BB" => "Desayuno incluido",
+            "HB" => "Media pensión",
+            "FB" => "Pensión completa",
+            "AI" => "Todo incluido",
+            _ when valor.Length <= 3 && valor.All(char.IsUpper) => string.Empty,
+            _ => valor,
+        };
     }
 
     // ── 2. Hold ────────────────────────────────────────────────────

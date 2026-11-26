@@ -56,4 +56,15 @@ public class StubCancellationPolicyEvaluatorTests
 
         Assert.Equal(first, second); // record equality
     }
+
+    [Fact] // D-016-C23: la política gratuita dice hasta cuándo, y ese día de verdad es gratis
+    public void La_cancelacion_gratuita_nombra_su_ultimo_dia_y_ese_dia_es_gratis()
+    {
+        var ultimoDia = Make().Evaluate("STD-FLEX", CheckIn, asOf: new DateOnly(2026, 7, 8));
+        var alDiaSiguiente = Make().Evaluate("STD-FLEX", CheckIn, asOf: new DateOnly(2026, 7, 9));
+
+        Assert.Equal("Cancelación gratuita hasta el 8 de julio; después se cobra una noche.", ultimoDia.Description);
+        Assert.Equal(0m, ultimoDia.PenaltyAmount);
+        Assert.True(alDiaSiguiente.PenaltyAmount > 0m);
+    }
 }
