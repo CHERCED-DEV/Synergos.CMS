@@ -84,6 +84,7 @@ public sealed class TravelController : ControllerBase
         [FromQuery] DateOnly checkOut,
         [FromQuery] int adults = 2,
         [FromQuery] int children = 0,
+        [FromQuery] string? destination = null,
         CancellationToken cancellationToken = default)
     {
         if (checkOut <= checkIn)
@@ -111,9 +112,17 @@ public sealed class TravelController : ControllerBase
             staysByRoomType[code] = await _stays.GetStayAsync(code, cancellationToken);
         }
 
-        var results = offers.Select(o =>
+        // El destino que se escribe filtra por la ciudad (o la región) de la estadía; antes se ignoraba y salían todas
+        // (D-016-C25). Sin destino, todas.
+        var lugar = DestinoDe(destination);
+        var noches = checkOut.DayNumber - checkIn.DayNumber;
+        var results = offers
+            .Where(o => lugar.Length == 0 || staysByRoomType.GetValueOrDefault(o.RoomTypeCode) is { } s
+                && (Plegar(s.City) == lugar || Plegar(s.Region) == lugar))
+            .Select(o =>
         {
             var stay = staysByRoomType.GetValueOrDefault(o.RoomTypeCode);
+            var regimen = BookingController.RegimenDe(o.BoardBasis);
             return new HotelOfferDto(
                 OfferId: $"{o.RoomTypeCode}/{o.RatePlanCode}",
                 Product: TravelProductType.Hotel.ToString(),
@@ -130,12 +139,15 @@ public sealed class TravelController : ControllerBase
                 // la estadía si resolvió, si no el room type; subtitle compone tipo + régimen;
                 // rating deriva del promedio de reviews de la estadía (null si no resolvió).
                 Title: stay?.Name ?? o.RoomTypeName,
-                Subtitle: $"{o.RoomTypeName} · {o.BoardBasis}",
+                Subtitle: regimen.Length > 0 ? $"{o.RoomTypeName} · {regimen}" : o.RoomTypeName,
                 StayId: stay?.StayId,
                 StayName: stay?.Name,
                 City: stay?.City,
                 Geo: stay is null ? null : new GeoDto(stay.Geo.Lat, stay.Geo.Lng),
-                Rating: stay?.Reviews.Average);
+                // Sin opiniones no hay valoración que mostrar.
+                Rating: stay is { Reviews.Count: > 0 } ? stay.Reviews.Average : null,
+                Board: regimen,
+                PriceNote: $"por {noches} {(noches == 1 ? "noche" : "noches")}");
         }).ToList();
 
         return Ok(new { offers = results });
@@ -549,7 +561,18 @@ public sealed class TravelController : ControllerBase
         string BoardBasis, bool Refundable, int RoomsLeft, decimal Price, string PriceFormatted, string Currency,
         string Title, string Subtitle,
         string? StayId = null, string? StayName = null, string? City = null, GeoDto? Geo = null,
-        double? Rating = null);
+        double? Rating = null, string Board = "", string PriceNote = "");
+
+    /// <summary>La ciudad del destino que se escribió («Cartagena, Colombia» → «cartagena»), sin tildes ni mayúsculas.</summary>
+    internal static string DestinoDe(string? destino) => Plegar((destino ?? string.Empty).Split(',')[0]);
+
+    /// <summary>Un texto sin tildes, sin mayúsculas y sin espacios de sobra, para comparar lugares.</summary>
+    internal static string Plegar(string? texto)
+    {
+        var descompuesto = (texto ?? string.Empty).Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        return new string(descompuesto.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+            != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+    }
 
     public sealed record GeoDto(double Lat, double Lng);
 
