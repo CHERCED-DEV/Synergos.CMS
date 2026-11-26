@@ -25,6 +25,7 @@
     var ctaLink = Model.Value<Link>("ctaLink");
     var ctaUrl = ctaLink?.Url;
     var hasCta = !string.IsNullOrWhiteSpace(ctaLabel) && !string.IsNullOrWhiteSpace(ctaUrl);
+    var itemParam = Model.Value<string>("ctaItemParam");
     var variant = Model.Value<string>("variantKey");
     var cssClass = Model.Value<string>("cssClass");
     var classes = string.Join(" ", new[]
@@ -62,7 +63,7 @@
                 }
                 @if (hasCta)
                 {
-                    <a class="syn-card__cta syn-catalog-list__cta" href="@ctaUrl" aria-label="@($"{ctaLabel}: {tarjeta.Titulo}")">@ctaLabel</a>
+                    <a class="syn-card__cta syn-catalog-list__cta" href="@ListadoDelCatalogoEnLaPagina.EnlaceConElId(ctaUrl, itemParam, tarjeta.Id)" aria-label="@($"{ctaLabel}: {tarjeta.Titulo}")">@ctaLabel</a>
                 }
             </li>
         }
