@@ -108,7 +108,8 @@ public class StubCaseTrackingProviderTests
     {
         var (tracking, _) = Make();
 
-        var byAgency = await tracking.GetQueueAsync("Cancillería", null);
+        var byAgency = await tracking.GetQueueAsync("Ventanilla de Pasaportes (ejemplo)", null);
+        Assert.NotEmpty(byAgency);
         Assert.All(byAgency, i => Assert.Equal("Expedición de pasaporte", i.TramiteName));
 
         var submitted = await tracking.GetQueueAsync(null, "submitted");

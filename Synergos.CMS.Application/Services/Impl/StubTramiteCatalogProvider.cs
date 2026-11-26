@@ -103,9 +103,9 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
 
     private static readonly TramiteStep[] DefaultSteps =
     {
-        new("radicar", "Radicar la solicitud", "Diligencia el formulario y adjunta los documentos requeridos."),
-        new("revision", "Revisión de la entidad", "Un funcionario valida tus datos y documentos."),
-        new("resolucion", "Resolución", "Recibe la respuesta y el documento resultante en tu carpeta."),
+        new("radicar", "Radicar la solicitud", "Diligencie el formulario y adjunte los documentos requeridos."),
+        new("revision", "Revisión de la entidad", "Un funcionario valida sus datos y documentos."),
+        new("resolucion", "Resolución", "Reciba la respuesta en su carpeta; si el documento es físico, allí se le indica dónde recogerlo."),
     };
 
     private static IReadOnlyList<TramiteDetail> Seed()
@@ -117,15 +117,15 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                 Summary: new TramiteSummary(
                     Id: "trm-cedula",
                     Slug: "renovacion-cedula",
-                    Name: "Renovación de cédula de ciudadanía",
-                    Summary: "Renueva tu cédula de ciudadanía por deterioro, pérdida o actualización de datos.",
+                    Name: "Duplicado de cédula de ciudadanía",
+                    Summary: "Solicite el duplicado de su cédula de ciudadanía por deterioro, pérdida o corrección de datos.",
                     Category: "Identidad",
-                    Agency: "Registraduría Nacional",
+                    Agency: "Ventanilla de Identificación (ejemplo)",
                     Channel: "presencial",
                     EstimatedDays: 15,
                     FeeMinor: 65_500m,
                     Currency: Cop),
-                Description: "La renovación de la cédula de ciudadanía te permite obtener un documento nuevo por deterioro, pérdida, hurto o rectificación de datos. Aplica para mayores de edad ya registrados.",
+                Description: "El duplicado de la cédula de ciudadanía le permite obtener un documento nuevo por deterioro, pérdida, hurto o rectificación de datos. Aplica para mayores de edad ya registrados. Es un trámite de ejemplo de esta demostración.",
                 Steps: DefaultSteps,
                 Eligibility: new[]
                 {
@@ -141,21 +141,20 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                 Normativa: "Decreto 1010 de 2000.",
                 FormDefinition: new TramiteFormDefinition(
                     Id: "form-cedula",
-                    Title: "Renovación de cédula de ciudadanía",
+                    Title: "Duplicado de cédula de ciudadanía",
                     Sections: new[]
                     {
                         new TramiteFormSection("solicitante", "Datos del solicitante", new[]
                         {
-                            Field("nombreCompleto", "Nombre completo", "text", true, "Como aparece en el registro civil."),
-                            Field("cedula", "Número de cédula actual", "number", true, "Solo números, sin puntos."),
-                            Field("correo", "Correo electrónico", "email", true, "Para notificarle el resultado."),
-                            Field("telefono", "Teléfono de contacto", "tel", true, "Celular con indicativo."),
+                            Field("nombreCompleto", "Nombre completo (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de cédula (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
-                        new TramiteFormSection("motivo", "Motivo de la renovación", new[]
+                        new TramiteFormSection("motivo", "Motivo del duplicado", new[]
                         {
-                            Field("motivo", "Motivo", "radio", true, "Selecciona una opción.",
+                            Field("motivo", "Motivo", "radio", true, "Seleccione una opción.",
                                 new[] { "Deterioro", "Pérdida o hurto", "Rectificación de datos" }),
-                            Field("observaciones", "Observaciones", "textarea", false, "Detalle adicional (opcional)."),
+                            Field("observaciones", "Observaciones", "textarea", false, "Opcional. No escriba datos personales."),
                         }),
                     }),
                 RequiresAppointment: true),
@@ -166,14 +165,14 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-licencia-conduccion",
                     Slug: "renovacion-licencia-conduccion",
                     Name: "Renovación de licencia de conducción",
-                    Summary: "Renueva tu licencia de conducción vigente o vencida. Requiere examen médico aprobado.",
+                    Summary: "Renueve su licencia de conducción vigente o vencida. Requiere examen médico aprobado.",
                     Category: "Vehículos",
-                    Agency: "Secretaría de Movilidad",
+                    Agency: "Ventanilla de Tránsito (ejemplo)",
                     Channel: "mixto",
                     EstimatedDays: 5,
                     FeeMinor: 95_000m,
                     Currency: Cop),
-                Description: "La renovación de la licencia de conducción actualiza tu documento para seguir conduciendo legalmente. Requiere un certificado de aptitud física, mental y de coordinación motriz vigente.",
+                Description: "La renovación de la licencia de conducción actualiza su documento para seguir conduciendo legalmente. Requiere un certificado de aptitud física, mental y de coordinación motriz vigente.",
                 Steps: DefaultSteps,
                 Eligibility: new[]
                 {
@@ -189,9 +188,9 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("solicitante", "Datos del solicitante", new[]
                         {
-                            Field("nombreCompleto", "Nombre completo", "text", true, ""),
-                            Field("cedula", "Número de cédula", "number", true, "Solo números, sin puntos."),
-                            Field("correo", "Correo electrónico", "email", true, ""),
+                            Field("nombreCompleto", "Nombre completo (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de cédula (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
                         new TramiteFormSection("licencia", "Datos de la licencia", new[]
                         {
@@ -208,14 +207,14 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-certificado-residencia",
                     Slug: "certificado-residencia",
                     Name: "Certificado de residencia",
-                    Summary: "Obtén un certificado que acredita tu lugar de residencia. Trámite gratuito y 100% en línea.",
+                    Summary: "Obtenga un certificado que acredita su lugar de residencia. Trámite gratuito y 100% en línea.",
                     Category: "Identidad",
-                    Agency: "Alcaldía Municipal",
+                    Agency: "Ventanilla de Atención al Ciudadano (ejemplo)",
                     Channel: "en-linea",
                     EstimatedDays: 2,
                     FeeMinor: 0m,
                     Currency: Cop),
-                Description: "El certificado de residencia acredita tu domicilio ante entidades públicas y privadas. Es un trámite gratuito que se resuelve completamente en línea.",
+                Description: "El certificado de residencia acredita su domicilio ante entidades públicas y privadas. Es un trámite gratuito que se resuelve completamente en línea.",
                 Steps: DefaultSteps,
                 Eligibility: new[] { "Ser residente del municipio con domicilio verificable." },
                 Required: new[] { "Recibo de servicio público reciente" },
@@ -227,14 +226,13 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("solicitante", "Datos del solicitante", new[]
                         {
-                            Field("nombreCompleto", "Nombre completo", "text", true, ""),
-                            Field("cedula", "Número de cédula", "number", true, "Solo números, sin puntos."),
-                            Field("correo", "Correo electrónico", "email", true, ""),
+                            Field("nombreCompleto", "Nombre completo (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de cédula (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
                         new TramiteFormSection("domicilio", "Domicilio", new[]
                         {
-                            Field("direccion", "Dirección de residencia", "text", true, ""),
-                            Field("barrio", "Barrio", "text", false, "Opcional."),
+                            Field("direccion", "Dirección de residencia (de prueba)", "text", true, "Use una dirección de prueba."),
                         }),
                     }),
                 RequiresAppointment: false),
@@ -245,14 +243,14 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-registro-mercantil",
                     Slug: "registro-mercantil",
                     Name: "Registro mercantil de empresa",
-                    Summary: "Inscribe tu empresa en el registro mercantil para operar formalmente.",
+                    Summary: "Inscriba su empresa en el registro mercantil para operar formalmente.",
                     Category: "Empresa",
-                    Agency: "Cámara de Comercio",
+                    Agency: "Ventanilla de Empresas (ejemplo)",
                     Channel: "en-linea",
                     EstimatedDays: 3,
                     FeeMinor: 320_000m,
                     Currency: Cop),
-                Description: "El registro mercantil formaliza tu actividad comercial e inscribe tu empresa en el registro público. Es requisito para facturar y contratar legalmente.",
+                Description: "El registro mercantil formaliza su actividad comercial e inscribe su empresa en el registro público. Es requisito para facturar y contratar legalmente.",
                 Steps: DefaultSteps,
                 Eligibility: new[] { "Ser persona natural o jurídica que ejerza actividad comercial." },
                 Required: new[] { "Documento de constitución", "RUT", "Comprobante de pago" },
@@ -264,14 +262,14 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("empresa", "Datos de la empresa", new[]
                         {
-                            Field("razonSocial", "Razón social", "text", true, ""),
-                            Field("nit", "NIT", "number", true, "Sin dígito de verificación."),
+                            Field("razonSocial", "Razón social (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("nit", "NIT (de prueba)", "number", true, "Use un NIT de prueba, sin dígito de verificación."),
                             Field("actividad", "Actividad económica (CIIU)", "text", true, "Código y descripción."),
                         }),
                         new TramiteFormSection("representante", "Representante legal", new[]
                         {
-                            Field("representante", "Nombre del representante legal", "text", true, ""),
-                            Field("correo", "Correo electrónico", "email", true, ""),
+                            Field("representante", "Nombre del representante legal (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
                     }),
                 RequiresAppointment: false),
@@ -282,17 +280,17 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-afiliacion-salud",
                     Slug: "afiliacion-salud",
                     Name: "Afiliación al régimen subsidiado de salud",
-                    Summary: "Afíliate al régimen subsidiado de salud. Trámite gratuito, requiere cita presencial.",
+                    Summary: "Afíliese al régimen subsidiado de salud. Trámite gratuito, requiere cita presencial.",
                     Category: "Salud",
-                    Agency: "Secretaría de Salud",
+                    Agency: "Ventanilla de Salud (ejemplo)",
                     Channel: "presencial",
                     EstimatedDays: 10,
                     FeeMinor: 0m,
                     Currency: Cop),
-                Description: "La afiliación al régimen subsidiado garantiza tu acceso a servicios de salud sin costo, para personas clasificadas en el SISBÉN sin capacidad de pago.",
+                Description: "La afiliación al régimen subsidiado da acceso a servicios de salud sin costo a personas clasificadas sin capacidad de pago. En esta demostración la clasificación es de ejemplo.",
                 Steps: DefaultSteps,
-                Eligibility: new[] { "Estar clasificado en el SISBÉN sin capacidad de pago." },
-                Required: new[] { "Documento de identidad", "Certificado SISBÉN" },
+                Eligibility: new[] { "Estar clasificado sin capacidad de pago." },
+                Required: new[] { "Documento de identidad", "Certificado de clasificación" },
                 Normativa: "Ley 100 de 1993.",
                 FormDefinition: new TramiteFormDefinition(
                     Id: "form-salud",
@@ -301,15 +299,16 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("solicitante", "Datos del solicitante", new[]
                         {
-                            Field("nombreCompleto", "Nombre completo", "text", true, ""),
-                            Field("cedula", "Número de documento", "number", true, ""),
-                            Field("sisben", "Puntaje SISBÉN", "text", true, "Grupo y puntaje (ej. C5)."),
+                            Field("nombreCompleto", "Nombre completo (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de documento (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
+                            Field("sisben", "Clasificación (ejemplo)", "select", true, "Elija una clasificación de ejemplo.",
+                                new[] { "Grupo A (ejemplo)", "Grupo B (ejemplo)", "Grupo C (ejemplo)" }),
                         }),
                         new TramiteFormSection("eps", "EPS", new[]
                         {
-                            Field("eps", "EPS de preferencia", "select", true, "Elige tu EPS.",
-                                new[] { "Nueva EPS", "Coosalud", "Mutual SER" }),
-                            Field("correo", "Correo electrónico", "email", false, "Opcional."),
+                            Field("eps", "EPS de preferencia", "select", true, "Elija una EPS de ejemplo.",
+                                new[] { "EPS Ejemplo Norte", "EPS Ejemplo Centro", "EPS Ejemplo Sur" }),
+                            Field("correo", "Correo electrónico (de prueba)", "email", false, "Opcional. Use un correo de prueba."),
                         }),
                     }),
                 RequiresAppointment: true),
@@ -320,14 +319,14 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-pasaporte",
                     Slug: "expedicion-pasaporte",
                     Name: "Expedición de pasaporte",
-                    Summary: "Solicita la expedición de tu pasaporte colombiano para viajar al exterior.",
+                    Summary: "Solicite la expedición de su pasaporte para viajar al exterior.",
                     Category: "Identidad",
-                    Agency: "Cancillería",
+                    Agency: "Ventanilla de Pasaportes (ejemplo)",
                     Channel: "presencial",
                     EstimatedDays: 8,
                     FeeMinor: 189_000m,
                     Currency: Cop),
-                Description: "El pasaporte es el documento de viaje que te identifica en el exterior. Se expide a ciudadanos colombianos con cédula vigente, con cita presencial.",
+                Description: "El pasaporte es el documento de viaje que lo identifica en el exterior. Se expide a ciudadanos con cédula vigente, con cita presencial. Es un trámite de ejemplo de esta demostración.",
                 Steps: DefaultSteps,
                 Eligibility: new[] { "Ser ciudadano colombiano con documento de identidad vigente." },
                 Required: new[] { "Cédula de ciudadanía original", "Foto reciente fondo blanco", "Comprobante de pago de la tasa" },
@@ -339,14 +338,13 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("solicitante", "Datos del solicitante", new[]
                         {
-                            Field("nombreCompleto", "Nombre completo", "text", true, ""),
-                            Field("cedula", "Número de cédula", "number", true, ""),
-                            Field("fechaNacimiento", "Fecha de nacimiento", "date", true, ""),
-                            Field("correo", "Correo electrónico", "email", true, ""),
+                            Field("nombreCompleto", "Nombre completo (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de cédula (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
                         new TramiteFormSection("expedicion", "Expedición", new[]
                         {
-                            Field("ciudad", "Ciudad de expedición", "select", true, "Sede donde recogerás el pasaporte.",
+                            Field("ciudad", "Ciudad de expedición", "select", true, "Sede donde recogerá el pasaporte.",
                                 new[] { "Bogotá", "Medellín", "Cali", "Barranquilla" }),
                         }),
                     }),
@@ -358,9 +356,9 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     Id: "trm-subsidio-vivienda",
                     Slug: "subsidio-vivienda",
                     Name: "Solicitud de subsidio de vivienda",
-                    Summary: "Postúlate al subsidio familiar de vivienda para compra o mejoramiento.",
+                    Summary: "Postúlese al subsidio familiar de vivienda para compra o mejoramiento.",
                     Category: "Subsidios",
-                    Agency: "Ministerio de Vivienda",
+                    Agency: "Ventanilla de Vivienda (ejemplo)",
                     Channel: "en-linea",
                     EstimatedDays: 30,
                     FeeMinor: 0m,
@@ -381,16 +379,17 @@ public sealed class StubTramiteCatalogProvider : ITramiteCatalogProvider
                     {
                         new TramiteFormSection("hogar", "Datos del hogar", new[]
                         {
-                            Field("nombreCompleto", "Nombre del jefe de hogar", "text", true, ""),
-                            Field("cedula", "Número de cédula", "number", true, ""),
+                            Field("nombreCompleto", "Nombre del jefe de hogar (de prueba)", "text", true, "Use un nombre de prueba."),
+                            Field("cedula", "Número de cédula (de prueba)", "number", true, "Use un número de prueba, no el suyo."),
                             Field("integrantes", "Número de integrantes del hogar", "number", true, ""),
-                            Field("ingresos", "Ingresos familiares mensuales (COP)", "number", true, "Suma de todos los ingresos."),
+                            Field("ingresos", "Rango de ingresos del hogar (ejemplo)", "select", true, "Elija un rango de ejemplo.",
+                                new[] { "Hasta 2 salarios mínimos", "Entre 2 y 4 salarios mínimos" }),
                         }),
                         new TramiteFormSection("solicitud", "Solicitud", new[]
                         {
-                            Field("modalidad", "Modalidad", "radio", true, "Selecciona una opción.",
+                            Field("modalidad", "Modalidad", "radio", true, "Seleccione una opción.",
                                 new[] { "Compra de vivienda nueva", "Construcción en sitio propio", "Mejoramiento" }),
-                            Field("correo", "Correo electrónico", "email", true, ""),
+                            Field("correo", "Correo electrónico (de prueba)", "email", true, "Use un correo de prueba."),
                         }),
                     }),
                 RequiresAppointment: false),
