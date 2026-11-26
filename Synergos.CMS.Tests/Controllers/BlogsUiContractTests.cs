@@ -243,7 +243,7 @@ public sealed class BlogsUiContractTests
     {
         var c = await BuildAsync();
         // act-elena sigue a act-mateo en el grafo sembrado.
-        var perfil = Wire(await c.Profile("mateo.design", CancellationToken.None));
+        var perfil = Wire(await c.Profile("tobias.design", CancellationToken.None));
 
         Assert.True(perfil.GetProperty("following").GetBoolean());
 

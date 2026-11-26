@@ -225,9 +225,9 @@ public sealed class BlogsLectorDeLaSesionTests : IDisposable
     [Fact]
     public async Task El_perfil_no_dice_siguiendo_porque_Elena_lo_siga()
     {
-        // Elena sigue a Mateo en la semilla.
+        // Elena sigue a Tobías en la semilla.
         var perfil = RedDePrueba.Cuerpo<BlogsController.ProfileResponse>(
-            await _red.Como(null).Red.Profile("mateo.design", CancellationToken.None));
+            await _red.Como(null).Red.Profile("tobias.design", CancellationToken.None));
 
         Assert.False(perfil.Following);
         Assert.False(perfil.Author.Following);

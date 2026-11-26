@@ -6,7 +6,7 @@
     los que ofrece DTSelectSharePlatform (#192, caso 20; telegram, reddit y pinterest se ofrecían
     y no se pintaban).
 *@
-@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement>
 @inject Umbraco.Cms.Core.Web.IUmbracoContextAccessor UmbracoContextAccessor
 @{
     var platforms = Model.Value<IEnumerable<string>>("platforms");
@@ -46,8 +46,28 @@
         "email"    => $"mailto:?subject={encTitle}&body={encUrl}",
         _ => null
     };
+
+    // Lo que se lee en cada botón (012-blogs-social, D-012-V9): antes, la clave de la plataforma («facebook»). Una marca
+    // no va al diccionario y la pone el elemento (CLAUDE.md, criterio (i)); «Correo» sí, porque se traduce.
+    string Nombre(string platform) => platform switch
+    {
+        "facebook"  => "Facebook",
+        "twitter"   => "X",
+        "linkedin"  => "LinkedIn",
+        "whatsapp"  => "WhatsApp",
+        "telegram"  => "Telegram",
+        "reddit"    => "Reddit",
+        "pinterest" => "Pinterest",
+        "email"     => Umbraco.GetDictionaryValueOrDefault("Share.Mail", "Correo"),
+        _ => platform
+    };
+
+    // La etiqueta accesible: «Compartir en Facebook», o «Compartir por correo».
+    string Etiqueta(string platform) => platform == "email"
+        ? Umbraco.GetDictionaryValueOrDefault("Share.Email", "Compartir por correo")
+        : Umbraco.GetDictionaryValueOrDefault("Share.On", "Compartir en {network}").Replace("{network}", Nombre(platform));
 }
-<nav class="@classes" aria-label="@("Compartir")">
+<nav class="@classes" aria-label="@Umbraco.GetDictionaryValueOrDefault("Share.Label", "Compartir")">
     @foreach (var platform in enabled)
     {
         var href = BuildShareUrl(platform);
@@ -55,8 +75,8 @@
         var isMail = platform == "email";
         <a class="syn-social-share__link syn-social-share__link--@platform"
            href="@href"
-           aria-label="@("Compartir") @platform"
+           aria-label="@Etiqueta(platform)"
            target="@(isMail ? null : "_blank")"
-           rel="@(isMail ? null : "noopener noreferrer")">@platform</a>
+           rel="@(isMail ? null : "noopener noreferrer")">@Nombre(platform)</a>
     }
 </nav>

@@ -49,11 +49,11 @@ public sealed class PerfilesConLosAutoresDelCmsTests
     public async Task Lo_que_conoce_la_proyeccion_de_siempre_gana()
     {
         var deSiempre = new StubSocialProfileProjection();
-        var mateo = await deSiempre.GetByHandleAsync("mateo.design");
+        var tobias = await deSiempre.GetByHandleAsync("tobias.design");
         var perfiles = new PerfilesConLosAutoresDelCms(deSiempre, new Articulos(Articulo("uno")));
 
-        Assert.NotNull(mateo);
-        Assert.Equal(mateo, await perfiles.GetByHandleAsync("mateo.design"));
-        Assert.False(mateo!.Editorial);
+        Assert.NotNull(tobias);
+        Assert.Equal(tobias, await perfiles.GetByHandleAsync("tobias.design"));
+        Assert.False(tobias!.Editorial);
     }
 }
