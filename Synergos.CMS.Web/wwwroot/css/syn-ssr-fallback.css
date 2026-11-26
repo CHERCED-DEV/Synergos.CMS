@@ -378,7 +378,13 @@
    `:defined`. From that moment the SSR node is redundant, so it is
    hidden here even if the bundle has not removed it yet. Enumerated
    per tag on purpose: `:defined` also matches every built-in
-   element, so a wildcard rule would hide the fallback always.       */
+   element, so a wildcard rule would hide the fallback always.
+   `synergos-blogs` is left out on purpose (D-012-V11): its app clears
+   the host when it is created and takes the reserve's place with no
+   frame showing neither (measured: nothing below it moves), but it is
+   defined more than 100 ms before it paints. Hiding the reserve at
+   `:defined` would empty the page in that gap — the very jump the
+   reserve removes.                                                 */
 
 synergos-hero-banner:defined > [data-syn-ssr-fallback],
 synergos-faq-section:defined > [data-syn-ssr-fallback],
@@ -430,4 +436,115 @@ synergos-kpi-card:defined > [data-syn-ssr-fallback] {
 
 .syn-ssr-listing__specs dd {
   margin: 0;
+}
+
+/* ── Blogs: el inicio de la red (elementSynBlogs, D-012-V11) ─────── */
+/* La reserva del servidor: el título del bloque y la primera página
+   del feed, con los datos que la app va a pintar. Ocupa su sitio hasta
+   que la app monta, así que lo de abajo ya empieza fuera de la
+   pantalla. Cada publicación, como la tarjeta de la app; la imagen
+   reserva su caja de 3:2, como en la app (tanda 11).                */
+
+.syn-ssr-blogs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+  max-width: var(--syn-max-width-article);
+  margin-inline: auto;
+}
+
+.syn-ssr-blogs__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-2);
+}
+
+.syn-ssr-blogs__title {
+  margin: 0;
+  font-size: var(--syn-font-size-xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+}
+
+.syn-ssr-blogs__sub {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-blogs__feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syn-ssr-blogs__post {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-3);
+  padding: var(--syn-card-pad);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  background: var(--syn-color-surface-primary);
+}
+
+.syn-ssr-blogs__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--syn-space-2);
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
+}
+
+.syn-ssr-blogs__author {
+  color: var(--syn-color-text-primary);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-blogs__handle,
+.syn-ssr-blogs__time {
+  color: var(--syn-color-text-secondary);
+}
+
+.syn-ssr-blogs__post-title {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-bold);
+  line-height: var(--syn-line-height-tight);
+  overflow-wrap: anywhere;
+}
+
+.syn-ssr-blogs__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.syn-ssr-blogs__link:hover {
+  text-decoration: underline;
+}
+
+.syn-ssr-blogs__body {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.syn-ssr-blogs__media {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 3 / 2;
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-surface-secondary);
+  object-fit: cover;
+}
+
+.syn-ssr-blogs__tags {
+  margin: 0;
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-sm);
 }
