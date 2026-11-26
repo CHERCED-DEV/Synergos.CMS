@@ -261,13 +261,19 @@ public sealed class AcademyController : ControllerBase
                     : _priceFormatter.Format(p.Total, p.Currency));
         }).ToList();
 
+        // Los cursos de quien lo dicta se cuentan del catálogo; sin ese dato la ficha pintaba «0 cursos» (D-016-C23).
+        var catalogo = await _catalog.SearchAsync(new CourseQuery(), cancellationToken);
+        var cursosDelInstructor = (catalogo?.Courses ?? []).Count(c =>
+            string.Equals(c.InstructorName, detail.Instructor.Name, StringComparison.OrdinalIgnoreCase));
+
         var instructor = new InstructorDto(
             Id: detail.Instructor.Id,
             Name: detail.Instructor.Name,
             Headline: detail.Instructor.Headline,
             Bio: detail.Instructor.Bio,
             AvatarUrl: detail.Instructor.AvatarUrl,
-            Avatar: detail.Instructor.AvatarUrl);
+            Avatar: detail.Instructor.AvatarUrl,
+            CourseCount: cursosDelInstructor > 0 ? cursosDelInstructor : null);
 
         return Ok(new CourseDetailResponse(
             Course: course,
@@ -1019,7 +1025,8 @@ public sealed class AcademyController : ControllerBase
         string Headline,
         string Bio,
         string? AvatarUrl,
-        string? Avatar);
+        string? Avatar,
+        int? CourseCount = null);
 
     /// <summary>
     /// Un plan de pago del curso.

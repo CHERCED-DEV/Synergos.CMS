@@ -187,9 +187,10 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
         var inicioFestival = ancla.AddDays(20).AddHours(14).ToUniversalTime();
         var inicioSinfonico = ancla.AddDays(70).AddHours(19).ToUniversalTime();
         var inicioCumbre = ancla.AddDays(58).AddHours(8).AddMinutes(30).ToUniversalTime();
-        // La obra es «Cuento de Navidad»: el próximo 14 de diciembre que quede al menos 20 días por delante, a las 15:30.
+        // La obra es «Cuento de Navidad»: el próximo 14 de diciembre que todavía no haya llegado, a las 15:30. Antes pedía
+        // 20 días por delante y a finales de noviembre la mandaba al diciembre del año siguiente (D-016-C23).
         var diciembre = new DateTimeOffset(ancla.Year, 12, 14, 0, 0, 0, Colombia);
-        if (diciembre < ancla.AddDays(20)) { diciembre = diciembre.AddYears(1); }
+        if (diciembre <= ancla) { diciembre = diciembre.AddYears(1); }
         var diasHastaLaObra = (int)(diciembre - ancla).TotalDays;
         var inicioObra = diciembre.AddHours(15).AddMinutes(30).ToUniversalTime();
         static int Anio(DateTimeOffset instante) => instante.ToOffset(Colombia).Year;
@@ -200,7 +201,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             Summary: new EventSummary(
                 Id: "evt-festival-estereo",
                 Slug: "festival-estereo-2026",
-                Title: $"Festival Estéreo {Anio(inicioFestival)}",
+                Title: $"Festival Sabana Sonora {Anio(inicioFestival)}",
                 Category: "Música",
                 City: "Bogotá",
                 Venue: "Parque Simón Bolívar",
@@ -214,7 +215,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 Mode: "general",
                 Geo: new EventGeo(4.6584, -74.0936)), // Parque Simón Bolívar, Bogotá
             Description: "Dos escenarios, más de 20 artistas nacionales e internacionales y zona gastronómica. La cita musical del año en Bogotá.",
-            Organizer: "Estéreo Producciones",
+            Organizer: "Faro Sonoro Producciones",
             Tiers: new[]
             {
                 new EventTier(
@@ -254,7 +255,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                     SaleClosesUtc: AlTerminarElDia(ancla, -148)),
             },
             SeatMap: null,
-            Artist: new EventArtist("Cordillera Eléctrica", "Headliner · fusión andina y electrónica en vivo", 328_000),
+            Artist: new EventArtist("Cordillera Eléctrica", "Headliner · fusión andina y electrónica en vivo", 0),
             Highlights: new[]
             {
                 "Dos escenarios en paralelo, sin cruces de set",
@@ -291,7 +292,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 Currency: Currency,
                 Mode: "reserved",
                 Geo: new EventGeo(6.2447, -75.5749)), // Teatro Metropolitano, Medellín
-            Description: "La Orquesta Filarmónica interpreta un programa de clásicos. Asientos numerados por zona.",
+            Description: "La Orquesta Sinfónica Alborada interpreta un programa de clásicos. Asientos numerados por zona.",
             Organizer: "Teatro Metropolitano",
             Tiers: new[]
             {
@@ -347,7 +348,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                             BuildRow("D", 6, soldLabels: Array.Empty<string>()),
                         }),
                 }),
-            Artist: new EventArtist("Orquesta Filarmónica de Medellín", "Filarmónica de Medellín, con dirección invitada de Santiago Villa", 27_800),
+            Artist: new EventArtist("Orquesta Sinfónica Alborada", "Orquesta Sinfónica Alborada, con dirección invitada de Santiago Villa", 0),
             Highlights: new[]
             {
                 "Programa de clásicos: Beethoven, Dvořák y Chaikovski",
@@ -361,9 +362,9 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
             {
                 new EventSession("sinf-s1", "19:00", "Apertura de puertas y acomodación por zona", ""),
                 new EventSession("sinf-s2", "19:40", "Charla previa: claves del programa", "Santiago Villa"),
-                new EventSession("sinf-s3", "20:00", "Primera parte: Beethoven y Dvořák", "Orquesta Filarmónica de Medellín"),
+                new EventSession("sinf-s3", "20:00", "Primera parte: Beethoven y Dvořák", "Orquesta Sinfónica Alborada"),
                 new EventSession("sinf-s4", "20:50", "Intermedio", ""),
-                new EventSession("sinf-s5", "21:10", "Segunda parte y bis: Chaikovski", "Orquesta Filarmónica de Medellín"),
+                new EventSession("sinf-s5", "21:10", "Segunda parte y bis: Chaikovski", "Orquesta Sinfónica Alborada"),
             });
 
         var conferencia = new EventDetail(
@@ -415,12 +416,12 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                     SaleClosesUtc: AlTerminarElDia(ancla, 48)),
             },
             SeatMap: null,
-            Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 41_200),
+            Artist: new EventArtist("Valeria Cárdenas", "Keynote principal · VP de Ingeniería, plataforma fintech latam", 0, Role: "Ponente"),
             Highlights: new[]
             {
                 "Keynotes de líderes de producto e ingeniería",
                 "Talleres prácticos incluidos con el plan Pro",
-                "Networking con más de 2.000 asistentes tech",
+                "Networking con hasta 1.500 asistentes del sector tech",
                 "Demos en vivo de startups colombianas",
                 "Ágora Centro de Convenciones, corazón de Bogotá",
                 "Certificado digital de asistencia",
@@ -430,7 +431,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                 new EventSession("tech-s1", "08:30", "Registro y acreditación", ""),
                 new EventSession("tech-s2", "09:30", "Keynote de apertura: el futuro del software en Colombia", "Valeria Cárdenas"),
                 new EventSession("tech-s3", "11:00", "Panel: escalar producto en mercados latam", "Mariana Ospina y Julián Ríos"),
-                new EventSession("tech-s4", "13:30", "Talleres prácticos simultáneos (acceso plan Pro)", "Andrés Gómez y equipo Synergos Labs"),
+                new EventSession("tech-s4", "13:30", "Talleres prácticos simultáneos (acceso plan Pro)", "Tomás Arbeláez y equipo Synergos Labs"),
                 new EventSession("tech-s5", "16:00", "Networking y cierre", ""),
             });
 
@@ -476,7 +477,7 @@ public sealed class StubEventCatalogProvider : IEventCatalogProvider
                     SaleClosesUtc: AlTerminarElDia(ancla, diasHastaLaObra - 1)),
             },
             SeatMap: null,
-            Artist: new EventArtist("Compañía Teatral La Ronda", "Compañía residente · teatro familiar y música en vivo", 8_730),
+            Artist: new EventArtist("Compañía Teatral La Ronda", "Compañía residente · teatro familiar y música en vivo", 0),
             Highlights: new[]
             {
                 "Adaptación familiar del clásico de Charles Dickens",

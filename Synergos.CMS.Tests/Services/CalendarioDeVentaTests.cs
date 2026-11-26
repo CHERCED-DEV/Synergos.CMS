@@ -16,7 +16,7 @@ namespace Synergos.CMS.Tests.Services;
 /// <remarks>
 /// <para><b>Lo que estaba roto.</b> <c>StubEventTicketingService.CheckoutAsync</c> miraba que la
 /// localidad existiera, el aforo y el máximo por orden, y nada más. Medido el 2026-10-02 con el
-/// motor en proceso: el «Festival Estéreo 2026» es del 15 de agosto, la ficha decía «El evento ya
+/// motor en proceso: el «Festival Sabana Sonora 2026» es del 15 de agosto, la ficha decía «El evento ya
 /// comenzó», y <c>POST /api/eventos/checkout</c> con 2 × General contestaba 200 con la sesión de
 /// pago abierta por 403.200. En el navegador, 2 × VIP daba «¡Compra confirmada!».</para>
 ///
@@ -143,7 +143,7 @@ public sealed class CalendarioDeVentaTests
             .CheckoutAsync("evt-festival-estereo",
                 new[] { new EventCheckoutItem("GEN", null, 2) }, new[] { Asistente("1"), Asistente("2") }));
 
-        Assert.Equal("El evento 'Festival Estéreo 2026' ya comenzó: ya no se venden entradas.", ex.Message);
+        Assert.Equal("El evento 'Festival Sabana Sonora 2026' ya comenzó: ya no se venden entradas.", ex.Message);
         await reservas.DidNotReceiveWithAnyArgs().HoldItemAsync(default!, default);
         await pagos.DidNotReceiveWithAnyArgs().CreateSessionAsync(default!, default);
     }
@@ -238,7 +238,7 @@ public sealed class CalendarioDeVentaTests
         var rechazo = Assert.IsType<BadRequestObjectResult>(resultado);
         using var cuerpo = JsonDocument.Parse(JsonSerializer.Serialize(rechazo.Value));
         Assert.Equal(
-            "El evento 'Festival Estéreo 2026' ya comenzó: ya no se venden entradas.",
+            "El evento 'Festival Sabana Sonora 2026' ya comenzó: ya no se venden entradas.",
             cuerpo.RootElement.GetProperty("error").GetString());
         await pagos.DidNotReceiveWithAnyArgs().CreateSessionAsync(default!, default);
     }

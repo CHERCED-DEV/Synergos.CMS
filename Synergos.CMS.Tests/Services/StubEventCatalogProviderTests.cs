@@ -27,7 +27,7 @@ public class StubEventCatalogProviderTests
 
         var festival = (await catalogo.GetEventAsync("evt-festival-estereo"))!;
         Assert.Equal(new DateTimeOffset(2026, 8, 15, 19, 0, 0, TimeSpan.Zero), festival.Summary.StartUtc);
-        Assert.Equal("Festival Estéreo 2026", festival.Summary.Title);
+        Assert.Equal("Festival Sabana Sonora 2026", festival.Summary.Title);
         Assert.Equal("Hasta el 14 de agosto de 2026", festival.Tiers.Single(t => t.Code == "GEN").SaleWindow);
         Assert.Equal("Concierto Sinfónico de Octubre", (await catalogo.GetEventAsync("evt-concierto-sinfonico"))!.Summary.Title);
     }
@@ -44,11 +44,38 @@ public class StubEventCatalogProviderTests
         Assert.All(eventos, e => Assert.True(e.StartUtc > hoy, $"{e.Title} ({e.StartUtc:O}) no queda por venir"));
         var festival = (await catalogo.GetEventAsync("evt-festival-estereo"))!;
         Assert.Equal(new DateTimeOffset(2027, 3, 30, 14, 0, 0, Colombia), festival.Summary.StartUtc);
-        Assert.Equal("Festival Estéreo 2027", festival.Summary.Title);
+        Assert.Equal("Festival Sabana Sonora 2027", festival.Summary.Title);
         Assert.Equal("Hasta el 29 de marzo de 2027", festival.Tiers.Single(t => t.Code == "GEN").SaleWindow);
         Assert.Equal("Concierto Sinfónico de Mayo", (await catalogo.GetEventAsync("evt-concierto-sinfonico"))!.Summary.Title);
         // «Cuento de Navidad» sigue en diciembre: el próximo 14 de diciembre.
         Assert.Equal(new DateTimeOffset(2027, 12, 14, 15, 30, 0, Colombia), (await catalogo.GetEventAsync("evt-obra-infantil"))!.Summary.StartUtc);
+    }
+
+    [Theory] // D-016-C23: «Cuento de Navidad» es el próximo 14 de diciembre que no haya llegado
+    [InlineData(2026, 11, 26, 2026)]
+    [InlineData(2026, 12, 13, 2026)]
+    [InlineData(2026, 12, 15, 2027)]
+    public async Task Cuento_de_Navidad_es_el_proximo_14_de_diciembre(int anio, int mes, int dia, int anioDeLaObra)
+    {
+        var catalogo = new StubEventCatalogProvider(new RelojFijo(new DateTimeOffset(anio, mes, dia, 9, 0, 0, Colombia)));
+
+        var obra = (await catalogo.GetEventAsync("evt-obra-infantil"))!;
+
+        Assert.Equal(new DateTimeOffset(anioDeLaObra, 12, 14, 15, 30, 0, Colombia), obra.Summary.StartUtc);
+        Assert.True(obra.Tiers.Single().SaleClosesUtc > new DateTimeOffset(anio, mes, dia, 9, 0, 0, Colombia));
+    }
+
+    [Fact] // D-016-C23: el catálogo de muestra no inventa seguidores; la ficha no los pinta en 0
+    public async Task Ningun_artista_del_catalogo_trae_seguidores_inventados()
+    {
+        var catalogo = Make();
+
+        foreach (var resumen in await catalogo.SearchAsync(null))
+        {
+            Assert.Equal(0, (await catalogo.GetEventAsync(resumen.Id))!.Artist!.Followers);
+        }
+        // Quien da la charla de la conferencia es «Ponente», no «Artista».
+        Assert.Equal("Ponente", (await catalogo.GetEventAsync("evt-cumbre-tech"))!.Artist!.Role);
     }
 
     [Fact] // empty: sin query devuelve todo el catálogo, ordenado por fecha

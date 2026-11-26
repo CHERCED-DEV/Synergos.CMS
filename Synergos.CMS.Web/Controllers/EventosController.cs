@@ -748,7 +748,7 @@ public sealed class EventosController : ControllerBase
     private static EventArtistDto ToArtistDto(EventArtist? a) =>
         a is null
             ? new EventArtistDto(string.Empty, string.Empty, 0)
-            : new EventArtistDto(a.Name, a.Headline, a.Followers);
+            : new EventArtistDto(a.Name, a.Headline, a.Followers, string.IsNullOrWhiteSpace(a.Role) ? null : a.Role.Trim());
 
     private static EventSessionDto ToSessionDto(EventSession s) =>
         new(s.Id, s.Time, s.Title, s.Speaker);
@@ -1059,8 +1059,8 @@ public sealed class EventosController : ControllerBase
     // Contrato UI (EventOrganizer): la ficha lee organizer.name (objeto).
     public sealed record EventOrganizerDto(string Name, string Headline, string Avatar);
 
-    // Contrato UI (EventArtist): la ficha lee artist.{name,headline,followers}.
-    public sealed record EventArtistDto(string Name, string Headline, int Followers);
+    // Contrato UI (EventArtist): la ficha lee artist.{name,headline,followers,role}.
+    public sealed record EventArtistDto(string Name, string Headline, int Followers, string? Role = null);
 
     // Contrato UI (EventSession): la agenda lee session.{id,time,title,speaker}.
     public sealed record EventSessionDto(string Id, string Time, string Title, string Speaker);
