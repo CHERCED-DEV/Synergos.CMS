@@ -215,4 +215,23 @@ public sealed class AcademyPublicationStateTests
 
         Assert.Equal(new[] { "b", "a" }, Rows(body, "id"));
     }
+
+    // ── D-016-C23: la ficha cuenta los cursos de quien lo dicta, y sin cursos no dice «0» ──
+
+    [Theory]
+    [InlineData("Elena Restrepo", 2)]
+    [InlineData("Otra Persona", null)]
+    public async Task La_ficha_cuenta_los_cursos_de_quien_lo_dicta(string instructora, int? esperados)
+    {
+        var curso = Course("curso-1", "Arquitectura limpia");
+        CatalogoPublico(curso, Course("curso-2", "Git desde cero"), Course("curso-3", "Otro") with { InstructorName = "Tobías Galindo" });
+        _catalog.GetCourseAsync("curso-1", Arg.Any<CancellationToken>()).Returns(new CourseDetail(
+            curso, "Descripción", [], new CourseInstructor("ins-1", instructora, "Arquitecta", "Bio", null), [], []));
+
+        var body = Json(await BuildSut().Course("curso-1", CancellationToken.None));
+
+        var cuenta = body.GetProperty("instructor").GetProperty("courseCount");
+        if (esperados is null) { Assert.Equal(JsonValueKind.Null, cuenta.ValueKind); }
+        else { Assert.Equal(esperados, cuenta.GetInt32()); }
+    }
 }
