@@ -35,7 +35,7 @@ namespace Synergos.CMS.Web.Services.Catalog;
 /// <c>ICatalogSource.GetAllAsync</c> se llama en CADA búsqueda, así que el feed crecería un ítem
 /// por lección y por búsqueda (#100).</para>
 /// </remarks>
-public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalDoctor>
+public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalDoctor>, IRaizDeSalud
 {
     internal const string Vertical = "Salud";
     internal const string ProfessionalPageAlias = "professionalPage";
@@ -104,9 +104,7 @@ public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalD
             return Array.Empty<IPublishedContent>();
         }
 
-        var brandKey = _settings.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b)
-            ? b.Trim()
-            : null;
+        var brandKey = Alcance();
 
         if (string.IsNullOrWhiteSpace(brandKey))
         {
@@ -119,10 +117,7 @@ public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalD
             return Array.Empty<IPublishedContent>();
         }
 
-        var siteRoot = umbracoContext.Content.GetAtRoot()
-            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
-            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
-                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
+        var siteRoot = Raiz(umbracoContext.Content, brandKey);
 
         if (siteRoot is null)
         {
@@ -134,6 +129,24 @@ public sealed class UmbracoProfessionalDirectorySource : ICatalogSource<MedicalD
 
         return siteRoot.DescendantsOfType(ProfessionalPageAlias).ToList();
     }
+
+    /// <inheritdoc />
+    public bool SeVe()
+        => _umbracoContextAccessor.TryGetUmbracoContext(out var umbracoContext)
+           && umbracoContext.Content is { } contenido
+           && Alcance() is { } brandKey
+           && Raiz(contenido, brandKey) is not null;
+
+    /// <summary>El <c>brandKey</c> del siteRoot de Salud, o null si el despliegue no lo dice.</summary>
+    private string? Alcance()
+        => _settings.CurrentValue.Scopes.TryGetValue(Vertical, out var b) && !string.IsNullOrWhiteSpace(b) ? b.Trim() : null;
+
+    /// <summary>El siteRoot con ese <c>brandKey</c> en el árbol publicado, o null.</summary>
+    private static IPublishedContent? Raiz(Umbraco.Cms.Core.PublishedCache.IPublishedContentCache contenido, string brandKey)
+        => contenido.GetAtRoot()
+            .SelectMany(r => r.DescendantsOrSelf<IPublishedContent>())
+            .FirstOrDefault(c => string.Equals(c.ContentType.Alias, SiteRootAlias, StringComparison.Ordinal)
+                && string.Equals(c.Value<string>("brandKey"), brandKey, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// <c>professionalPage</c> → <see cref="MedicalDoctor"/>, o null si no es servible.

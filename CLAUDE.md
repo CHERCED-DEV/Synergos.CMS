@@ -36,12 +36,12 @@
    tenant-resolver middleware.
 9. **Tests por seam** — gate liftado post-Ola 190 (ADR 0075). Cada
    nuevo seam ship con tests (empty / happy / filter / idempotent).
-   **7001 passing** en TRES suites (#135), y cada una cuadra su propia cifra
+   **7014 passing** en TRES suites (#135), y cada una cuadra su propia cifra
    contra su ensamblado por reflexión (`SuiteCountTests`, enlazado en las tres):
 
    | suite | tests | qué referencia |
    |---|---:|---|
-   | `Synergos.CMS.Tests` | 4291 | **un** proyecto: `Synergos.CMS.Web` |
+   | `Synergos.CMS.Tests` | 4304 | **un** proyecto: `Synergos.CMS.Web` |
    | `Synergos.Servicios.Tests` | 2124 | Core, Shared, las 20 `Api.*` y los 10 `Bff.*` |
    | `Synergos.Arquitectura.Tests` | 586 | Web, Shared, `Bff.Core`, `Bff.Tienda` |
 
@@ -193,7 +193,7 @@ versión de la rama 13 que lo cierre.
 > `NoWarn` sino subir de 13.13.1 a 13.16.2 — el último 13.x publicado.
 > Medido antes de subirlo: build en 0 avisos con la auditoría ENCENDIDA y
 > las tres suites **en las 3280 de entonces**, ni un test movido — los cinco
-> que añadió fueron el gate que esa misma HU escribió. (Hoy son **7001**: el #141
+> que añadió fueron el gate que esa misma HU escribió. (Hoy son **7014**: el #141
 > se llevó dos de esos cinco al sacar el arnés de este repo — ver
 > `feedback_moving_an_artifact_out_of_a_repo_moves_it_out_of_its_gates_reach`. Las frases que
 > cruzaban las cruza hoy `.github/workflows/arnes.yml` desde el arnés, #142, fuera de esta suite.)
@@ -229,7 +229,7 @@ Synergos.CMS/
 │   │   ├── contracts/           los 5 contratos CMS↔UI + harness Vitest
 │   │   └── umbraco/             cdn-contract.md (DESBLOQUEADO, HU #20 · ADR 0132)
 │   └── uSync/v9/                SCHEMA AUTORITATIVO
-│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (266 archivos)
+│       ├── ContentTypes/        DocTypes + ElementTypes + Compositions (267 archivos)
 │       ├── DataTypes/           148 archivos (77 DTSelect*) + UrlPicker/MediaPicker/Tags/ContentPicker
 │       ├── Dictionary/          i18n es-CO + en-US (1402 keys)
 │       ├── Languages/           es-CO (default) + en-US
@@ -3090,11 +3090,11 @@ dotnet build Synergos.CMS.Application/Synergos.CMS.Application.csproj -v quiet
 # Web compila clean (solo MSB3021 file-lock esperados si Web corre):
 dotnet build Synergos.CMS.Web/Synergos.CMS.Web.csproj -v quiet --no-dependencies
 
-# Las tres suites (7001 tests) — la solución integradora las lanza juntas:
+# Las tres suites (7014 tests) — la solución integradora las lanza juntas:
 dotnet test Synergos.CMS.sln -v quiet
 
 # …o una sola, que es lo que hace el corte del #135 útil en el día a día:
-dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 4291
+dotnet test Synergos.CMS.Tests/Synergos.CMS.Tests.csproj -v quiet           # 4304
 dotnet test backend/Synergos.Servicios.Tests/Synergos.Servicios.Tests.csproj -v quiet  # 2124
 dotnet test Synergos.Arquitectura.Tests/Synergos.Arquitectura.Tests.csproj -v quiet  # 586
 
@@ -3512,7 +3512,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   Hero, SnippetRef.
 - **Block Grid con areas** (`DTBlockGridSections.config`) permite al
   editor dropear presets al root de `sections` y cualquier elemento
-  de contenido (156 blocks) dentro de las areas.
+  de contenido (157 blocks) dentro de las areas.
 - **Plugin backoffice** `App_Plugins/LayoutComposer/` con custom
   views + SVG thumbnails + JS defaults pre-drop.
 - **Runtime SSR** `Views/Partials/blockgrid/Components/
@@ -3524,7 +3524,7 @@ Después de las Olas 42 → 44 el Layout Composer es end-to-end:
   `Synergos:LayoutComposer:EnableStarterScaffold`.
 - **Reusable snippets** (Ola 42.10) via `elementLayoutSnippetRef` que
   referencia un `reusableBlock` de Ola 34.
-- **compDom* universal** (Ola 43.15/43.16): los 175 element types
+- **compDom* universal** (Ola 43.15/43.16): los 176 element types
   tienen compDomClass + compDomVariant + compDomVisibility +
   compDomAttributes. El wrapper `SynHost/_Wrapper.cshtml` (Ola 44.1)
   aplica estos props al HTML emitido por los SynHost partials.
@@ -3593,7 +3593,7 @@ Ver ADR 0021 para el mapping canonical DataType ↔ editorial intent.
 > agente propone lo que ya existe o da por hecho lo que no.
 
 **Construido y verificado:** 20 capacidades (141 endpoints, 258 códigos
-de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 7001 tests, gates de
+de rechazo), `Bff.Core`, `Bff.Salud`, `Bff.Tienda`, `Bff.Eventos`, `Bff.Viajes`, `Bff.Alquiler`. 7014 tests, gates de
 segregación y molde en verde.
 
 > **Construido no es REUTILIZADO, y la diferencia se deriva del disco** (#169). §0.B.17 dice que

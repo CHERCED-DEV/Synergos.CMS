@@ -294,6 +294,12 @@
   display: block;
 }
 
+/* Una sección cuyos bloques no pintan nada no deja una banda vacía: se degrada por AUSENCIA (un listado del catálogo
+   sin nada publicado, por ejemplo; 003-salud-cita D-003-V2). Un elemento cualquiera dentro de un bloque la mantiene. */
+.syn-layout--section:not(:has(.umb-block-grid__layout-item *)) {
+  display: none;
+}
+
 /* Grid libre: las columnas hijas (.syn-layout--column) declaran su span. */
 .syn-layout--grid {
   display: grid;

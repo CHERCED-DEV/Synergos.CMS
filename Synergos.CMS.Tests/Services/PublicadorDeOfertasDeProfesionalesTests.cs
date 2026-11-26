@@ -7,6 +7,7 @@ using NSubstitute;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Notifications;
+using Synergos.CMS.Web.Services.Catalog;
 using Synergos.CMS.Web.Services.Salud;
 using Umbraco.Cms.Core.Events;
 using Umbraco.Cms.Core.Models;
@@ -168,6 +169,14 @@ public sealed class PublicadorDeOfertasDeProfesionalesTests
     private readonly IDoctorDirectory _directorio = Substitute.For<IDoctorDirectory>();
     private readonly IPublicadorDeOfertasDeProfesionales _ofertas = Substitute.For<IPublicadorDeOfertasDeProfesionales>();
     private readonly IContentService _contenidos = Substitute.For<IContentService>();
+    private readonly IRaizDeSalud _raiz = Raiz(seVe: true);
+
+    private static IRaizDeSalud Raiz(bool seVe)
+    {
+        var raiz = Substitute.For<IRaizDeSalud>();
+        raiz.SeVe().Returns(seVe);
+        return raiz;
+    }
 
     private static IOptionsMonitor<CatalogSettings> Fuente(string fuente)
     {
@@ -180,7 +189,7 @@ public sealed class PublicadorDeOfertasDeProfesionalesTests
     }
 
     private OfertaDeProfesionalAlPublicar AlPublicar(string fuente = "cms")
-        => new(_directorio, _ofertas, Fuente(fuente), NullLogger<OfertaDeProfesionalAlPublicar>.Instance);
+        => new(_directorio, _ofertas, Fuente(fuente), _raiz, NullLogger<OfertaDeProfesionalAlPublicar>.Instance);
 
     private OfertaDeProfesionalAlRetirar AlRetirar(string fuente = "cms")
         => new(_ofertas, _contenidos, Fuente(fuente), NullLogger<OfertaDeProfesionalAlRetirar>.Instance);
@@ -220,6 +229,19 @@ public sealed class PublicadorDeOfertasDeProfesionalesTests
 
         await _ofertas.DidNotReceiveWithAnyArgs().PublicarAsync(default!, default);
         await _ofertas.DidNotReceiveWithAnyArgs().RetirarAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task En_un_import_sin_la_raiz_en_la_cache_no_le_pregunta_al_directorio_ni_toca_la_oferta()
+    {
+        _directorio.GetAsync("ana-rios", Arg.Any<CancellationToken>()).Returns(Profesional());
+        var enUnImport = new OfertaDeProfesionalAlPublicar(
+            _directorio, _ofertas, Fuente("cms"), Raiz(seVe: false), NullLogger<OfertaDeProfesionalAlPublicar>.Instance);
+
+        await enUnImport.HandleAsync(new ContentPublishedNotification([Nodo("professionalPage", "ana-rios")], new EventMessages()), default);
+
+        await _directorio.DidNotReceiveWithAnyArgs().GetAsync(default!, default);
+        await _ofertas.DidNotReceiveWithAnyArgs().PublicarAsync(default!, default);
     }
 
     [Fact]
