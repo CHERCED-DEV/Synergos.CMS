@@ -163,16 +163,16 @@ public class CatalogEngineReplicationTests
     [Fact]
     public async Task Gov_SinTildes_Encuentra()
     {
-        var conTilde = await Gov().SearchAsync("Registraduría", null);
-        var sinTilde = await Gov().SearchAsync("registraduria", null);
+        var conTilde = await Gov().SearchAsync("Identificación", null);
+        var sinTilde = await Gov().SearchAsync("identificacion", null);
 
         Assert.NotEmpty(conTilde);
         Assert.Equal(conTilde.Select(t => t.Id), sinTilde.Select(t => t.Id));
     }
 
-    [Fact] // Lo que el motor añade: prefijo. "registra" encuentra "Registraduría".
+    [Fact] // Lo que el motor añade: prefijo. "identifica" encuentra "Identificación".
     public async Task Gov_CasaPorPrefijo()
-        => Assert.NotEmpty(await Gov().SearchAsync("registra", null));
+        => Assert.NotEmpty(await Gov().SearchAsync("identifica", null));
 
     // ── EVENTOS ────────────────────────────────────────────────────────────────────
 

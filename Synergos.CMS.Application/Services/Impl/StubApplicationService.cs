@@ -932,14 +932,13 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001001",
             tramiteId: "trm-certificado-residencia",
             tramiteName: "Certificado de residencia",
-            agency: "Alcaldía Municipal",
+            agency: "Ventanilla de Atención al Ciudadano (ejemplo)",
             citizen: new GovCitizen("María Fernanda López", "maria.lopez@correo.co", "52841937", "+57 310 555 0101"),
             formData: new Dictionary<string, string>
             {
                 ["nombreCompleto"] = "María Fernanda López",
                 ["cedula"] = "52841937",
                 ["direccion"] = "Cra 15 # 82-33",
-                ["barrio"] = "El Lago",
                 ["correo"] = "maria.lopez@correo.co",
             },
             priority: CasePriority.Normal,
@@ -958,15 +957,15 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001002",
             tramiteId: "trm-licencia-conduccion",
             tramiteName: "Renovación de licencia de conducción",
-            agency: "Secretaría de Movilidad",
-            citizen: new GovCitizen("Carlos Andrés Pérez", "carlos.perez@correo.co", "80234561", "+57 315 555 0202"),
+            agency: "Ventanilla de Tránsito (ejemplo)",
+            citizen: new GovCitizen("Carlos Ernesto Pardo", "carlos.pardo@correo.co", "80234561", "+57 315 555 0202"),
             formData: new Dictionary<string, string>
             {
-                ["nombreCompleto"] = "Carlos Andrés Pérez",
+                ["nombreCompleto"] = "Carlos Ernesto Pardo",
                 ["cedula"] = "80234561",
                 ["categoria"] = "B1",
                 ["examenMedico"] = "true",
-                ["correo"] = "carlos.perez@correo.co",
+                ["correo"] = "carlos.pardo@correo.co",
             },
             priority: CasePriority.High,
             slaDays: 5,
@@ -974,7 +973,7 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicadoAt: baseDate.AddDays(5),
             history: new[]
             {
-                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(5), "carlos.perez@correo.co", "Solicitud radicada en línea."),
+                new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(5), "carlos.pardo@correo.co", "Solicitud radicada en línea."),
                 new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(6), officer, "Expediente asignado para revisión."),
             },
             decision: null);
@@ -985,13 +984,12 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001003",
             tramiteId: "trm-pasaporte",
             tramiteName: "Expedición de pasaporte",
-            agency: "Cancillería",
+            agency: "Ventanilla de Pasaportes (ejemplo)",
             citizen: new GovCitizen("Juliana Ríos", "juliana.rios@correo.co", "1020456789", "+57 300 555 0303"),
             formData: new Dictionary<string, string>
             {
                 ["nombreCompleto"] = "Juliana Ríos",
                 ["cedula"] = "1020456789",
-                ["fechaNacimiento"] = "1994-03-12",
                 ["ciudad"] = "Bogotá",
                 ["correo"] = "juliana.rios@correo.co",
             },
@@ -1017,11 +1015,11 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001004",
             tramiteId: "trm-registro-mercantil",
             tramiteName: "Registro mercantil de empresa",
-            agency: "Cámara de Comercio",
+            agency: "Ventanilla de Empresas (ejemplo)",
             citizen: new GovCitizen("Andrés Felipe Torres", "andres.torres@correo.co", "900123456", "+57 320 555 0404"),
             formData: new Dictionary<string, string>
             {
-                ["razonSocial"] = "Café La Palma S.A.S.",
+                ["razonSocial"] = "Tostadora Ejemplo S.A.S.",
                 ["nit"] = "900123456",
                 ["actividad"] = "5613 — Expendio de comidas",
                 ["representante"] = "Andrés Felipe Torres",
@@ -1049,14 +1047,14 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001005",
             tramiteId: "trm-afiliacion-salud",
             tramiteName: "Afiliación al régimen subsidiado de salud",
-            agency: "Secretaría de Salud",
+            agency: "Ventanilla de Salud (ejemplo)",
             citizen: new GovCitizen("Luz Dary Gómez", "luz.gomez@correo.co", "39765432", "+57 311 555 0505"),
             formData: new Dictionary<string, string>
             {
                 ["nombreCompleto"] = "Luz Dary Gómez",
                 ["cedula"] = "39765432",
-                ["sisben"] = "C5",
-                ["eps"] = "Nueva EPS",
+                ["sisben"] = "Grupo C (ejemplo)",
+                ["eps"] = "EPS Ejemplo Norte",
                 ["correo"] = "luz.gomez@correo.co",
             },
             priority: CasePriority.Low,
@@ -1067,9 +1065,9 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             {
                 new HistoryEntry(CaseStatus.Radicado, baseDate.AddDays(-10), "luz.gomez@correo.co", "Solicitud radicada en línea."),
                 new HistoryEntry(CaseStatus.EnRevision, baseDate.AddDays(-9), officer, "Expediente asignado para revisión."),
-                new HistoryEntry(CaseStatus.Rechazado, baseDate.AddDays(-7), officer, "Puntaje SISBÉN fuera del rango del régimen subsidiado."),
+                new HistoryEntry(CaseStatus.Rechazado, baseDate.AddDays(-7), officer, "La clasificación de ejemplo está fuera del rango del régimen subsidiado."),
             },
-            decision: new CaseDecision("reject", "Puntaje SISBÉN fuera del rango del régimen subsidiado.", baseDate.AddDays(-7), officer));
+            decision: new CaseDecision("reject", "La clasificación de ejemplo está fuera del rango del régimen subsidiado.", baseDate.AddDays(-7), officer));
 
         // 6) Radicado — segundo en la cola, prioridad normal (más volumen para el funcionario).
         SeedCase(
@@ -1077,14 +1075,14 @@ public sealed class StubApplicationService : IApplicationService, IExpedientesDe
             radicado: "SG-2026-001006",
             tramiteId: "trm-subsidio-vivienda",
             tramiteName: "Solicitud de subsidio de vivienda",
-            agency: "Ministerio de Vivienda",
+            agency: "Ventanilla de Vivienda (ejemplo)",
             citizen: new GovCitizen("Diego Martínez", "diego.martinez@correo.co", "1015789456", "+57 312 555 0606"),
             formData: new Dictionary<string, string>
             {
                 ["nombreCompleto"] = "Diego Martínez",
                 ["cedula"] = "1015789456",
                 ["integrantes"] = "4",
-                ["ingresos"] = "1800000",
+                ["ingresos"] = "Hasta 2 salarios mínimos",
                 ["modalidad"] = "Compra de vivienda nueva",
                 ["correo"] = "diego.martinez@correo.co",
             },

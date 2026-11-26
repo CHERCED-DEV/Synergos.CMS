@@ -1483,12 +1483,12 @@ public sealed class DevContenidoDeVerticales
     /// <summary>Tres trámites del catálogo de la app (<c>/api/gov/services</c>): entidad, tasa y plazo como los pinta la app.</summary>
     private static readonly Tramite[] TramitesMasConsultados =
     [
-        new("trm-cedula", "Renovación de cédula de ciudadanía", "Registraduría Nacional · $ 65.500 · unos 15 días hábiles",
-            "Renueva tu cédula por deterioro, pérdida o actualización de datos."),
-        new("trm-pasaporte", "Expedición de pasaporte", "Cancillería · $ 189.000 · unos 8 días hábiles",
-            "Pide la expedición de tu pasaporte colombiano para viajar al exterior."),
-        new("trm-licencia-conduccion", "Renovación de licencia de conducción", "Secretaría de Movilidad · $ 95.000 · unos 5 días hábiles",
-            "Renueva tu licencia vigente o vencida. Necesitas el examen médico aprobado."),
+        new("trm-cedula", "Duplicado de cédula de ciudadanía", "Ventanilla de Identificación (ejemplo) · tarifa de ejemplo $ 65.500 · unos 15 días hábiles",
+            "Solicite el duplicado de su cédula por deterioro, pérdida o corrección de datos."),
+        new("trm-pasaporte", "Expedición de pasaporte", "Ventanilla de Pasaportes (ejemplo) · tarifa de ejemplo $ 189.000 · unos 8 días hábiles",
+            "Solicite la expedición de su pasaporte para viajar al exterior."),
+        new("trm-licencia-conduccion", "Renovación de licencia de conducción", "Ventanilla de Tránsito (ejemplo) · tarifa de ejemplo $ 95.000 · unos 5 días hábiles",
+            "Renueve su licencia vigente o vencida. Necesita el examen médico aprobado."),
     ];
 
     private string RecetaGobierno(CuerpoEditable cuerpo)
@@ -1503,23 +1503,23 @@ public sealed class DevContenidoDeVerticales
         FilasDeTarjetas(destacados, TramitesMasConsultados.Select(t => new Tarjeta(
             t.Nombre, t.Linea, t.Resumen, null, t.Nombre, "Ver el trámite", $"/gobierno/#/gov/tramite/{t.Id}")).ToArray());
 
-        Rejilla(b, "surface", "Entidades que atienden aquí", 4,
-            ("Registraduría Nacional", "Renovación de la cédula de ciudadanía."),
-            ("Cancillería", "Expedición del pasaporte."),
-            ("Secretaría de Movilidad", "Renovación de la licencia de conducción."),
-            ("Secretaría de Salud", "Afiliación al régimen subsidiado de salud."),
-            ("Alcaldía Municipal", "Certificado de residencia."),
-            ("Cámara de Comercio", "Registro mercantil de tu empresa."),
-            ("Ministerio de Vivienda", "Solicitud del subsidio de vivienda."));
+        Rejilla(b, "surface", "Ventanillas de ejemplo que atienden aquí", 4,
+            ("Ventanilla de Identificación (ejemplo)", "Duplicado de la cédula de ciudadanía."),
+            ("Ventanilla de Pasaportes (ejemplo)", "Expedición del pasaporte."),
+            ("Ventanilla de Tránsito (ejemplo)", "Renovación de la licencia de conducción."),
+            ("Ventanilla de Salud (ejemplo)", "Afiliación al régimen subsidiado de salud."),
+            ("Ventanilla de Atención al Ciudadano (ejemplo)", "Certificado de residencia."),
+            ("Ventanilla de Empresas (ejemplo)", "Registro mercantil de su empresa."),
+            ("Ventanilla de Vivienda (ejemplo)", "Solicitud del subsidio de vivienda."));
 
         Preguntas(b, "Preguntas frecuentes",
-            ("¿Qué es el número de radicado?", "Es el código que recibe tu solicitud al enviarla. Con él la encuentras en «Mis solicitudes» y la identifica la entidad."),
-            ("¿Cuánto tarda un trámite?", "Cada trámite dice su plazo en días hábiles. Se cuentan desde que radicas; los fines de semana y festivos no cuentan."),
-            ("¿Cómo pago la tasa?", "Si el trámite tiene tasa, la pagas en línea al radicar. Los trámites gratuitos lo dicen en su ficha."),
-            ("¿Qué pasa si falta un documento?", "La entidad te pide subsanar y te avisamos en «Notificaciones». Completas lo que falta y el trámite sigue."),
-            ("¿Se realizan cobros reales?", "No. Este es un sitio de demostración: las solicitudes y los pagos no tienen efecto ante ninguna entidad."));
+            ("¿Qué es el número de radicado?", "Es el código que recibe su solicitud al enviarla. Con él la encuentra en «Mis solicitudes» y la identifica la entidad."),
+            ("¿Cuánto tarda un trámite?", "Cada trámite dice su plazo en días hábiles. Se cuentan desde que radica; los fines de semana y festivos no cuentan."),
+            ("¿Cómo pago la tasa?", "Si el trámite tiene tasa, la paga en línea al radicar; en esta demostración es una tarifa de ejemplo. Los trámites gratuitos lo dicen en su ficha."),
+            ("¿Qué pasa si falta un documento?", "La entidad le pide subsanar y le avisamos en «Notificaciones». Completa lo que falta y el trámite sigue."),
+            ("¿Se realizan cobros reales?", "No. Este es un sitio de demostración: las entidades son de ejemplo, y las solicitudes y los pagos no tienen efecto ante ninguna entidad real."));
 
-        Cierre(b, "¿Ya radicaste?", "Consulta en qué etapa va tu expediente y lo que te ha pedido la entidad.",
+        Cierre(b, "¿Ya radicó?", "Consulte en qué etapa va su expediente y lo que le ha pedido la entidad.",
             "Ver mis solicitudes", "/gobierno/#/gov/mis-solicitudes");
 
         var n = cuerpo.Sumar(b.Build());
@@ -2281,7 +2281,7 @@ public sealed class DevContenidoDeVerticales
             [("Líder de producto", "Bogotá"), ("Ingeniero de plataforma", "Medellín"), ("Directora de diseño", "Cali")]),
         ["educacion"] = new(Educacion, "Cursos de datos, desarrollo y diseño para aprender a tu ritmo, con proyecto y certificado.",
             [("Estudiante de frontend", "Medellín"), ("Estudiante de backend", "Bogotá"), ("Egresada", "Cali")]),
-        ["gobierno"] = new(Gobierno, "Trámites en línea en lenguaje claro: radica, paga la tasa si aplica y sigue tu expediente.", []),
+        ["gobierno"] = new(Gobierno, "Trámites de ejemplo en lenguaje claro: radique, pague la tasa si aplica y siga su expediente.", []),
         ["synergos"] = new(Synergos, null,
             [("CTO de un grupo empresarial", "Bogotá"), ("Líder de producto", "Medellín"), ("Directora digital", "Cali")]),
         ["casos"] = new(Casos, null,

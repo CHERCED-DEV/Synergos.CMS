@@ -3810,20 +3810,20 @@ public sealed class DevContentFiller
 
         // Reframe apps-reales: entrar a /gobierno = la app (el portal ciudadano se monta
         // PRIMERO). Grace: si elementSynGov no está importado, queda el home editorial.
-        AddSynGov(b, "Tus trámites, sin filas",
-            "Radica, paga la tasa si aplica y sigue tu expediente por etapas — en lenguaje claro.");
+        AddSynGov(b, "Sus trámites, sin filas",
+            "Radique, pague la tasa si aplica y siga su expediente por etapas, en lenguaje claro. Las entidades son de ejemplo.");
 
-        AddFallbackHero(b, "elementSynGov", "Trámites del Estado, en lenguaje claro",
+        AddFallbackHero(b, "elementSynGov", "Trámites de ejemplo, en lenguaje claro",
             "Un solo lugar para radicar y hacer seguimiento",
-            "<p>Consulta los requisitos, radica tu solicitud con un formulario guiado, adjunta tus documentos y sigue tu expediente etapa por etapa hasta la resolución. Sin filas, sin vueltas.</p>",
+            "<p>Consulte los requisitos, radique su solicitud con un formulario guiado, adjunte sus documentos y siga su expediente etapa por etapa hasta la resolución. Sin filas, sin vueltas.</p>",
             "Gobierno Home Hero", "Hero del portal ciudadano de trámites", GovFrom, GovTo,
             ("Ver trámites", "/gobierno"), ("Conocer la plataforma", "/synergos/apps/gobierno"));
 
         FeatureGridAuto(b, "Cómo funciona", "Tres pasos, cero filas", new (string title, string subtitle, string body)[]
         {
-            ("Consulta el trámite", "Lenguaje claro", "Requisitos, costos y tiempos explicados sin jerga, antes de empezar."),
-            ("Radica en línea", "Formulario guiado", "Un asistente paso a paso valida tus datos y documentos antes de enviar."),
-            ("Sigue tu expediente", "Carpeta ciudadana", "Cada etapa queda registrada y auditada; te avisamos si debes subsanar."),
+            ("Consulte el trámite", "Lenguaje claro", "Requisitos, costos y tiempos explicados sin jerga, antes de empezar."),
+            ("Radique en línea", "Formulario guiado", "Un asistente paso a paso valida sus datos y documentos antes de enviar."),
+            ("Siga su expediente", "Carpeta ciudadana", "Cada etapa queda registrada y auditada; le avisamos si debe subsanar."),
         }, 3);
 
         return b.Build();
