@@ -22,7 +22,7 @@ public sealed class StubEquipmentCatalogProvider : IEquipmentCatalogProvider
             Id: "andamio-multidireccional-2m",
             Name: "Andamio multidireccional 2 m",
             Category: "Andamios",
-            Summary: "Cuerpo de andamio certificado para trabajo en altura hasta 2 metros.",
+            Summary: "Cuerpo de andamio para trabajo en altura hasta 2 metros.",
             Description: "Estructura modular de acero galvanizado con plataforma antideslizante "
                 + "y barandas. Se entrega armada y se recoge desarmada.",
             CoverUrl: null,
