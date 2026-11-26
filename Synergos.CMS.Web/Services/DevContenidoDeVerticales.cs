@@ -1063,7 +1063,7 @@ public sealed class DevContenidoDeVerticales
     private static readonly EquipoAutorado[] EquiposDeAlquiler =
     [
         new("andamio-multidireccional-2m", "Andamio multidireccional 2 m", "Andamios",
-            "Cuerpo de andamio certificado para trabajo en altura hasta 2 metros.",
+            "Cuerpo de andamio para trabajo en altura hasta 2 metros.",
             "Estructura modular de acero galvanizado con plataforma antideslizante y barandas. Se entrega armada y se recoge desarmada.",
             12, 38_000, 250_000, 1, 30,
             ["Plataforma", "Dos barandas", "Rodachines con freno"], ["Arnés propio", "Cédula del responsable"],
