@@ -599,6 +599,9 @@
         "Blogs.Red.EscribirSinSesionTexto",
         "Blogs.Red.PerfilSinSesion",
         "Blogs.Red.PerfilSinSesionTexto",
+        "Blogs.Red.PublicacionDe",
+        "Blogs.Red.PublicacionNoDisponible",
+        "Blogs.Red.PublicacionNoDisponibleTexto",
         "Blogs.Red.Publicaciones",
         "Blogs.Red.SesionParaPublicar",
         "Blogs.Red.UnaPublicacion"
