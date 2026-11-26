@@ -29,7 +29,8 @@ public sealed record FormStepperProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] IReadOnlyList<PasoDelFormulario>? Steps,
     [property: CampoSynHost(OrigenDelCampo.Decision)] bool? AllowSkip,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string HoneypotField);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string HoneypotField,
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] IReadOnlyList<string>? PrefillFromQuery = null);
 
 /// <summary>Un paso: su título, una línea que lo explica y sus campos, en orden.</summary>
 public sealed record PasoDelFormulario(string Title, IReadOnlyList<CampoDelFormulario> Fields, string? Description = null);

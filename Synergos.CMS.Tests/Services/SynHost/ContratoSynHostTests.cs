@@ -911,6 +911,8 @@ public sealed class ContratoSynHostTests
             .AddSingleton<IPuertaDeLosFlujos>(new PuertaSinDestino())
             .AddSingleton(Substitute.For<Umbraco.Cms.Core.Web.IUmbracoContextAccessor>())
             .Configure<Synergos.CMS.Application.Configuration.PuertaSettings>(_ => { })
+            // El formulario de la muestra (`reserva-cita`) toma su servicio de la dirección (D-016-C24), como en el despliegue.
+            .Configure<Synergos.CMS.Application.Configuration.FormsSettings>(f => f.CamposDesdeLaDireccion["reserva-cita"] = ["servicio"])
             .AddSingleton<ICaminoDeLosFlujos, Synergos.CMS.Web.Services.Puerta.CaminoDeLosFlujos>()
             .AddSingleton(ElementoFalso.Fallback)
             .AddSingleton(ElementoFalso.Diccionario())

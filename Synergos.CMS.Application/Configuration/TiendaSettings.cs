@@ -82,6 +82,20 @@ public sealed class TiendaSettings
     /// </remarks>
     public List<string> Promesas { get; init; } = [];
 
+    /// <summary>
+    /// Las raíces de sitio (<c>siteRoot</c>, por su Key) cuya ficha no muestra la referencia ni la disponibilidad
+    /// (016, D-016-C24): en Booking la ficha es un servicio que se reserva, y «Referencia: WEL-MASAJE-60» o «Disponible»
+    /// no le dicen nada a quien reserva.
+    /// </summary>
+    /// <remarks>
+    /// <b>Por la Key del sitio y no por el dominio:</b> la base real no tiene dominios, y lo que se resuelve por dominio
+    /// cae siempre a la base sin avisar. La vista toma el sitio del <c>siteRoot</c> ancestro de la ficha.
+    /// </remarks>
+    public List<Guid> SitiosSinReferenciaNiStock { get; init; } = [];
+
+    /// <summary>Si la ficha de un producto del sitio <paramref name="sitio"/> muestra la referencia y la disponibilidad.</summary>
+    public bool MuestraReferenciaYStock(Guid? sitio) => sitio is not { } key || !SitiosSinReferenciaNiStock.Contains(key);
+
     /// <summary>Los roles que valen: los declarados o, sin declarar, <see cref="RolPorDefecto"/>.</summary>
     public IReadOnlyList<string> Personal() => RolesDelPersonal.Count > 0 ? RolesDelPersonal : [RolPorDefecto];
 

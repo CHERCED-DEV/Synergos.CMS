@@ -103,4 +103,23 @@ public sealed class FormsSettings
 
     /// <summary>URL de Microsoft Teams incoming webhook (MessageCard).</summary>
     public string? TeamsWebhookUrl { get; init; }
+
+    /// <summary>
+    /// Los campos que un formulario por pasos toma de la dirección, por la clave del formulario (016, D-016-C24): en
+    /// Booking, «Reservar ahora» llega con <c>?servicio=Masaje terapéutico</c> y el formulario abre con ese servicio
+    /// elegido.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Opcional por instancia:</b> sólo el formulario declarado aquí lee la dirección; los demás no cambian.</para>
+    /// <para><b>Sólo elige, nunca avanza ni envía:</b> el valor tiene que ser una de las opciones del campo, y quien
+    /// reserva sigue confirmando cada paso.</para>
+    /// </remarks>
+    public Dictionary<string, List<string>> CamposDesdeLaDireccion { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>Los campos que el formulario <paramref name="formKey"/> toma de la dirección, o nulo si no declara ninguno.</summary>
+    public IReadOnlyList<string>? CamposDesdeLaDireccionDe(string? formKey)
+        => formKey is not null && CamposDesdeLaDireccion.TryGetValue(formKey, out var campos)
+           && campos.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList() is { Count: > 0 } limpios
+            ? limpios
+            : null;
 }

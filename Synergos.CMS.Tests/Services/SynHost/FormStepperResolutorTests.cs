@@ -15,14 +15,14 @@ namespace Synergos.CMS.Tests.Services.SynHost;
 /// </summary>
 public sealed class FormStepperResolutorTests
 {
-    private static FormStepperResolutor Resolutor(string apiBase = "/api/forms", string trampa = "syn_hp")
+    private static FormStepperResolutor Resolutor(string apiBase = "/api/forms", string trampa = "syn_hp", FormsSettings? formularios = null)
     {
         var negocio = Substitute.For<INegocioDelSitio<NegocioDeFormStepper>>();
         negocio.Actual().Returns(new NegocioDeFormStepper(apiBase));
         return new FormStepperResolutor(
             ElementoFalso.Fallback,
             negocio,
-            Options.Create(new FormsSettings { HoneypotFieldName = trampa }),
+            Options.Create(formularios ?? new FormsSettings { HoneypotFieldName = trampa }),
             NullLogger<FormStepperResolutor>.Instance);
     }
 
@@ -118,5 +118,24 @@ public sealed class FormStepperResolutorTests
         var campos = UmbracoFormDefinitionReader.ReadFields(contenedor, ElementoFalso.Fallback);
 
         Assert.Equal([new FormFieldDefinition("nombre", "Nombre", true), new FormFieldDefinition("mensaje", "Mensaje", false)], campos);
+    }
+
+    // ── D-016-C24: sólo el formulario que lo declara toma campos de la dirección ──
+
+    [Theory]
+    [InlineData("reserva-cita", "servicio")]
+    [InlineData("contacto", null)]
+    public void Solo_el_formulario_declarado_toma_campos_de_la_direccion(string formKey, string? campo)
+    {
+        var formularios = new FormsSettings();
+        formularios.CamposDesdeLaDireccion["reserva-cita"] = ["servicio", " "];
+        var bloque = ElementoFalso.DeTipo("elementSynFormStepper",
+            ("formInternalKey", formKey),
+            ("steps", ElementoFalso.Lista(Paso("Tu reserva", Campo("servicio", "Servicio", "select", true, ["Auditorio"])))));
+
+        var props = Resolutor(formularios: formularios).Resolver(bloque).Props;
+
+        if (campo is null) { Assert.Null(props.PrefillFromQuery); }
+        else { Assert.Equal([campo], props.PrefillFromQuery!); }
     }
 }

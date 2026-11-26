@@ -46,6 +46,9 @@
     var priceRaw = product.Value<string>("productPriceBase");
     var hasPrice = Synergos.CMS.Web.Services.PrecioAutorado.EsInequivoco(priceRaw, out var price) && price > 0m;
     var inStock = product.Value<bool>("productInStock");
+    // D-016-C24: el sitio sale del siteRoot ancestro de la ficha (nunca la raíz del árbol) y se identifica por su Key. En Booking la
+    // ficha es un servicio que se reserva: ni la referencia ni «Disponible» le dicen nada a quien reserva.
+    var conReferenciaYStock = TiendaOpt.Value.MuestraReferenciaYStock(product.AncestorOrSelf("siteRoot")?.Key);
     var images = Synergos.CMS.Web.Services.MediaPickerReader.ReadMedia(product, "productImages");
     var variantsJson = product.Value<string>("productVariantsJson");
 
@@ -96,7 +99,7 @@
             <a class="syn-product__category" href="@category!.Url()">@categoryName</a>
         }
         <h1 class="syn-product__name">@name</h1>
-        @if (!string.IsNullOrWhiteSpace(sku))
+        @if (conReferenciaYStock && !string.IsNullOrWhiteSpace(sku))
         {
             <p class="syn-product__sku">@Umbraco.GetDictionaryValue("Shop.Product.Sku"): @sku</p>
         }
@@ -115,11 +118,11 @@
             omitido para no inventar dato. El estilo `.syn-product__discount`
             queda listo en syn-shop.css. SEGUIMIENTO uSync (ver nota al pie).
         *@
-        @if (inStock)
+        @if (conReferenciaYStock && inStock)
         {
             <p class="syn-product__stock syn-product__stock--in">@Umbraco.GetDictionaryValue("Shop.Product.InStock")</p>
         }
-        else
+        else if (conReferenciaYStock)
         {
             <p class="syn-product__stock syn-product__stock--out">@Umbraco.GetDictionaryValue("Shop.Product.OutOfStock")</p>
         }
