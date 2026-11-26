@@ -63,6 +63,28 @@ public static class ListadoDelCatalogoEnLaPagina
     }
 
     /// <summary>
+    /// El enlace del botón de una tarjeta con su id en <paramref name="parametro"/>, antes del <c>#</c>
+    /// («/healthcare/#/ehr/agendar» → «/healthcare/?profesional=laura-mendez#/ehr/agendar»). Es opcional por instancia
+    /// (D-016-C24): sin parámetro, o con uno que no sea sólo letras minúsculas, el enlace queda como lo escribió el editor.
+    /// Quien lo recibe decide si casa con algo que existe.
+    /// </summary>
+    public static string? EnlaceConElId(string? enlace, string? parametro, string id)
+    {
+        var nombre = parametro?.Trim();
+        if (string.IsNullOrEmpty(enlace) || string.IsNullOrEmpty(nombre) || !nombre.All(char.IsAsciiLetterLower)
+            || string.IsNullOrWhiteSpace(id))
+        {
+            return enlace;
+        }
+
+        var almohadilla = enlace.IndexOf('#', StringComparison.Ordinal);
+        var antes = almohadilla < 0 ? enlace : enlace[..almohadilla];
+        var despues = almohadilla < 0 ? string.Empty : enlace[almohadilla..];
+        var separador = antes.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        return $"{antes}{separador}{nombre}={Uri.EscapeDataString(id.Trim())}{despues}";
+    }
+
+    /// <summary>
     /// Lee el listado de <paramref name="vertical"/> y lo vuelve tarjetas. Un vertical que no existe, uno sin nada
     /// publicado o una lectura caída dan la lista vacía, y el bloque no pinta nada.
     /// </summary>

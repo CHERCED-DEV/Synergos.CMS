@@ -36,7 +36,7 @@ public class StubPatientRegistryTests
         var registry = Make();
         var all = await registry.SearchAsync(null);
 
-        var matches = await registry.SearchAsync("79.521.336"); // Jorge Medina
+        var matches = await registry.SearchAsync("1.000.000.102"); // Jorge Medina (documento de prueba, D-016-C25)
 
         Assert.Single(matches);
         Assert.True(matches.Count < all.Count);

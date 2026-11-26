@@ -38,6 +38,11 @@ namespace Synergos.CMS.Interfaces.SynHost;
 /// <para><b>Y cuánto devuelve cancelar una cita confirmada</b> (<c>Devolucion*</c>, I6): la política del sitio, la misma que la
 /// puerta manda a <c>salud.cancelacion</c>. El elemento la usa para decir lo que se devolverá antes de cancelar; lo que se
 /// devuelve de verdad lo calcula el orquestador.</para>
+///
+/// <para><b>Y si la petición llegó sin sesión</b> (<c>SinSesion</c>, vuelta de valor de 003): lo sabe el servidor al pintar
+/// la página, la misma que ya lleva dentro el panel «Inicia sesión» como reserva (D-012-V11). Con él la app arranca en ese
+/// panel, sin pintar antes el inicio ni pedir lecturas que van a contestar 401 (el salto de 0,06 a 1280 px). Es una
+/// pista para pintar, no un permiso: cada lectura la sigue decidiendo el servidor.</para>
 /// </remarks>
 [ElementoSynHost("ehr", TipoDeColocable.Funcionalidad, Diccionario = ["Health.Appointment", "Health.Consent", "Health.Record"])]
 public sealed record EhrProps(
@@ -48,4 +53,5 @@ public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string HistoriaBase,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionTotalHoras = 24,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialHoras = 2,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialPorcentaje = 50);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialPorcentaje = 50,
+    [property: CampoSynHost(OrigenDelCampo.Sesion)] bool SinSesion = false);

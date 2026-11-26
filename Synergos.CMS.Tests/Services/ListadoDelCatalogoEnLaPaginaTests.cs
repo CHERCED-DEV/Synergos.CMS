@@ -81,6 +81,16 @@ public sealed class ListadoDelCatalogoEnLaPaginaTests
         => Assert.Equal(esperado, ListadoDelCatalogoEnLaPagina.Maximo(escrito));
 
     [Theory]
+    [InlineData("/healthcare/#/ehr/agendar", "profesional", "laura-mendez", "/healthcare/?profesional=laura-mendez#/ehr/agendar")]
+    [InlineData("/healthcare/?x=1#/ehr/agendar", "profesional", "laura-mendez", "/healthcare/?x=1&profesional=laura-mendez#/ehr/agendar")]
+    [InlineData("/healthcare/", "profesional", "a b&c", "/healthcare/?profesional=a%20b%26c")]
+    [InlineData("/healthcare/#/ehr/agendar", null, "laura-mendez", "/healthcare/#/ehr/agendar")]
+    [InlineData("/healthcare/#/ehr/agendar", "Profesional", "laura-mendez", "/healthcare/#/ehr/agendar")]
+    [InlineData("/healthcare/#/ehr/agendar", "pro=fesional", "laura-mendez", "/healthcare/#/ehr/agendar")]
+    public void El_enlace_lleva_el_id_solo_si_la_instancia_lo_pide_y_antes_del_hash(string enlace, string? parametro, string id, string esperado)
+        => Assert.Equal(esperado, ListadoDelCatalogoEnLaPagina.EnlaceConElId(enlace, parametro, id));
+
+    [Theory]
     [InlineData("Dra. Laura Méndez", "LM")]
     [InlineData("Dr. Andrés Villa Gómez", "AV")]
     [InlineData("sofía", "S")]
