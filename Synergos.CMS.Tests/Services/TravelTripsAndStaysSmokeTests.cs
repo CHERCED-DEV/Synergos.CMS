@@ -138,8 +138,9 @@ public class TravelTripsAndStaysSmokeTests
         Assert.NotEmpty(byId.Amenities);
         Assert.NotEmpty(byId.Specs);
         Assert.False(string.IsNullOrWhiteSpace(byId.Description));
-        Assert.InRange(byId.Reviews.Average, 1d, 10d);
-        Assert.NotEmpty(byId.Reviews.Categories);
+        // D-016-C25: una estadía de muestra no tiene opiniones; antes traía 418 inventadas.
+        Assert.Equal(0, byId.Reviews.Count);
+        Assert.Empty(byId.Reviews.Categories);
 
         Assert.Null(await stays.GetStayAsync("no-existe"));
     }

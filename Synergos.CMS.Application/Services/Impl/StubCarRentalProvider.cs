@@ -24,9 +24,9 @@ public sealed class StubCarRentalProvider : ICarRentalProvider
     private static readonly IReadOnlyList<CatalogCar> Catalog = new[]
     {
         new CatalogCar("ECON", "Económico", "ECMR", "SynRent", Transmission: "manual", AirConditioning: true, PricePerDay: 95_000m),
-        new CatalogCar("COMP", "Compacto", "CDAR", "Localiza", Transmission: "automatic", AirConditioning: true, PricePerDay: 130_000m),
-        new CatalogCar("SUV", "SUV", "IFAR", "Hertz", Transmission: "automatic", AirConditioning: true, PricePerDay: 210_000m),
-        new CatalogCar("LUX", "Premium", "PDAR", "Avis", Transmission: "automatic", AirConditioning: true, PricePerDay: 340_000m),
+        new CatalogCar("COMP", "Compacto", "CDAR", "Rodamundo", Transmission: "automatic", AirConditioning: true, PricePerDay: 130_000m),
+        new CatalogCar("SUV", "SUV", "IFAR", "Ruta Clara Autos", Transmission: "automatic", AirConditioning: true, PricePerDay: 210_000m),
+        new CatalogCar("LUX", "Premium", "PDAR", "Kilómetro Verde", Transmission: "automatic", AirConditioning: true, PricePerDay: 340_000m),
     };
 
     public Task<IReadOnlyList<CarOffer>> SearchAsync(CarRentalQuery query, CancellationToken cancellationToken = default)

@@ -19,6 +19,9 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// </remarks>
 public sealed class StubStayContentProvider : IStayContentProvider
 {
+    /// <summary>Una estadía de muestra no tiene opiniones: nadie se ha alojado (016, D-016-C25).</summary>
+    private static readonly StayReviewSummary SinOpiniones = new(0, 0, string.Empty, Array.Empty<StayReviewCategoryScore>());
+
     // Geo real: Getsemaní 10.4224,-75.5468 · Bocagrande 10.3997,-75.5567 ·
     // Provenza (El Poblado) 6.2088,-75.5673 · Zona T (Bogotá) 4.6669,-74.0536 ·
     // Salento 4.6372,-75.5709 · Filandia 4.6747,-75.6584.
@@ -29,12 +32,12 @@ public sealed class StubStayContentProvider : IStayContentProvider
             Name: "Casa Getsemaní Boutique",
             City: "Cartagena",
             Region: "Bolívar",
-            Address: "Calle de la Sierpe #29-108, Getsemaní",
+            Address: "Getsemaní, Cartagena",
             Description: "Casa republicana restaurada en el corazón de Getsemaní, a 5 minutos a pie "
                 + "de la Ciudad Amurallada. Patios coloniales, piscina en el solar y terraza con "
                 + "vista a los techos del centro histórico.",
             Gallery: GalleryFor("ctg-getsemani"),
-            Amenities: new[] { "Wifi de alta velocidad", "Piscina exterior", "Desayuno incluido", "Aire acondicionado", "Terraza con vista", "Traslado al aeropuerto" },
+            Amenities: new[] { "Wifi de alta velocidad", "Piscina exterior", "Desayuno según la tarifa", "Aire acondicionado", "Terraza con vista", "Traslado al aeropuerto" },
             Specs: new[]
             {
                 new StaySpec("Habitaciones", "12"),
@@ -44,13 +47,7 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "12:00 m."),
             },
             Geo: new StayGeo(10.4224, -75.5468),
-            Reviews: new StayReviewSummary(9.2, 418, "Ubicación excepcional en Getsemaní", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 9.4),
-                new StayReviewCategoryScore("Ubicación", 9.8),
-                new StayReviewCategoryScore("Servicio", 9.1),
-                new StayReviewCategoryScore("Relación precio-calidad", 8.7),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: new[] { "STD" }),
 
         new StayDetail(
@@ -58,7 +55,7 @@ public sealed class StubStayContentProvider : IStayContentProvider
             Name: "Torre Bocagrande Beach Resort",
             City: "Cartagena",
             Region: "Bolívar",
-            Address: "Av. San Martín #5-94, Bocagrande",
+            Address: "Bocagrande, Cartagena",
             Description: "Resort frente al mar en la primera línea de Bocagrande: playa privada, "
                 + "tres piscinas, club de niños y gastronomía caribeña. Ideal para familias que "
                 + "quieren sol y mar sin salir del hotel.",
@@ -73,21 +70,15 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "1:00 p. m."),
             },
             Geo: new StayGeo(10.3997, -75.5567),
-            Reviews: new StayReviewSummary(8.6, 1243, "Perfecto para viajes en familia", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 8.8),
-                new StayReviewCategoryScore("Ubicación", 9.1),
-                new StayReviewCategoryScore("Servicio", 8.5),
-                new StayReviewCategoryScore("Relación precio-calidad", 8.2),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: new[] { "FAM" }),
 
         new StayDetail(
             StayId: "med-provenza",
-            Name: "Provenza Lofts El Poblado",
+            Name: "Lofts del Ciprés",
             City: "Medellín",
             Region: "Antioquia",
-            Address: "Carrera 35 #8A-109, Provenza, El Poblado",
+            Address: "Provenza, El Poblado, Medellín",
             Description: "Lofts de diseño en plena Provenza, la cuadra más vibrante de El Poblado. "
                 + "Rooftop con jacuzzi, coworking y café de especialidad en el lobby — a pasos de "
                 + "los mejores restaurantes de la ciudad.",
@@ -102,13 +93,7 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "12:00 m."),
             },
             Geo: new StayGeo(6.2088, -75.5673),
-            Reviews: new StayReviewSummary(9.0, 672, "Diseño impecable y rooftop imperdible", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 9.3),
-                new StayReviewCategoryScore("Ubicación", 9.6),
-                new StayReviewCategoryScore("Servicio", 8.8),
-                new StayReviewCategoryScore("Relación precio-calidad", 8.6),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: new[] { "DLX" }),
 
         new StayDetail(
@@ -116,12 +101,12 @@ public sealed class StubStayContentProvider : IStayContentProvider
             Name: "Zona T Executive Suites",
             City: "Bogotá",
             Region: "Cundinamarca",
-            Address: "Calle 83 #12-19, Zona T, Chapinero",
+            Address: "Zona T, Chapinero, Bogotá",
             Description: "Suites ejecutivas sobre la Zona T: salas de reuniones, gimnasio 24 horas y "
                 + "desayuno buffet. A una cuadra del Andino y a 20 minutos del aeropuerto por la "
                 + "Calle 26 — pensado para el viajero de negocios.",
             Gallery: GalleryFor("bog-zonat"),
-            Amenities: new[] { "Salas de reuniones", "Gimnasio 24 horas", "Desayuno buffet", "Wifi de alta velocidad", "Room service", "Parqueadero cubierto" },
+            Amenities: new[] { "Salas de reuniones", "Gimnasio 24 horas", "Desayuno buffet según la tarifa", "Wifi de alta velocidad", "Room service", "Parqueadero cubierto" },
             Specs: new[]
             {
                 new StaySpec("Habitaciones", "64"),
@@ -131,26 +116,20 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "12:00 m."),
             },
             Geo: new StayGeo(4.6669, -74.0536),
-            Reviews: new StayReviewSummary(8.8, 954, "El favorito de los viajeros de negocios", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 9.0),
-                new StayReviewCategoryScore("Ubicación", 9.4),
-                new StayReviewCategoryScore("Servicio", 8.9),
-                new StayReviewCategoryScore("Relación precio-calidad", 8.3),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: new[] { "STE" }),
 
         new StayDetail(
             StayId: "eje-salento",
-            Name: "Finca Mirador del Cocora",
+            Name: "Finca Niebla Alta",
             City: "Salento",
             Region: "Quindío",
-            Address: "Vereda Palestina, km 3 vía al Valle de Cocora",
+            Address: "Valle de Cocora, Salento",
             Description: "Finca cafetera con vista directa al Valle de Cocora y sus palmas de cera. "
                 + "Tour de café propio, chimenea, caminatas guiadas al amanecer y cocina "
                 + "tradicional del Eje Cafetero.",
             Gallery: GalleryFor("eje-salento"),
-            Amenities: new[] { "Tour de café", "Chimenea", "Caminatas guiadas", "Desayuno típico incluido", "Wifi en zonas comunes", "Parqueadero" },
+            Amenities: new[] { "Tour de café", "Chimenea", "Caminatas guiadas", "Desayuno típico según la tarifa", "Wifi en zonas comunes", "Parqueadero" },
             Specs: new[]
             {
                 new StaySpec("Habitaciones", "8"),
@@ -160,13 +139,7 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "11:00 a. m."),
             },
             Geo: new StayGeo(4.6372, -75.5709),
-            Reviews: new StayReviewSummary(9.5, 287, "Vistas al Cocora que quitan el aliento", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 9.4),
-                new StayReviewCategoryScore("Ubicación", 9.7),
-                new StayReviewCategoryScore("Servicio", 9.6),
-                new StayReviewCategoryScore("Relación precio-calidad", 9.2),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: Array.Empty<string>()),
 
         new StayDetail(
@@ -174,12 +147,12 @@ public sealed class StubStayContentProvider : IStayContentProvider
             Name: "Hacienda Café & Bruma",
             City: "Filandia",
             Region: "Quindío",
-            Address: "Km 2 vía Filandia–Quimbaya",
+            Address: "Zona rural, Filandia",
             Description: "Hacienda centenaria entre cafetales de Filandia, con balcones de colores, "
                 + "spa de montaña y catas de café de origen. El plan perfecto para desconectarse "
                 + "en el corazón del Paisaje Cultural Cafetero.",
             Gallery: GalleryFor("eje-filandia"),
-            Amenities: new[] { "Spa de montaña", "Catas de café", "Piscina climatizada", "Desayuno incluido", "Wifi en zonas comunes", "Pet friendly" },
+            Amenities: new[] { "Spa de montaña", "Catas de café", "Piscina climatizada", "Desayuno según la tarifa", "Wifi en zonas comunes", "Pet friendly" },
             Specs: new[]
             {
                 new StaySpec("Habitaciones", "14"),
@@ -189,13 +162,7 @@ public sealed class StubStayContentProvider : IStayContentProvider
                 new StaySpec("Check-out", "11:00 a. m."),
             },
             Geo: new StayGeo(4.6747, -75.6584),
-            Reviews: new StayReviewSummary(9.3, 341, "Desconexión total entre cafetales", new[]
-            {
-                new StayReviewCategoryScore("Limpieza", 9.5),
-                new StayReviewCategoryScore("Ubicación", 9.0),
-                new StayReviewCategoryScore("Servicio", 9.4),
-                new StayReviewCategoryScore("Relación precio-calidad", 9.1),
-            }),
+            Reviews: SinOpiniones,
             RoomTypeCodes: Array.Empty<string>()),
     };
 
