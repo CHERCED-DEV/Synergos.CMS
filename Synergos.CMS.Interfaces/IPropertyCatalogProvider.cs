@@ -45,7 +45,8 @@ public sealed record PropertyListing(
     double Lat,
     double Lng,
     string ImageUrl,
-    bool Featured = false);
+    bool Featured = false,
+    int Parking = 0);
 
 /// <summary>
 /// Una faceta de búsqueda con sus valores y conteos (la "cara izquierda" de los

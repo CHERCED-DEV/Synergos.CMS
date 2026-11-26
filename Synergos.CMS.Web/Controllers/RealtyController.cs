@@ -246,9 +246,7 @@ public sealed class RealtyController : ControllerBase
             Listing: ToListingDto(detail.Summary),
             // PDP specs: la UI (normalizeSpecs) lee `specs` como OBJETO numérico, no
             // como array {label,value}. El array humano se conserva en `specList`.
-            Specs: new SpecsDto(
-                detail.Summary.Beds, detail.Summary.Baths, detail.Summary.AreaM2,
-                0, 0, detail.Summary.Stratum, 0, 0),
+            Specs: SpecsDe(detail.Summary),
             SpecList: detail.Specs.Select(s => new SpecDto(s.Label, s.Value)).ToList(),
             Amenities: detail.Amenities,
             Gallery: detail.Gallery,
@@ -852,9 +850,9 @@ public sealed class RealtyController : ControllerBase
         // Geo anidado: la UI lee `listing.geo.{neighborhood,city,lat,lng}` (card
         // subtítulo + marcadores del mapa). Sin esto quedaba " · " y mapa sin pines.
         Geo: new LocationDto(l.Lat, l.Lng, string.Empty, l.Neighborhood, l.City),
-        // Specs anidado: la UI lee `listing.specs.{beds,baths,areaBuilt,stratum}`
-        // (card + comparador). Los campos sin fuente en el resumen van en 0.
-        Specs: new SpecsDto(l.Beds, l.Baths, l.AreaM2, 0, 0, l.Stratum, 0, 0),
+        // Specs anidado: la UI lee `listing.specs.{beds,baths,areaBuilt,stratum,parking}`
+        // (card, ficha y comparador).
+        Specs: SpecsDe(l),
         // Subtítulo de la card (línea de specs) que la UI lee como `listing.subtitle`.
         Subtitle: PropertyContentRules.BuildSubtitle(l),
         // Chips string[] que la UI lee como `listing.badges` (Destacado/Estrato/estado).
@@ -862,6 +860,14 @@ public sealed class RealtyController : ControllerBase
         ImageUrl: l.ImageUrl,
         Cover: l.ImageUrl,
         Featured: l.Featured);
+
+    /// <summary>
+    /// Las características numéricas de un inmueble. Lo que el inventario no trae va en nulo y no en 0: la ficha no
+    /// pinta «Parqueaderos 0» ni «Antigüedad Nuevo» de un dato que nadie escribió (016, degradar por ausencia).
+    /// </summary>
+    internal static SpecsDto SpecsDe(PropertyListing l) =>
+        new(l.Beds, l.Baths, l.AreaM2, AreaPrivate: null, Parking: l.Parking > 0 ? l.Parking : null, l.Stratum,
+            AgeYears: null, Floor: null);
 
     private static FacetDto ToFacetDto(PropertyFacet f) => new(
         Name: f.Name,
@@ -1189,17 +1195,17 @@ public sealed class RealtyController : ControllerBase
     /// <summary>
     /// Specs numéricos anidados que la UI espera (normalizeSpecs → objeto, no array):
     /// `listing.specs` en card/comparador y `specs` en la PDP. Los campos sin fuente
-    /// en el resumen (areaPrivate/parking/ageYears/floor) van en 0.
+    /// (areaPrivate, ageYears, floor, y parking cuando el inventario no lo trae) van en nulo.
     /// </summary>
     public sealed record SpecsDto(
         int Beds,
         int Baths,
         int AreaBuilt,
-        int AreaPrivate,
-        int Parking,
+        int? AreaPrivate,
+        int? Parking,
         int Stratum,
-        int AgeYears,
-        int Floor);
+        int? AgeYears,
+        int? Floor);
 
     public sealed record LocationDto(double Lat, double Lng, string Address, string Neighborhood, string City);
 

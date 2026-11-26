@@ -1,4 +1,5 @@
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Controllers;
 using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Tests.Services;
@@ -365,5 +366,24 @@ public sealed class PropertyContentRulesTests
     {
         Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildSubtitle(null!));
         Assert.Throws<ArgumentNullException>(() => PropertyContentRules.BuildBadges(null!));
+    }
+
+    // ── 016: la ficha de la app no pinta lo que el inventario no trae ────────
+
+    [Theory]
+    [InlineData(2, 2)]
+    [InlineData(0, null)]
+    public void Los_parqueaderos_salen_del_inventario_y_lo_que_no_hay_va_en_nulo(int autorados, int? enLaFicha)
+    {
+        var detalle = Build(Content() with { Parking = autorados, Beds = 3, Stratum = 6 })!;
+
+        var specs = RealtyController.SpecsDe(detalle.Summary);
+
+        Assert.Equal(enLaFicha, specs.Parking);
+        Assert.Equal(3, specs.Beds);
+        Assert.Equal(6, specs.Stratum);
+        Assert.Null(specs.AreaPrivate);
+        Assert.Null(specs.AgeYears);
+        Assert.Null(specs.Floor);
     }
 }
