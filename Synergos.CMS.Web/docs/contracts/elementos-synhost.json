@@ -599,6 +599,9 @@
         "Blogs.Red.EscribirSinSesionTexto",
         "Blogs.Red.PerfilSinSesion",
         "Blogs.Red.PerfilSinSesionTexto",
+        "Blogs.Red.PublicacionDe",
+        "Blogs.Red.PublicacionNoDisponible",
+        "Blogs.Red.PublicacionNoDisponibleTexto",
         "Blogs.Red.Publicaciones",
         "Blogs.Red.SesionParaPublicar",
         "Blogs.Red.UnaPublicacion"
@@ -1726,6 +1729,12 @@
           "tipo": "number",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "sinSesion",
+          "tipo": "boolean",
+          "opcional": false,
+          "origen": "sesion"
         }
       ],
       "ejemplo": {
@@ -1737,7 +1746,8 @@
         "historiaBase": "/api/healthcare",
         "devolucionTotalHoras": 24,
         "devolucionParcialHoras": 2,
-        "devolucionParcialPorcentaje": 50
+        "devolucionParcialPorcentaje": 50,
+        "sinSesion": false
       }
     },
     {

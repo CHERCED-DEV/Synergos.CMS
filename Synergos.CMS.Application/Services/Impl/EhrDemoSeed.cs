@@ -24,25 +24,25 @@ internal static class EhrDemoSeed
     {
         new MedicalDoctor(
             Id: "doc-ana-rios", FullName: "Dra. Ana Ríos", Specialty: "Medicina Interna",
-            LicenseNumber: "RM-48213", Rating: 4.9, YearsExperience: 14,
+            LicenseNumber: "RM-00001", Rating: 4.9, YearsExperience: 14,
             AvatarUrl: "/media/ehr/doctors/ana-rios.webp",
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday },
             SlotStartHour: 8, SlotEndHour: 16, SlotMinutes: 30),
         new MedicalDoctor(
             Id: "doc-carlos-mejia", FullName: "Dr. Carlos Mejía", Specialty: "Cardiología",
-            LicenseNumber: "RM-50917", Rating: 4.8, YearsExperience: 21,
+            LicenseNumber: "RM-00002", Rating: 4.8, YearsExperience: 21,
             AvatarUrl: "/media/ehr/doctors/carlos-mejia.webp",
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday },
             SlotStartHour: 9, SlotEndHour: 15, SlotMinutes: 40),
         new MedicalDoctor(
             Id: "doc-laura-vega", FullName: "Dra. Laura Vega", Specialty: "Pediatría",
-            LicenseNumber: "RM-46108", Rating: 5.0, YearsExperience: 9,
+            LicenseNumber: "RM-00003", Rating: 5.0, YearsExperience: 9,
             AvatarUrl: "/media/ehr/doctors/laura-vega.webp",
             WorkingDays: new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday, DayOfWeek.Saturday },
             SlotStartHour: 8, SlotEndHour: 13, SlotMinutes: 20),
         new MedicalDoctor(
             Id: "doc-diego-soto", FullName: "Dr. Diego Soto", Specialty: "Dermatología",
-            LicenseNumber: "RM-52740", Rating: 4.7, YearsExperience: 12,
+            LicenseNumber: "RM-00004", Rating: 4.7, YearsExperience: 12,
             AvatarUrl: "/media/ehr/doctors/diego-soto.webp",
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Thursday },
             SlotStartHour: 10, SlotEndHour: 18, SlotMinutes: 30),
@@ -52,41 +52,41 @@ internal static class EhrDemoSeed
     public static IReadOnlyList<EhrPatient> Patients() => new[]
     {
         new EhrPatient(
-            Id: "pat-camila-restrepo", FullName: "Camila Restrepo", DocumentId: "CC 1.012.448.901",
+            Id: "pat-camila-restrepo", FullName: "Camila Restrepo", DocumentId: "CC 1.000.000.101",
             Gender: "Femenino", DateOfBirth: new DateOnly(1991, 3, 18), AgeYears: 35,
-            Phone: "+57 311 4480 901", Email: "camila.restrepo@example.co", City: "Medellín",
+            Phone: "+57 300 555 0101", Email: "camila.restrepo@example.co", City: "Medellín",
             BloodType: "O+",
             Allergies: new[] { "Penicilina" },
             ChronicConditions: new[] { "Migraña" },
             PrimaryDoctorId: "doc-ana-rios", AvatarUrl: "/media/ehr/patients/camila.webp"),
         new EhrPatient(
-            Id: "pat-jorge-medina", FullName: "Jorge Medina", DocumentId: "CC 79.521.336",
+            Id: "pat-jorge-medina", FullName: "Jorge Medina", DocumentId: "CC 1.000.000.102",
             Gender: "Masculino", DateOfBirth: new DateOnly(1968, 11, 5), AgeYears: 57,
-            Phone: "+57 320 7711 045", Email: "jorge.medina@example.co", City: "Bogotá",
+            Phone: "+57 300 555 0102", Email: "jorge.medina@example.co", City: "Bogotá",
             BloodType: "A+",
             Allergies: Array.Empty<string>(),
             ChronicConditions: new[] { "Hipertensión arterial", "Diabetes tipo 2" },
             PrimaryDoctorId: "doc-carlos-mejia", AvatarUrl: "/media/ehr/patients/jorge.webp"),
         new EhrPatient(
-            Id: "pat-sara-gomez", FullName: "Sara Gómez", DocumentId: "TI 1.028.776.140",
+            Id: "pat-sara-gomez", FullName: "Sara Gómez", DocumentId: "TI 1.000.000.103",
             Gender: "Femenino", DateOfBirth: new DateOnly(2015, 7, 22), AgeYears: 10,
-            Phone: "+57 315 9930 218", Email: "familia.gomez@example.co", City: "Cali",
+            Phone: "+57 300 555 0103", Email: "familia.gomez@example.co", City: "Cali",
             BloodType: "B+",
             Allergies: new[] { "Maní", "Polvo" },
             ChronicConditions: new[] { "Asma" },
             PrimaryDoctorId: "doc-laura-vega", AvatarUrl: "/media/ehr/patients/sara.webp"),
         new EhrPatient(
-            Id: "pat-andres-pardo", FullName: "Andrés Pardo", DocumentId: "CC 1.094.220.515",
+            Id: "pat-andres-pardo", FullName: "Andrés Pardo", DocumentId: "CC 1.000.000.104",
             Gender: "Masculino", DateOfBirth: new DateOnly(1985, 1, 30), AgeYears: 41,
-            Phone: "+57 301 2204 884", Email: "andres.pardo@example.co", City: "Barranquilla",
+            Phone: "+57 300 555 0104", Email: "andres.pardo@example.co", City: "Barranquilla",
             BloodType: "AB-",
             Allergies: Array.Empty<string>(),
             ChronicConditions: Array.Empty<string>(),
             PrimaryDoctorId: "doc-diego-soto", AvatarUrl: "/media/ehr/patients/andres.webp"),
         new EhrPatient(
-            Id: "pat-valentina-cruz", FullName: "Valentina Cruz", DocumentId: "CC 1.001.337.620",
+            Id: "pat-valentina-cruz", FullName: "Valentina Cruz", DocumentId: "CC 1.000.000.105",
             Gender: "Femenino", DateOfBirth: new DateOnly(1998, 9, 12), AgeYears: 27,
-            Phone: "+57 318 6650 273", Email: "valentina.cruz@example.co", City: "Bucaramanga",
+            Phone: "+57 300 555 0105", Email: "valentina.cruz@example.co", City: "Bucaramanga",
             BloodType: "O-",
             Allergies: new[] { "Ibuprofeno" },
             ChronicConditions: new[] { "Hipotiroidismo" },
@@ -274,7 +274,7 @@ internal static class EhrDemoSeed
                 new EhrBillingLine("bill-jorge-3", nowUtc.AddDays(-4), "Perfil metabólico + lipídico", 145_000m, 43_500m, "pending-insurance"),
             },
             Balance: 123_500m, Currency: "COP",
-            Plan: new EhrInsurancePlan("EPS Sura — Plan Complementario", "SURA-79521336", "Cobertura 70%", 80_000m)),
+            Plan: new EhrInsurancePlan("EPS Ejemplo Norte — Plan Complementario", "ENOR-000102", "Cobertura 70%", 80_000m)),
         ["pat-camila-restrepo"] = new EhrBillingStatement(
             PatientId: "pat-camila-restrepo",
             Statement: new[]
@@ -282,7 +282,7 @@ internal static class EhrDemoSeed
                 new EhrBillingLine("bill-camila-1", nowUtc.AddDays(-21), "Consulta medicina interna", 160_000m, 80_000m, "paid"),
             },
             Balance: 0m, Currency: "COP",
-            Plan: new EhrInsurancePlan("Nueva EPS — Contributivo", "NEPS-1012448901", "Cobertura 50%", 80_000m)),
+            Plan: new EhrInsurancePlan("EPS Ejemplo Norte — Contributivo", "ENOR-000101", "Cobertura 50%", 80_000m)),
         ["pat-valentina-cruz"] = new EhrBillingStatement(
             PatientId: "pat-valentina-cruz",
             Statement: new[]
@@ -290,7 +290,7 @@ internal static class EhrDemoSeed
                 new EhrBillingLine("bill-valentina-1", nowUtc.AddDays(-9), "Perfil tiroideo", 95_000m, 28_500m, "due"),
             },
             Balance: 28_500m, Currency: "COP",
-            Plan: new EhrInsurancePlan("Compensar EPS — Contributivo", "COMP-1001337620", "Cobertura 70%", 80_000m)),
+            Plan: new EhrInsurancePlan("EPS Ejemplo Sur — Contributivo", "ESUR-000105", "Cobertura 70%", 80_000m)),
         ["pat-sara-gomez"] = new EhrBillingStatement(
             PatientId: "pat-sara-gomez",
             Statement: new[]
@@ -298,12 +298,12 @@ internal static class EhrDemoSeed
                 new EhrBillingLine("bill-sara-1", nowUtc.AddDays(-12), "Consulta pediatría — crisis asmática", 150_000m, 0m, "paid"),
             },
             Balance: 0m, Currency: "COP",
-            Plan: new EhrInsurancePlan("Sanitas EPS — Contributivo", "SAN-1028776140", "Cobertura 100% (menor)", 0m)),
+            Plan: new EhrInsurancePlan("EPS Ejemplo Centro — Contributivo", "ECEN-000103", "Cobertura 100% (menor)", 0m)),
         ["pat-andres-pardo"] = new EhrBillingStatement(
             PatientId: "pat-andres-pardo",
             Statement: Array.Empty<EhrBillingLine>(),
             Balance: 0m, Currency: "COP",
-            Plan: new EhrInsurancePlan("Medicina prepagada Colsanitas", "COLS-1094220515", "Cobertura 90%", 60_000m)),
+            Plan: new EhrInsurancePlan("Medicina prepagada Ejemplo", "PREP-000104", "Cobertura 90%", 60_000m)),
     };
 
     /// <summary>Recetas sembradas, fechas relativas al instante base.</summary>

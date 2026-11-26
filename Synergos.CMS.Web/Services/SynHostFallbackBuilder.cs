@@ -363,6 +363,56 @@ public static class SynHostFallbackBuilder
             : null;
     }
 
+    // ── Salud: el portal sin sesión ──────────────────────────────────
+
+    /// <summary>Las secciones del portal del paciente, en el orden de la app (<c>PATIENT_NAV</c> de <c>ehr</c>).</summary>
+    private static readonly string[] SeccionesDelPaciente =
+        ["Inicio", "Mis citas", "Mensajes", "Resultados", "Medicamentos", "Mi salud", "Facturación"];
+
+    /// <summary>
+    /// <c>elementSynEhr</c> sin sesión (vuelta de valor de 003, con la receta de D-012-V11): el panel «Inicia sesión» del
+    /// portal del paciente, el MISMO que la app pinta sin sesión (sus textos, su marco y su enlace a la entrada que vuelve a
+    /// esta página). Ocupa el sitio de la app mientras llega el bundle: antes el elemento estaba vacío, y al montar empujaba
+    /// lo de abajo (CLS 0,47 a 1280 px). Nunca lleva datos de nadie: sin sesión no hay de quién.
+    /// </summary>
+    /// <remarks>
+    /// La marca, los perfiles y las secciones van como texto, sin botones (<c>aria-hidden</c>): sin la app no hacen nada, y
+    /// están para que el panel quede en el mismo sitio cuando la app lo reemplace. Los textos son los de <c>ehr.html</c>.
+    /// </remarks>
+    /// <param name="volver">La ruta de esta página (con su consulta), a la que vuelve la entrada; sólo una ruta local.</param>
+    public static string EhrSinSesion(string? volver)
+    {
+        var ruta = Clean(volver);
+        var local = ruta is not null && ruta[0] == '/' && (ruta.Length == 1 || (ruta[1] != '/' && ruta[1] != '\\'));
+        var entrada = local ? "/account/login?returnUrl=" + Uri.EscapeDataString(ruta!) : "/account/login";
+
+        var sb = new StringBuilder();
+        sb.Append("<div class=\"").Append(BaseClass).Append(" syn-ssr-ehr\"").Append(Marker).Append('>')
+          .Append("<div class=\"syn-ssr-ehr__topbar\" aria-hidden=\"true\">")
+          .Append("<span class=\"syn-ssr-ehr__brand\"><span class=\"syn-ssr-ehr__mark\">")
+          .Append(IconoDelPortal("M12 5v14", "M5 12h14", 16)).Append("</span>")
+          .Append("<span class=\"syn-ssr-ehr__clinic\">Clínica Synergos</span></span>")
+          .Append("<span class=\"syn-ssr-ehr__toggle\">").Append(IconoDelPortal("M4 6h16", "M4 12h16M4 18h16", 20)).Append("</span>")
+          .Append("<span class=\"syn-ssr-ehr__roles\"><span class=\"syn-ssr-ehr__role is-active\">Paciente</span>")
+          .Append("<span class=\"syn-ssr-ehr__role\">Médico</span><span class=\"syn-ssr-ehr__role\">Enfermería</span></span>")
+          .Append("</div><div class=\"syn-ssr-ehr__layout\">")
+          .Append("<div class=\"syn-ssr-ehr__sidebar\" aria-hidden=\"true\"><p class=\"syn-ssr-ehr__sidebar-title\">Mi portal</p><ul>");
+        for (var i = 0; i < SeccionesDelPaciente.Length; i++)
+            sb.Append(i == 0 ? "<li class=\"is-active\">" : "<li>").Append(Esc(SeccionesDelPaciente[i])).Append("</li>");
+        sb.Append("</ul></div><div class=\"syn-ssr-ehr__main\"><div class=\"syn-ssr-ehr__panel\">")
+          .Append("<span class=\"syn-ssr-ehr__icon\" aria-hidden=\"true\">🔒</span>")
+          .Append("<h2 class=\"syn-ssr-ehr__title\">Inicia sesión para ver tu historia clínica</h2>")
+          .Append("<p class=\"syn-ssr-ehr__message\">Tu portal de salud es personal: lo abrimos con tu cuenta, nunca con datos de ejemplo.</p>")
+          .Append("<a class=\"syn-ssr-ehr__action\" href=\"").Append(Esc(entrada)).Append("\">Iniciar sesión</a>")
+          .Append("</div></div></div></div>");
+        return sb.ToString();
+    }
+
+    /// <summary>Los dos íconos de trazo de <c>ehr.html</c> (la cruz de la marca y las líneas de «Menú»).</summary>
+    private static string IconoDelPortal(string trazo, string otroTrazo, int lado)
+        => $"<svg viewBox=\"0 0 24 24\" width=\"{lado}\" height=\"{lado}\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" "
+           + $"stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"{trazo}\"/><path d=\"{otroTrazo}\"/></svg>";
+
     // ── Media + text ─────────────────────────────────────────────────
 
     /// <summary>
