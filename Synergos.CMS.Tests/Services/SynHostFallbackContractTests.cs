@@ -292,6 +292,8 @@ public sealed class SynHostFallbackContractTests
                 new PublicacionDelRespaldo("A", null, dia, null, "C", "/x", null, null, []),
             ],
             System.Globalization.CultureInfo.InvariantCulture)!;
+        // El portal de Salud sin sesión (vuelta de valor de 003): el panel «Inicia sesión» con su marco.
+        yield return SynHostFallbackBuilder.EhrSinSesion("/healthcare/");
         yield return SynHostFallbackBuilder.QuoteAnimated("Q", "A")!;
         yield return SynHostFallbackBuilder.StatTicker("1", "L", "+", "%")!;
         foreach (var trend in new[] { "up", "down", "flat" })

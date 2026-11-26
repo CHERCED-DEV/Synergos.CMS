@@ -1726,6 +1726,12 @@
           "tipo": "number",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "sinSesion",
+          "tipo": "boolean",
+          "opcional": false,
+          "origen": "sesion"
         }
       ],
       "ejemplo": {
@@ -1737,7 +1743,8 @@
         "historiaBase": "/api/healthcare",
         "devolucionTotalHoras": 24,
         "devolucionParcialHoras": 2,
-        "devolucionParcialPorcentaje": 50
+        "devolucionParcialPorcentaje": 50,
+        "sinSesion": false
       }
     },
     {

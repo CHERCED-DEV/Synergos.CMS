@@ -548,3 +548,211 @@ synergos-kpi-card:defined > [data-syn-ssr-fallback] {
   color: var(--syn-color-text-secondary);
   font-size: var(--syn-font-size-sm);
 }
+
+/* ── Salud: el portal sin sesión (vuelta de valor de 003, receta de D-012-V11) ──
+   El panel «Inicia sesión» de <synergos-ehr> con el mismo marco que la app
+   (ehr.scss): la cabecera, las secciones en escritorio y el estado vacío
+   (syn-empty-state), con sus mismos tokens, para que al montar la app el panel
+   quede donde estaba. Sin la regla :defined, como Blogs: la app vacía el host
+   al montar y pinta el panel en el mismo sitio. */
+.syn-ssr-ehr {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--syn-color-border-default);
+  border-radius: var(--syn-radius-xl);
+  background: var(--syn-color-surface-secondary);
+  box-shadow: var(--syn-shadow-panel);
+  overflow: hidden;
+  font-size: var(--syn-font-size-sm);
+  line-height: var(--syn-line-height-relaxed);
+}
+
+.syn-ssr-ehr__topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--syn-space-3);
+  padding: var(--syn-space-3) var(--syn-space-lg);
+  background: var(--syn-color-surface-primary);
+  border-bottom: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-ssr-ehr__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--syn-space-2);
+  margin-right: auto;
+}
+
+.syn-ssr-ehr__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  font-weight: var(--syn-font-weight-bold);
+}
+
+.syn-ssr-ehr__clinic {
+  font-size: var(--syn-font-size-base);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-ehr__toggle {
+  display: none;
+}
+
+.syn-ssr-ehr__roles {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--syn-color-surface-tertiary);
+  border-radius: var(--syn-radius-md);
+}
+
+.syn-ssr-ehr__role {
+  padding: var(--syn-space-1) var(--syn-space-3);
+  border-radius: var(--syn-radius-md);
+  color: var(--syn-color-text-secondary);
+  font-size: var(--syn-font-size-xs);
+  font-weight: var(--syn-font-weight-medium);
+  text-align: center;
+}
+
+.syn-ssr-ehr__role.is-active {
+  background: var(--syn-color-surface-primary);
+  color: var(--syn-color-action-primary);
+  box-shadow: var(--syn-shadow-panel);
+}
+
+.syn-ssr-ehr__layout {
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  flex: 1;
+}
+
+.syn-ssr-ehr__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-1);
+  padding: var(--syn-space-lg) var(--syn-space-3);
+  background: var(--syn-color-surface-primary);
+  border-right: 1px solid var(--syn-color-border-subtle);
+}
+
+.syn-ssr-ehr__sidebar-title {
+  margin: 0 0 var(--syn-space-2);
+  padding: 0 var(--syn-space-2);
+  color: var(--syn-color-text-muted);
+  font-size: var(--syn-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.syn-ssr-ehr__sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.syn-ssr-ehr__sidebar li {
+  padding: var(--syn-space-2) var(--syn-space-3);
+  border-radius: var(--syn-radius-md);
+  color: var(--syn-color-text-secondary);
+  font-weight: var(--syn-font-weight-medium);
+}
+
+.syn-ssr-ehr__sidebar li.is-active {
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-action-primary);
+  font-weight: var(--syn-font-weight-semibold);
+}
+
+.syn-ssr-ehr__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-md);
+  padding: var(--syn-space-lg);
+}
+
+.syn-ssr-ehr__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--syn-space-3);
+  padding: var(--syn-space-10) var(--syn-space-lg);
+  border: 1px solid var(--syn-color-border-subtle);
+  border-radius: var(--syn-radius-lg);
+  background: var(--syn-color-surface-secondary);
+  color: var(--syn-color-text-secondary);
+  text-align: center;
+}
+
+.syn-ssr-ehr__icon {
+  display: grid;
+  place-items: center;
+  width: var(--syn-space-12);
+  height: var(--syn-space-12);
+  font-size: var(--syn-font-size-2xl);
+  line-height: 1;
+  color: var(--syn-color-text-muted);
+}
+
+.syn-ssr-ehr__title {
+  margin: 0;
+  font-size: var(--syn-font-size-lg);
+  font-weight: var(--syn-font-weight-semibold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-tight);
+  color: var(--syn-color-text-primary);
+}
+
+.syn-ssr-ehr__message {
+  margin: 0;
+  max-width: 26.25rem;
+}
+
+.syn-ssr-ehr__action {
+  margin-top: var(--syn-space-2);
+  padding: var(--syn-space-2) var(--syn-space-lg);
+  border: 1px solid var(--syn-color-action-primary);
+  border-radius: var(--syn-radius-md);
+  background: var(--syn-color-action-primary);
+  color: var(--syn-color-action-primary-text);
+  font-weight: var(--syn-font-weight-semibold);
+  text-decoration: none;
+}
+
+/* En el teléfono, como la app (ehr.scss, ≤ 760 px): la marca y «Menú» arriba,
+   los perfiles debajo a lo ancho y sin la columna de secciones. */
+@media (max-width: 47.5rem) {
+  .syn-ssr-ehr__topbar { flex-wrap: wrap; }
+
+  .syn-ssr-ehr__toggle {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--syn-color-border-default);
+    border-radius: var(--syn-radius-md);
+    background: var(--syn-color-surface-primary);
+  }
+
+  .syn-ssr-ehr__roles {
+    order: 1;
+    flex: 1 1 100%;
+  }
+
+  .syn-ssr-ehr__role { flex: 1; }
+
+  .syn-ssr-ehr__layout { grid-template-columns: 1fr; }
+
+  .syn-ssr-ehr__sidebar { display: none; }
+}

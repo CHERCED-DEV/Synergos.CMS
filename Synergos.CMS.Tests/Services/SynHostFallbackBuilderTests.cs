@@ -418,6 +418,30 @@ public sealed class SynHostFallbackBuilderTests
         Assert.Contains("syn-cdn-offline-fallback", result.ElementHtml);
     }
 
+    // ── Salud: el portal sin sesión (vuelta de valor de 003) ─────────
+
+    [Fact]
+    public void El_portal_sin_sesion_es_el_panel_de_la_app_con_la_entrada_que_vuelve_a_esta_pagina()
+    {
+        var html = SynHostFallbackBuilder.EhrSinSesion("/healthcare/?cita=pta-1");
+
+        Assert.Contains(SynHostFallbackBuilder.MarkerAttribute, html, StringComparison.Ordinal);
+        Assert.Contains("Inicia sesión para ver tu historia clínica", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/account/login?returnUrl=%2Fhealthcare%2F%3Fcita%3Dpta-1\"", html, StringComparison.Ordinal);
+        // Sin la app no hacen nada: los perfiles y las secciones van como texto oculto al lector, sin botones.
+        Assert.DoesNotContain("<button", html, StringComparison.Ordinal);
+        Assert.Contains("syn-ssr-ehr__topbar\" aria-hidden=\"true\"", html, StringComparison.Ordinal);
+        Assert.Contains("syn-ssr-ehr__sidebar\" aria-hidden=\"true\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("//otro.sitio/x")]
+    [InlineData("/\\otro.sitio")]
+    [InlineData("https://otro.sitio/")]
+    [InlineData(null)]
+    public void Una_vuelta_que_no_es_una_ruta_local_entra_sin_vuelta(string? volver)
+        => Assert.Contains("href=\"/account/login\"", SynHostFallbackBuilder.EhrSinSesion(volver), StringComparison.Ordinal);
+
     // ── Helpers ──────────────────────────────────────────────────────
 
     private static int CountOccurrences(string haystack, string needle)
