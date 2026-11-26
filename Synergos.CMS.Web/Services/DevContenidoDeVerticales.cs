@@ -133,6 +133,11 @@ public sealed class DevContenidoDeVerticales
             var hecho = RecetaCasosSinHistoriasInventadas();
             return new Resultado(!hecho.Contains("fallo", StringComparison.Ordinal), "casos", hecho, 0);
         }
+        if (string.Equals(vertical, "booking-reservar", StringComparison.OrdinalIgnoreCase))
+        {
+            var hecho = RecetaReservarDesdeLaFicha();
+            return new Resultado(!hecho.Contains("fallo", StringComparison.Ordinal), "booking-reservar", hecho, 0);
+        }
         if (string.Equals(vertical, "testimonios", StringComparison.OrdinalIgnoreCase))
         {
             var hecho = RecetaSinTestimoniosInventados();
@@ -2117,6 +2122,45 @@ public sealed class DevContenidoDeVerticales
         if (!cambio) { return "nada-que-hacer"; }
         var r = _contentService.SaveAndPublish(casos, new[] { Cultura });
         return r.Success ? $"secciones:{fuera};oculta-del-menu" : $"fallo:{r.Result}";
+    }
+
+    /// <summary>
+    /// Las fichas de Booking y la opción del campo «Servicio» del formulario de reserva (<c>reserva-cita</c>) que cada una
+    /// elige al reservar (016, D-016-C24).
+    /// </summary>
+    internal static readonly (Guid Ficha, string Servicio)[] ServiciosDeBooking =
+    [
+        (Guid.Parse("ac898180-e618-44ba-9fc1-29cf0a2a71e6"), "Asesoría express"),
+        (Guid.Parse("4f0092ca-bf9e-468e-abf0-47bc5483103e"), "Consultoría estratégica"),
+        (Guid.Parse("5b622e11-1191-4c2a-b805-9f888bc5f87a"), "Sala de reuniones"),
+        (Guid.Parse("156beede-bf2b-447d-95a2-e89ff207a0a1"), "Auditorio"),
+        (Guid.Parse("51e3c7f8-96f8-4458-a650-5adec6126174"), "Masaje terapéutico"),
+        (Guid.Parse("678082a0-3387-4adb-9dad-2c8911387830"), "Plan nutricional"),
+    ];
+
+    /// <summary>El enlace de «Reservar ahora» de una ficha de Booking: el formulario con su servicio ya elegido.</summary>
+    internal static string ReservarElServicio(string servicio) => $"/booking/reservar?servicio={Uri.EscapeDataString(servicio)}";
+
+    /// <summary>
+    /// D-016-C24: «Reservar ahora» de cada ficha de Booking lleva al formulario con su servicio ya elegido. Es el cierre
+    /// de la ficha (<c>elementCompCtaBanner</c>), que la vista repite junto al precio. Idempotente.
+    /// </summary>
+    private string RecetaReservarDesdeLaFicha()
+    {
+        var cierre = KeyOf("elementCompCtaBanner");
+        var partes = new List<string>();
+        foreach (var (key, servicio) in ServiciosDeBooking)
+        {
+            var ficha = _contentService.GetById(key);
+            if (ficha is null) { partes.Add($"sin-ficha:{key}"); continue; }
+            var cuerpo = new CuerpoEditable(ficha.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Reservar ahora", ReservarElServicio(servicio)))!);
+            if (!cuerpo.Cambio) { continue; }
+            ficha.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            var r = _contentService.SaveAndPublish(ficha, new[] { Cultura });
+            partes.Add(r.Success ? $"{servicio}:ok" : $"{servicio}:fallo:{r.Result}");
+        }
+        return partes.Count == 0 ? "nada-que-hacer" : string.Join(";", partes);
     }
 
     /// <summary>

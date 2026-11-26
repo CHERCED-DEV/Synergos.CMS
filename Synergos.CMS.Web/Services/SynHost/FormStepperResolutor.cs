@@ -44,12 +44,15 @@ public sealed class FormStepperResolutor : IResolutorSynHost<FormStepperProps>
             .OfType<PasoDelFormulario>()
             .ToList();
 
+        var formKey = editor.Texto("formInternalKey");
         return new ElementoResuelto<FormStepperProps>(new FormStepperProps(
-            FormKey: editor.Texto("formInternalKey"),
+            FormKey: formKey,
             Steps: pasos.Count > 0 ? pasos : null,
             AllowSkip: editor.Interruptor("allowSkip") ? true : null,
             ApiBase: _negocio.Actual().ApiBase,
-            HoneypotField: _formularios.Value.HoneypotFieldName));
+            HoneypotField: _formularios.Value.HoneypotFieldName,
+            // D-016-C24: sólo el formulario que lo declara toma campos de la dirección (Synergos:Forms:CamposDesdeLaDireccion).
+            PrefillFromQuery: _formularios.Value.CamposDesdeLaDireccionDe(formKey)));
     }
 
     /// <summary>Un paso con título y al menos un campo; si no, no se pinta.</summary>

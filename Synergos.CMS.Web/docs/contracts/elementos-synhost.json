@@ -2215,6 +2215,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "prefillFromQuery",
+          "tipo": "string[]",
+          "opcional": true,
+          "origen": "negocio"
         }
       ],
       "ejemplo": {
@@ -2242,7 +2248,10 @@
         ],
         "allowSkip": true,
         "apiBase": "/api/forms",
-        "honeypotField": "syn_hp"
+        "honeypotField": "syn_hp",
+        "prefillFromQuery": [
+          "servicio"
+        ]
       }
     },
     {
