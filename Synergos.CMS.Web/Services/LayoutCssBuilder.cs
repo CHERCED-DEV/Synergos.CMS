@@ -82,6 +82,17 @@ public static class LayoutCssBuilder
         }
     }
 
+    /// <summary>
+    /// El espaciado a los lados de las partes fijas de una plantilla de página —la cabecera de un artículo, sus etiquetas,
+    /// sus relacionados—, de la misma composición que el de una sección (<c>compDomSpacing</c>): el que eligió el editor,
+    /// o <paramref name="porDefecto"/>, el del preset de sección, si no eligió ninguno (012-blogs-social, D-012-V13).
+    /// </summary>
+    public static string EspaciadoLateral(IPublishedElement model, IPublishedValueFallback fallback, string porDefecto = "lg")
+    {
+        var valor = model.Value<string>(fallback, "spacingInline");
+        return $"syn-space--inline-{(string.IsNullOrWhiteSpace(valor) ? porDefecto : valor.Trim())}";
+    }
+
     private static string? Val(IPublishedElement model, string alias)
     {
         var raw = model.Value<string>(alias);
