@@ -282,6 +282,16 @@ public sealed class SynHostFallbackContractTests
         }
 
         yield return SynHostFallbackBuilder.HeroBanner("T", "S", "/m.jpg", "alt", "CTA", "/x", "a")!;
+        // El inicio de Blogs (D-012-V11): un artículo con título, página, imagen y etiquetas, y una nota sin nada de eso.
+        var dia = new DateTime(2026, 6, 22, 0, 0, 0, DateTimeKind.Utc);
+        yield return SynHostFallbackBuilder.Blogs(
+            "T",
+            "S",
+            [
+                new PublicacionDelRespaldo("A", "a", dia, "T", "C", "/x", "/m.jpg", "alt", ["e"]),
+                new PublicacionDelRespaldo("A", null, dia, null, "C", "/x", null, null, []),
+            ],
+            System.Globalization.CultureInfo.InvariantCulture)!;
         yield return SynHostFallbackBuilder.QuoteAnimated("Q", "A")!;
         yield return SynHostFallbackBuilder.StatTicker("1", "L", "+", "%")!;
         foreach (var trend in new[] { "up", "down", "flat" })
