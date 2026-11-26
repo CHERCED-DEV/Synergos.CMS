@@ -247,4 +247,15 @@ public sealed class BookingUiContractTests
         Assert.Equal(CheckIn.ToString("yyyy-MM-dd"), FirstString(voucher, "checkIn"));
         Assert.Equal(CheckOut.ToString("yyyy-MM-dd"), FirstString(voucher, "checkOut"));
     }
+
+    [Theory] // D-016-C23: el régimen se pinta en palabras; un código que no se conoce no se pinta
+    [InlineData("BB", "Desayuno incluido")]
+    [InlineData("ro", "Solo alojamiento")]
+    [InlineData("Desayuno", "Desayuno")]
+    [InlineData("XX", "")]
+    [InlineData(null, "")]
+    public void El_regimen_se_dice_en_palabras(string? regimen, string esperado)
+    {
+        Assert.Equal(esperado, BookingController.RegimenDe(regimen));
+    }
 }
