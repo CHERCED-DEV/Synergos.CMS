@@ -67,19 +67,20 @@ internal static class AcademyDemoSeed
         new SeedCourse(
             Id: "dev-clean-architecture",
             Title: "Arquitectura Limpia en .NET",
-            Summary: "Diseña sistemas mantenibles con Clean Architecture, SOLID y seams testeables.",
-            Description: "Un recorrido práctico por la arquitectura limpia aplicada a aplicaciones .NET reales: separación de capas, inversión de dependencias, seams stub-first y pruebas. Termina con un servicio modular listo para producción.",
+            Summary: "Las capas, el grafo de dependencias y los seams stub-first, con sus pruebas.",
+            Description: "Cuatro lecciones cortas sobre arquitectura limpia en .NET: por qué el dominio no depende de los detalles, cómo leer el grafo de dependencias, el patrón stub-first para definir un seam y los cuatro casos de prueba que todo seam debería cubrir.",
             Category: "Desarrollo",
             Level: "Intermedio",
             InstructorId: "ins-elena",
             CoverImageUrl: "/media/academy/courses/clean-architecture.jpg",
-            Price: 320_000m,
+            // D-016-C26: un precio coherente con 57 minutos de contenido (antes 320.000).
+            Price: 89_000m,
             Rating: 4.8,
             PublishedAt: new DateOnly(2026, 2, 17),
             Outcomes: new[]
             {
                 "Separar dominio, aplicación e infraestructura sin acoplar capas.",
-                "Aplicar SOLID a casos reales, no de juguete.",
+                "Leer un grafo de dependencias y detectar fugas de capa.",
                 "Diseñar seams stub-first y cubrirlos con pruebas.",
             },
             Modules: new[]
@@ -91,13 +92,13 @@ internal static class AcademyDemoSeed
                         Array.Empty<CourseResource>()),
                     new SeedLesson("les-ca-1-2", "El grafo de dependencias", 2, 14, null, false,
                         "Interfaces ← Application ← Web. Cómo leer un grafo de dependencias y detectar fugas de capa antes de que se vuelvan deuda técnica.",
-                        new[] { new CourseResource("Diagrama de capas (PDF)", "/media/academy/resources/ca-layers.pdf", "pdf") }),
+                        Array.Empty<CourseResource>()),
                 }),
                 new SeedModule("mod-ca-2", "Seams y pruebas", 2, new[]
                 {
                     new SeedLesson("les-ca-2-1", "Stub-first: define el seam", 1, 18, null, false,
                         "El patrón stub-first: defines el seam, escribes el stub determinista y el equipo construye encima desde el día 1. Cero bloqueos.",
-                        new[] { new CourseResource("Plantilla de seam (zip)", "/media/academy/resources/ca-seam-template.zip", "zip") }),
+                        Array.Empty<CourseResource>()),
                     new SeedLesson("les-ca-2-2", "Los 4 casos canónicos de prueba", 2, 16, null, false,
                         "Empty, happy, filter, idempotent: la matriz mínima de pruebas que todo seam debería cubrir. Ejemplos en xUnit.",
                         Array.Empty<CourseResource>()),
@@ -131,7 +132,7 @@ internal static class AcademyDemoSeed
                         Array.Empty<CourseResource>()),
                     new SeedLesson("les-ds-1-2", "La grilla de 8 puntos", 2, 13, null, false,
                         "La grilla de 8pt no es dogma, es disciplina. El ritmo vertical consistente separa un UI 'ok' de uno que se siente premium.",
-                        new[] { new CourseResource("Cheat-sheet de espaciados", "/media/academy/resources/ds-spacing.pdf", "pdf") }),
+                        Array.Empty<CourseResource>()),
                 }),
                 new SeedModule("mod-ds-2", "Componiendo el sistema", 2, new[]
                 {
@@ -165,7 +166,7 @@ internal static class AcademyDemoSeed
                 {
                     new SeedLesson("les-ml-1-1", "El 80% es limpiar datos", 1, 15, null, true,
                         "Antes del primer modelo: valores faltantes, fugas de datos y el sesgo de supervivencia. Por qué tus dashboards mienten cuando promedian sin percentiles.",
-                        new[] { new CourseResource("Dataset de ejemplo (csv)", "/media/academy/resources/ml-dataset.csv", "csv") }),
+                        Array.Empty<CourseResource>()),
                     new SeedLesson("les-ml-1-2", "Feature engineering", 2, 20, null, false,
                         "Las features ganan a los modelos. Técnicas de encoding, escalado y creación de variables que de verdad aportan señal.",
                         Array.Empty<CourseResource>()),
@@ -177,7 +178,7 @@ internal static class AcademyDemoSeed
                         Array.Empty<CourseResource>()),
                     new SeedLesson("les-ml-2-2", "De notebook a producción", 2, 22, null, false,
                         "Empaquetar el modelo, exponerlo tras un seam y monitorear la deriva. El notebook es el principio, no el fin.",
-                        new[] { new CourseResource("Checklist de despliegue", "/media/academy/resources/ml-deploy-checklist.pdf", "pdf") }),
+                        Array.Empty<CourseResource>()),
                 }),
             }),
 

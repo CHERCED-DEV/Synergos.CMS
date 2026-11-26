@@ -3035,8 +3035,8 @@ public sealed class DevContentFiller
         }
         if (bienestar > 0)
         {
-            SeedProduct(bienestar, "WEL-MASAJE-60", "Masaje terapéutico · 60 min", brand: null, "60 minutos · profesional certificado",
-                "140000", stockQty: null, "Sesión de masaje terapéutico de una hora con profesional certificado. Agenda tu horario preferido.",
+            SeedProduct(bienestar, "WEL-MASAJE-60", "Masaje terapéutico · 60 min", brand: null, "60 minutos · sesión individual",
+                "140000", stockQty: null, "Sesión individual de masaje terapéutico de una hora. Agenda tu horario preferido.",
                 new[] { "bienestar", "60min" }, MeridianFrom, MeridianTo, "Booking Masaje", BuildServiceBody, details);
             SeedProduct(bienestar, "WEL-NUTRICION", "Plan nutricional · valoración", brand: null, "Valoración inicial · plan personalizado",
                 "110000", stockQty: null, "Valoración nutricional inicial con plan personalizado y seguimiento. Cupos limitados por día.",
@@ -3177,7 +3177,7 @@ public sealed class DevContentFiller
                 ("Consultoría estratégica", "Consultoría · 60 min", "Diagnóstico a profundidad con plan de acción."),
                 ("Sala de reuniones", "Espacios · 2 h", "Sala equipada para hasta 8 personas, por bloques de dos horas."),
                 ("Auditorio", "Espacios · jornada", "Hasta 60 asistentes, media jornada o jornada completa."),
-                ("Masaje terapéutico", "Bienestar · 60 min", "Sesión de una hora con profesional certificado."),
+                ("Masaje terapéutico", "Bienestar · 60 min", "Sesión individual de una hora."),
                 ("Plan nutricional", "Bienestar · valoración", "Valoración inicial con plan personalizado y seguimiento."),
             }, 3);
         }

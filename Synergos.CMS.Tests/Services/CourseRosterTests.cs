@@ -18,7 +18,7 @@ namespace Synergos.CMS.Tests.Services;
 /// </remarks>
 public class CourseRosterTests
 {
-    private const string PaidCourse = "dev-clean-architecture"; // 320.000 COP
+    private const string PaidCourse = "dev-clean-architecture"; // 89.000 COP (D-016-C26)
     private const string FreeCourse = "dev-git-fundamentals";   // 0 COP
 
     private static ICourseCatalogProvider Catalog()

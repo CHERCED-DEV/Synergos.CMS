@@ -1,3 +1,5 @@
+using Synergos.CMS.Application.Services.Impl;
+
 namespace Synergos.CMS.Tests.Services;
 
 /// <summary>
@@ -42,5 +44,27 @@ public sealed class AlquilerDeEjemploTests
 
         Assert.NotEmpty(equipos);
         Assert.All(equipos, x => Assert.DoesNotContain("certificad", x, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact] // También el catálogo de muestra, que se queda en el código aunque no se muestre (SUPERSET).
+    public async Task El_catalogo_de_muestra_tampoco_promete_una_certificacion()
+    {
+        var equipos = await new StubEquipmentCatalogProvider().ListAsync();
+
+        Assert.NotEmpty(equipos);
+        Assert.All(equipos, e => Assert.DoesNotContain("certificad", e.Summary + " " + e.Description, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact] // 016: sin respaldo no se dice; un servicio de Booking no promete un profesional certificado.
+    public void Ningun_servicio_de_Booking_promete_una_certificacion()
+    {
+        var fichas = Directory.GetFiles(Path.Combine(Usync(), "Content"), "*.config")
+            .Select(File.ReadAllText)
+            .Where(x => x.Contains("<ContentType>productPage</ContentType>", StringComparison.Ordinal)
+                        && x.Contains("<Path>/SynergosLabs/Booking/", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(fichas);
+        Assert.All(fichas, x => Assert.DoesNotContain("certificad", x, StringComparison.OrdinalIgnoreCase));
     }
 }
