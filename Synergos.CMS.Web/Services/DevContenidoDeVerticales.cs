@@ -285,40 +285,29 @@ public sealed class DevContenidoDeVerticales
 
     // ───────────────────────────── Propiedades ─────────────────────────────
 
-    private sealed record Inmueble(string Slug, string Titulo, string Ciudad, string Alt);
-
-    /// <summary>Los inmuebles del catálogo de la app (<c>/api/realty/listings</c>), con su foto CC0 de <c>media/realty</c>.</summary>
-    private static readonly Inmueble[] EnVenta =
-    [
-        new("apto-chico-norte-bogota", "Apartamento en Chicó Norte", "Bogotá", "Sala con sofá de cuero negro y un cuadro de letras en la pared"),
-        new("apto-bocagrande-cartagena", "Apartamento en Bocagrande", "Cartagena", "Sala blanca con chimenea y ventanales hacia el mar"),
-        new("casa-laureles-medellin", "Casa en Laureles", "Medellín", "Casa de madera amarilla de un piso con jardín al frente"),
-        new("apto-manga-cartagena", "Apartamento en Manga", "Cartagena", "Edificio de apartamentos con balcones y comercio en el primer piso"),
-    ];
-
-    private static readonly Inmueble[] EnArriendoYComercial =
-    [
-        new("apto-arriendo-poblado-medellin", "Apartamento en El Poblado", "Medellín", "Sala con sofás claros, chimenea y lámpara de araña"),
-        new("casa-arriendo-cedritos-bogota", "Casa en Cedritos", "Bogotá", "Casa blanca de madera con porche y jardín"),
-        new("oficina-santa-monica-cali", "Oficina en Santa Mónica", "Cali", "Persona trabajando en un portátil sobre planos en una oficina"),
-        new("local-comercial-centro-cali", "Local comercial en el Centro", "Cali", "Ropa colgada en los exhibidores de un local comercial"),
-    ];
-
+    /// <summary>
+    /// La portada de Propiedades: el carrusel de «Inmuebles destacados en venta» y la galería de «En arriendo y para tu
+    /// negocio» salen del inventario del CMS (<see cref="InmueblesDelCms"/>, D-016-C22), con la foto de cada inmueble y
+    /// un enlace a su ficha en la app. Antes salían de una lista del catálogo de demostración.
+    /// </summary>
     private string RecetaPropiedades(CuerpoEditable cuerpo)
     {
-        string Url(Inmueble i) => _media.GetOrCreatePhotoUrl($"Foto Propiedades {i.Titulo}", i.Alt, Foto("realty", i.Slug + ".jpg"), LicenciaCc0);
-        static string Ficha(Inmueble i) => $"/propiedades/#/realty/inmueble/{i.Slug}";
+        static string Ficha(InmuebleDelCms i) => $"/propiedades/#/realty/inmueble/{i.Slug}";
+        string? Url(InmuebleDelCms i) => FotoDelInmueble(i) is var k && k != Guid.Empty ? _media.UrlOf(k) : null;
 
         var carrusel = KeyOf("elementSynCarousel");
         var galeria = KeyOf("elementSynLightboxGallery");
 
-        var diapositivas = new JsonArray(EnVenta.Select(i => (JsonNode)new JsonObject
+        var ventas = InmueblesDelCms.Where(i => i.Operacion == "venta" && i.Tipo is "apartamento" or "casa").ToArray();
+        var negocio = InmueblesDelCms.Where(i => i.Operacion == "arriendo" || i.Tipo == "local").ToArray();
+
+        var diapositivas = new JsonArray(ventas.Where(i => Url(i) is not null).Select(i => (JsonNode)new JsonObject
         {
-            ["imageUrl"] = Url(i), ["alt"] = i.Alt, ["caption"] = $"{i.Titulo} · {i.Ciudad}", ["linkUrl"] = Ficha(i),
+            ["imageUrl"] = Url(i), ["alt"] = i.Titulo, ["caption"] = $"{i.Titulo} · {i.Ciudad}", ["linkUrl"] = Ficha(i),
         }).ToArray());
-        var fotos = new JsonArray(EnArriendoYComercial.Select(i => (JsonNode)new JsonObject
+        var fotos = new JsonArray(negocio.Where(i => Url(i) is not null).Select(i => (JsonNode)new JsonObject
         {
-            ["thumbUrl"] = Url(i), ["fullUrl"] = Url(i), ["alt"] = i.Alt, ["caption"] = $"{i.Titulo} · {i.Ciudad}",
+            ["thumbUrl"] = Url(i), ["fullUrl"] = Url(i), ["alt"] = i.Titulo, ["caption"] = $"{i.Titulo} · {i.Ciudad}",
         }).ToArray());
 
         var n = cuerpo.Reemplazar(carrusel, "slidesJson", diapositivas.ToJsonString());
@@ -326,7 +315,7 @@ public sealed class DevContenidoDeVerticales
         n += cuerpo.Reemplazar(galeria, "columns", "4");
         var t1 = cuerpo.InsertarAntesDe(carrusel, UnEncabezado("Inmuebles destacados en venta"), "Inmuebles destacados en venta");
         var t2 = cuerpo.InsertarAntesDe(galeria, UnEncabezado("En arriendo y para tu negocio"), "En arriendo y para tu negocio");
-        return $"carrusel:{EnVenta.Length};galeria:{EnArriendoYComercial.Length};propiedades-cambiadas:{n};titulos:{(t1 ? 1 : 0) + (t2 ? 1 : 0)}";
+        return $"carrusel:{diapositivas.Count};galeria:{fotos.Count};propiedades-cambiadas:{n};titulos:{(t1 ? 1 : 0) + (t2 ? 1 : 0)}";
     }
 
     // ───────────────────────────── Booking ─────────────────────────────
@@ -1934,13 +1923,7 @@ public sealed class DevContenidoDeVerticales
             var categoria = _contentService.GetById(i.Categoria);
             if (categoria is null) { partes.Add($"sin-categoria:{i.Slug}"); continue; }
 
-            var foto = i.Foto;
-            if (foto == Guid.Empty && i.Ficha is { } fichaKey && _contentService.GetById(fichaKey) is { } ficha)
-            {
-                var imagenes = ficha.GetValue<string>("productImages", ficha.Properties["productImages"]!.PropertyType.VariesByCulture() ? Cultura : null);
-                var m = System.Text.RegularExpressions.Regex.Match(imagenes ?? string.Empty, "\"mediaKey\"\\s*:\\s*\"([0-9a-fA-F-]{36})\"");
-                if (m.Success) { foto = Guid.Parse(m.Groups[1].Value); }
-            }
+            var foto = FotoDelInmueble(i);
 
             var existentes = _contentService.GetPagedChildren(categoria.Id, 0, 200, out _).Where(c => c.ContentType.Alias == "propertyListing");
             var nodo = existentes.FirstOrDefault(c => string.Equals(c.GetValue<string>("propertySlug"), i.Slug, StringComparison.Ordinal));
@@ -1983,7 +1966,99 @@ public sealed class DevContenidoDeVerticales
             if (esNuevo) { creados++; } else { cambiados++; }
         }
         partes.Insert(0, $"inmuebles:{InmueblesDelCms.Length};creados:{creados};cambiados:{cambiados}");
+
+        // F1d: la ficha (productPage) de cada venta dice lo mismo que su inmueble —la ficha técnica sale de la misma fila— y
+        // su «Agendar visita» lleva al inmueble en la app, donde vive el flujo de la visita.
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var cierre = KeyOf("elementCompCtaBanner");
+        var fichas = 0;
+        foreach (var i in InmueblesDelCms.Where(x => x.Ficha is not null))
+        {
+            var ficha = _contentService.GetById(i.Ficha!.Value);
+            if (ficha is null) { partes.Add($"sin-ficha:{i.Slug}"); continue; }
+            var cuerpo = new CuerpoEditable(ficha.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.TransformarLista(rejilla, "itemsJson", lista => FichaTecnica(lista, i), CuerpoEditable.Donde("headingText", "Ficha técnica"));
+            cuerpo.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Agendar visita", FichaEnLaApp(i)))!);
+            if (!cuerpo.Cambio) { continue; }
+            ficha.SetValue(Cuerpo, cuerpo.Json, Cultura);
+            var r = _contentService.SaveAndPublish(ficha, new[] { Cultura });
+            if (r.Success) { fichas++; } else { partes.Add($"ficha-sin-publicar:{i.Slug}:{r.Result}"); }
+        }
+        partes.Insert(1, $"fichas:{fichas}");
+
+        // «Ver una propiedad» del listado llevaba a la página de demostración (oculta en F4): ahora, a una ficha real.
+        var paginaListado = _contentService.GetById(PaginaListadoDePropiedades);
+        if (paginaListado is not null)
+        {
+            var cuerpo = new CuerpoEditable(paginaListado.GetValue<string>(Cuerpo, Cultura));
+            cuerpo.CambiarBotones(KeyOf("elementCompHero"), "ctaItems",
+                [("Ver una propiedad", Enlace("Ver una propiedad", FichaEnLaApp(InmueblesDelCms[0]))), ("Hablar con un asesor", Enlace("Hablar con un asesor", "/synergos/contacto"))]);
+            if (cuerpo.Cambio)
+            {
+                paginaListado.SetValue(Cuerpo, cuerpo.Json, Cultura);
+                var r = _contentService.SaveAndPublish(paginaListado, new[] { Cultura });
+                partes.Add(r.Success ? "listado:ver-una-propiedad" : $"listado-sin-publicar:{r.Result}");
+            }
+        }
         return string.Join(";", partes);
+    }
+
+    /// <summary>La página «Listado» de Propiedades, por su Key de uSync.</summary>
+    private static readonly Guid PaginaListadoDePropiedades = Guid.Parse("ce0d4262-5cc3-4e3c-b478-d4d0e1adcdd9");
+
+    /// <summary>La ficha de un inmueble en la app del portal, con su visita.</summary>
+    internal static string FichaEnLaApp(InmuebleDelCms i) => $"/propiedades/#/realty/inmueble/{i.Slug}";
+
+    /// <summary>Los datos de la ficha técnica que salen de la fila del inmueble, en este orden (lo que vale 0 no se pone).</summary>
+    internal static IReadOnlyList<(string Rotulo, string Texto, int? Numero)> DatosDeLaFicha(InmuebleDelCms i)
+    {
+        var datos = new List<(string, string, int?)> { ("Operación", i.Operacion == "arriendo" ? "Arriendo" : "Venta", null) };
+        if (i.AreaM2 > 0) { datos.Add(("Área", $"{i.AreaM2} m²", i.AreaM2)); }
+        if (i.Habitaciones > 0) { datos.Add(("Habitaciones", $"{i.Habitaciones}", i.Habitaciones)); }
+        if (i.Banos > 0) { datos.Add(("Baños", $"{i.Banos}", i.Banos)); }
+        if (i.Parqueaderos > 0) { datos.Add(("Parqueaderos", $"{i.Parqueaderos}", i.Parqueaderos)); }
+        if (i.Estrato > 0) { datos.Add(("Estrato", $"{i.Estrato}", i.Estrato)); }
+        return datos;
+    }
+
+    /// <summary>El número con que empieza un texto («240 m² en dos niveles» → 240), o nulo.</summary>
+    internal static int? NumeroDe(string? texto)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(texto ?? string.Empty, "^\\s*(\\d+)");
+        return m.Success ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    /// <summary>
+    /// La ficha técnica de una ficha de Propiedades con los datos de su fila primero: un ítem que ya existe y dice el mismo
+    /// número conserva su texto («240 m² en dos niveles»); si no, toma el de la fila. Los demás ítems siguen detrás.
+    /// </summary>
+    private static JsonArray FichaTecnica(JsonArray lista, InmuebleDelCms i)
+    {
+        var items = lista.OfType<JsonObject>().ToList();
+        string? Texto(JsonObject o, string campo) => o[campo] is JsonValue v && v.TryGetValue<string>(out var t) ? t : null;
+        var nueva = new JsonArray();
+        var usados = new HashSet<JsonObject>();
+        foreach (var (rotulo, texto, numero) in DatosDeLaFicha(i))
+        {
+            var actual = items.FirstOrDefault(o => Texto(o, "heading") == rotulo);
+            var cuerpo = actual is not null && (numero is null ? Texto(actual, "body") == texto : NumeroDe(Texto(actual, "body")) == numero)
+                ? Texto(actual, "body")!
+                : texto;
+            if (actual is not null) { usados.Add(actual); }
+            nueva.Add(new JsonObject { ["heading"] = rotulo, ["body"] = cuerpo });
+        }
+        foreach (var o in items.Where(o => !usados.Contains(o))) { nueva.Add(o.DeepClone()); }
+        return nueva;
+    }
+
+    /// <summary>La foto de un inmueble: la suya si la tiene; si no, la primera de su ficha (<c>productImages</c>).</summary>
+    private Guid FotoDelInmueble(InmuebleDelCms i)
+    {
+        if (i.Foto != Guid.Empty) { return i.Foto; }
+        if (i.Ficha is not { } fichaKey || _contentService.GetById(fichaKey) is not { } ficha || !ficha.HasProperty("productImages")) { return Guid.Empty; }
+        var imagenes = ficha.GetValue<string>("productImages", ficha.Properties["productImages"]!.PropertyType.VariesByCulture() ? Cultura : null);
+        var m = System.Text.RegularExpressions.Regex.Match(imagenes ?? string.Empty, "\"mediaKey\"\\s*:\\s*\"([0-9a-fA-F-]{36})\"");
+        return m.Success ? Guid.Parse(m.Groups[1].Value) : Guid.Empty;
     }
 
     /// <summary>La página de demostración «Propiedad» de Propiedades, por su Key de uSync.</summary>
