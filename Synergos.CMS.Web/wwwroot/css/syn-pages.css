@@ -1613,3 +1613,71 @@ html:has(.syn-launcher) { overflow-x: clip; }
   border-radius: var(--syn-radius-lg);
   margin: 0;
 }
+
+/* ============================================================
+   Listado del catálogo (elementCompCatalogList, 003-salud-cita D-003-V2)
+   ============================================================
+   Lo que un vertical publica, en tarjetas: «Equipo» de Salud lista sus
+   profesionales. Las personas van con sus iniciales, sin foto (D-016-C18). */
+.syn-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--syn-space-lg);
+}
+
+.syn-catalog-list__title {
+  font-size: var(--syn-font-size-2xl);
+  font-weight: var(--syn-font-weight-bold);
+  letter-spacing: var(--syn-letter-spacing-tight);
+  line-height: var(--syn-line-height-snug);
+  color: var(--syn-color-text-primary);
+  margin: 0;
+}
+
+.syn-catalog-list__subtitle {
+  color: var(--syn-color-text-secondary);
+  margin: 0;
+}
+
+.syn-catalog-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--syn-space-lg);
+}
+
+.syn-catalog-list__item {
+  align-items: flex-start;
+  gap: var(--syn-space-2);
+  padding: var(--syn-space-lg);
+}
+
+.syn-catalog-list__item .syn-card__title {
+  margin: 0;
+}
+
+.syn-catalog-list__initials {
+  display: inline-grid;
+  place-items: center;
+  width: var(--syn-size-avatar-lg);
+  height: var(--syn-size-avatar-lg);
+  border-radius: var(--syn-radius-full);
+  background: var(--syn-color-state-brand-surface);
+  color: var(--syn-color-text-accent);
+  font-weight: var(--syn-font-weight-semibold);
+  font-size: var(--syn-font-size-lg);
+}
+
+.syn-catalog-list__image {
+  width: var(--syn-size-avatar-lg);
+  height: var(--syn-size-avatar-lg);
+  border-radius: var(--syn-radius-full);
+  object-fit: cover;
+}
+
+.syn-catalog-list__cta {
+  margin-top: auto;
+  padding-top: var(--syn-space-2);
+}

@@ -1,0 +1,70 @@
+@*
+    elementCompCatalogList (003-salud-cita, D-003-V2): lo que un vertical publica, leído de su lectura genérica
+    (api/lecturas/{vertical}/catalogo), en tarjetas. «Equipo» de Salud compone así el directorio de professionalPage.
+    Sin nada que listar no pinta nada, y la sección que lo envuelve tampoco se muestra (syn-layout.css).
+*@
+@using Umbraco.Cms.Core.Models
+@using Synergos.CMS.Interfaces.Lecturas
+@using Synergos.CMS.Web.Services.Lecturas
+@model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
+@inject IEnumerable<ILecturaDelCatalogo> Lecturas
+@inject Microsoft.Extensions.Logging.ILogger<TarjetaDelListado> Log
+@{
+    var tarjetas = await ListadoDelCatalogoEnLaPagina.LeerAsync(
+        Lecturas,
+        Model.Value<string>("catalogVertical"),
+        Model.Value<string>("subtitleAttribute"),
+        ListadoDelCatalogoEnLaPagina.Maximo(Model.Value<string>("maxItems")),
+        Log,
+        Context.RequestAborted);
+    if (tarjetas.Count == 0) { return; }
+
+    var title = Model.Value<string>("headingTitle");
+    var subtitle = Model.Value<string>("headingSubtitle");
+    var ctaLabel = Model.Value<string>("ctaLabel");
+    var ctaLink = Model.Value<Link>("ctaLink");
+    var ctaUrl = ctaLink?.Url;
+    var hasCta = !string.IsNullOrWhiteSpace(ctaLabel) && !string.IsNullOrWhiteSpace(ctaUrl);
+    var variant = Model.Value<string>("variantKey");
+    var cssClass = Model.Value<string>("cssClass");
+    var classes = string.Join(" ", new[]
+    {
+        "syn-catalog-list",
+        string.IsNullOrWhiteSpace(variant) ? null : $"syn-catalog-list--{variant}",
+        string.IsNullOrWhiteSpace(cssClass) ? null : cssClass,
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}
+<section class="@classes">
+    @if (!string.IsNullOrWhiteSpace(title))
+    {
+        <h2 class="syn-catalog-list__title">@title</h2>
+    }
+    @if (!string.IsNullOrWhiteSpace(subtitle))
+    {
+        <p class="syn-catalog-list__subtitle">@subtitle</p>
+    }
+    <ul class="syn-catalog-list__items" role="list">
+        @foreach (var tarjeta in tarjetas)
+        {
+            <li class="syn-card syn-card--outlined syn-catalog-list__item">
+                @if (!string.IsNullOrWhiteSpace(tarjeta.Imagen))
+                {
+                    <img class="syn-catalog-list__image" src="@tarjeta.Imagen" alt="" loading="lazy" />
+                }
+                else if (!string.IsNullOrEmpty(tarjeta.Iniciales))
+                {
+                    <span class="syn-catalog-list__initials" aria-hidden="true">@tarjeta.Iniciales</span>
+                }
+                <h3 class="syn-card__title">@tarjeta.Titulo</h3>
+                @if (!string.IsNullOrWhiteSpace(tarjeta.Subtitulo))
+                {
+                    <p class="syn-card__subtitle">@tarjeta.Subtitulo</p>
+                }
+                @if (hasCta)
+                {
+                    <a class="syn-card__cta syn-catalog-list__cta" href="@ctaUrl" aria-label="@($"{ctaLabel}: {tarjeta.Titulo}")">@ctaLabel</a>
+                }
+            </li>
+        }
+    </ul>
+</section>
