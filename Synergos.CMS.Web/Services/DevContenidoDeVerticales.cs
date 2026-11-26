@@ -42,6 +42,9 @@ public sealed class DevContenidoDeVerticales
     /// <summary>La raíz de sitio Blogs, por su Key de uSync.</summary>
     public static readonly Guid Blogs = Guid.Parse("0d857159-703a-410c-b9f5-a0ccc2c9b3eb");
 
+    /// <summary>La raíz de sitio Healthcare, por su Key de uSync.</summary>
+    public static readonly Guid Healthcare = Guid.Parse("f289c6d5-4f6c-407f-8c35-ce7e0dec7b22");
+
     private static readonly Guid AreaDeLaSeccion = LayoutComposerKeys.SectionContentArea;
     private static readonly Guid[] AreasDeTresColumnas =
     [
@@ -2166,8 +2169,9 @@ public sealed class DevContenidoDeVerticales
     /// <summary>
     /// D-016-C13: un testimonio inventado lo es con nombre o con rol y ciudad, y unos logos de clientes que no lo son
     /// serían una afirmación falsa en producción (corrige la decisión del 2026-11-13). Salen de su página los carruseles
-    /// de testimonios de Educación, Eventos, Hoteles, Propiedades, la portada de Synergos, Casos y la raíz de Blogs
-    /// («Lo que dicen nuestros lectores»), y las dos nubes de logos del hub. Cada sección es sólo su encabezado y el bloque, así que no deja un título suelto. SUPERSET: se desconecta
+    /// de testimonios de Educación, Eventos, Hoteles, Propiedades, la portada de Synergos, Casos, la raíz de Blogs
+    /// («Lo que dicen nuestros lectores») y la de Healthcare («Lo que dicen las clínicas», D-003-V3), y las dos nubes de
+    /// logos del hub. Cada sección es sólo su encabezado y el bloque, así que no deja un título suelto. SUPERSET: se desconecta
     /// la sección; el tipo, los textos y las fotos siguen en el esquema y en el repo. Idempotente.
     /// </summary>
     private string RecetaSinTestimoniosInventados()
@@ -2179,7 +2183,7 @@ public sealed class DevContenidoDeVerticales
                  {
                      (Educacion, "educacion", false), (Eventos, "eventos", false), (Hoteles, "hoteles", false),
                      (Propiedades, "propiedades", false), (Synergos, "synergos", true), (Casos, "casos", true),
-                     (Blogs, "blogs", false),
+                     (Blogs, "blogs", false), (Healthcare, "healthcare", false),
                  })
         {
             var contenido = _contentService.GetById(pagina);

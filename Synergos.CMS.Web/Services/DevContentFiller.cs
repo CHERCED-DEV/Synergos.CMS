@@ -1814,7 +1814,7 @@ public sealed class DevContentFiller
         // Testimonios vía componente Angular CDN (hidrata desde la CDN).
         AddSynTestimonials(b, "Lo que dicen nuestros lectores", new (string quote, string author, string role)[]
         {
-            ("Los artículos van al grano y se nota la experiencia real.", "Andrés Gómez", "Lector"),
+            ("Los artículos van al grano y se nota la experiencia real.", "Mateo Garcés", "Lector"),
             ("Mi fuente para entender arquitectura de plataformas.", "Valentina Díaz", "Suscriptora"),
             ("Cada post me ahorra horas de investigación.", "Felipe Castro", "Lector"),
         });
@@ -2669,18 +2669,18 @@ public sealed class DevContentFiller
         AddHero(b, "Servicios clínicos", "Atención integral, registro impecable",
             "<p>Desde la consulta hasta el seguimiento, todo queda registrado y accesible para tu equipo — con la privacidad del paciente protegida.</p>",
             "Healthcare Servicios Hero", "Servicios de Healthcare", "#0B3B3C", "#1FA2A6",
-            ("Pedir una cita", "/healthcare"), ("Hablar con ventas", "/synergos/contacto"));
+            ("Pedir una cita", "/healthcare/#/ehr/agendar"), ("Hablar con ventas", "/synergos/contacto"));
         FeatureGridAuto(b, "Lo que ofrecemos", "Cobertura completa de la práctica",
             new (string title, string subtitle, string body)[]
             {
-                ("Consulta médica", "Presencial o virtual", "Agenda, atiende y registra la consulta con historia clínica versionada."),
+                ("Consulta médica", "Presencial", "Agenda, atiende y registra la consulta con historia clínica versionada."),
                 ("Controles y seguimiento", "Continuidad del cuidado", "Citas de control con acceso al historial completo del paciente."),
                 ("Recetas", "Registro formal", "Emisión y consulta de recetas, vinculadas al paciente."),
                 ("Consentimiento informado", "Transparencia", "El paciente controla quién accede a su información clínica."),
             }, 2);
         AddMission(b, "Cada servicio, registrado de punta a punta", "",
             "<p>Consulta, control, receta o consentimiento: todo queda en la historia clínica versionada del paciente, con acceso auditado. El sistema registra; el profesional decide y firma cada acto clínico.</p>");
-        AddCta(b, "¿Listo para empezar?", "Pedí una cita o agendá una demo para tu equipo.", "Pedir una cita", "/healthcare");
+        AddCta(b, "¿Listo para empezar?", "Pide una cita o agenda una demo para tu equipo.", "Pedir una cita", "/healthcare/#/ehr/agendar");
         return b.Build();
     }
 
@@ -2688,9 +2688,9 @@ public sealed class DevContentFiller
     {
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Nuestro equipo", "Profesionales a cargo de tu salud",
-            "<p>Un equipo comprometido con el cuidado y la privacidad. Conocé a los profesionales detrás de la práctica.</p>",
+            "<p>Un equipo comprometido con el cuidado y la privacidad. Conoce a los profesionales detrás de la práctica.</p>",
             "Healthcare Equipo Hero", "Equipo de Healthcare", "#0B3B3C", "#1FA2A6",
-            ("Pedir una cita", "/healthcare"), ("Hablar con ventas", "/synergos/contacto"));
+            ("Pedir una cita", "/healthcare/#/ehr/agendar"), ("Hablar con ventas", "/synergos/contacto"));
         FeatureGridAuto(b, "El equipo", "Profesionales licenciados",
             new (string title, string subtitle, string body)[]
             {
@@ -2700,7 +2700,7 @@ public sealed class DevContentFiller
             }, 3);
         AddMission(b, "Compromiso con tu privacidad", "",
             "<p>Tu información clínica está cifrada y solo accesible por el personal autorizado con tu consentimiento. Este sistema registra; el profesional decide.</p>");
-        AddCta(b, "Agendá tu cita", "Reservá con el especialista que necesitás.", "Pedir una cita", "/healthcare");
+        AddCta(b, "Agenda tu cita", "Reserva con el especialista que necesitas.", "Pedir una cita", "/healthcare/#/ehr/agendar");
         return b.Build();
     }
 
@@ -2723,7 +2723,7 @@ public sealed class DevContentFiller
 
         AddFallbackHero(b, "elementSynEhr", "Tu consultorio, en orden",
             "Historia clínica, agenda y recetas en un solo lugar",
-            "<p>SynergosLabs Healthcare reúne la historia de tus pacientes, la agenda de citas y las recetas — cifrado y con acceso auditado. Pedí una cita abajo o conocé la plataforma.</p>",
+            "<p>SynergosLabs Healthcare reúne la historia de tus pacientes, la agenda de citas y las recetas — cifrado y con acceso auditado. Agenda tu cita desde el portal o conoce la plataforma.</p>",
             "Synergos Healthcare Hero", "Hero del vertical Healthcare", "#0B3B3C", "#1FA2A6",
             ("Hablar con ventas", "/synergos/contacto"), ("Ver planes", "/synergos/precios"));
 
@@ -2733,10 +2733,10 @@ public sealed class DevContentFiller
         FeatureGridAuto(b, "Lo que incluye", "Todo para la práctica clínica",
             new (string title, string subtitle, string body)[]
             {
-                ("Historia clínica", "Versionada y cifrada", "Registro de pacientes con historial inmutable y acceso auditado."),
-                ("Agenda de citas", "Sin sobrecupos", "Reserva con control anti-overbooking por doctor."),
-                ("Recetas", "Registro formal", "Emisión y consulta de recetas — el sistema registra, el profesional decide."),
-                ("Consentimiento", "Paciente → doctor", "Libro de consentimientos que gobierna el acceso a la información clínica."),
+                ("Historia clínica", "Cifrada y versionada", "Cada cambio queda registrado y cada acceso a tu historia queda auditado."),
+                ("Agenda de citas", "Sin sobrecupos", "Eliges una hora libre del profesional y nadie más la puede tomar."),
+                ("Recetas", "Firmadas por tu médico", "Ves tus medicamentos y pides la renovación desde el portal."),
+                ("Consentimiento", "Tú decides", "Das o retiras el permiso para que el consultorio vea tu historia."),
             }, 2);
 
         // Componentes CDN-Angular (hidratan <synergos-*> desde la CDN): testimonios + FAQ clínico.
@@ -2748,22 +2748,22 @@ public sealed class DevContentFiller
         });
         AddSynFaq(b, "Preguntas frecuentes", new (string question, string answer)[]
         {
-            ("¿Cómo agendo una cita?", "Llená el formulario de abajo o llamanos; te confirmamos en minutos."),
+            ("¿Cómo agendo una cita?", "Inicia sesión y entra a «Agendar»: eliges profesional, servicio y hora, ves el copago antes de confirmar y la cita queda en «Mis citas»."),
             ("¿Mis datos están seguros?", "Sí: la información clínica va cifrada y con acceso auditado por consentimiento."),
-            ("¿Atienden urgencias?", "Para urgencias acudí al servicio de emergencias; acá agendamos consultas y controles."),
+            ("¿Atienden urgencias?", "Para una urgencia acude al servicio de urgencias más cercano; aquí agendamos consultas y controles."),
         });
 
         AddMission(b, "Cuidado y privacidad, de la mano", "",
             "<p>Acompañamos a tu equipo en la transición: migración de historias, capacitación y soporte. La información clínica viaja cifrada y con acceso auditado por consentimiento — desde el primer día.</p>");
 
-        AddContactForm(b, "Pedir una cita", "Solicitar cita",
+        AddContactForm(b, "Escríbenos", "Enviar mensaje",
             ("Nombre", "nombre", "text", true, "Tu nombre"),
             ("Email", "email", "email", true, "tu@correo.com"),
             ("Teléfono", "telefono", "tel", false, "Tu teléfono (opcional)"),
-            ("Motivo de consulta", "motivo", "textarea", true, "Contanos brevemente el motivo…"));
+            ("Mensaje", "motivo", "textarea", true, "¿En qué te ayudamos? No incluyas datos de salud: esos van en tu portal."));
 
         AddCta(b, "¿Tu equipo quiere conocer la plataforma?",
-            "Agendá una demo y te mostramos la práctica completa.", "Hablar con ventas", "/synergos/contacto");
+            "Agenda una demo y te mostramos la práctica completa.", "Hablar con ventas", "/synergos/contacto");
         return b.Build();
     }
 
@@ -2937,7 +2937,7 @@ public sealed class DevContentFiller
         // Instructor — media-text split (CDN si está, SSR si no).
         SplitAuto(b, "Tu instructor",
             "Quien te acompaña",
-            "<p><strong>Andrés Gómez</strong> — Ingeniero de plataforma con 12 años construyendo productos digitales. Ha liderado equipos que migraron decenas de sitios a un solo motor componible y enseña con proyectos reales, no diapositivas.</p>",
+            "<p><strong>Mateo Garcés</strong> — Ingeniero de plataforma con 12 años construyendo productos digitales. Ha liderado equipos que migraron decenas de sitios a un solo motor componible y enseña con proyectos reales, no diapositivas.</p>",
             "Educacion Instructor", "Foto del instructor del curso", ScholarFrom, ScholarTo,
             mediaOnRight: true, ctaLabel: null, ctaUrl: null);
 
@@ -3430,7 +3430,7 @@ public sealed class DevContentFiller
         // Lineup / speakers — feature-grid (CDN si está, SSR si no).
         FeatureGridAuto(b, "Lineup de speakers", "Quienes te van a acompañar", new (string title, string subtitle, string body)[]
         {
-            ("Andrés Gómez", "Ingeniero de plataforma", "12 años construyendo productos componibles a escala."),
+            ("Mateo Garcés", "Ingeniero de plataforma", "12 años construyendo productos componibles a escala."),
             ("Laura Méndez", "CTO, Grupo Andino", "Lideró la consolidación de cuatro verticales sobre un solo core."),
             ("Diego Restrepo", "Líder de Producto", "Especialista en composición visual y sistemas de diseño."),
             ("Sofía Cardona", "Directora Digital", "Estrategia multi-marca y multi-dominio sobre un mismo motor."),
