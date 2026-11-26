@@ -39,6 +39,9 @@ public sealed class DevContenidoDeVerticales
     public static readonly Guid Synergos = Guid.Parse("71976524-5053-4127-a677-adf2c5e078e7");
     public static readonly Guid Casos = Guid.Parse("017b3ae2-b39f-4120-82d6-96ef984048bc");
 
+    /// <summary>La raíz de sitio Blogs, por su Key de uSync.</summary>
+    public static readonly Guid Blogs = Guid.Parse("0d857159-703a-410c-b9f5-a0ccc2c9b3eb");
+
     private static readonly Guid AreaDeLaSeccion = LayoutComposerKeys.SectionContentArea;
     private static readonly Guid[] AreasDeTresColumnas =
     [
@@ -2119,8 +2122,8 @@ public sealed class DevContenidoDeVerticales
     /// <summary>
     /// D-016-C13: un testimonio inventado lo es con nombre o con rol y ciudad, y unos logos de clientes que no lo son
     /// serían una afirmación falsa en producción (corrige la decisión del 2026-11-13). Salen de su página los carruseles
-    /// de testimonios de Educación, Eventos, Hoteles, Propiedades, la portada de Synergos y Casos, y las dos nubes de logos
-    /// del hub. Cada sección es sólo su encabezado y el bloque, así que no deja un título suelto. SUPERSET: se desconecta
+    /// de testimonios de Educación, Eventos, Hoteles, Propiedades, la portada de Synergos, Casos y la raíz de Blogs
+    /// («Lo que dicen nuestros lectores»), y las dos nubes de logos del hub. Cada sección es sólo su encabezado y el bloque, así que no deja un título suelto. SUPERSET: se desconecta
     /// la sección; el tipo, los textos y las fotos siguen en el esquema y en el repo. Idempotente.
     /// </summary>
     private string RecetaSinTestimoniosInventados()
@@ -2132,6 +2135,7 @@ public sealed class DevContenidoDeVerticales
                  {
                      (Educacion, "educacion", false), (Eventos, "eventos", false), (Hoteles, "hoteles", false),
                      (Propiedades, "propiedades", false), (Synergos, "synergos", true), (Casos, "casos", true),
+                     (Blogs, "blogs", false),
                  })
         {
             var contenido = _contentService.GetById(pagina);
