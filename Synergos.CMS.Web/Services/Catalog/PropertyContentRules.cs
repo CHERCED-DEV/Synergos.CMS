@@ -186,7 +186,8 @@ public static class PropertyContentRules
             // campo. Sin fotos se emite vacío y la tarjeta pinta su propio placeholder: una
             // ruta inventada daría un 404 por cada tarjeta de la grilla.
             ImageUrl: gallery.Count > 0 ? gallery[0] : string.Empty,
-            Featured: content.Featured);
+            Featured: content.Featured,
+            Parking: NonNegative(content.Parking));
 
         var address = content.Address?.Trim();
         if (string.IsNullOrEmpty(address))
