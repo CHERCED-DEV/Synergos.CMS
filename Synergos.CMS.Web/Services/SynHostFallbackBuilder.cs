@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Synergos.CMS.Interfaces.SynHost;
@@ -234,6 +235,132 @@ public static class SynHostFallbackBuilder
         }
         sb.Append("</ul></section>");
         return sb.ToString();
+    }
+
+    // ── Blogs: el inicio de la red ───────────────────────────────────
+
+    /// <summary>
+    /// <c>elementSynBlogs</c> en su inicio (D-012-V11, 012-blogs-social): el título del bloque y la primera página del
+    /// feed, con los datos que la app va a pintar (los arma <c>RespaldoDeBlogs</c>). Es lo que se ve hasta que el bundle
+    /// hidrata, y sin JavaScript; y ocupa el sitio de la app, que antes estaba vacío hasta montar y empujaba lo de abajo.
+    /// </summary>
+    /// <remarks>
+    /// Cada publicación, como la tarjeta de la app: quién y cuándo, el título del artículo con su página (o el cuerpo
+    /// como enlace, si no lleva título), el cuerpo, la imagen en su caja de 3:2 y las etiquetas. Sin reacciones ni
+    /// acciones, que sin la app no hacen nada. La fecha sale con el patrón de mes y día de la cultura de la página.
+    /// </remarks>
+    public static string? Blogs(
+        string? heading,
+        string? subheading,
+        IReadOnlyList<PublicacionDelRespaldo>? publicaciones,
+        CultureInfo cultura)
+    {
+        ArgumentNullException.ThrowIfNull(cultura);
+        heading = Clean(heading);
+        subheading = Clean(subheading);
+        var lista = (publicaciones ?? Array.Empty<PublicacionDelRespaldo>())
+            .Where(p => Clean(p.Titulo) is not null || Clean(p.Cuerpo) is not null)
+            .ToList();
+        if (heading is null && lista.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        sb.Append("<div class=\"").Append(BaseClass).Append(" syn-ssr-blogs\"").Append(Marker).Append('>');
+        if (heading is not null || subheading is not null)
+        {
+            sb.Append("<header class=\"syn-ssr-blogs__head\">");
+            if (heading is not null)
+                sb.Append("<h1 class=\"syn-ssr-blogs__title\">").Append(Esc(heading)).Append("</h1>");
+            if (subheading is not null)
+                sb.Append("<p class=\"syn-ssr-blogs__sub\">").Append(Esc(subheading)).Append("</p>");
+            sb.Append("</header>");
+        }
+
+        if (lista.Count > 0)
+        {
+            sb.Append("<ul class=\"syn-ssr-blogs__feed\">");
+            foreach (var publicacion in lista)
+                Publicacion(sb, publicacion, cultura);
+            sb.Append("</ul>");
+        }
+
+        return sb.Append("</div>").ToString();
+    }
+
+    private static void Publicacion(StringBuilder sb, PublicacionDelRespaldo publicacion, CultureInfo cultura)
+    {
+        var titulo = Clean(publicacion.Titulo);
+        var cuerpo = Clean(publicacion.Cuerpo);
+        var pagina = UrlSegura(publicacion.Pagina);
+        var fecha = publicacion.Fecha.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(publicacion.Fecha, DateTimeKind.Utc)
+            : publicacion.Fecha.ToUniversalTime();
+
+        sb.Append("<li><article class=\"syn-ssr-blogs__post\"><p class=\"syn-ssr-blogs__meta\">")
+          .Append("<span class=\"syn-ssr-blogs__author\">").Append(Esc(Clean(publicacion.Autor) ?? string.Empty)).Append("</span>");
+        if (Clean(publicacion.Alias)?.TrimStart('@') is { Length: > 0 } alias)
+            sb.Append(" <span class=\"syn-ssr-blogs__handle\">@").Append(Esc(alias)).Append("</span>");
+        sb.Append(" <time class=\"syn-ssr-blogs__time\" datetime=\"")
+          .Append(fecha.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)).Append("\">")
+          .Append(Esc(fecha.ToString("m", cultura))).Append("</time></p>");
+
+        if (titulo is not null)
+        {
+            sb.Append("<h2 class=\"syn-ssr-blogs__post-title\">");
+            Enlace(sb, titulo, pagina);
+            sb.Append("</h2>");
+            if (cuerpo is not null)
+                sb.Append("<p class=\"syn-ssr-blogs__body\">").Append(Esc(cuerpo)).Append("</p>");
+        }
+        else if (cuerpo is not null)
+        {
+            sb.Append("<p class=\"syn-ssr-blogs__body\">");
+            Enlace(sb, cuerpo, pagina);
+            sb.Append("</p>");
+        }
+
+        if (UrlSegura(publicacion.Imagen) is { } imagen)
+            sb.Append("<img class=\"syn-ssr-blogs__media\" src=\"").Append(Esc(imagen))
+              .Append("\" alt=\"").Append(Esc(Clean(publicacion.TextoAlternativo) ?? string.Empty))
+              .Append("\" loading=\"lazy\" decoding=\"async\">");
+
+        var etiquetas = (publicacion.Etiquetas ?? Array.Empty<string>())
+            .Select(e => Clean(e)?.TrimStart('#'))
+            .Where(e => !string.IsNullOrEmpty(e))
+            .ToList();
+        if (etiquetas.Count > 0)
+            sb.Append("<p class=\"syn-ssr-blogs__tags\">")
+              .Append(string.Join(" ", etiquetas.Select(e => "#" + Esc(e!))))
+              .Append("</p>");
+
+        sb.Append("</article></li>");
+    }
+
+    private static void Enlace(StringBuilder sb, string texto, string? href)
+    {
+        if (href is null)
+        {
+            sb.Append(Esc(texto));
+            return;
+        }
+
+        sb.Append("<a class=\"syn-ssr-blogs__link\" href=\"").Append(Esc(href)).Append("\">").Append(Esc(texto)).Append("</a>");
+    }
+
+    /// <summary>
+    /// Una ruta del sitio o una URL http(s), como la acepta la app (<c>readPageUrl</c>); un <c>//otro.sitio</c>, un
+    /// <c>javascript:</c> o cualquier otra cosa, nada.
+    /// </summary>
+    private static string? UrlSegura(string? url)
+    {
+        var limpia = Clean(url);
+        if (limpia is null) return null;
+        if (limpia[0] == '/')
+            return limpia.Length > 1 && (limpia[1] == '/' || limpia[1] == '\\') ? null : limpia;
+
+        return Uri.TryCreate(limpia, UriKind.Absolute, out var absoluta)
+               && (absoluta.Scheme == Uri.UriSchemeHttp || absoluta.Scheme == Uri.UriSchemeHttps)
+            ? limpia
+            : null;
     }
 
     // ── Media + text ─────────────────────────────────────────────────
@@ -569,3 +696,26 @@ public static class SynHostFallbackBuilder
              .Replace("\"", "&quot;")
              .Replace("'", "&#39;");
 }
+
+/// <summary>
+/// Una publicación del feed tal como la pinta la reserva de Blogs (<see cref="SynHostFallbackBuilder.Blogs"/>).
+/// </summary>
+/// <param name="Autor">El nombre con que sale quien la firma: su cara pública si es un miembro, nunca su correo.</param>
+/// <param name="Alias">Su alias, sin <c>@</c>.</param>
+/// <param name="Fecha">Cuándo se publicó (UTC).</param>
+/// <param name="Titulo">El título, sólo si es un artículo del CMS; lo de un miembro no lleva.</param>
+/// <param name="Cuerpo">El cuerpo, o el resumen de un artículo.</param>
+/// <param name="Pagina">La página del artículo, si la tiene.</param>
+/// <param name="Imagen">La imagen, si la lleva.</param>
+/// <param name="TextoAlternativo">Su texto alternativo.</param>
+/// <param name="Etiquetas">Las etiquetas del cuerpo, sin <c>#</c>.</param>
+public sealed record PublicacionDelRespaldo(
+    string Autor,
+    string? Alias,
+    DateTime Fecha,
+    string? Titulo,
+    string? Cuerpo,
+    string? Pagina,
+    string? Imagen,
+    string? TextoAlternativo,
+    IReadOnlyList<string> Etiquetas);

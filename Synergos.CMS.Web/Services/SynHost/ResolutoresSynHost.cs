@@ -50,6 +50,10 @@ public static class ResolutoresSynHost
         // Si un enlace del editor lleva a una página apagada: el lanzador y la tarjeta no la anuncian (002, P11 C).
         services.TryAddSingleton<IDestinosApagados, DestinosApagados>();
 
+        // La reserva del servidor del inicio de Blogs, con la primera página del feed (D-012-V11). La pide la vista con lo
+        // que resolvió el resolver: el feed se lee de forma asíncrona y el resolver es síncrono.
+        services.TryAddSingleton<RespaldoDeBlogs>();
+
         return services;
     }
 }

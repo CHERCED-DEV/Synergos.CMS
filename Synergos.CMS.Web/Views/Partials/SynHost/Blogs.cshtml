@@ -4,13 +4,20 @@
     Host tonto (ADR 0135): el resolver arma el record que viaja (BlogsProps) con lo que escribe
     el editor y dónde vive la API para el sitio de la petición (Synergos:Features:Blogs, ADR 0137).
     Es una FUNCIONALIDAD (ADR 0134): no recibe JSON libre del editor.
+
+    En el inicio, el elemento lleva dentro la reserva del servidor (D-012-V11): el título y la primera página del feed,
+    con los datos que la app va a pintar (RespaldoDeBlogs). Al hidratar, Angular vacía el host y pinta la app: la
+    reserva [data-syn-ssr-fallback] se va sola, sin la regla :defined, que la quitaría antes de que la app pinte.
 *@
 @using Synergos.CMS.Web.Services.SynHost
 @model Umbraco.Cms.Core.Models.PublishedContent.IPublishedElement
 @inject IResolutorSynHost<Synergos.CMS.Interfaces.SynHost.BlogsProps> Resolutor
+@inject RespaldoDeBlogs Respaldo
 @inject Synergos.CMS.Interfaces.ISynHostEmitter Emitter
 @{
+    var cultura = System.Globalization.CultureInfo.CurrentUICulture;
     var resuelto = Resolutor.Resolver(Model);
-    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, System.Globalization.CultureInfo.CurrentUICulture));
+    resuelto = resuelto with { RespaldoHtml = await Respaldo.DelInicioAsync(resuelto.Props, cultura) };
+    var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, cultura));
 }
 @await Html.PartialAsync("SynHost/_Wrapper", (Model, result.ScriptHtml, result.ElementHtml))
