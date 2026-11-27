@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Synergos.CMS.Interfaces.Lecturas;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -49,7 +50,13 @@ public sealed class LecturaDelCatalogoController : ControllerBase
             Orden: string.IsNullOrWhiteSpace(orden) ? null : orden.Trim(),
             Pagina: pagina is > 0 ? pagina.Value : 1,
             PorPagina: porPagina is > 0 ? porPagina.Value : PorPaginaPorDefecto);
-        return Ok(await lectura.ListarAsync(consulta, cancellationToken));
+        var listado = await lectura.ListarAsync(consulta, cancellationToken);
+        // D-016-Y2: la tarjeta pide la foto a su ancho, a la salida; la ficha conserva la grande. Una URL que ya trae
+        // su tamaño (Blogs) no cambia.
+        return Ok(listado with
+        {
+            Elementos = listado.Elementos.Select(e => e with { Imagen = ImagenesDeLasApps.Tarjeta(e.Imagen) }).ToList(),
+        });
     }
 
     /// <summary>La ficha de un elemento del catálogo del vertical.</summary>

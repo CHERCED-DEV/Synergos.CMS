@@ -122,7 +122,8 @@ public sealed class LecturaDeProfesionalesContractTests
 
         var porId = Wire(await Controlador(fuente: fuente).Listado("salud", null, null, null, null, default))
             .GetProperty("elementos").EnumerateArray().ToDictionary(e => e.GetProperty("id").GetString()!);
-        Assert.Equal("/media/salud/retrato.jpg", porId["doc-con"].GetProperty("imagen").GetString());
+        // La tarjeta pide la foto a su ancho (D-016-Y2); la ficha, abajo, conserva la grande.
+        Assert.Equal("/media/salud/retrato.jpg?width=640&format=webp&quality=80", porId["doc-con"].GetProperty("imagen").GetString());
         Assert.Equal(JsonValueKind.Null, porId["doc-sin"].GetProperty("imagen").ValueKind);
 
         var conFoto = Wire(await Controlador(fuente: fuente).Ficha("salud", "doc-con", default));

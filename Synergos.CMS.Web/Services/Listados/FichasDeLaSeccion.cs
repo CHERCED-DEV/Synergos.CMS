@@ -48,7 +48,7 @@ public sealed class FichasDeLaSeccion : IFuenteDeListado
                 Id: f.Ficha.Key.ToString(),
                 Title: f.Nombre,
                 Href: f.Ficha.Url(),
-                Image: MediaPickerReader.ReadFirstMediaUrl(f.Ficha, "productImages"),
+                Image: ImagenesDeLasApps.Tarjeta(MediaPickerReader.ReadFirstMediaUrl(f.Ficha, "productImages")),
                 ImageAlt: f.Nombre,
                 Badge: f.Categoria,
                 Specs: Datos(f.Ficha, peticion)))
