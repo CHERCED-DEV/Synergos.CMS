@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Xml;
 using Microsoft.AspNetCore.Authorization;
@@ -148,9 +149,11 @@ public sealed class NewsSitemapController : ControllerBase
                 writer.WriteElementString("news", "language", NewsNs, "es");
                 writer.WriteEndElement();
 
+                // La fecha sola: el editor escribe sólo el día, y Google News acepta YYYY-MM-DD o la hora CON zona;
+                // la hora sin zona que salía antes no es ninguna de las dos (012-blogs-social).
                 writer.WriteElementString(
                     "news", "publication_date", NewsNs,
-                    post.PublishDate.Value.ToString("yyyy-MM-ddTHH:mm:ssK"));
+                    post.PublishDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 writer.WriteElementString("news", "title", NewsNs, post.Title);
 
                 writer.WriteEndElement();

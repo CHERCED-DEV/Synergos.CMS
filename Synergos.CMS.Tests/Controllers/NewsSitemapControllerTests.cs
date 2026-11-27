@@ -25,6 +25,7 @@ public sealed class NewsSitemapControllerTests
     // Lejos del reloj real: si la acción volviera a DateTime.UtcNow, la ventana dejaría fuera a los dos artículos.
     private static readonly DateTimeOffset Ahora = new(2026, 6, 22, 12, 0, 0, TimeSpan.Zero);
     private static readonly XNamespace Sitemap = "http://www.sitemaps.org/schemas/sitemap/0.9";
+    private static readonly XNamespace News = "http://www.google.com/schemas/sitemap-news/0.9";
 
     [Fact]
     public void Pide_el_contexto_de_Umbraco_y_la_cultura_antes_de_leer_los_articulos()
@@ -57,6 +58,20 @@ public sealed class NewsSitemapControllerTests
             .Select(l => l.Value);
 
         Assert.Equal(new[] { "http://blogs.test/blogs/de-hoy/" }, locs);
+    }
+
+    [Fact]
+    public void La_fecha_de_publicacion_sale_sola_sin_hora()
+    {
+        var (sut, _, _, _) = Crear(new[] { Articulo("/blogs/de-hoy/", Ahora.UtcDateTime.AddHours(-3)) });
+
+        var archivo = Assert.IsType<FileContentResult>(sut.GetNewsSitemap());
+        var fecha = XDocument.Parse(Encoding.UTF8.GetString(archivo.FileContents))
+            .Descendants(News + "publication_date")
+            .Single()
+            .Value;
+
+        Assert.Equal("2026-06-22", fecha);
     }
 
     private static (NewsSitemapController Sut, IUmbracoContextFactory Fabrica, IBlogQuery Consulta, Variacion Variacion) Crear(
