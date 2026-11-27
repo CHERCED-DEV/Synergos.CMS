@@ -102,14 +102,33 @@ public sealed class LecturaDeProfesionalesContractTests
     }
 
     [Fact]
-    public async Task La_ficha_trae_el_profesional_y_su_foto_y_uno_que_no_existe_es_404()
+    public async Task La_ficha_trae_el_profesional_sin_una_foto_que_no_existe_y_uno_que_no_existe_es_404()
     {
         var ficha = Wire(await Controlador().Ficha("salud", "doc-ana-rios", default));
 
         Assert.Equal("doc-ana-rios", ficha.GetProperty("elemento").GetProperty("id").GetString());
-        Assert.Equal("/media/ehr/doctors/ana-rios.webp", ficha.GetProperty("imagenes")[0].GetString());
+        Assert.Equal(0, ficha.GetProperty("imagenes").GetArrayLength());
         Assert.Equal(0, ficha.GetProperty("opciones").GetArrayLength());
         Assert.Equal(404, Estado(await Controlador().Ficha("salud", "doc-no-existe", default)));
+    }
+
+    /// <summary>La foto viaja sólo cuando el profesional la tiene; sin ella, ni la lista ni la ficha emiten una URL.</summary>
+    [Fact]
+    public async Task La_foto_viaja_solo_cuando_el_profesional_la_tiene()
+    {
+        var fuente = new FuenteFija(
+            Profesional("doc-con", "Dra. Con Foto", acepta: null) with { AvatarUrl = "/media/salud/retrato.jpg" },
+            Profesional("doc-sin", "Dr. Sin Foto", acepta: null));
+
+        var porId = Wire(await Controlador(fuente: fuente).Listado("salud", null, null, null, null, default))
+            .GetProperty("elementos").EnumerateArray().ToDictionary(e => e.GetProperty("id").GetString()!);
+        Assert.Equal("/media/salud/retrato.jpg", porId["doc-con"].GetProperty("imagen").GetString());
+        Assert.Equal(JsonValueKind.Null, porId["doc-sin"].GetProperty("imagen").ValueKind);
+
+        var conFoto = Wire(await Controlador(fuente: fuente).Ficha("salud", "doc-con", default));
+        var sinFoto = Wire(await Controlador(fuente: fuente).Ficha("salud", "doc-sin", default));
+        Assert.Equal("/media/salud/retrato.jpg", conFoto.GetProperty("imagenes")[0].GetString());
+        Assert.Equal(0, sinFoto.GetProperty("imagenes").GetArrayLength());
     }
 
     private static MedicalDoctor Profesional(string id, string nombre, bool? acepta) => new(
