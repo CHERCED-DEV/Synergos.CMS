@@ -109,6 +109,18 @@ public sealed class RealtyContractShapeTests
         Assert.Equal("arriendo", CapturedQuery(_catalog).Operation);
     }
 
+    [Fact] // D-016-X2c: la tarjeta de la lista y del mapa pide la foto a su ancho, en WebP, no el original
+    public async Task Listings_LaFotoDeLaTarjetaSalePedidaASuAncho()
+    {
+        CatalogReturns(Listing());
+
+        var body = Json(await BuildSut().Listings(null, null, null, null, null, null, null, null, null, default));
+
+        var tarjeta = body.GetProperty("listings")[0];
+        Assert.Equal("/media/realty/chico.jpg?width=800&format=webp&quality=80", tarjeta.GetProperty("cover").GetString());
+        Assert.Equal("/media/realty/chico.jpg?width=800&format=webp&quality=80", tarjeta.GetProperty("imageUrl").GetString());
+    }
+
     [Fact] // empty: sin operación NO se inventa una — el portal no arranca filtrado
     public async Task Listings_SinOperacion_NoFiltra()
     {
