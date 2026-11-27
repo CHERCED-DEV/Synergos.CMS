@@ -24,6 +24,9 @@ public sealed class LecturaDelCatalogoDeBlogs : ILecturaDelCatalogo
     /// <summary>El atributo con la reacción de quien lee; no viaja si no tiene una o no hay sesión.</summary>
     public const string AtributoMiReaccion = "miReaccion";
 
+    /// <summary>El atributo con el avatar de quien firma, como lo pone <see cref="CatalogoDeBlogs"/>.</summary>
+    private const string AtributoAutorImagen = "autorImagen";
+
     private readonly ILecturaDelCatalogo _catalogo;
     private readonly IReactionService _reacciones;
     private readonly IMemberAccessGate _sesion;
@@ -58,7 +61,11 @@ public sealed class LecturaDelCatalogoDeBlogs : ILecturaDelCatalogo
         }
 
         var elementos = await ConReaccionesAsync([ficha.Elemento], cancellationToken).ConfigureAwait(false);
-        return ficha with { Elemento = elementos[0] };
+        return ficha with
+        {
+            Elemento = elementos[0],
+            Imagenes = ficha.Imagenes.Select(i => ImagenesDeBlogs.Portada(i) ?? i).ToList(),
+        };
     }
 
     /// <inheritdoc />
@@ -98,7 +105,14 @@ public sealed class LecturaDelCatalogoDeBlogs : ILecturaDelCatalogo
                 atributos[AtributoMiReaccion] = estado.MyReaction;
             }
 
-            conReacciones.Add(elemento with { Atributos = atributos });
+            // Las fotos al ancho en que se pintan, con la misma URL que /api/blogs y el respaldo SSR (012-blogs-social).
+            // El catálogo de Application guarda la original: es la del item del stream.
+            if (atributos.TryGetValue(AtributoAutorImagen, out var avatar))
+            {
+                atributos[AtributoAutorImagen] = ImagenesDeBlogs.Avatar(avatar) ?? avatar;
+            }
+
+            conReacciones.Add(elemento with { Imagen = ImagenesDeBlogs.Portada(elemento.Imagen), Atributos = atributos });
         }
 
         return conReacciones;

@@ -318,8 +318,9 @@ public static class SynHostFallbackBuilder
             sb.Append("</p>");
         }
 
+        // Al ancho de la tarjeta y con la MISMA URL que la API de la app: tras hidratar no se vuelve a pedir (012-blogs-social).
         if (UrlSegura(publicacion.Imagen) is { } imagen)
-            sb.Append("<img class=\"syn-ssr-blogs__media\" src=\"").Append(Esc(imagen))
+            sb.Append("<img class=\"syn-ssr-blogs__media\" src=\"").Append(Esc(ImagenesDeBlogs.Portada(imagen) ?? imagen))
               .Append("\" alt=\"").Append(Esc(Clean(publicacion.TextoAlternativo) ?? string.Empty))
               .Append("\" loading=\"lazy\" decoding=\"async\">");
 
