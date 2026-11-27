@@ -2471,13 +2471,6 @@ public sealed class DevContentFiller
     }
 
     /// <summary>
-    /// Monta el dashboard clínico demo de Healthcare (elementSynEhr → &lt;synergos-ehr&gt;)
-    /// como módulo Angular CDN. Calque de <see cref="AddSynAcademy"/>: el SynHost emite
-    /// el custom element con su config (heading/subheading) y la CDN lo hidrata por
-    /// el alias kebab "ehr". Sale no-op con grace si el ElementType aún no está importado
-    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
-    /// </summary>
-    /// <summary>
     /// El listado de un catálogo (<c>elementCompCatalogList</c>, D-003-V2): lo que haya publicado en la vertical, con su
     /// botón por ítem. Sale no-op con grace si el ElementType aún no está importado.
     /// </summary>
@@ -2500,6 +2493,13 @@ public sealed class DevContentFiller
         });
     }
 
+    /// <summary>
+    /// Monta el dashboard clínico demo de Healthcare (elementSynEhr → &lt;synergos-ehr&gt;)
+    /// como módulo Angular CDN. Calque de <see cref="AddSynAcademy"/>: el SynHost emite
+    /// el custom element con su config (heading/subheading) y la CDN lo hidrata por
+    /// el alias kebab "ehr". Sale no-op con grace si el ElementType aún no está importado
+    /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
+    /// </summary>
     private void AddSynEhr(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynEhr")?.Key;
