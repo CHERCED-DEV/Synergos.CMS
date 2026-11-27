@@ -60,9 +60,10 @@
 #nullable enable
     string? ConfigString(string alias) => siteConfig?.Value<string>(alias);
 
-    var seoTitle = PageString("seoTitle");
-    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = ConfigString("defaultSeoTitle");
-    if (string.IsNullOrWhiteSpace(seoTitle)) seoTitle = page?.Name ?? siteName;
+    // El suyo, el de la marca, o su nombre con el del sitio («Carrito — Tienda»); la raíz de un sitio, su nombre (D-016-X3).
+    var seoTitle = Synergos.CMS.Web.Services.TituloDeLaPagina.Resolver(
+        PageString("seoTitle"), ConfigString("defaultSeoTitle"), page?.Name, siteName,
+        page is not null && siteRoot is not null && page.Id == siteRoot.Id);
 
     // La de la página, su resumen propio (ficha de producto, categoría, equipo), la de la marca y la de su sitio (016, C9).
     var seoDesc = Synergos.CMS.Web.Services.DescripcionDeLaPagina.Resolver(
@@ -79,6 +80,8 @@
 
     var ogImage = page?.Value<IPublishedContent>("ogImage") ?? siteConfig?.Value<IPublishedContent>("socialOgImage");
     var ogImageUrl = ogImage?.Url(mode: UrlMode.Absolute);
+    // Sin ogImage, la imagen propia de la página o la de su primer bloque (D-016-X1).
+    if (string.IsNullOrWhiteSpace(ogImageUrl)) { ogImageUrl = Synergos.CMS.Web.Services.ImagenParaCompartir.DeLaPagina(page); }
 
     var ogType = PageString("ogType");
     if (string.IsNullOrWhiteSpace(ogType)) ogType = "website";
