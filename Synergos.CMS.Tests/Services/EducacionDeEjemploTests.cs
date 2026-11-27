@@ -40,4 +40,14 @@ public sealed class EducacionDeEjemploTests
         Assert.DoesNotContain("producción", curso.Description, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SOLID", curso.Summary + " " + string.Join(" ", curso.Outcomes), StringComparison.Ordinal);
     }
+
+    [Fact] // D-016-Q4: ningún curso de pago cuesta más de $ 120.000 por hora de clase (antes, 75 minutos a $ 480.000).
+    public void Ningun_curso_de_pago_cuesta_mas_de_lo_que_dura()
+    {
+        foreach (var curso in AcademyDemoSeed.Courses.Where(c => c.Price > 0))
+        {
+            var tope = 120_000m * curso.DurationMinutes / 60m;
+            Assert.True(curso.Price <= tope, $"«{curso.Title}»: {curso.DurationMinutes} min a {curso.Price:N0}, tope {tope:N0}.");
+        }
+    }
 }
