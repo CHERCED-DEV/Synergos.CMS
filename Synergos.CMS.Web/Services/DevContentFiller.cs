@@ -4515,7 +4515,7 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Booking — reservas y citas sin fricción",
             "La agenda en línea, disponible 24/7",
-            "<p>La app Booking demuestra el motor de reservas de punta a punta: catálogo de servicios, disponibilidad en tiempo real y confirmación automática. Para negocios que viven de la agenda — consultorías, espacios, bienestar y viajes.</p>",
+            "<p>La app Booking demuestra el motor de reservas de punta a punta: catálogo de servicios, disponibilidad en tiempo real y tu solicitud registrada con su número. Para negocios que viven de la agenda — consultorías, espacios y bienestar.</p>",
             "Apps Booking Hero", "Preview de la app Booking", MeridianFrom, MeridianTo,
             ("Abrir la app", "/booking"), ("Ver todas las apps", "/synergos/apps"));
 
@@ -4523,7 +4523,7 @@ public sealed class DevContentFiller
         {
             ("Disponibilidad real", "Calendario en vivo", "Los cupos se consultan al motor en tiempo real; nadie reserva dos veces el mismo lugar."),
             ("Retención anti-conflicto", "Hold con timeout", "El motor retiene el cupo mientras completas tus datos y lo libera si no confirmas."),
-            ("Confirmación instantánea", "Cero llamadas", "Eliges, confirmas y recibes tu comprobante al instante — el ciclo entero en línea."),
+            ("Solicitud registrada", "Sin llamadas para pedir", "Eliges el servicio y la hora, y tu solicitud queda registrada con su número; el negocio te contacta para confirmarla."),
         }, 3);
 
         // DEMO — pieza viva: el asistente de reserva multipaso contra el motor real (/api/booking).
@@ -4543,7 +4543,7 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Eventos — experiencias que se agotan",
             "Cartelera, tickets y agenda sobre el mismo motor",
-            "<p>La app Eventos demuestra el motor bajo presión: cupos limitados, retención del ticket mientras te registras y confirmación con acceso al instante. Para organizadores de conferencias, conciertos y experiencias premium.</p>",
+            "<p>La app Eventos demuestra el motor bajo presión: cupos limitados, retención del ticket mientras te registras y el ticket con su código QR en «Mis tickets». Para organizadores de conferencias, conciertos y experiencias premium.</p>",
             "Apps Eventos Hero", "Preview de la app Eventos", EventsFrom, EventsTo,
             ("Abrir la app", "/eventos"), ("Ver todas las apps", "/synergos/apps"));
 
@@ -4551,7 +4551,7 @@ public sealed class DevContentFiller
         {
             ("Ticket con retención", "Cupo asegurado", "El motor retiene tu ticket mientras completas el registro — igual que un cupo de reserva."),
             ("Agenda viva", "Programa interactivo", "El programa del evento se navega en una línea de tiempo con scroll, no en un PDF."),
-            ("Registro end-to-end", "Del interés al acceso", "Eliges tu entrada, te registras y el acceso llega a tu correo al instante."),
+            ("Registro end-to-end", "Del interés al acceso", "Eliges tu entrada, te registras y tu ticket queda en «Mis tickets» con su código QR."),
         }, 3);
 
         // DEMO — pieza viva: la agenda del próximo evento como timeline interactiva (CDN).
