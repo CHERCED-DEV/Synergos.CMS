@@ -1715,7 +1715,7 @@ public sealed class DevContentFiller
         if (post.HasProperty("tags")) { post.SetValue("tags", TagsJson(tags), Culture); }   // Umbraco.Tags (Culture)
         post.SetValue(SectionsAlias, sectionsJson, Culture);
         if (_blogAuthorUdi is not null && post.HasProperty("authorRef")) { post.SetValue("authorRef", _blogAuthorUdi, Culture); }
-        if (post.HasProperty("seoTitle")) { post.SetValue("seoTitle", $"{title} — {BrandName}", Culture); }
+        if (post.HasProperty("seoTitle")) { post.SetValue("seoTitle", $"{title} — {SitioDe(categoryId)}", Culture); }
         if (post.HasProperty("seoDescription")) { post.SetValue("seoDescription", excerpt, Culture); }
         var save = _contentService.SaveAndPublish(post, new[] { Culture });
         var label = title.Length > 24 ? title[..24] : title;
@@ -2016,6 +2016,16 @@ public sealed class DevContentFiller
         return save.Success ? cat.Id : 0;
     }
 
+    /// <summary>El nombre que muestra el sitio del nodo (<c>siteDisplayName</c>), para que el título diga de qué sitio es.</summary>
+    private string SitioDe(int nodoId)
+    {
+        var nodo = _contentService.GetById(nodoId);
+        var sitio = nodo is null ? null
+            : nodo.ContentType.Alias == "siteRoot" ? nodo
+            : _contentService.GetAncestors(nodo).FirstOrDefault(a => a.ContentType.Alias == "siteRoot");
+        return sitio?.GetValue<string>("siteDisplayName", Culture) is { Length: > 0 } nombre ? nombre : BrandName;
+    }
+
     /// <param name="description">
     /// La descripción en TEXTO PLANO. Es la única fuente del copy: alimenta el campo
     /// <c>productDescriptionText</c> (consultable/buscable) y, envuelta, el cuerpo compuesto.
@@ -2059,7 +2069,8 @@ public sealed class DevContentFiller
         }
         if (p.HasProperty("tags")) { p.SetValue("tags", TagsJson(tags), Culture); }
         p.SetValue(SectionsAlias, buildBody($"<p>{description}</p>", mediaName, hexFrom, hexTo), Culture);
-        if (p.HasProperty("seoTitle")) { p.SetValue("seoTitle", $"{name} — {BrandName}", Culture); }
+        // D-016-X3b: el título firma con su sitio («Buzo con cierre — Tienda»), no con la marca de la plataforma.
+        if (p.HasProperty("seoTitle")) { p.SetValue("seoTitle", $"{name} — {SitioDe(categoryId)}", Culture); }
         var save = _contentService.SaveAndPublish(p, new[] { Culture });
         var label = name.Length > 24 ? name[..24] : name;
         details.Add(save.Success ? $"Shop:product:{label}:ok" : $"Shop:product:{label}:failed:{save.Result}");

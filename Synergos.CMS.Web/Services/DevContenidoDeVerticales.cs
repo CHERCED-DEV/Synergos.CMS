@@ -701,7 +701,7 @@ public sealed class DevContenidoDeVerticales
             c.Reemplazar(cierre, "headingSubtitle", "Elige tu plan y compra tu entrada en la cartelera.");
             c.Reemplazar(cierre, "ctaLabel", "Comprar entradas");
             c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Comprar entradas", EnlaceDelEvento))!);
-            n += Guardar(evento, c, "Cumbre Tech", "Cumbre Tech · Eventos",
+            n += Guardar(evento, c, "Cumbre Tech", "Cumbre Tech — Eventos",
                 "Cumbre Tech en Bogotá: keynotes, panel, talleres prácticos y networking en el Ágora Centro de Convenciones.");
         }
 
@@ -735,7 +735,7 @@ public sealed class DevContenidoDeVerticales
             c.Reemplazar(cierre, "headingSubtitle", "Mira el temario en la ficha del curso y empieza por la primera lección.");
             c.Reemplazar(cierre, "ctaLabel", "Ver el curso");
             c.Reemplazar(cierre, "ctaLink", JsonNode.Parse(Enlace("Ver el curso", EnlaceDelCurso))!);
-            n += Guardar(curso, c, "Design Systems con Atomic Design", "Design Systems con Atomic Design · Educación",
+            n += Guardar(curso, c, "Design Systems con Atomic Design", "Design Systems con Atomic Design — Educación",
                 "Curso de nivel principiante: tokens semánticos, la grilla de 8 puntos y átomos, moléculas y organismos. Certificado al completar.");
         }
         return $"paginas:{n}";
@@ -1054,7 +1054,7 @@ public sealed class DevContenidoDeVerticales
         foreach (var (alias, valor) in new[]
                  {
                      ("heading", TituloDeCreditos),
-                     ("seoTitle", "Créditos de las fotos · SynergosLabs"),
+                     ("seoTitle", "Créditos de las fotos — SynergosLabs"),
                      ("seoDescription", "Autor, origen y licencia de las fotos del sitio que piden crédito."),
                  })
         {
