@@ -129,8 +129,9 @@
   text-decoration: none;
 }
 
+/* D-016-Y5: el texto de marca sobre su tinte pasa 4,5:1 en los 7 temas; el de la acción primaria daba 4,1 en eventsNight. */
 .syn-site-nav__link--current {
-  color: var(--syn-color-action-primary);
+  color: var(--syn-color-state-brand-text);
   background: var(--syn-color-state-brand-surface);
   font-weight: var(--syn-font-weight-semibold);
 }
