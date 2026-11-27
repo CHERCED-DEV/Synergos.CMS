@@ -16,6 +16,8 @@ namespace Synergos.CMS.Application.Services.Impl;
 /// Las fechas relativas (encuentros/recetas/última visita) se derivan de un instante
 /// base inyectable para que la demo sea estable y testeable. Todo es data de DEMO,
 /// NO PHI de producción (esa vive en el repositorio cifrado de ADR 0098).
+/// La muestra no trae fotos: ninguna existe en <c>wwwroot</c>, y una URL a un fichero que no está sería una imagen rota
+/// en «Equipo». Sin foto, la lista cae a las iniciales (degradar por ausencia).
 /// </remarks>
 internal static class EhrDemoSeed
 {
@@ -25,25 +27,25 @@ internal static class EhrDemoSeed
         new MedicalDoctor(
             Id: "doc-ana-rios", FullName: "Dra. Ana Ríos", Specialty: "Medicina Interna",
             LicenseNumber: "RM-00001", Rating: 4.9, YearsExperience: 14,
-            AvatarUrl: "/media/ehr/doctors/ana-rios.webp",
+            AvatarUrl: null,
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday },
             SlotStartHour: 8, SlotEndHour: 16, SlotMinutes: 30),
         new MedicalDoctor(
             Id: "doc-carlos-mejia", FullName: "Dr. Carlos Mejía", Specialty: "Cardiología",
             LicenseNumber: "RM-00002", Rating: 4.8, YearsExperience: 21,
-            AvatarUrl: "/media/ehr/doctors/carlos-mejia.webp",
+            AvatarUrl: null,
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday },
             SlotStartHour: 9, SlotEndHour: 15, SlotMinutes: 40),
         new MedicalDoctor(
             Id: "doc-laura-vega", FullName: "Dra. Laura Vega", Specialty: "Pediatría",
             LicenseNumber: "RM-00003", Rating: 5.0, YearsExperience: 9,
-            AvatarUrl: "/media/ehr/doctors/laura-vega.webp",
+            AvatarUrl: null,
             WorkingDays: new[] { DayOfWeek.Tuesday, DayOfWeek.Thursday, DayOfWeek.Saturday },
             SlotStartHour: 8, SlotEndHour: 13, SlotMinutes: 20),
         new MedicalDoctor(
             Id: "doc-diego-soto", FullName: "Dr. Diego Soto", Specialty: "Dermatología",
             LicenseNumber: "RM-00004", Rating: 4.7, YearsExperience: 12,
-            AvatarUrl: "/media/ehr/doctors/diego-soto.webp",
+            AvatarUrl: null,
             WorkingDays: new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Thursday },
             SlotStartHour: 10, SlotEndHour: 18, SlotMinutes: 30),
     };
@@ -58,7 +60,7 @@ internal static class EhrDemoSeed
             BloodType: "O+",
             Allergies: new[] { "Penicilina" },
             ChronicConditions: new[] { "Migraña" },
-            PrimaryDoctorId: "doc-ana-rios", AvatarUrl: "/media/ehr/patients/camila.webp"),
+            PrimaryDoctorId: "doc-ana-rios", AvatarUrl: null),
         new EhrPatient(
             Id: "pat-jorge-medina", FullName: "Jorge Medina", DocumentId: "CC 1.000.000.102",
             Gender: "Masculino", DateOfBirth: new DateOnly(1968, 11, 5), AgeYears: 57,
@@ -66,7 +68,7 @@ internal static class EhrDemoSeed
             BloodType: "A+",
             Allergies: Array.Empty<string>(),
             ChronicConditions: new[] { "Hipertensión arterial", "Diabetes tipo 2" },
-            PrimaryDoctorId: "doc-carlos-mejia", AvatarUrl: "/media/ehr/patients/jorge.webp"),
+            PrimaryDoctorId: "doc-carlos-mejia", AvatarUrl: null),
         new EhrPatient(
             Id: "pat-sara-gomez", FullName: "Sara Gómez", DocumentId: "TI 1.000.000.103",
             Gender: "Femenino", DateOfBirth: new DateOnly(2015, 7, 22), AgeYears: 10,
@@ -74,7 +76,7 @@ internal static class EhrDemoSeed
             BloodType: "B+",
             Allergies: new[] { "Maní", "Polvo" },
             ChronicConditions: new[] { "Asma" },
-            PrimaryDoctorId: "doc-laura-vega", AvatarUrl: "/media/ehr/patients/sara.webp"),
+            PrimaryDoctorId: "doc-laura-vega", AvatarUrl: null),
         new EhrPatient(
             Id: "pat-andres-pardo", FullName: "Andrés Pardo", DocumentId: "CC 1.000.000.104",
             Gender: "Masculino", DateOfBirth: new DateOnly(1985, 1, 30), AgeYears: 41,
@@ -82,7 +84,7 @@ internal static class EhrDemoSeed
             BloodType: "AB-",
             Allergies: Array.Empty<string>(),
             ChronicConditions: Array.Empty<string>(),
-            PrimaryDoctorId: "doc-diego-soto", AvatarUrl: "/media/ehr/patients/andres.webp"),
+            PrimaryDoctorId: "doc-diego-soto", AvatarUrl: null),
         new EhrPatient(
             Id: "pat-valentina-cruz", FullName: "Valentina Cruz", DocumentId: "CC 1.000.000.105",
             Gender: "Femenino", DateOfBirth: new DateOnly(1998, 9, 12), AgeYears: 27,
@@ -90,7 +92,7 @@ internal static class EhrDemoSeed
             BloodType: "O-",
             Allergies: new[] { "Ibuprofeno" },
             ChronicConditions: new[] { "Hipotiroidismo" },
-            PrimaryDoctorId: "doc-ana-rios", AvatarUrl: "/media/ehr/patients/valentina.webp"),
+            PrimaryDoctorId: "doc-ana-rios", AvatarUrl: null),
     };
 
     /// <summary>
