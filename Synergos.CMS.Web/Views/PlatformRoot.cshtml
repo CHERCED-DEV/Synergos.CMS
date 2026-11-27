@@ -26,6 +26,9 @@
             "Un solo motor, un solo schema — múltiples productos sobre el mismo core.");
 
     var culture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+    // La raíz no pasa por _SeoHead: sin esto no tenía descripción, og:title, imagen para compartir ni canonical (D-016-X5).
+    var canonicalRaiz = $"{Context.Request.Scheme}://{Context.Request.Host}/";
+    var imagenRaiz = Synergos.CMS.Web.Services.ImagenParaCompartir.DeLaPagina(Model);
 }
 <!DOCTYPE html>
 <html lang="@culture" data-theme="dark">
@@ -35,6 +38,17 @@
     <meta name="robots" content="index,follow" />
     <link rel="icon" type="image/svg+xml" href="~/img/synergoslabs-isotipo.svg" />
     <title>@Model.Name</title>
+    <meta name="description" content="@welcomeMessage" />
+    <link rel="canonical" href="@canonicalRaiz" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="@Model.Name" />
+    <meta property="og:description" content="@welcomeMessage" />
+    <meta property="og:url" content="@canonicalRaiz" />
+    @if (!string.IsNullOrWhiteSpace(imagenRaiz))
+    {
+        <meta property="og:image" content="@imagenRaiz" />
+        <meta name="twitter:card" content="summary_large_image" />
+    }
     <link rel="preload" href="https://fonts.gstatic.com/s/manrope/v23/xn7gYHE41ni1AdIRggexSg.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
