@@ -2477,6 +2477,29 @@ public sealed class DevContentFiller
     /// el alias kebab "ehr". Sale no-op con grace si el ElementType aún no está importado
     /// (el caller compone el resto del home), preservando lo existente (no-destructivo).
     /// </summary>
+    /// <summary>
+    /// El listado de un catálogo (<c>elementCompCatalogList</c>, D-003-V2): lo que haya publicado en la vertical, con su
+    /// botón por ítem. Sale no-op con grace si el ElementType aún no está importado.
+    /// </summary>
+    private void AddCatalogList(BlockGridJsonBuilder b, string vertical, string titulo, string subtitulo, string atributoDelSubtitulo,
+        string cta, string url, string queryString, string parametroDelItem)
+    {
+        var key = _contentTypeService.Get("elementCompCatalogList")?.Key;
+        if (key is null) { return; }
+        var section = BeginSection(b);
+        section.AddChild(SectionContentAreaKey, key.Value, c =>
+        {
+            c.Set("catalogVertical", vertical)
+             .Set("headingTitle", titulo)
+             .Set("headingSubtitle", subtitulo)
+             .Set("subtitleAttribute", atributoDelSubtitulo)
+             .Set("ctaLabel", cta)
+             .Set("ctaLink", $"[{{\"name\":\"{Esc(cta)}\",\"url\":\"{Esc(url)}\",\"target\":\"\",\"udi\":null,\"icon\":null,\"queryString\":\"{Esc(queryString)}\"}}]")
+             .Set("ctaItemParam", parametroDelItem);
+            c.ApplyDefaults(_defaults.DefaultsFor(key.Value));
+        });
+    }
+
     private void AddSynEhr(BlockGridJsonBuilder b, string heading, string subheading)
     {
         var key = _contentTypeService.Get("elementSynEhr")?.Key;
@@ -2691,13 +2714,10 @@ public sealed class DevContentFiller
             "<p>Un equipo comprometido con el cuidado y la privacidad. Conoce a los profesionales detrás de la práctica.</p>",
             "Healthcare Equipo Hero", "Equipo de Healthcare", "#0B3B3C", "#1FA2A6",
             ("Pedir una cita", "/healthcare/#/ehr/agendar"), ("Hablar con ventas", "/synergos/contacto"));
-        FeatureGridAuto(b, "El equipo", "Profesionales licenciados",
-            new (string title, string subtitle, string body)[]
-            {
-                ("Dra. Laura Méndez", "Medicina general", "Más de 10 años en atención primaria y prevención."),
-                ("Dr. Andrés Villa", "Cardiología", "Especialista en salud cardiovascular y controles de seguimiento."),
-                ("Dra. Sofía Cardona", "Pediatría", "Cuidado integral de niños y adolescentes."),
-            }, 3);
+        // D-003-V2: «El equipo» es el directorio de los professionalPage del catálogo de Salud, no tres médicos fijos con
+        // trayectorias sin respaldo. Sin profesionales, el bloque no se muestra (degradar por ausencia).
+        AddCatalogList(b, "salud", "El equipo", "Elige con quién atenderte y agenda en línea.", "especialidad",
+            "Agendar", "/healthcare/", "#/ehr/agendar", "profesional");
         AddMission(b, "Compromiso con tu privacidad", "",
             "<p>Tu información clínica está cifrada y solo accesible por el personal autorizado con tu consentimiento. Este sistema registra; el profesional decide.</p>");
         AddCta(b, "Agenda tu cita", "Reserva con el especialista que necesitas.", "Pedir una cita", "/healthcare/#/ehr/agendar");
