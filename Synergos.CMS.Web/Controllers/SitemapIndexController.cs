@@ -38,15 +38,18 @@ public sealed class SitemapIndexController : ControllerBase
     private const string CacheKeyPrefix = "syn:sitemap-index:";
 
     private readonly IUmbracoContextAccessor _umbracoContextAccessor;
+    private readonly IUmbracoContextFactory _umbracoContextFactory;
     private readonly IOptions<OutputCacheSettings> _cacheOptions;
     private readonly IMemoryCache _cache;
 
     public SitemapIndexController(
         IUmbracoContextAccessor umbracoContextAccessor,
+        IUmbracoContextFactory umbracoContextFactory,
         IOptions<OutputCacheSettings> cacheOptions,
         IMemoryCache cache)
     {
         _umbracoContextAccessor = umbracoContextAccessor;
+        _umbracoContextFactory = umbracoContextFactory;
         _cacheOptions = cacheOptions;
         _cache = cache;
     }
@@ -55,6 +58,9 @@ public sealed class SitemapIndexController : ControllerBase
     [AllowAnonymous]
     public IActionResult GetSitemapIndex()
     {
+        // Umbraco no crea su contexto para una ruta con extensión (.xml): sin esto el accesor no tenía contenido y
+        // la respuesta era un 404 (D-016-Q7). Si el contexto ya existe, se reutiliza.
+        using var contexto = _umbracoContextFactory.EnsureUmbracoContext();
         var hostBase = $"{Request.Scheme}://{Request.Host}";
         var cacheSettings = _cacheOptions.Value;
         var cacheKey = CacheKeyPrefix + hostBase;

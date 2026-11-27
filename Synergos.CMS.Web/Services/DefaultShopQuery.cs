@@ -58,18 +58,13 @@ public sealed class DefaultShopQuery : IShopQuery
         // Category filter
         if (!string.IsNullOrWhiteSpace(request.CategoryAliasOrName))
         {
-            var needle = request.CategoryAliasOrName.Trim();
-            products = products.Where(p =>
+            products = DeLaCategoria(products, p =>
             {
                 var category = p.Parent;
-                if (category is null || !string.Equals(category.ContentType.Alias, ProductCategoryPageAlias, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-                var categoryName = category.Value<string>("categoryName") ?? category.Name;
-                return string.Equals(category.Name, needle, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(categoryName, needle, StringComparison.OrdinalIgnoreCase);
-            });
+                return category is null || !string.Equals(category.ContentType.Alias, ProductCategoryPageAlias, StringComparison.Ordinal)
+                    ? null
+                    : (category.Name, category.Value<string>("categoryName") ?? category.Name);
+            }, request.CategoryAliasOrName);
         }
 
         // Un producto cuyo precio no se puede leer NO se lista: cero es un precio válido y no
@@ -105,6 +100,18 @@ public sealed class DefaultShopQuery : IShopQuery
     /// </summary>
     public static bool BuscarFueraDelSitio(bool elSitioTieneProductos, string? categoria) =>
         !elSitioTieneProductos && !string.IsNullOrWhiteSpace(categoria);
+
+    /// <summary>
+    /// Los productos cuya categoría (la página padre) se llama como <paramref name="categoria"/>, por su nombre de nodo
+    /// o por <c>categoryName</c>. Una categoría que no existe deja la lista vacía: no se inventa nada.
+    /// </summary>
+    public static IEnumerable<T> DeLaCategoria<T>(IEnumerable<T> productos, Func<T, (string? Nodo, string? Nombre)?> categoriaDe, string categoria)
+    {
+        var needle = categoria.Trim();
+        return productos.Where(p => categoriaDe(p) is { } c
+            && (string.Equals(c.Nodo, needle, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(c.Nombre, needle, StringComparison.OrdinalIgnoreCase)));
+    }
 
     public ProductSummary? GetProductBySku(string sku)
     {
