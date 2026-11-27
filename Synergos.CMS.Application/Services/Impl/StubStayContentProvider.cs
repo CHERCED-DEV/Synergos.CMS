@@ -187,10 +187,12 @@ public sealed class StubStayContentProvider : IStayContentProvider
         return Task.FromResult(match);
     }
 
-    // Galería determinista por estadía: cover local coherente con el tema
-    // (servido desde wwwroot/media/booking/; el adapter real las leería del CMS/media).
+    // Galería determinista por estadía: la portada y dos fotos más (D-016-C27, licencia Unsplash, sin marcas ni
+    // personas reconocibles), servidas desde wwwroot/media/booking/; el adapter real las leería del CMS/media.
     private static IReadOnlyList<string> GalleryFor(string stayId) => new[]
     {
         $"/media/booking/{stayId}.jpg",
+        $"/media/booking/{stayId}-2.jpg",
+        $"/media/booking/{stayId}-3.jpg",
     };
 }
