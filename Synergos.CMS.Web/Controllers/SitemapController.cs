@@ -139,13 +139,19 @@ public sealed class SitemapController : ControllerBase
         return stream.ToArray();
     }
 
+    /// <summary>
+    /// Sólo una página entra al sitemap: un nodo con plantilla (D-016-Q7b). Sin plantilla es configuración (alertas,
+    /// notas del pie) o un dato que pinta una app (equipos, profesionales, el inventario viejo), y su URL da 404.
+    /// </summary>
+    public static bool EsPagina(int? templateId) => templateId is > 0;
+
     private static void EmitNode(
         XmlWriter writer,
         IPublishedContent node,
         HashSet<string> excluded,
         string hostBase)
     {
-        if (excluded.Contains(node.ContentType.Alias))
+        if (excluded.Contains(node.ContentType.Alias) || !EsPagina(node.TemplateId))
         {
             return;
         }
