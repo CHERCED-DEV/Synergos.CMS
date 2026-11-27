@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Xml;
 using Microsoft.AspNetCore.Authorization;
@@ -6,6 +7,9 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
+using Umbraco.Cms.Core.Models.PublishedContent;
+using Umbraco.Cms.Core.Services;
+using Umbraco.Cms.Core.Web;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -36,15 +40,27 @@ public sealed class NewsSitemapController : ControllerBase
     private const string SitemapNs = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
     private readonly IBlogQuery _blogQuery;
+    private readonly IUmbracoContextFactory _umbracoContextFactory;
+    private readonly IVariationContextAccessor _variationContextAccessor;
+    private readonly ILocalizationService _localizationService;
+    private readonly TimeProvider _reloj;
     private readonly IOptions<OutputCacheSettings> _cacheOptions;
     private readonly IMemoryCache _cache;
 
     public NewsSitemapController(
         IBlogQuery blogQuery,
+        IUmbracoContextFactory umbracoContextFactory,
+        IVariationContextAccessor variationContextAccessor,
+        ILocalizationService localizationService,
+        TimeProvider reloj,
         IOptions<OutputCacheSettings> cacheOptions,
         IMemoryCache cache)
     {
         _blogQuery = blogQuery;
+        _umbracoContextFactory = umbracoContextFactory;
+        _variationContextAccessor = variationContextAccessor;
+        _localizationService = localizationService;
+        _reloj = reloj;
         _cacheOptions = cacheOptions;
         _cache = cache;
     }
@@ -53,6 +69,12 @@ public sealed class NewsSitemapController : ControllerBase
     [AllowAnonymous]
     public IActionResult GetNewsSitemap()
     {
+        // Umbraco no crea su contexto para una ruta con extensión (.xml): sin esto, IBlogQuery no veía contenido y el
+        // news-sitemap salía siempre vacío, aunque hubiera artículos recientes (012-blogs-social; el mismo arreglo que
+        // D-016-Q7 en /sitemap.xml). Si el contexto ya existe, se reutiliza.
+        using var contexto = _umbracoContextFactory.EnsureUmbracoContext();
+        // Tampoco hay cultura activa: sin ella, el contenido que varía por cultura no sale de GetAtRoot y su URL es «#».
+        _variationContextAccessor.VariationContext ??= new VariationContext(_localizationService.GetDefaultLanguageIsoCode());
         var hostBase = $"{Request.Scheme}://{Request.Host}";
         var cacheSettings = _cacheOptions.Value;
         var cacheKey = CacheKeyPrefix + hostBase;
@@ -85,7 +107,7 @@ public sealed class NewsSitemapController : ControllerBase
     private byte[] Build(string hostBase, int windowHours)
     {
         var window = TimeSpan.FromHours(Math.Max(1, windowHours));
-        var cutoff = DateTime.UtcNow - window;
+        var cutoff = _reloj.GetUtcNow().UtcDateTime - window;
         var posts = _blogQuery.GetPosts(new BlogQueryRequest(
             MaxItems: 1000,
             Skip: 0,
@@ -114,6 +136,8 @@ public sealed class NewsSitemapController : ControllerBase
             {
                 if (!post.PublishDate.HasValue) continue;
                 if (post.PublishDate.Value < cutoff) continue;
+                // Un artículo sin dirección (publicado en otra cultura) no se anuncia con un <loc> roto.
+                if (string.IsNullOrWhiteSpace(post.Url) || post.Url == "#") continue;
 
                 writer.WriteStartElement("url");
                 writer.WriteElementString("loc", $"{hostBase}{post.Url}");
@@ -125,9 +149,11 @@ public sealed class NewsSitemapController : ControllerBase
                 writer.WriteElementString("news", "language", NewsNs, "es");
                 writer.WriteEndElement();
 
+                // La fecha sola: el editor escribe sólo el día, y Google News acepta YYYY-MM-DD o la hora CON zona;
+                // la hora sin zona que salía antes no es ninguna de las dos (012-blogs-social).
                 writer.WriteElementString(
                     "news", "publication_date", NewsNs,
-                    post.PublishDate.Value.ToString("yyyy-MM-ddTHH:mm:ssK"));
+                    post.PublishDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 writer.WriteElementString("news", "title", NewsNs, post.Title);
 
                 writer.WriteEndElement();
