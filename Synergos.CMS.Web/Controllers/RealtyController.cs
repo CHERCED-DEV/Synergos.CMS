@@ -4,6 +4,7 @@ using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Application.Services;
 using Synergos.CMS.Application.Services.Impl;
 using Synergos.CMS.Interfaces;
+using Synergos.CMS.Web.Services;
 using Synergos.CMS.Web.Services.Catalog;
 
 namespace Synergos.CMS.Web.Controllers;
@@ -857,8 +858,9 @@ public sealed class RealtyController : ControllerBase
         Subtitle: PropertyContentRules.BuildSubtitle(l),
         // Chips string[] que la UI lee como `listing.badges` (Destacado/Estrato/estado).
         Badges: PropertyContentRules.BuildBadges(l),
-        ImageUrl: l.ImageUrl,
-        Cover: l.ImageUrl,
+        // D-016-X2c: la tarjeta de la lista y del mapa pide la foto a su ancho, no el original.
+        ImageUrl: ImagenesDeInmuebles.Tarjeta(l.ImageUrl),
+        Cover: ImagenesDeInmuebles.Tarjeta(l.ImageUrl),
         Featured: l.Featured);
 
     /// <summary>
