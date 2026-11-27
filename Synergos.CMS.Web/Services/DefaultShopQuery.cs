@@ -45,9 +45,12 @@ public sealed class DefaultShopQuery : IShopQuery
         // platformRoot (umbrella) → DescendantsOrSelfOfType barrería TODOS los
         // siteRoots (Tienda + Propiedades + Booking…), mezclando productos con
         // inmuebles y servicios. Scopeamos al siteRoot ACTUAL del request.
-        var siteRoots = umbracoContext.PublishedRequest?.PublishedContent?.AncestorOrSelf("siteRoot") is { } currentRoot
-            ? new[] { currentRoot }
-            : umbracoContext.Content?.GetAtRoot().ToArray() ?? Array.Empty<IPublishedContent>();
+        var everywhere = umbracoContext.Content?.GetAtRoot().ToArray() ?? Array.Empty<IPublishedContent>();
+        var currentRoot = umbracoContext.PublishedRequest?.PublishedContent?.AncestorOrSelf("siteRoot");
+        var siteRoots = currentRoot is null
+            || BuscarFueraDelSitio(currentRoot.DescendantsOfType(ProductPageAlias).Any(), request.CategoryAliasOrName)
+            ? everywhere
+            : new[] { currentRoot };
 
         IEnumerable<IPublishedContent> products = siteRoots
             .SelectMany(root => root.DescendantsOrSelfOfType(ProductPageAlias));
@@ -94,6 +97,14 @@ public sealed class DefaultShopQuery : IShopQuery
             .Select(x => Project(x.Product, x.Price))
             .ToArray();
     }
+
+    /// <summary>
+    /// Un sitio sin productos propios (el hub, que muestra la Tienda o Propiedades en su ficha de app) que nombra una
+    /// categoría la busca en el sitio que la tiene (D-016-Q1): la categoría dice de qué catálogo se habla. Sin categoría
+    /// no sale del sitio, para no mezclar productos con inmuebles y servicios.
+    /// </summary>
+    public static bool BuscarFueraDelSitio(bool elSitioTieneProductos, string? categoria) =>
+        !elSitioTieneProductos && !string.IsNullOrWhiteSpace(categoria);
 
     public ProductSummary? GetProductBySku(string sku)
     {
