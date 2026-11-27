@@ -655,7 +655,7 @@ public sealed record EquipmentCardDto(
     /// <param name="e">El equipo.</param>
     /// <returns>La tarjeta.</returns>
     public static EquipmentCardDto From(RentalEquipment e)
-        => new(e.Id, e.Name, e.Category, e.Summary, e.CoverUrl, e.DailyRate, e.Deposit, e.Units, e.Currency);
+        => new(e.Id, e.Name, e.Category, e.Summary, ImagenesDeLasApps.Tarjeta(e.CoverUrl), e.DailyRate, e.Deposit, e.Units, e.Currency);
 }
 
 /// <summary>La ficha completa de un equipo.</summary>

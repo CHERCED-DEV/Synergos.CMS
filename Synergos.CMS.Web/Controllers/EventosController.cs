@@ -191,7 +191,10 @@ public sealed class EventosController : ControllerBase
         foreach (var summary in events)
         {
             var detail = await _catalog.GetEventAsync(summary.Id, cancellationToken);
-            dtos.Add(ToSummaryDto(summary, detail?.SoldPercent ?? 0));
+            // D-016-Y2: la tarjeta pide la foto a su ancho; la ficha (más abajo) conserva la grande.
+            var tarjeta = ToSummaryDto(summary, detail?.SoldPercent ?? 0);
+            var foto = ImagenesDeLasApps.Tarjeta(tarjeta.ImageUrl) ?? tarjeta.ImageUrl;
+            dtos.Add(tarjeta with { ImageUrl = foto, Cover = foto });
         }
 
         return Ok(new EventsResponse(SortSummaries(dtos, sort)));

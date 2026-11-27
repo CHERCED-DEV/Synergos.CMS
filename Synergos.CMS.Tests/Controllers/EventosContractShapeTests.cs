@@ -180,6 +180,21 @@ public sealed class EventosContractShapeTests
         Assert.True(evento.TryGetProperty("soldPercent", out _));
     }
 
+    [Fact] // D-016-Y2: la tarjeta pide la foto a su ancho; la ficha conserva la grande
+    public async Task Events_LaTarjetaPideLaFotoASuAncho_YLaFichaLaGrande()
+    {
+        _catalog.SearchAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { Summary() });
+        _catalog.GetEventAsync("EVT-1", Arg.Any<CancellationToken>()).Returns(Detail());
+
+        var tarjeta = Json(await BuildSut().Events(null, null, null, null, default)).GetProperty("events")[0];
+        var ficha = Json(await BuildSut().Event("EVT-1", default)).GetProperty("event");
+
+        Assert.Equal("/media/eventos/cumbre.jpg?width=640&format=webp&quality=80", tarjeta.GetProperty("cover").GetString());
+        Assert.Equal("/media/eventos/cumbre.jpg?width=640&format=webp&quality=80", tarjeta.GetProperty("imageUrl").GetString());
+        Assert.Equal("/media/eventos/cumbre.jpg", ficha.GetProperty("cover").GetString());
+    }
+
     // ── "Mis entradas" (SH-10) ────────────────────────────────────────────────────
 
     [Fact] // happy: la tarjeta de la billetera lee CINCO claves que el borde no emitía

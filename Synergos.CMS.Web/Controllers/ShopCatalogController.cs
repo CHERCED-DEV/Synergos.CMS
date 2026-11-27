@@ -259,7 +259,8 @@ public sealed class ShopCatalogController : ControllerBase
                 Take: pageSize),
             cancellationToken);
 
-        var products = result.Products.Select(ToProductDto).ToList();
+        // D-016-Y2: la tarjeta pide la foto a su ancho; la ficha del producto conserva la grande.
+        var products = result.Products.Select(ToProductDto).Select(ConFotoDeTarjeta).ToList();
         // La UI (shop-api.client.ts:411 normalizeFacets) lee entry['key']; el backend
         // reshapea a esa clave (UI = fuente de verdad). Antes emitía 'field' → las
         // facetas se descartaban silenciosamente y el PLP quedaba sin filtros.
@@ -1069,6 +1070,12 @@ public sealed class ShopCatalogController : ControllerBase
 
     // ── Helpers ────────────────────────────────────────────────────
 
+    private static ProductDto ConFotoDeTarjeta(ProductDto p)
+    {
+        var foto = ImagenesDeLasApps.Tarjeta(p.ImageUrl);
+        return p with { ImageUrl = foto, Images = foto is null ? System.Array.Empty<string>() : new[] { foto } };
+    }
+
     private ProductDto ToProductDto(CatalogProductSummary p) => new(
         Id: p.Id,
         Name: p.Name,
@@ -1135,7 +1142,7 @@ public sealed class ShopCatalogController : ControllerBase
             Amount: product?.Price ?? 0m,
             AmountFormatted: product is null ? null : _priceFormatter.Format(product.Price, product.Currency),
             Currency: product?.Currency,
-            Image: product?.ImageUrl);
+            Image: ImagenesDeLasApps.Tarjeta(product?.ImageUrl));
     }
 
     private ReturnDto ToReturnDto(ShopReturnCase c) => new(

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Synergos.CMS.Application.Configuration;
 using Synergos.CMS.Interfaces;
 using Synergos.CMS.Web.Services.Academy;
+using Synergos.CMS.Web.Services;
 
 namespace Synergos.CMS.Web.Controllers;
 
@@ -154,7 +155,8 @@ public sealed class AcademyController : ControllerBase
         var matched = ApplyPriceBracket(result.Courses, price);
         matched = ApplySort(matched, sort);
 
-        var courses = matched.Select(ToCourseDto).ToList();
+        // D-016-Y2: la tarjeta pide la foto a su ancho; la ficha del curso conserva la grande.
+        var courses = matched.Select(ToCourseDto).Select(ConFotoDeTarjeta).ToList();
         // El total es el de lo que se devuelve, no el de antes de filtrar: la UI lo pinta como
         // «N cursos» junto a la lista, y decir 40 sobre doce tarjetas es peor que no decirlo.
         return Ok(new CoursesResponse(Courses: courses, Total: courses.Count));
@@ -391,7 +393,7 @@ public sealed class AcademyController : ControllerBase
 
             rows.Add(new EnrolledCourseDto(
                 EnrollmentId: e.EnrollmentId,
-                Course: ToCourseDto(detail.Course),
+                Course: ConFotoDeTarjeta(ToCourseDto(detail.Course)),
                 Percent: e.Percent,
                 LessonCount: detail.Course.LessonCount,
                 CompletedCount: e.CompletedCount,
@@ -778,6 +780,12 @@ public sealed class AcademyController : ControllerBase
         => !string.IsNullOrWhiteSpace(a) ? a : b;
 
     // ── Helpers ────────────────────────────────────────────────────────
+
+    private static CourseDto ConFotoDeTarjeta(CourseDto c)
+    {
+        var foto = ImagenesDeLasApps.Tarjeta(c.CoverImageUrl);
+        return c with { CoverImageUrl = foto, Cover = foto };
+    }
 
     private CourseDto ToCourseDto(CourseSummary c) => new(
         Id: c.Id,

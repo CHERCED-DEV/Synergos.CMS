@@ -27,7 +27,7 @@ public sealed class CursosDelCatalogo : IFuenteDeListado
             .Select(c => new FilaDelListado(
                 Id: c.Id,
                 Title: c.Title,
-                Image: c.CoverImageUrl,
+                Image: ImagenesDeLasApps.Tarjeta(c.CoverImageUrl),
                 ImageAlt: c.Title,
                 Badge: c.Category,
                 Specs:
@@ -72,7 +72,7 @@ public sealed class EventosDelCatalogo : IFuenteDeListado
             .Select(e => new FilaDelListado(
                 Id: e.Id,
                 Title: e.Title,
-                Image: string.IsNullOrWhiteSpace(e.ImageUrl) ? null : e.ImageUrl,
+                Image: string.IsNullOrWhiteSpace(e.ImageUrl) ? null : ImagenesDeLasApps.Tarjeta(e.ImageUrl),
                 ImageAlt: e.Title,
                 Badge: e.Category,
                 Specs:
@@ -104,7 +104,7 @@ public sealed class InmueblesDelCatalogo : IFuenteDeListado
             .Select(l => new FilaDelListado(
                 Id: l.Id,
                 Title: l.Title,
-                Image: string.IsNullOrWhiteSpace(l.ImageUrl) ? null : l.ImageUrl,
+                Image: string.IsNullOrWhiteSpace(l.ImageUrl) ? null : ImagenesDeLasApps.Tarjeta(l.ImageUrl),
                 ImageAlt: l.Title,
                 Badge: FormatoDelListado.Etiqueta(l.Type, peticion.Cultura),
                 Specs:
