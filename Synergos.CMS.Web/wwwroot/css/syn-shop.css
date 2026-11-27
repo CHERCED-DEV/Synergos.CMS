@@ -99,6 +99,9 @@
      radio por overflow:hidden del contenedor); encuadre 4/5 consistente. Si el
      producto no trae imagen el <img> no se emite → NO se reserva hueco vacío. */
   width: calc(100% + 2 * var(--syn-space-md));
+  /* El sangrado pasa del 100 %: sin esto, el img { max-width: 100% } de syn-base lo recorta y deja 32 px vacíos a
+     la derecha de la foto (D-016-Q8). */
+  max-width: none;
   margin: calc(-1 * var(--syn-space-md)) calc(-1 * var(--syn-space-md)) var(--syn-space-2);
   aspect-ratio: 4 / 5;
   object-fit: cover;
@@ -264,6 +267,9 @@
   /* Sangra fuera del padding del link a los bordes de la card (recortada al radio
      por overflow:hidden); encuadre 4/5. Sin imagen → sin <img> → sin hueco vacío. */
   width: calc(100% + 2 * var(--syn-space-md));
+  /* El sangrado pasa del 100 %: sin esto, el img { max-width: 100% } de syn-base lo recorta y deja 32 px vacíos a
+     la derecha de la foto (D-016-Q8). */
+  max-width: none;
   margin: calc(-1 * var(--syn-space-md)) calc(-1 * var(--syn-space-md)) var(--syn-space-2);
   aspect-ratio: 4 / 5;
   object-fit: cover;
