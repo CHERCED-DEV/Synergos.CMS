@@ -40,6 +40,7 @@ public sealed class VitrinaDeAppsTests
             Sitio("Blogs", "blogs"), Sitio("Tienda", "ecommerce"), Sitio("Healthcare", "healthcare"),
             Sitio("Educacion", "educacion"), Sitio("Booking", "meridian"), Sitio("Eventos", "eventos"),
             Sitio("Propiedades", "propiedades"), Sitio("Hoteles", "hoteles"), Sitio("Gobierno", "gobierno"), Sitio("Alquiler", "alquiler"),
+            Sitio("Viajes", "viajes"),
         };
         var urls = new DefaultShortStringHelper(new DefaultShortStringHelperConfig().WithDefault(new RequestHandlerSettings()));
 
