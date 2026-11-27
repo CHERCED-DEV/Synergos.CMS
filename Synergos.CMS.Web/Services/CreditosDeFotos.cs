@@ -41,6 +41,16 @@ public static partial class CreditosDeFotos
         return (autor, string.IsNullOrWhiteSpace(titulo) ? null : titulo, origen);
     }
 
+    /// <summary>
+    /// Lo que se le hizo a la obra (CC BY pide decirlo): las partes del crédito entre el título y el origen, como en
+    /// <c>Foto: Autor · «Título» · recortada · URL</c>.
+    /// </summary>
+    public static IReadOnlyList<string> Cambios(string? credito)
+    {
+        var partes = (credito ?? string.Empty).Split('·', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return partes.Skip(1).Where(p => !p.StartsWith("http", StringComparison.OrdinalIgnoreCase)).Skip(1).ToList();
+    }
+
     /// <summary>Lo justo para que un texto no rompa el HTML; las tildes se quedan como se leen en el editor.</summary>
     private static string Escapar(string texto) =>
         texto.Replace("&", "&amp;", StringComparison.Ordinal)
@@ -58,7 +68,7 @@ public static partial class CreditosDeFotos
         var lista = fotos.Where(f => PideAtribucion(f.Licencia)).DistinctBy(f => (f.Credito.Trim(), f.Licencia.Trim())).ToList();
         if (lista.Count == 0)
         {
-            return "<p>Hoy ninguna foto del sitio pide crédito: todas son de dominio público o CC0.</p>";
+            return "<p>Hoy ninguna foto del sitio pide crédito.</p>";
         }
         var html = new StringBuilder("<ul>");
         foreach (var (alt, licencia, credito) in lista)
@@ -67,7 +77,9 @@ public static partial class CreditosDeFotos
             var obra = Escapar(titulo ?? "Foto original");
             html.Append("<li><strong>").Append(Escapar(alt)).Append("</strong>. ");
             html.Append(origen is null ? $"«{obra}»" : $"<a href=\"{Escapar(origen)}\" rel=\"nofollow noopener\">«{obra}»</a>");
-            html.Append(", de ").Append(Escapar(autor)).Append(". Licencia ");
+            html.Append(", de ").Append(Escapar(autor));
+            foreach (var cambio in Cambios(credito)) { html.Append(", ").Append(Escapar(cambio)); }
+            html.Append(". Licencia ");
             html.Append($"<a href=\"{UrlDeLicencia(licencia)}\" rel=\"license noopener\">{Escapar(licencia.Trim())}</a>");
             html.Append(".</li>");
         }
