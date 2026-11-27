@@ -1337,6 +1337,12 @@ public sealed class DevContentFiller
             "Equipos por días con la cotización por tramos y la garantía retenida, no cobrada.",
             "grid", "Construcción y eventos", "Contratista",
             new[] { "Catálogo", "Cotización", "Garantía", "Devolución" }),
+        // D-016-Q3: Viajes vive en /viajes/ y el lanzador del hub no la tenía.
+        new("viajes", "Viajes",
+            "Estadías, vuelos y autos en un solo carrito, con tarifas que dicen si son reembolsables — un portal de viajes completo sobre el mismo motor.",
+            "Estadías, vuelos y autos en un solo carrito, con «Mis viajes» para ver y cancelar cada reserva.",
+            "grid", "Turismo", "Viajero",
+            new[] { "Estadías", "Vuelos", "Autos", "Carrito" }),
     };
 
     /// <summary>
@@ -4392,6 +4398,7 @@ public sealed class DevContentFiller
             ["hoteles"] = (f, _) => f.BuildShowcaseHoteles(),
             ["gobierno"] = (f, appUrl) => f.BuildShowcaseGobierno(appUrl),
             ["alquiler"] = (f, appUrl) => f.BuildShowcaseAlquiler(appUrl),
+            ["viajes"] = (f, appUrl) => f.BuildShowcaseViajes(appUrl),
         };
 
     /// <summary>Los slugs que la vitrina ENLAZA: uno por vertical.</summary>
@@ -4781,6 +4788,51 @@ public sealed class DevContentFiller
         {
             AddCta(b, "La app de Gobierno está en camino",
                 "El motor ya está listo para trámites; mientras la app llega, explora las demás apps del ecosistema.",
+                "Ver todas las apps", "/synergos/apps");
+        }
+        return b.Build();
+    }
+
+    private const string ViajesFrom = "#0B3B5C", ViajesTo = "#1F7A8C";   // mar y verde azulado (on-brand, NO define tema)
+
+    // Origen del copy: la portada de /viajes/ (016, I1 y C19) y travel-shell: estadías, vuelos y autos en un solo
+    // carrito, tarifas que dicen si son reembolsables y «Mis viajes» con la referencia y la cancelación (D-016-Q3).
+    private string BuildShowcaseViajes(string appUrl)
+    {
+        var hasApp = !string.IsNullOrEmpty(appUrl);
+        var b = new BlockGridJsonBuilder();
+        AddHero(b, "Viajes — todo el viaje en un carrito",
+            "Estadías, vuelos y autos sobre el mismo motor",
+            "<p>La app Viajes demuestra un carrito que junta reservas de distinto tipo: buscas estadías, vuelos y autos, ves si cada tarifa es reembolsable y confirmas todo en un solo paso. Para agencias y portales de turismo.</p>",
+            "Apps Viajes Hero", "Preview de la app Viajes", ViajesFrom, ViajesTo,
+            hasApp
+                ? new[] { ("Abrir la app", appUrl), ("Ver todas las apps", "/synergos/apps") }
+                : new[] { ("Ver todas las apps", "/synergos/apps"), ("Hablar con ventas", "/synergos/contacto") });
+
+        FeatureGridAuto(b, "Qué demuestra del motor", "Varias reservas, un solo carrito", new (string title, string subtitle, string body)[]
+        {
+            ("Un solo carrito", "Estadía, vuelo y auto", "Lo que agregas queda en el mismo carrito y se confirma en un solo paso."),
+            ("Tarifas claras", "Reembolsable o no", "Cada tarifa dice qué incluye y si es reembolsable antes de que la elijas."),
+            ("Mis viajes", "Referencia y cancelación", "Cada reserva queda con su referencia, y desde ahí se cancela."),
+        }, 3);
+
+        FeatureGridAuto(b, "Así se arma un viaje", "Del destino a la confirmación", new (string title, string subtitle, string body)[]
+        {
+            ("1 · Busca", "Destino y fechas", "Eliges a dónde vas, cuándo y cuántos viajan."),
+            ("2 · Arma tu viaje", "Estadía, vuelo y auto", "Comparas las opciones y agregas al carrito lo que te sirve."),
+            ("3 · Confirma", "Datos del viajero", "Completas los datos y recibes la referencia de tu reserva."),
+        }, 3);
+
+        if (hasApp)
+        {
+            AddCta(b, "Recorre la app completa",
+                "Estadías, vuelos, autos y «Mis viajes» en la app real.",
+                "Abrir la app", appUrl);
+        }
+        else
+        {
+            AddCta(b, "La app de Viajes está en camino",
+                "El motor ya junta reservas en un carrito; mientras la app llega, explora las demás apps del ecosistema.",
                 "Ver todas las apps", "/synergos/apps");
         }
         return b.Build();
