@@ -87,7 +87,7 @@ public static class SynHostFallbackBuilder
 
         if (imageUrl is not null)
         {
-            sb.Append("<img class=\"syn-ssr-hero__media\" src=\"").Append(Esc(imageUrl))
+            sb.Append("<img class=\"syn-ssr-hero__media\" src=\"").Append(Esc(ImagenServida.Url(imageUrl, 1600) ?? imageUrl))
               .Append("\" alt=\"").Append(Esc(Clean(imageAlt) ?? title ?? string.Empty))
               .Append("\" />");
         }
@@ -444,7 +444,7 @@ public static class SynHostFallbackBuilder
         if (imageUrl is not null)
         {
             sb.Append("<figure class=\"syn-ssr-media-text__figure\">")
-              .Append("<img class=\"syn-ssr-media-text__image\" src=\"").Append(Esc(imageUrl))
+              .Append("<img class=\"syn-ssr-media-text__image\" src=\"").Append(Esc(ImagenServida.Url(imageUrl, 1200) ?? imageUrl))
               .Append("\" alt=\"").Append(Esc(Clean(imageAlt) ?? string.Empty)).Append("\" />")
               .Append("</figure>");
         }

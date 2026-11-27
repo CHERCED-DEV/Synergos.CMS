@@ -18,7 +18,7 @@
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
 <figure class="@classes">
-    <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+    <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1200)" alt="@alt" loading="lazy" />
     @if (!string.IsNullOrWhiteSpace(caption))
     {
         <figcaption class="syn-image__caption">@caption</figcaption>

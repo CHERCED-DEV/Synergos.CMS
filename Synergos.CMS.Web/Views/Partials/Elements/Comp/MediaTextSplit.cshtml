@@ -33,7 +33,7 @@
     @if (mediaRef != null)
     {
         <figure class="syn-media-text-split__media">
-            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="lazy" />
+            <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1200)" alt="@mediaAlt" loading="lazy" />
             @if (!string.IsNullOrWhiteSpace(mediaCaption))
             {
                 <figcaption class="syn-media-text-split__caption">@mediaCaption</figcaption>
