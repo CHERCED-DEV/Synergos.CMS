@@ -48,7 +48,7 @@
                     <a class="syn-article-list__link" href="@post.Url">
                         @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
                         {
-                            <img class="syn-article-list__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                            <img class="syn-article-list__image" src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.Portada(post.HeroImageUrl)" alt="" loading="lazy" />
                         }
                         <div class="syn-article-list__body">
                             <h3 class="syn-article-list__item-title">@post.Title</h3>

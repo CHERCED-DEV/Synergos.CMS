@@ -73,8 +73,10 @@ public sealed class LecturasDeBlogsContractTests
         Assert.Equal(new string?[] { "it-ana", "it-articulo", "it-semilla" }, elementos.EnumerateArray().Select(e => e.GetProperty("id").GetString()));
         var articulo = elementos[1];
         Assert.Equal("Arquitectura por capas", articulo.GetProperty("titulo").GetString());
-        Assert.Equal("/media/capas.jpg", articulo.GetProperty("imagen").GetString());
+        // Las fotos al ancho en que se pintan, como en /api/blogs y el respaldo SSR (012-blogs-social).
+        Assert.Equal("/media/capas.jpg?width=800&format=webp&quality=80", articulo.GetProperty("imagen").GetString());
         var atributos = articulo.GetProperty("atributos");
+        Assert.Equal("/media/camila.jpg?width=192&format=webp&quality=80", atributos.GetProperty("autorImagen").GetString());
         TieneLasClaves(atributos, "tipo", "cuerpo", "autor", "autorId", "alias", "autorImagen", "fecha", "categoria",
             "etiquetas", "pagina", "imagenAlt", "republicaciones", "comentarios", "reacciones");
         Assert.Equal("Ingeniería", atributos.GetProperty("categoria").GetString());

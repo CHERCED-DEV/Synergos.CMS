@@ -282,6 +282,36 @@ public sealed class BlogsUiContractTests
         Assert.Equal(2, perfil.GetProperty("posts").GetArrayLength());
     }
 
+    /// <summary>
+    /// Las fotos de Blogs al ancho en que se pintan (012-blogs-social): la tarjeta de un artículo del CMS trae su portada y
+    /// el avatar de quien firma achicados y en WebP. El item del stream guarda la original, porque su URL entra en la huella
+    /// de <see cref="CatalogContentStream"/>, que sólo sabe crear: cambiarla en el origen sembraría el artículo otra vez.
+    /// </summary>
+    [Fact]
+    public async Task La_portada_y_el_avatar_salen_al_ancho_y_el_stream_guarda_la_original()
+    {
+        var graph = new StubSocialGraphService();
+        var reactions = new StubReactionService();
+        var articulo = ArticuloDelEquipo("uno") with
+        {
+            HeroImageUrl = "/media/abc/portada.png",
+            Author = new AuthoredPostAuthor("autor-equipo-synergoslabs", "equipo-synergoslabs", "Equipo SynergosLabs", "/media/def/avatar.png", "Redacción"),
+        };
+        using var stream = new CatalogContentStream(new ArticulosDelCms(articulo), new InMemoryJsonEntityStore(), new StubContentStream(graph, reactions));
+        var c = new BlogsController(
+            stream, graph, reactions, new StubSocialProfileProjection(), new SinComentarios(), new StubMessagingService(),
+            new StubUserCollection(), new StubNotificationFeed(graph, reactions), Substitute.For<IMemberAccessGate>(), IdentidadDePrueba.Con());
+
+        var tarjeta = Wire(await c.Feed("foryou", null, null, CancellationToken.None)).GetProperty("posts").EnumerateArray()
+            .Single(p => FirstString(p, "body") == "El resumen de uno");
+
+        Assert.Equal("/media/abc/portada.png?width=800&format=webp&quality=80", FirstString(tarjeta, "mediaUrl"));
+        Assert.Equal("/media/abc/portada.png?width=800&format=webp&quality=80", FirstString(tarjeta.GetProperty("media")[0], "url"));
+        Assert.Equal("/media/def/avatar.png?width=192&format=webp&quality=80", FirstString(tarjeta.GetProperty("author"), "avatarUrl"));
+        var item = (await stream.GetFeedAsync(new FeedQuery(Scope: FeedScope.ForYou))).Items.Single(i => i.Body == "El resumen de uno");
+        Assert.Equal("/media/abc/portada.png", item.MediaUrl);
+    }
+
     private sealed class ArticulosDelCms(params AuthoredPost[] posts) : ICatalogSource<AuthoredPost>
     {
         public Task<IReadOnlyList<AuthoredPost>> GetAllAsync(string? scope = null, CancellationToken cancellationToken = default)
@@ -407,7 +437,8 @@ public sealed class BlogsUiContractTests
         var post = Wire(await (await BuildAsync()).Article(cuerpo, CancellationToken.None)).GetProperty("post");
 
         var media = Assert.Single(post.GetProperty("media").EnumerateArray());
-        Assert.Equal("/media/portada.png", FirstString(media, "url"));
+        // Al ancho de la tarjeta (012-blogs-social): la portada sale achicada y en WebP, no el original.
+        Assert.Equal("/media/portada.png?width=800&format=webp&quality=80", FirstString(media, "url"));
         Assert.Equal("Terminal con los logs de una compra", FirstString(media, "alt"));
         Assert.Equal("postPage", FirstString(post, "objectKind"));
     }
