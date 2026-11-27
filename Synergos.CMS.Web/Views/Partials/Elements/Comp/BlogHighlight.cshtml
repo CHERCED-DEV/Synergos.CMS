@@ -44,7 +44,7 @@
                         @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
                         {
                             <img class="syn-blog-highlight__image"
-                                 src="@post.HeroImageUrl"
+                                 src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.Portada(post.HeroImageUrl)"
                                  alt=""
                                  loading="@(isFirst ? "eager" : "lazy")" />
                         }

@@ -59,7 +59,7 @@
                     <a class="syn-post-category__link" href="@post.Url">
                         @if (!string.IsNullOrWhiteSpace(post.HeroImageUrl))
                         {
-                            <img class="syn-post-category__image" src="@post.HeroImageUrl" alt="" loading="lazy" />
+                            <img class="syn-post-category__image" src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.Portada(post.HeroImageUrl)" alt="" loading="lazy" />
                         }
                         <h2 class="syn-post-category__item-title">@post.Title</h2>
                         @if (!string.IsNullOrWhiteSpace(post.Excerpt))

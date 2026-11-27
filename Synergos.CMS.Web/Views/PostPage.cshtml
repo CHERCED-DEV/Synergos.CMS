@@ -78,7 +78,7 @@
                     <span class="syn-author__avatar">
                         @if (author.AuthorAvatar is not null)
                         {
-                            <img src="@author.AuthorAvatar.Url()" alt="@authorName" loading="lazy" />
+                            <img src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.Avatar(author.AuthorAvatar.Url())" alt="@authorName" loading="lazy" />
                         }
                     </span>
                     <span class="syn-author__info">
@@ -94,7 +94,7 @@
         @if (heroImage is not null)
         {
             <figure class="syn-post__hero">
-                <img src="@heroImage.Url()" alt="@title" loading="eager" />
+                <img src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.FotoDelArticulo(heroImage.Url())" alt="@title" loading="eager" />
             </figure>
         }
         @if (sections is not null && sections.Any())
@@ -145,7 +145,7 @@
                     <a class="syn-post__related-link" href="@rel.Url">
                         @if (!string.IsNullOrWhiteSpace(rel.HeroImageUrl))
                         {
-                            <img class="syn-post__related-image" src="@rel.HeroImageUrl" alt="" loading="lazy" />
+                            <img class="syn-post__related-image" src="@Synergos.CMS.Web.Services.ImagenesDeBlogs.Portada(rel.HeroImageUrl)" alt="" loading="lazy" />
                         }
                         <h3 class="syn-post__related-item-title">@rel.Title</h3>
                     </a>

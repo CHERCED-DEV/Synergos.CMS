@@ -51,7 +51,8 @@ public sealed class RespaldoDeBlogsTests
         Assert.Contains($"{SynHostFallbackBuilder.MarkerAttribute}=\"true\"", html);
         Assert.Contains("<h1 class=\"syn-ssr-blogs__title\">Conecta, publica y crece tu audiencia</h1>", html);
         Assert.Contains("<a class=\"syn-ssr-blogs__link\" href=\"/blogs/un-motor-mil-productos/\">Un motor, mil productos</a>", html);
-        Assert.Contains("src=\"/media/a/un-motor.png\" alt=\"Un cubo de piezas\"", html);
+        // Al ancho de la tarjeta, con la misma URL que la API de la app (012-blogs-social).
+        Assert.Contains("src=\"/media/a/un-motor.png?width=800&amp;format=webp&amp;quality=80\" alt=\"Un cubo de piezas\"", html);
         Assert.Contains("#producto #plataforma", html);
         Assert.Contains("datetime=\"2026-06-22T15:00:00Z\">22 de junio</time>", html);
         Assert.Contains(">Ana</span> <span class=\"syn-ssr-blogs__handle\">@ana-0123</span>", html);

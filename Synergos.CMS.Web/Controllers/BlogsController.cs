@@ -544,7 +544,7 @@ public sealed class BlogsController : ControllerBase
             Verb: MapVerb(n.Type),
             Actor: CaraPublica.EsCorreo(n.Actor.Id)
                 ? DeMiembro(n.Actor.Id)
-                : new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, n.Actor.AvatarUrl, n.Actor.Verified,
+                : new AuthorDto(n.Actor.Id, n.Actor.Handle, n.Actor.DisplayName, ImagenesDeBlogs.Avatar(n.Actor.AvatarUrl), n.Actor.Verified,
                     ActorKey: n.Actor.Id),
             ObjectId: n.ObjectId,
             PostId: n.ObjectId,
@@ -773,7 +773,7 @@ public sealed class BlogsController : ControllerBase
                 Id: autor.Id,
                 Handle: autor.Handle,
                 DisplayName: autor.DisplayName,
-                AvatarUrl: autor.AvatarUrl,
+                AvatarUrl: ImagenesDeBlogs.Avatar(autor.AvatarUrl),
                 Verified: autor.Verified,
                 ActorKey: autor.Id);
 
@@ -832,12 +832,14 @@ public sealed class BlogsController : ControllerBase
             ObjectKind: MapObjectKind(item.Kind),
             Author: Publico(item.Author),
             Body: item.Body,
-            MediaUrl: item.MediaUrl,
+            // La foto al ancho de la tarjeta, la misma URL que el respaldo SSR: tras hidratar no se vuelve a pedir
+            // (012-blogs-social). El item guarda la original: su URL entra en la huella del stream.
+            MediaUrl: ImagenesDeBlogs.Portada(item.MediaUrl),
             Media: string.IsNullOrWhiteSpace(item.MediaUrl)
                 ? System.Array.Empty<PostMediaDto>()
                 // El alt de quien publicó gana; el recorte del cuerpo es la red para
                 // lo que se publicó antes de que el alt viajara — nunca al revés.
-                : new[] { new PostMediaDto(item.MediaUrl!, "image",
+                : new[] { new PostMediaDto(ImagenesDeBlogs.Portada(item.MediaUrl)!, "image",
                     string.IsNullOrWhiteSpace(item.MediaAlt) ? BuildMediaAlt(item.Body) : item.MediaAlt!) },
             Hashtags: ExtractTags(item.Body),
             Mentions: ExtractMentions(item.Body),
@@ -1009,7 +1011,7 @@ public sealed class BlogsController : ControllerBase
         Id: p.ActorId,
         Handle: p.Handle,
         DisplayName: p.DisplayName,
-        AvatarUrl: p.AvatarUrl,
+        AvatarUrl: ImagenesDeBlogs.Avatar(p.AvatarUrl),
         Verified: p.Verified,
         ActorKey: p.ActorId,
         // La bio y el banner ya vivían en SocialProfile; el DTO no los llevaba, así
