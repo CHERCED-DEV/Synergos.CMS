@@ -619,7 +619,7 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddHero(b, "Planes que crecen con tu negocio",
             "Empieza gratis, escala cuando quieras",
-            "<p>Todos los planes corren sobre el mismo motor: cambias capacidad y soporte, nunca la tecnología. Sin permanencia — subes, bajas o cancelas cuando lo necesites.</p>",
+            "<p>Todos los planes corren sobre el mismo motor: cambias capacidad y soporte, nunca la tecnología. Sin permanencia — subes, bajas o cancelas cuando lo necesites. Hoy un plan se contrata hablando con nosotros: te mostramos el motor en una demo y lo armamos contigo.</p>",
             "Synergos Precios Hero", "Planes de SynergosLabs", "#0A2540", "#0F58A7",
             ("Hablar con ventas", "/synergos/contacto"), ("Ver soluciones", "/synergos/soluciones"));
 
@@ -630,10 +630,10 @@ public sealed class DevContentFiller
             AddPricingTable(b, "Elige tu plan", "Del primer sitio a todo un ecosistema",
                 ("Inicial", "Gratis", "", "",
                  "1 sitio o vertical\nComponentes esenciales\nPublicación en subdominio\nSoporte por comunidad",
-                 false, "Empezar gratis", "/synergos/contacto"),
+                 false, "Pedir una demo", "/synergos/contacto"),
                 ("Profesional", "$129.900", "/mes", "El más elegido",
                  "Todo lo de Inicial\nMulti-vertical\nDominio propio\n+120 componentes\nBranding completo\nSoporte prioritario",
-                 true, "Elegir Profesional", "/synergos/contacto"),
+                 true, "Hablar con ventas", "/synergos/contacto"),
                 ("Premium", "A tu medida", "", "",
                  "Todo lo de Profesional\nMulti-dominio\nSLA garantizado\nIntegraciones a medida\nAcompañamiento dedicado",
                  false, "Hablar con ventas", "/synergos/contacto"));

@@ -1516,14 +1516,14 @@ public sealed class DevContenidoDeVerticales
     /// <summary>Tres cursos del catálogo de la app (<c>/api/academy/courses</c>), con su foto CC0 de <c>media/academy/courses</c>.</summary>
     private static readonly Curso[] CursosDestacados =
     [
-        new("data-ml-applied", "Machine Learning Aplicado", "Datos · Avanzado · $ 480.000",
-            "Del dato sucio al modelo en producción, sin humo.", "ml-applied.jpg",
+        new("data-ml-applied", "Machine Learning Aplicado", "Datos · Avanzado · $ 119.000",
+            "Datos, features, evaluación honesta y el paso a producción, en cuatro lecciones.", "ml-applied.jpg",
             "Persona frente a varios monitores con gráficas de datos"),
         new("dev-clean-architecture", "Arquitectura Limpia en .NET", "Desarrollo · Intermedio · $ 89.000",
             "Las capas, el grafo de dependencias y los seams stub-first, con sus pruebas.", "clean-architecture.jpg",
             "Código fuente en una pantalla, en primer plano"),
-        new("design-systems-atomic", "Design Systems con Atomic Design", "Diseño · Principiante · $ 240.000",
-            "Construye un design system escalable: tokens, átomos, moléculas y organismos.", "design-systems.jpg",
+        new("design-systems-atomic", "Design Systems con Atomic Design", "Diseño · Principiante · $ 69.000",
+            "Tokens semánticos, la grilla de 8 puntos y átomos, moléculas y organismos, en tres lecciones.", "design-systems.jpg",
             "Lámina antigua de alfabetos con letras de distintos estilos"),
     ];
 

@@ -108,13 +108,14 @@ internal static class AcademyDemoSeed
         new SeedCourse(
             Id: "design-systems-atomic",
             Title: "Design Systems con Atomic Design",
-            Summary: "Construye un design system escalable: tokens, átomos, moléculas y organismos.",
+            Summary: "Tokens semánticos, la grilla de 8 puntos y átomos, moléculas y organismos, en tres lecciones.",
             Description: "De los tokens semánticos a los organismos: cómo modelar un design system que sobreviva a un rebrand entero cambiando un solo archivo. Incluye la grilla de 8 puntos y el ritmo vertical premium.",
             Category: "Diseño",
             Level: "Principiante",
             InstructorId: "ins-mateo",
             CoverImageUrl: "/media/academy/courses/design-systems.jpg",
-            Price: 240_000m,
+            // D-016-Q4: un precio coherente con 41 minutos de contenido (antes 240.000).
+            Price: 69_000m,
             Rating: 4.6,
             PublishedAt: new DateOnly(2026, 4, 3),
             Outcomes: new[]
@@ -145,20 +146,21 @@ internal static class AcademyDemoSeed
         new SeedCourse(
             Id: "data-ml-applied",
             Title: "Machine Learning Aplicado",
-            Summary: "Del dato sucio al modelo en producción, sin humo.",
-            Description: "ML real: el 80% es limpiar datos. Recorremos el pipeline completo — exploración, features, entrenamiento, evaluación honesta y despliegue — con foco en lo que de verdad mueve la aguja.",
+            Summary: "Datos, features, evaluación honesta y el paso a producción, en cuatro lecciones.",
+            Description: "ML real: el 80% es limpiar datos. Cuatro lecciones sobre lo que de verdad mueve la aguja: los datos antes que el modelo, las features que aportan señal, métricas que no mienten y qué hace falta para llevar un modelo a producción.",
             Category: "Datos",
             Level: "Avanzado",
             InstructorId: "ins-sofia",
             CoverImageUrl: "/media/academy/courses/ml-applied.jpg",
-            Price: 480_000m,
+            // D-016-Q4: un precio coherente con 75 minutos de contenido (antes 480.000).
+            Price: 119_000m,
             Rating: 4.9,
             PublishedAt: new DateOnly(2026, 6, 11),
             Outcomes: new[]
             {
-                "Construir un pipeline de datos reproducible.",
+                "Detectar valores faltantes, fugas de datos y sesgos antes de entrenar.",
                 "Evaluar modelos con percentiles, no solo promedios.",
-                "Desplegar un modelo y monitorear su deriva.",
+                "Saber qué hace falta para llevar un modelo a producción y vigilar su deriva.",
             },
             Modules: new[]
             {
