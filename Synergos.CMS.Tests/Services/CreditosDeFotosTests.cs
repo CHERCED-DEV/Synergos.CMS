@@ -37,6 +37,17 @@ public sealed class CreditosDeFotosTests
             CreditosDeFotos.Leer("Foto: Photo Mix · https://stocksnap.io/photo/a"));
     }
 
+    [Fact] // D-016-C27: CC BY pide decir si la obra se cambió; el título y el origen siguen leyéndose igual.
+    public void Dice_lo_que_se_le_hizo_a_la_foto()
+    {
+        const string credito = "Foto: Julian Renom · «Deluxe Room» · recortada · https://commons.wikimedia.org/wiki/File:X.jpg";
+
+        Assert.Equal(("Julian Renom", "Deluxe Room", "https://commons.wikimedia.org/wiki/File:X.jpg"), CreditosDeFotos.Leer(credito));
+        Assert.Contains("«Deluxe Room»</a>, de Julian Renom, recortada. Licencia",
+            CreditosDeFotos.Html([("Habitación deluxe", "CC BY 4.0", credito)]), StringComparison.Ordinal);
+        Assert.Empty(CreditosDeFotos.Cambios("Foto: mrbichel · «Leather Laptop Sleeves» · https://www.flickr.com/photos/x/1"));
+    }
+
     [Fact]
     public void La_lista_muestra_sólo_las_que_piden_crédito_con_autor_origen_y_licencia()
     {

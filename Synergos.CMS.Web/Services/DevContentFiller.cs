@@ -1975,8 +1975,8 @@ public sealed class DevContentFiller
             SeedProduct(tecnologia, "FUNDA-LAPTOP-001", "Funda para laptop", "Vértice", "14\" · interior afelpado",
                 "98000", 33, "Neopreno de 5 mm con interior afelpado para portátiles de 14 pulgadas. Cierre que no raya.",
                 new[] { "tecnologia", "funda" }, dFrom, dTo, "Producto Funda", BuildProductBody, details);
-            SeedProduct(tecnologia, "HUB-USBC-001", "Hub USB-C", "Vértice", "7 en 1 · HDMI 4K · carga passthrough",
-                "185000", 14, "Siete puertos en uno: HDMI 4K, tres USB-A, lector SD y carga passthrough de 100 W.",
+            SeedProduct(tecnologia, "HUB-USBC-001", "Hub USB-C", "Vértice", "7 puertos USB 3.0 · un interruptor por puerto",
+                "185000", 14, "Siete puertos USB 3.0 en una regleta, cada uno con su interruptor y su luz.",
                 new[] { "tecnologia", "hub" }, dFrom, dTo, "Producto Hub", BuildProductBody, details);
             SeedProduct(tecnologia, "BASE-CEL-001", "Base para celular", "Vértice", "Aluminio · ángulo ajustable",
                 "54000", 62, "Aluminio con ángulo ajustable y base con peso. Tu teléfono deja de resbalarse.",

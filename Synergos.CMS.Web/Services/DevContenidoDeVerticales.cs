@@ -414,7 +414,7 @@ public sealed class DevContenidoDeVerticales
 
     /// <summary>
     /// Importa las fotos de <paramref name="carpeta"/> según sus manifiestos (<c>tienda.json</c>, <c>booking.json</c>,
-    /// <c>propiedades.json</c>, <c>alquiler.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
+    /// <c>propiedades.json</c>, <c>alquiler.json</c>, <c>hoteles.json</c>, <c>laureles.json</c>; el que falte se salta). Cada foto va a los nodos de Media que ya
     /// usa su destino —misma Key, así que páginas y catálogo siguen apuntando bien— y la página se republica. Idempotente:
     /// un medio que ya tiene esa licencia y ese crédito no se toca.
     /// </summary>
@@ -448,6 +448,12 @@ public sealed class DevContenidoDeVerticales
             var (n, sinEquipo) = FotosDeEquipos(alquiler, carpeta);
             partes.Add($"alquiler:{n}"); cambios += n; ok &= sinEquipo == 0;
             if (sinEquipo > 0) { partes.Add($"alquiler-sin-equipo:{sinEquipo}"); }
+        }
+        if (Leer(carpeta, "hoteles.json") is { } hoteles)
+        {
+            var (n, sinHabitacion, tarjetas) = FotosDeHabitaciones(hoteles, carpeta);
+            partes.Add($"hoteles:{n};tarjetas-de-habitaciones:{tarjetas}"); cambios += n + tarjetas; ok &= sinHabitacion == 0;
+            if (sinHabitacion > 0) { partes.Add($"hoteles-sin-habitacion:{sinHabitacion}"); }
         }
         if (Leer(carpeta, "laureles.json") is { } medios)
         {
@@ -504,6 +510,96 @@ public sealed class DevContenidoDeVerticales
             cambiados++;
         }
         return (cambiados, sinEquipo);
+    }
+
+    /// <summary>Una habitación que vende el asistente de /hoteles/ (<c>StubRoomAvailabilityProvider</c>), en su tarjeta.</summary>
+    private sealed record Habitacion(string Nombre, string Huespedes, string Texto, string Fichero);
+
+    /// <summary>Las mismas cuatro habitaciones de «Nuestras habitaciones», con el cupo aparte para la tarjeta.</summary>
+    private static readonly Habitacion[] HabitacionesDeHoteles =
+    [
+        new("Habitación Estándar", "Hasta 2 huéspedes", "Para un viaje corto o de trabajo.", "estandar"),
+        new("Habitación Deluxe", "Hasta 3 huéspedes", "Con más espacio para descansar.", "deluxe"),
+        new("Suite Junior", "Hasta 4 huéspedes", "Con zona de estar aparte.", "suite-junior"),
+        new("Habitación Familiar", "Hasta 5 huéspedes", "Para viajar con los niños.", "familiar"),
+    ];
+
+    private static readonly Guid[] AreasDeCuatroColumnas =
+    [
+        new("dab21ac8-bbd7-4516-81b2-16cd9bbb8cd6"),
+        new("16a0184f-fb4a-4703-98f1-9bf416f9f8d2"),
+        new("29772aca-31c0-42dc-97ac-bdfb65690d09"),
+        new("2ba5df6e-35cd-404e-a37e-1ee89be2042f"),
+    ];
+    private const string ClaseDeCuatroColumnas = "syn-display--grid syn-grid--tpl-4col syn-grid--gap-lg";
+
+    /// <summary>
+    /// Las fotos de las habitaciones de Hoteles (D-016-C27), por el nombre de la habitación (<c>producto</c> en
+    /// <c>hoteles.json</c>), con su licencia y su crédito. La rejilla de textos «Nuestras habitaciones» se desconecta y en
+    /// su lugar quedan cuatro tarjetas con foto, con la misma marca de la receta. Idempotente: un medio con esa licencia y
+    /// ese crédito no se toca, y sin la rejilla las tarjetas ya están.
+    /// </summary>
+    private (int Cambiados, int SinHabitacion, int Tarjetas) FotosDeHabitaciones(IReadOnlyList<FotoImportada> fotos, string carpeta)
+    {
+        var portada = _contentService.GetById(Hoteles);
+        if (portada is null) { return (0, fotos.Count, 0); }
+        int cambiados = 0, sinHabitacion = 0;
+        var porHabitacion = new Dictionary<string, (string Picker, string Alt)>(StringComparer.Ordinal);
+        foreach (var foto in fotos.Where(f => f.Producto is not null && !string.IsNullOrWhiteSpace(f.Archivo)))
+        {
+            var habitacion = HabitacionesDeHoteles.FirstOrDefault(h => string.Equals(h.Nombre, foto.Producto, StringComparison.Ordinal));
+            if (habitacion is null) { sinHabitacion++; continue; }
+            var ruta = Path.Combine(carpeta, foto.Archivo);
+            // El nombre del medio da el del fichero: corto y sin tildes (hotel-estandar.jpg).
+            var nombre = $"hotel {habitacion.Fichero}";
+            var nueva = _media.KeyByName(nombre) is null;
+            var picker = _media.GetOrCreatePhotoPickerValue(nombre, foto.Alt, ruta, foto.Licencia);
+            var cambio = nueva;
+            if (_media.KeyByName(nombre) is { } clave) { cambio |= _media.ReplacePhoto(clave, ruta, nombre, foto.Alt, foto.Licencia, foto.Credito); }
+            if (cambio) { cambiados++; }
+            porHabitacion[foto.Producto!] = (picker, foto.Alt);
+        }
+
+        var cuerpo = new CuerpoEditable(portada.GetValue<string>(Cuerpo, Cultura));
+        var rejilla = KeyOf("elementSynFeatureGrid");
+        var deHabitaciones = CuerpoEditable.Donde("headingText", "Nuestras habitaciones");
+        if (porHabitacion.Count == 0 || !cuerpo.Contiene("Nuestras habitaciones") || !cuerpo.Contiene(rejilla.ToString()))
+        {
+            return (cambiados, sinHabitacion, 0);
+        }
+
+        var b = new BlockGridJsonBuilder();
+        var seccion = Seccion(b, null, Marca("hoteles"));
+        Encabezado(seccion, "Nuestras habitaciones");
+        var cuatroKey = KeyOf("elementLayout4Col");
+        var cardKey = KeyOf("elementCompCard");
+        seccion.AddChild(AreaDeLaSeccion, cuatroKey, col =>
+        {
+            col.Set("cssClass", ClaseDeCuatroColumnas);
+            col.ApplyDefaults(_defaults.DefaultsFor(cuatroKey));
+            for (var i = 0; i < HabitacionesDeHoteles.Length; i++)
+            {
+                var h = HabitacionesDeHoteles[i];
+                col.AddChild(AreasDeCuatroColumnas[i], cardKey, c =>
+                {
+                    c.Set("headingTitle", h.Nombre)
+                     .Set("headingSubtitle", h.Huespedes)
+                     .Set("textBody", $"<p>{TextoHtml(h.Texto)}</p>");
+                    if (porHabitacion.TryGetValue(h.Nombre, out var foto))
+                    {
+                        c.Set("mediaReference", foto.Picker).Set("mediaAlt", foto.Alt);
+                    }
+                    c.ApplyDefaults(_defaults.DefaultsFor(cardKey));
+                });
+            }
+        });
+
+        var puestas = cuerpo.InsertarSeccionesAntesDe(rejilla, b.Build(), deHabitaciones);
+        if (puestas == 0) { return (cambiados, sinHabitacion, 0); }
+        cuerpo.DesconectarSeccionesCon(rejilla, deHabitaciones);
+        portada.SetValue(Cuerpo, cuerpo.Json, Cultura);
+        _contentService.SaveAndPublish(portada, new[] { Cultura });
+        return (cambiados, sinHabitacion, HabitacionesDeHoteles.Length);
     }
 
     /// <summary>Compatibilidad: <c>/dev/fotos-de-la-tienda</c> importa sólo el manifiesto de la Tienda.</summary>
@@ -687,7 +783,7 @@ public sealed class DevContenidoDeVerticales
         (Guid.Parse("3338ca4f-1b7c-48be-8ac5-ca56878ebb43"),
             "Camisetas, buzos, una chaqueta cortavientos y gorras para el uso diario. Agregas al carrito lo que te guste y finalizas tu pedido en línea."),
         (Guid.Parse("623ce787-89d7-49e8-803b-a8623c3c118e"),
-            "Audífonos, mouse, hubs USB-C, fundas y organizadores para tu escritorio y tus dispositivos. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
+            "Audífonos, mouse, hubs USB, fundas y organizadores para tu escritorio y tus dispositivos. Agregas al carrito lo que necesites y finalizas tu pedido en línea."),
         (Guid.Parse("10195c7f-440a-46c1-82b1-284ccc890206"),
             "Apartamentos en Bogotá para vivir en familia o con las amenidades de un conjunto. Cada ficha trae su ficha técnica, y desde ella agendas una visita."),
         (Guid.Parse("6e68d98e-f370-4d81-bc08-ea7b47a685f6"),
@@ -925,7 +1021,7 @@ public sealed class DevContenidoDeVerticales
         var terminos = _contentService.GetById(PaginaTerminos) ?? throw new InvalidOperationException("No existe Términos.");
         var texto = KeyOf("elementTextRichtext");
         var lista = CreditosDeFotos.Html(_media.ConLicencia(CreditosDeFotos.PideAtribucion).Select(m => (m.Alt, m.Licencia, m.Credito)));
-        var cuerpoDeLaLista = "<p>Estas fotos se usan con una licencia que pide decir quién las hizo. Las demás son de dominio público o CC0.</p>" + lista;
+        var cuerpoDeLaLista = "<p>Estas fotos se usan con una licencia que pide decir quién las hizo. Las demás no lo piden: son de dominio público, CC0 o de la licencia de Unsplash.</p>" + lista;
 
         var pagina = _contentService.GetPagedChildren(legal.Id, 0, 100, out _)
             .FirstOrDefault(c => string.Equals(c.GetCultureName(Cultura) ?? c.Name, TituloDeCreditos, StringComparison.Ordinal));
@@ -1596,8 +1692,9 @@ public sealed class DevContenidoDeVerticales
             ["Correa ajustable", "Bordado al frente", "Visera curva"]),
         ["Hoodie gris premium"] = new("Abriga en las mañanas frías sin verse como ropa de casa.",
             ["Felpa pesada con interior perchado", "Capucha forrada", "Color gris"]),
-        ["Hub USB-C"] = new("Conecta pantalla, memorias y cargador a un portátil que sólo trae puertos USB-C.",
-            ["7 puertos en uno", "HDMI 4K y tres USB-A", "Lector SD y carga passthrough de 100 W"]),
+        // D-016-C27: la ficha dice lo que muestra su foto (un hub USB de 7 puertos con interruptores); la página conserva su nombre.
+        ["Hub USB-C"] = new("Conecta memorias, teclado, mouse y discos por un solo cable al portátil, y apaga el puerto que no estés usando.",
+            ["7 puertos USB 3.0", "Un interruptor con luz por puerto", "Un solo cable al portátil"]),
         ["Libreta de puntos"] = new("Sirve para listas, bocetos, diarios o planes: la retícula guía sin imponer renglones.",
             ["Tamaño A5", "Retícula de puntos cada 5 mm", "Para escribir o dibujar"]),
         ["Libreta de tapa dura"] = new("Para tomar notas en reuniones o llevar un diario que aguante el uso diario.",
