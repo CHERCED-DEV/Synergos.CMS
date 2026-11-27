@@ -23,7 +23,7 @@
     <footer class="syn-testimonial__author">
         @if (avatarRef != null)
         {
-            <img class="syn-testimonial__avatar" src="@avatarRef.Url()" alt="@avatarAlt" loading="lazy" />
+            <img class="syn-testimonial__avatar" src="@(Synergos.CMS.Web.Services.ImagenServida.Url(avatarRef.Url(), 96))" alt="@avatarAlt" loading="lazy" />
         }
         <div class="syn-testimonial__identity">
             <cite class="syn-testimonial__name">@authorName</cite>

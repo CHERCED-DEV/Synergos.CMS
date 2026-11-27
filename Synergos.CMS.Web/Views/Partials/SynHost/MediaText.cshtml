@@ -30,7 +30,7 @@
 #nullable enable
     var props = new Dictionary<string, object?>(StringComparer.Ordinal)
     {
-        ["imageSrc"] = mediaRef?.Url(),
+        ["imageSrc"] = ImagenServida.Url(mediaRef?.Url(), 1200),
         ["imageAlt"] = mediaAlt,
         ["headingText"] = headingText,
         ["body"] = body,

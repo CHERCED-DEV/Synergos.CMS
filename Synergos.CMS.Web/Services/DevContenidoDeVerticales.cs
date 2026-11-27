@@ -902,7 +902,7 @@ public sealed class DevContenidoDeVerticales
         nombre = string.IsNullOrWhiteSpace(nombre) ? categoria.GetCultureName(Cultura) ?? categoria.Name : nombre;
         return string.IsNullOrWhiteSpace(nombreDelSitio) || string.IsNullOrWhiteSpace(nombre)
             ? null
-            : $"{nombre} — {nombreDelSitio.Trim()} SynergosLabs";
+            : $"{nombre} — {nombreDelSitio.Trim()}";
     }
 
     private string RecetaEntradasDeCategorias()
@@ -918,7 +918,7 @@ public sealed class DevContenidoDeVerticales
                 pagina.SetValue("categoryDescription", entrada, Cultura);
                 cambio = true;
             }
-            // El título nombra SU sitio (016, V7): el sembrador puso «Casas — Tienda SynergosLabs» a todas.
+            // El título nombra SU sitio (016, V7) y nada más (X3c): el sembrador puso «Casas — Tienda SynergosLabs» a todas.
             if (TituloDeCategoria(pagina) is { } titulo && pagina.HasProperty("seoTitle")
                 && pagina.GetValue<string>("seoTitle", Cultura) != titulo)
             {

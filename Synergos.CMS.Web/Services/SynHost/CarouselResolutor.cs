@@ -55,7 +55,7 @@ public sealed class CarouselResolutor : IResolutorSynHost<CarouselProps>
             }
 
             diapositivas.Add(new CarouselSlide(
-                imagen,
+                ImagenServida.Url(imagen, 1600)!,
                 LectorDelEditor.Cadena(entrada, "alt"),
                 LectorDelEditor.Cadena(entrada, "caption"),
                 LectorDelEditor.Cadena(entrada, "linkUrl")));

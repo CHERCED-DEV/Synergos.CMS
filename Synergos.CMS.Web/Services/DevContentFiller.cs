@@ -1665,7 +1665,7 @@ public sealed class DevContentFiller
         cat.SetCultureName(name, Culture);
         cat.SetValue("categoryName", name, Culture);                 // mandatory (Culture)
         if (cat.HasProperty("description")) { cat.SetValue("description", description, Culture); }
-        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — Blog {BrandName}", Culture); }
+        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — {SitioDe(parentId)}", Culture); }
         if (cat.HasProperty("seoDescription")) { cat.SetValue("seoDescription", description, Culture); }
         var save = _contentService.SaveAndPublish(cat, new[] { Culture });
         details.Add(save.Success ? $"Blog:cat:{name}:ok" : $"Blog:cat:{name}:failed:{save.Result}");
@@ -1692,7 +1692,7 @@ public sealed class DevContentFiller
         var b = new BlockGridJsonBuilder();
         AddMission(b, $"Sobre {name}", "", bioHtml);
         author.SetValue(SectionsAlias, b.Build(), Culture);
-        if (author.HasProperty("seoTitle")) { author.SetValue("seoTitle", $"{name} — Blog {BrandName}", Culture); }
+        if (author.HasProperty("seoTitle")) { author.SetValue("seoTitle", $"{name} — {SitioDe(parentId)}", Culture); }
         var save = _contentService.SaveAndPublish(author, new[] { Culture });
         details.Add(save.Success ? $"Blog:author:{name}:ok" : $"Blog:author:{name}:failed:{save.Result}");
         return save.Success ? $"umb://document/{author.Key:N}" : null;
@@ -2009,7 +2009,8 @@ public sealed class DevContentFiller
         cat.SetCultureName(name, Culture);
         cat.SetValue("categoryName", name, Culture);                  // mandatory (Culture)
         if (cat.HasProperty("categoryDescription")) { cat.SetValue("categoryDescription", description, Culture); }
-        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — Tienda {BrandName}", Culture); }
+        // D-016-X3c: «Ropa — Tienda»; la marca no se repite dentro de su sitio.
+        if (cat.HasProperty("seoTitle")) { cat.SetValue("seoTitle", $"{name} — {SitioDe(parentId)}", Culture); }
         if (cat.HasProperty("seoDescription")) { cat.SetValue("seoDescription", description, Culture); }
         var save = _contentService.SaveAndPublish(cat, new[] { Culture });
         details.Add(save.Success ? $"Shop:cat:{name}:ok" : $"Shop:cat:{name}:failed:{save.Result}");

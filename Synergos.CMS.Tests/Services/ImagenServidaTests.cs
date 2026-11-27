@@ -20,4 +20,17 @@ public sealed class ImagenServidaTests
     {
         Assert.Equal(esperada, ImagenServida.Url(url, ancho));
     }
+
+    [Theory]
+    [InlineData("http://localhost:6300/media/abc/synergos-proposito.png", 1200, "http://localhost:6300/media/abc/synergos-proposito.png?width=1200&format=webp&quality=80")]
+    [InlineData("https://synergoslabs.co/media/abc/foto.jpg", 1600, "https://synergoslabs.co/media/abc/foto.jpg?width=1600&format=webp&quality=80")]
+    [InlineData("/media/abc/foto.jpg", 256, "/media/abc/foto.jpg?width=256&format=webp&quality=80")]
+    [InlineData("http://localhost:6300/media/abc/foto.jpg?width=900", 1600, "http://localhost:6300/media/abc/foto.jpg?width=900")]
+    [InlineData("http://localhost:6300/media/abc/logo.svg", 1600, "http://localhost:6300/media/abc/logo.svg")]
+    [InlineData("http://localhost:6300/media/abc/clip.mp4", 1600, "http://localhost:6300/media/abc/clip.mp4")]
+    [InlineData(null, 1600, null)]
+    public void Un_medio_resuelto_por_Umbraco_se_pide_al_ancho_aunque_venga_absoluto(string? url, int ancho, string? esperada)
+    {
+        Assert.Equal(esperada, ImagenServida.DelMedio(url, ancho));
+    }
 }

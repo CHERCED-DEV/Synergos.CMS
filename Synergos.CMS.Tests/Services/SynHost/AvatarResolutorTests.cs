@@ -29,7 +29,7 @@ public sealed class AvatarResolutorTests
             ("avatarImage", ElementoFalso.Medio("/media/equipo/ana.jpg", "Ana Gómez")))).Props);
 
         Assert.Equal(new[] { "src", "alt" }, cable.Keys);
-        Assert.Equal("/media/equipo/ana.jpg", cable["src"]!.ToString());
+        Assert.Equal("/media/equipo/ana.jpg?width=256&format=webp&quality=80", cable["src"]!.ToString());
         Assert.Equal("Ana Gómez", cable["alt"]!.ToString());
     }
 
@@ -40,7 +40,7 @@ public sealed class AvatarResolutorTests
             ("avatarImage", ElementoFalso.Medio("/media/equipo/ana.jpg", "Ana Gómez")),
             ("ariaLabel", "Ana Gómez, directora de producto"))).Props;
 
-        Assert.Equal(new AvatarProps("/media/equipo/ana.jpg", "Ana Gómez, directora de producto"), props);
+        Assert.Equal(new AvatarProps("/media/equipo/ana.jpg?width=256&format=webp&quality=80", "Ana Gómez, directora de producto"), props);
     }
 
     [Fact]

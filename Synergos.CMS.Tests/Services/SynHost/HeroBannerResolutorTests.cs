@@ -39,9 +39,9 @@ public sealed class HeroBannerResolutorTests
 
         var cable = SolicitudSynHost.Props(resuelto.Props);
         Assert.Equal(new[] { "title", "subtitle", "media", "mediaAlt", "ctaLabel", "ctaLink" }, cable.Keys);
-        Assert.Equal("/media/hero/playa.jpg", cable["media"]!.ToString());
+        Assert.Equal("/media/hero/playa.jpg?width=1600&format=webp&quality=80", cable["media"]!.ToString());
         Assert.Equal("/reservas", cable["ctaLink"]!.ToString());
-        // El respaldo SSR pide la foto al ancho del hero, en WebP (D-016-X2); el elemento recibe la URL tal cual.
+        // El elemento y su respaldo SSR piden la foto al ancho del hero, en WebP (D-016-X2, X2b).
         Assert.Contains("src=\"/media/hero/playa.jpg?width=1600&amp;format=webp&amp;quality=80\"", resuelto.RespaldoHtml, StringComparison.Ordinal);
         Assert.Contains("alt=\"Playa al atardecer\"", resuelto.RespaldoHtml, StringComparison.Ordinal);
         Assert.Contains("href=\"/reservas\">Reservar</a>", resuelto.RespaldoHtml, StringComparison.Ordinal);
