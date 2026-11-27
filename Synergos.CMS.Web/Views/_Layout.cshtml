@@ -112,7 +112,12 @@
     <link rel="apple-touch-icon" sizes="180x180" href="~/img/favicon-synergos.png" />
     @* Ola 100 — Manrope font family canónica del design system (Synergos.UI).
        Preconnect + display=swap para evitar FOUT bloqueante. Si el theme override
-       define otra Heading/Body Font Family, el _BrandThemeStyle gana. *@
+       define otra Heading/Body Font Family, el _BrandThemeStyle gana.
+       D-012-V14b — la precarga pide desde el primer byte el .woff2 latino que usa la hoja (uno solo, variable,
+       para los cinco pesos): llega antes de que pinte el texto y un título no cambia de líneas al llegar. Va igual
+       en las cinco cabeceras que cargan la hoja (PrecargaDeLaFuenteTests); si Google cambia la versión de la URL,
+       se cambia en las cinco. *@
+    <link rel="preload" href="https://fonts.gstatic.com/s/manrope/v23/xn7gYHE41ni1AdIRggexSg.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@@300;400;500;600;700&display=swap" />
