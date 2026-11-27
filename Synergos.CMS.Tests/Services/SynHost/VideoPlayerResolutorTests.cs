@@ -31,7 +31,7 @@ public sealed class VideoPlayerResolutorTests
 
         Assert.Equal(new[] { "videoFile", "posterImage" }, cable.Keys);
         Assert.Equal("/media/recorrido.mp4", cable["videoFile"]!.ToString());
-        Assert.Equal("/media/recorrido.jpg", cable["posterImage"]!.ToString());
+        Assert.Equal("/media/recorrido.jpg?width=1600&format=webp&quality=80", cable["posterImage"]!.ToString());
     }
 
     [Fact]

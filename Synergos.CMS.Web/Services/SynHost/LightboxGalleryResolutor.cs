@@ -46,8 +46,8 @@ public sealed class LightboxGalleryResolutor : IResolutorSynHost<LightboxGallery
             }
 
             imagenes.Add(new LightboxGalleryImage(
-                grande,
-                LectorDelEditor.Cadena(entrada, "thumbUrl"),
+                ImagenServida.Url(grande, 1600)!,
+                ImagenServida.Url(LectorDelEditor.Cadena(entrada, "thumbUrl"), 400),
                 LectorDelEditor.Cadena(entrada, "alt"),
                 LectorDelEditor.Cadena(entrada, "caption")));
         }

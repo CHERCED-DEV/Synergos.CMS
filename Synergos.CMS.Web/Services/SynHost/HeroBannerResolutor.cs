@@ -43,7 +43,8 @@ public sealed class HeroBannerResolutor : IResolutorSynHost<HeroBannerProps>
         var props = new HeroBannerProps(
             Title: editor.Texto("title"),
             Subtitle: editor.Texto("subtitle"),
-            Media: imagen?.Url,
+            // D-016-X2b: el elemento pide la foto al mismo ancho que su respaldo SSR, no el original.
+            Media: ImagenServida.DelMedio(imagen?.Url, 1600),
             MediaAlt: imagen?.Alt,
             CtaLabel: editor.Texto("ctaLabel") ?? cta?.Nombre,
             CtaLink: cta?.Url);

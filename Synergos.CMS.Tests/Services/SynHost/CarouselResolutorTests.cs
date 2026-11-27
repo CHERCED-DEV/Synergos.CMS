@@ -37,7 +37,7 @@ public sealed class CarouselResolutorTests
         Assert.Equal(new[] { "slides", "autoplay", "interval" }, cable.Keys);
         var slides = (JsonElement)cable["slides"]!;
         Assert.Equal(2, slides.GetArrayLength());
-        Assert.Equal("/media/sala.jpg", slides[0].GetProperty("src").GetString());
+        Assert.Equal("/media/sala.jpg?width=1600&format=webp&quality=80", slides[0].GetProperty("src").GetString());
         Assert.Equal("La sala", slides[0].GetProperty("label").GetString());
         Assert.False(slides[1].TryGetProperty("label", out _));
         Assert.Equal("/x", slides[1].GetProperty("linkUrl").GetString());

@@ -19,4 +19,21 @@ public static class ImagenServida
         if (!esDeLaBiblioteca || !Formatos.Any(f => ruta.EndsWith(f, StringComparison.OrdinalIgnoreCase))) { return url; }
         return $"{url}?width={ancho}&format=webp&quality=80";
     }
+
+    /// <summary>
+    /// La misma petición para la URL de un medio que ya resolvió Umbraco (<c>IPublishedUrlProvider.GetMediaUrl</c>), que
+    /// sale ABSOLUTA (D-016-X2b): <see cref="Url"/> no toca una absoluta porque puede ser de otro sitio; ésta es de la
+    /// biblioteca propia por construcción, así que se mira su ruta. Los elementos que hidratan la pedían entera.
+    /// </summary>
+    public static string? DelMedio(string? url, int ancho)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var absoluta)
+            || absoluta.Scheme is not ("http" or "https"))
+        {
+            return Url(url, ancho);
+        }
+        if (!string.IsNullOrEmpty(absoluta.Query)) { return url; }
+        var ruta = Url(absoluta.AbsolutePath, ancho);
+        return ruta == absoluta.AbsolutePath ? url : url + ruta![absoluta.AbsolutePath.Length..];
+    }
 }

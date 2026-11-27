@@ -36,8 +36,8 @@ public sealed class LightboxGalleryResolutorTests
         Assert.Equal(new[] { "images", "columns" }, cable.Keys);
         var images = (JsonElement)cable["images"]!;
         Assert.Equal(2, images.GetArrayLength());
-        Assert.Equal("/media/sala.jpg", images[0].GetProperty("src").GetString());
-        Assert.Equal("/media/sala-t.jpg", images[0].GetProperty("thumb").GetString());
+        Assert.Equal("/media/sala.jpg?width=1600&format=webp&quality=80", images[0].GetProperty("src").GetString());
+        Assert.Equal("/media/sala-t.jpg?width=400&format=webp&quality=80", images[0].GetProperty("thumb").GetString());
         Assert.Equal("La sala", images[0].GetProperty("caption").GetString());
         Assert.False(images[0].TryGetProperty("fullUrl", out _));
         Assert.False(images[1].TryGetProperty("thumb", out _));
@@ -50,7 +50,7 @@ public sealed class LightboxGalleryResolutorTests
         var images = Resolutor().Resolver(ElementoFalso.Con(
             ("imagesJson", """[{"thumbUrl":"/media/solo-miniatura.jpg"},{"fullUrl":"/media/a.jpg"}]"""))).Props.Images;
 
-        Assert.Equal(new[] { new LightboxGalleryImage("/media/a.jpg") }, images);
+        Assert.Equal(new[] { new LightboxGalleryImage("/media/a.jpg?width=1600&format=webp&quality=80") }, images);
         Assert.Equal(1, _log.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(ILogger.Log)));
     }
 

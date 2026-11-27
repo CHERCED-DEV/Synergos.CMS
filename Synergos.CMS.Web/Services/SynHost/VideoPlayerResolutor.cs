@@ -27,6 +27,6 @@ public sealed class VideoPlayerResolutor : IResolutorSynHost<VideoPlayerProps>
         var editor = new LectorDelEditor(elemento, _fallback, _log, _urls);
         return new ElementoResuelto<VideoPlayerProps>(new VideoPlayerProps(
             VideoFile: editor.Medio("videoFile")?.Url,
-            PosterImage: editor.Medio("posterImage")?.Url));
+            PosterImage: ImagenServida.DelMedio(editor.Medio("posterImage")?.Url, 1600)));
     }
 }

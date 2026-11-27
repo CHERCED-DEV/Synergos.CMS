@@ -9,7 +9,7 @@ namespace Synergos.CMS.Tests.Services;
 public sealed class TituloDeLaPaginaTests
 {
     [Theory]
-    [InlineData("Ropa — Tienda SynergosLabs", null, "Ropa", "Tienda", false, "Ropa — Tienda SynergosLabs")]
+    [InlineData("Ropa y abrigo — Tienda", null, "Ropa", "Tienda", false, "Ropa y abrigo — Tienda")]
     [InlineData(null, "Tienda SynergosLabs", "Carrito", "Tienda", false, "Tienda SynergosLabs")]
     [InlineData(null, null, "Carrito", "Tienda", false, "Carrito — Tienda")]
     [InlineData("  ", null, "Mi cuenta", "Tienda", false, "Mi cuenta — Tienda")]

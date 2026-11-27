@@ -27,7 +27,7 @@ public sealed class AvatarResolutor : IResolutorSynHost<AvatarProps>
         var editor = new LectorDelEditor(elemento, _fallback, _log, _urls);
         var foto = editor.Medio("avatarImage");
         return new ElementoResuelto<AvatarProps>(new AvatarProps(
-            Src: foto?.Url,
+            Src: ImagenServida.DelMedio(foto?.Url, 256),
             Alt: editor.Texto("ariaLabel") ?? foto?.Alt));
     }
 }
