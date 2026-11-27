@@ -26,7 +26,7 @@
     @if (mediaRef != null)
     {
         <div class="syn-hero__media">
-            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="eager" />
+            <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1600)" alt="@mediaAlt" loading="eager" />
         </div>
     }
     <div class="syn-hero__content">

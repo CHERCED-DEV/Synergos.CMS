@@ -110,7 +110,8 @@ public sealed class SynHostFallbackBuilderTests
         Assert.Contains("<section", html);
         Assert.Contains("<h2 class=\"syn-ssr-hero__title\">Bienvenido</h2>", html);
         Assert.Contains("Todo en un solo lugar", html);
-        Assert.Contains("<img class=\"syn-ssr-hero__media\" src=\"/media/hero.jpg\" alt=\"Vista de la sede\"", html);
+        // D-016-X2: la foto se pide al ancho del hero, en WebP.
+        Assert.Contains("<img class=\"syn-ssr-hero__media\" src=\"/media/hero.jpg?width=1600&amp;format=webp&amp;quality=80\" alt=\"Vista de la sede\"", html);
         // Un CTA sin href no es un CTA: tiene que ser un enlace real.
         Assert.Contains("<a class=\"syn-ssr-hero__cta\" href=\"/planes\">Ver planes</a>", html);
     }

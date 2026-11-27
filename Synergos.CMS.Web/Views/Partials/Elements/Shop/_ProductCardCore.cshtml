@@ -43,7 +43,7 @@
     <a class="syn-product-card__link" href="@(Model.Url ?? p.Url)">
         @if (!string.IsNullOrWhiteSpace(p.ImageUrl))
         {
-            <img class="syn-product-card__image" src="@p.ImageUrl" alt="@p.Name" loading="lazy" />
+            <img class="syn-product-card__image" src="@Synergos.CMS.Web.Services.ImagenServida.Url(p.ImageUrl, 640)" alt="@p.Name" loading="lazy" />
         }
         @* El nivel del encabezado lo fija el llamador; la clase es lo que estiliza. *@
         @Html.Raw($"<{heading} class=\"syn-product-card__name\">")@p.Name@Html.Raw($"</{heading}>")

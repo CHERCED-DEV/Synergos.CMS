@@ -24,7 +24,7 @@
 <section class="@classes">
     @if (mediaRef != null)
     {
-        <img class="syn-mission__media" src="@mediaRef.Url()" alt="@(mediaAlt ?? "")" aria-hidden="@(string.IsNullOrWhiteSpace(mediaAlt) ? "true" : "false")" loading="lazy" />
+        <img class="syn-mission__media" src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1200)" alt="@(mediaAlt ?? "")" aria-hidden="@(string.IsNullOrWhiteSpace(mediaAlt) ? "true" : "false")" loading="lazy" />
     }
     <header class="syn-mission__header">
         <h2 class="syn-mission__title">@title</h2>

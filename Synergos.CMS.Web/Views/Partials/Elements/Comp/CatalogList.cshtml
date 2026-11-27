@@ -50,7 +50,7 @@
             <li class="syn-card syn-card--outlined syn-catalog-list__item">
                 @if (!string.IsNullOrWhiteSpace(tarjeta.Imagen))
                 {
-                    <img class="syn-catalog-list__image" src="@tarjeta.Imagen" alt="" loading="lazy" />
+                    <img class="syn-catalog-list__image" src="@Synergos.CMS.Web.Services.ImagenServida.Url(tarjeta.Imagen, 640)" alt="" loading="lazy" />
                 }
                 else if (!string.IsNullOrEmpty(tarjeta.Iniciales))
                 {

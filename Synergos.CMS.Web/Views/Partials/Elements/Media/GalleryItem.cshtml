@@ -19,7 +19,7 @@
 }
 <figure class="@classes">
     <a href="@mediaRef.Url()" data-syn-gallery-lightbox>
-        <img src="@mediaRef.Url()" alt="@alt" loading="lazy" />
+        <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1200)" alt="@alt" loading="lazy" />
     </a>
     @if (!string.IsNullOrWhiteSpace(caption))
     {

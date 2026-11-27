@@ -35,7 +35,7 @@
     @if (mediaRef != null)
     {
         <figure class="syn-card__media">
-            <img src="@mediaRef.Url()" alt="@mediaAlt" loading="lazy" />
+            <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 800)" alt="@mediaAlt" loading="lazy" />
         </figure>
     }
     <header class="syn-card__header">
