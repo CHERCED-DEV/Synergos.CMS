@@ -54,4 +54,6 @@ public sealed record EhrProps(
     [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionTotalHoras = 24,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialHoras = 2,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] int DevolucionParcialPorcentaje = 50,
-    [property: CampoSynHost(OrigenDelCampo.Sesion)] bool SinSesion = false);
+    [property: CampoSynHost(OrigenDelCampo.Sesion)] bool SinSesion = false,
+    // El nivel del título (D-016-Y4): 1 cuando el editor marcó «Es el título de la página»; sin él, la pieza usa el 2.
+    [property: CampoSynHost(OrigenDelCampo.Decision)] int? HeadingLevel = null);

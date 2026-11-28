@@ -73,8 +73,10 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
         var editor = new LectorDelEditor(elemento, _fallback, _log);
         var negocio = _negocio.Actual();
 
+        var nivel = TituloDeLaPaginaDelBloque.Nivel(elemento);
+        var titulo = editor.Texto("heading");
         return new ElementoResuelto<StorefrontProps>(new StorefrontProps(
-            Heading: editor.Texto("heading"),
+            Heading: titulo,
             Subheading: editor.Texto("subheading"),
             ApiBase: negocio.ApiBase,
             LecturasBase: negocio.LecturasBase,
@@ -84,6 +86,8 @@ public sealed class StorefrontResolutor : IResolutorSynHost<StorefrontProps>
             Vista: editor.Opciones(RutasDeLasVistas.AliasDeLaVista)?[0],
             Filtros: FiltrosDe(editor.Opciones(AliasDeLaSeleccion)),
             Rutas: _rutas.Del(AliasDelBloque, VistaPorDefecto),
-            Cabecera: _cabecera?.Actual()));
+            Cabecera: _cabecera?.Actual(),
+            HeadingLevel: nivel),
+            nivel == 1 ? SynHostFallbackBuilder.TituloDeLaPagina(titulo) : null);
     }
 }

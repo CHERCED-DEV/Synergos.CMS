@@ -24,7 +24,7 @@
         resuelto = resuelto with
         {
             Props = resuelto.Props with { SinSesion = true },
-            RespaldoHtml = SynHostFallbackBuilder.EhrSinSesion(aqui),
+            RespaldoHtml = SynHostFallbackBuilder.EhrSinSesion(aqui, resuelto.Props.HeadingLevel == 1),
         };
     }
     var result = await Emitter.EmitAsync(SolicitudSynHost.Para(resuelto, null, System.Globalization.CultureInfo.CurrentUICulture));

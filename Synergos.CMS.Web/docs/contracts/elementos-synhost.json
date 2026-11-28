@@ -240,6 +240,12 @@
           "tipo": "string",
           "opcional": false,
           "origen": "negocio"
+        },
+        {
+          "nombre": "headingLevel",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
         }
       ],
       "ejemplo": {
@@ -248,7 +254,8 @@
         "subheading": "Por días, con la garantía retenida y no cobrada",
         "category": "andamios",
         "apiBase": "/api/alquiler",
-        "rentalPath": "directa"
+        "rentalPath": "directa",
+        "headingLevel": 1
       }
     },
     {
@@ -1735,6 +1742,12 @@
           "tipo": "boolean",
           "opcional": false,
           "origen": "sesion"
+        },
+        {
+          "nombre": "headingLevel",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
         }
       ],
       "ejemplo": {
@@ -1747,7 +1760,8 @@
         "devolucionTotalHoras": 24,
         "devolucionParcialHoras": 2,
         "devolucionParcialPorcentaje": 50,
-        "sinSesion": false
+        "sinSesion": false,
+        "headingLevel": 1
       }
     },
     {
@@ -3934,6 +3948,12 @@
           "tipo": "string",
           "opcional": true,
           "origen": "sitio"
+        },
+        {
+          "nombre": "headingLevel",
+          "tipo": "number",
+          "opcional": true,
+          "origen": "decision"
         }
       ],
       "selectores": [
@@ -4017,7 +4037,8 @@
             "url": "/tienda/carrito/"
           }
         ],
-        "cabecera": "secundaria"
+        "cabecera": "secundaria",
+        "headingLevel": 1
       }
     },
     {

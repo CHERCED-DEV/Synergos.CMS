@@ -47,11 +47,15 @@ public sealed class AlquilerResolutor : IResolutorSynHost<AlquilerProps>
         var editor = new LectorDelEditor(elemento, _fallback, _log);
         var negocio = _negocio.Actual();
 
+        var nivel = TituloDeLaPaginaDelBloque.Nivel(elemento);
+        var titulo = editor.Texto("heading");
         return new ElementoResuelto<AlquilerProps>(new AlquilerProps(
-            Heading: editor.Texto("heading"),
+            Heading: titulo,
             Subheading: editor.Texto("subheading"),
             Category: editor.Texto("category"),
             ApiBase: negocio.ApiBase,
-            RentalPath: _caminos.Decidir(FlujoDeLaRenta, negocio.RentalPath)));
+            RentalPath: _caminos.Decidir(FlujoDeLaRenta, negocio.RentalPath),
+            HeadingLevel: nivel),
+            nivel == 1 ? SynHostFallbackBuilder.TituloDeLaPagina(titulo) : null);
     }
 }
