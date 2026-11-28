@@ -25,8 +25,11 @@
 <section class="@classes">
     @if (mediaRef != null)
     {
+        var heroSrc = Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1600);
+        @* D-016-Z4: la foto del hero es la del LCP: se precarga y se pide con prioridad. *@
+        <link rel="preload" as="image" href="@heroSrc" fetchpriority="high" />
         <div class="syn-hero__media">
-            <img src="@Synergos.CMS.Web.Services.ImagenServida.Url(mediaRef.Url(), 1600)" alt="@mediaAlt" loading="eager" />
+            <img src="@heroSrc" alt="@mediaAlt" loading="eager" fetchpriority="high" />
         </div>
     }
     <div class="syn-hero__content">
