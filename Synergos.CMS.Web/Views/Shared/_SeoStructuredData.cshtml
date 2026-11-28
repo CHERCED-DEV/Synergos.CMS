@@ -23,6 +23,7 @@
    error (ver Views/_ViewImports.cshtml). No se pierde nada: las anotaciones se borran en
    ejecución y estas vistas no se compilan en el build. *@
 @inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<Umbraco.Cms.Core.Models.PublishedContent.IPublishedContent>
+@inject Microsoft.Extensions.Options.IOptions<Synergos.CMS.Application.Configuration.CartSettings> CartSettingsOpt
 @{
 // El runtime compila las vistas SIN contexto nullable; ver Views/_ViewImports.cshtml.
 #nullable enable
@@ -81,8 +82,9 @@
             // el sitio donde el que lo lee es un buscador y no una persona que pueda extrañarse.
             var priceRaw = page.Value<string>("productPriceBase");
             var hasPrice = Synergos.CMS.Web.Services.PrecioAutorado.EsInequivoco(priceRaw, out var price);
-            var currency = page.Value<string>("productCurrency");
-            if (string.IsNullOrWhiteSpace(currency)) currency = "USD";
+            // D-016-Z3: la moneda es la que muestra la ficha (CartSettings.Currency, la misma de _ProductDetailCore).
+            // Antes leía una propiedad que el tipo no tiene y caía a dólares: anunciaba en dólares un precio en pesos.
+            var currency = CartSettingsOpt.Value.Currency;
             var inStock = page.Value<bool>("productInStock");
             var primaryImg = Synergos.CMS.Web.Services.MediaPickerReader.ReadFirstMediaUrl(
                 page, "productImages", UrlMode.Absolute);
@@ -93,7 +95,8 @@
             if (!string.IsNullOrWhiteSpace(sku)) sb.Append($",\"sku\":{Json(sku)}");
             if (!string.IsNullOrWhiteSpace(description)) sb.Append($",\"description\":{Json(description)}");
             if (!string.IsNullOrWhiteSpace(primaryImg)) sb.Append($",\"image\":{Json(primaryImg)}");
-            if (hasPrice && price > 0)
+            // Sin moneda conocida no se anuncia precio: un número sin moneda no dice nada verdadero.
+            if (hasPrice && price > 0 && !string.IsNullOrWhiteSpace(currency))
             {
                 var availability = inStock
                     ? "https://schema.org/InStock"

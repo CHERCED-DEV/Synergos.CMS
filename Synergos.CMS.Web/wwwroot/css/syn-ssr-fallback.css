@@ -756,3 +756,36 @@ synergos-kpi-card:defined > [data-syn-ssr-fallback] {
 
   .syn-ssr-ehr__sidebar { display: none; }
 }
+
+/* ── Reserva de altura de las apps (D-016-Z1) ────────────────── */
+/* Estas apps llegan del servidor sin altura (o sólo con su h1 para
+   lectores) y al montar miden de 421 a 4.635 px: lo de abajo saltaba
+   fuera de la pantalla (CLS 0,27–0,98 en sus raíces). Mientras no
+   están definidas, están vacías (Angular vacía el host al crearlas) o
+   sólo tienen su respaldo, ocupan la pantalla; al pintar, la reserva
+   se va y la app mide eso o más. Su estado de carga también la tapa
+   (la portada de la Tienda, el catálogo de Alquiler). Viajes pinta
+   menos que la pantalla desde 768 px: reserva su altura real.        */
+
+synergos-storefront:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-eventos:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-academy:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-realty:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-travel-shell:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-alquiler:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)),
+synergos-gov:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)) {
+  display: block;
+  min-block-size: 100svh;
+}
+
+@media (min-width: 768px) {
+  synergos-travel-shell:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)) {
+    min-block-size: 31.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  synergos-travel-shell:is(:not(:defined), :empty, :has(> [data-syn-ssr-fallback]:only-child)) {
+    min-block-size: 26.3rem;
+  }
+}
