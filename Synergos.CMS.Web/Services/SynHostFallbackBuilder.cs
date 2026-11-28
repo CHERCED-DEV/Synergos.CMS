@@ -381,7 +381,8 @@ public static class SynHostFallbackBuilder
     /// están para que el panel quede en el mismo sitio cuando la app lo reemplace. Los textos son los de <c>ehr.html</c>.
     /// </remarks>
     /// <param name="volver">La ruta de esta página (con su consulta), a la que vuelve la entrada; sólo una ruta local.</param>
-    public static string EhrSinSesion(string? volver)
+    /// <param name="esTituloDeLaPagina">El bloque es el título de la página (D-016-Y4): el del panel va en h1, no en h2.</param>
+    public static string EhrSinSesion(string? volver, bool esTituloDeLaPagina = false)
     {
         var ruta = Clean(volver);
         var local = ruta is not null && ruta[0] == '/' && (ruta.Length == 1 || (ruta[1] != '/' && ruta[1] != '\\'));
@@ -402,7 +403,8 @@ public static class SynHostFallbackBuilder
             sb.Append(i == 0 ? "<li class=\"is-active\">" : "<li>").Append(Esc(SeccionesDelPaciente[i])).Append("</li>");
         sb.Append("</ul></div><div class=\"syn-ssr-ehr__main\"><div class=\"syn-ssr-ehr__panel\">")
           .Append("<span class=\"syn-ssr-ehr__icon\" aria-hidden=\"true\">🔒</span>")
-          .Append("<h2 class=\"syn-ssr-ehr__title\">Inicia sesión para ver tu historia clínica</h2>")
+          .Append(esTituloDeLaPagina ? "<h1" : "<h2").Append(" class=\"syn-ssr-ehr__title\">Inicia sesión para ver tu historia clínica")
+          .Append(esTituloDeLaPagina ? "</h1>" : "</h2>")
           .Append("<p class=\"syn-ssr-ehr__message\">Tu portal de salud es personal: lo abrimos con tu cuenta, nunca con datos de ejemplo.</p>")
           .Append("<a class=\"syn-ssr-ehr__action\" href=\"").Append(Esc(entrada)).Append("\">Iniciar sesión</a>")
           .Append("</div></div></div></div>");
@@ -739,6 +741,19 @@ public static class SynHostFallbackBuilder
         "4" => " syn-ssr-features--cols-4",
         _ => string.Empty,
     };
+
+    /// <summary>
+    /// El h1 sólo-lectores de una pieza que es el título de la página (D-016-Y4), mientras llega su bundle: así la página
+    /// tiene su h1 también antes de hidratar. Va dentro del respaldo, que la pieza quita al montar, y ahí pone el suyo.
+    /// </summary>
+    /// <param name="texto">El título del bloque; vacío, no hay respaldo.</param>
+    public static string? TituloDeLaPagina(string? texto)
+    {
+        var limpio = Clean(texto);
+        return limpio is null
+            ? null
+            : "<div class=\"" + BaseClass + " syn-ssr-titulo\"" + Marker + "><h1 class=\"syn-sr-only\">" + Esc(limpio) + "</h1></div>";
+    }
 
     private static string Esc(string value) =>
         value.Replace("&", "&amp;")

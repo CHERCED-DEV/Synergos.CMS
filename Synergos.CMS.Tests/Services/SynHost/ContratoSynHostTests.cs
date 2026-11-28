@@ -112,7 +112,8 @@ public sealed class ContratoSynHostTests
             },
             // Nada del editor: la API es de negocio y el paciente lo resuelve el servidor desde la
             // sesión (#197).
-            ["ehr"] = Array.Empty<(string, object?)>(),
+            // El ajuste «Es el título de la página» (D-016-Y4): marcado, el título de la pieza pasa a h1.
+            ["ehr"] = new (string, object?)[] { ("esTituloDeLaPagina", true) },
             ["gov"] = new (string, object?)[]
             {
                 ("heading", "Tus trámites, sin filas"),
@@ -131,6 +132,7 @@ public sealed class ContratoSynHostTests
                 ("heading", "Alquiler de equipos"),
                 ("subheading", "Por días, con la garantía retenida y no cobrada"),
                 ("category", "andamios"),
+                ("esTituloDeLaPagina", true),
             },
             ["storefront"] = new (string, object?)[]
             {
@@ -138,6 +140,7 @@ public sealed class ContratoSynHostTests
                 ("subheading", "Catálogo, carrito y checkout"),
                 ("vista", "catalogo"),
                 ("seleccion", "ofertas"),
+                ("esTituloDeLaPagina", true),
             },
             ["travel-shell"] = new (string, object?)[]
             {

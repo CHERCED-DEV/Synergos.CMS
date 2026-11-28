@@ -45,4 +45,6 @@ public sealed record StorefrontProps(
     [property: CampoSynHost(OrigenDelCampo.Decision)] IReadOnlyList<FiltroFijo> Filtros,
     [property: CampoSynHost(OrigenDelCampo.Sitio)] IReadOnlyList<RutaDeUnaVista> Rutas,
     // Cómo pinta su cabecera dentro del sitio (D-016-V2): «secundaria», sin repetir su marca; «completa», la de siempre.
-    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null);
+    [property: CampoSynHost(OrigenDelCampo.Sitio)] string? Cabecera = null,
+    // El nivel del título (D-016-Y4): 1 cuando el editor marcó «Es el título de la página»; sin él, la pieza usa el 2.
+    [property: CampoSynHost(OrigenDelCampo.Decision)] int? HeadingLevel = null);

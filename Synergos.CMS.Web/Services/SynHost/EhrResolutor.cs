@@ -52,6 +52,7 @@ public sealed class EhrResolutor : IResolutorSynHost<EhrProps>
             HistoriaBase: negocio.HistoriaBase,
             DevolucionTotalHoras: negocio.DevolucionTotalHoras,
             DevolucionParcialHoras: negocio.DevolucionParcialHoras,
-            DevolucionParcialPorcentaje: negocio.DevolucionParcialPorcentaje));
+            DevolucionParcialPorcentaje: negocio.DevolucionParcialPorcentaje,
+            HeadingLevel: TituloDeLaPaginaDelBloque.Nivel(elemento)));
     }
 }

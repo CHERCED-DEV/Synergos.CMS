@@ -27,4 +27,6 @@ public sealed record AlquilerProps(
     [property: CampoSynHost(OrigenDelCampo.Contenido)] string? Subheading,
     [property: CampoSynHost(OrigenDelCampo.Decision)] string? Category,
     [property: CampoSynHost(OrigenDelCampo.Negocio)] string ApiBase,
-    [property: CampoSynHost(OrigenDelCampo.Negocio)] string RentalPath);
+    [property: CampoSynHost(OrigenDelCampo.Negocio)] string RentalPath,
+    // El nivel del título (D-016-Y4): 1 cuando el editor marcó «Es el título de la página»; sin él, la pieza usa el 2.
+    [property: CampoSynHost(OrigenDelCampo.Decision)] int? HeadingLevel = null);
